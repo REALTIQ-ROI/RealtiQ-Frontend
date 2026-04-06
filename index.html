@@ -1,0 +1,58 @@
+﻿<!doctype html>
+<html lang="en" class="light">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RealtiQ</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              surface: '#f7f9fb',
+              primary: '#000000',
+              secondary: '#505f76',
+              'on-surface': '#191c1e',
+              'on-surface-variant': '#45464d',
+              'on-primary': '#ffffff',
+              'surface-container-low': '#f2f4f6',
+              'surface-container-lowest': '#ffffff',
+              'surface-container-high': '#e6e8ea',
+              'surface-container': '#eceef0',
+              'surface-variant': '#e0e3e5',
+              'surface-tint': '#545f73',
+              'outline-variant': '#c6c6cd',
+              'primary-container': '#111c2d',
+              'secondary-container': '#d0e1fb',
+              'secondary-fixed': '#d3e4fe',
+              'on-secondary-fixed': '#0b1c30',
+              error: '#ba1a1a',
+            },
+            fontFamily: {
+              headline: ['Manrope', 'sans-serif'],
+              body: ['Inter', 'sans-serif'],
+              label: ['Inter', 'sans-serif'],
+              manrope: ['Manrope', 'sans-serif'],
+              inter: ['Inter', 'sans-serif'],
+            },
+          },
+        },
+      };
+    </script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

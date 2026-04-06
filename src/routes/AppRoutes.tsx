@@ -1,0 +1,123 @@
+﻿import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+
+import Home from '../pages/public/Home';
+import Listings from '../pages/public/Listings';
+import PropertyDetails from '../pages/public/PropertyDetails';
+import AboutAndContact from '../pages/public/AboutAndContact';
+import Checkout from '../pages/public/Checkout';
+import FeaturedListingControl from '../pages/public/FeaturedListingControl';
+import FiltersAndSort from '../pages/public/FiltersAndSort';
+import InquiryForm from '../pages/public/InquiryForm';
+import InquirySuccess from '../pages/public/InquirySuccess';
+import LoginRequired from '../pages/public/LoginRequired';
+import PaymentFailed from '../pages/public/PaymentFailed';
+import PaymentSucess from '../pages/public/PaymentSucess';
+import PostPaymentRedirect from '../pages/public/PostPaymentRedirect';
+import Redirecting from '../pages/public/Redirecting';
+
+import Login from '../pages/auth/Login';
+import Register from '../pages/auth/Register';
+import LoginToPurchase from '../pages/auth/LoginToPurchase';
+import RegisterToPurchase from '../pages/auth/RegisterToPurchase';
+import AdminLogin from '../pages/auth/Admin/AdminLogin';
+import LandlordLogin from '../pages/auth/Landlord/LandlordLogin';
+import LandlordRegistration from '../pages/auth/Landlord/LandlordRegistration';
+
+import Dashboard from '../pages/dashboard/Dashboard';
+import AdminDashboard from '../pages/dashboard/Admin/AdminDashboard';
+import AdminPropertyDetails from '../pages/dashboard/Admin/AdminPropertyDetails';
+import LandlordDetails from '../pages/dashboard/Admin/LandlordDetails';
+import ManageInquiries from '../pages/dashboard/Admin/ManageInquiries';
+import ManageLandlords from '../pages/dashboard/Admin/ManageLandlords';
+import ManagePayments from '../pages/dashboard/Admin/ManagePayments';
+import ManageProperties from '../pages/dashboard/Admin/ManageProperties';
+import ManageUsers from '../pages/dashboard/Admin/ManageUsers';
+import BuyerDashboard from '../pages/dashboard/Buyer/BuyerDashboard';
+import InquiryDetails from '../pages/dashboard/Buyer/InquiryDetails';
+import InquiryHistory from '../pages/dashboard/Buyer/InquiryHistory';
+import MyProperties from '../pages/dashboard/Buyer/MyProperties';
+import PaymentDetails from '../pages/dashboard/Buyer/PaymentDetails';
+import PaymentHistory from '../pages/dashboard/Buyer/PaymentHistory';
+import ProfileSettings from '../pages/dashboard/Buyer/ProfileSettings';
+import BuyerPropertyDetails from '../pages/dashboard/Buyer/PropertyDetails';
+import AddProperty from '../pages/dashboard/Landlord/AddProperty';
+import Editproperty from '../pages/dashboard/Landlord/Editproperty';
+import InquiriesList from '../pages/dashboard/Landlord/InquiriesList';
+import LandlordDashboard from '../pages/dashboard/Landlord/LandlordDashboard';
+import LandlordInquiryDetails from '../pages/dashboard/Landlord/LandlordInquiryDetails';
+import LandlordMyProperties from '../pages/dashboard/Landlord/LandlordMyProperties';
+import LandlordPaymentHistory from '../pages/dashboard/Landlord/LandlordPaymentHistory';
+import LandlordPropertyDetails from '../pages/dashboard/Landlord/LandlordPropertyDetails';
+import ProtectedRoute from './ProtectedRoute';
+
+const AppRoutes = () => {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/properties" element={<Listings />} />
+        <Route path="/properties/:id" element={<PropertyDetails />} />
+        <Route path="/about-contact" element={<AboutAndContact />} />
+        <Route path="/checkout" element={<Checkout />} />
+        <Route path="/featured-control" element={<FeaturedListingControl />} />
+        <Route path="/filters" element={<FiltersAndSort />} />
+        <Route path="/inquiry" element={<InquiryForm />} />
+        <Route path="/inquiry-success" element={<InquirySuccess />} />
+        <Route path="/login-required" element={<LoginRequired />} />
+        <Route path="/payment-failed" element={<PaymentFailed />} />
+        <Route path="/payment-success" element={<PaymentSucess />} />
+        <Route path="/post-payment-redirect" element={<PostPaymentRedirect />} />
+        <Route path="/redirecting" element={<Redirecting />} />
+
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/login-to-purchase" element={<LoginToPurchase />} />
+        <Route path="/register-to-purchase" element={<RegisterToPurchase />} />
+        <Route path="/auth/admin/login" element={<AdminLogin />} />
+        <Route path="/auth/landlord/login" element={<LandlordLogin />} />
+        <Route path="/auth/landlord/register" element={<LandlordRegistration />} />
+
+        <Route element={<ProtectedRoute />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={['buyer']} />}>
+          <Route path="/dashboard/buyer" element={<BuyerDashboard />} />
+          <Route path="/dashboard/buyer/my-properties" element={<MyProperties />} />
+          <Route path="/dashboard/buyer/property-details" element={<BuyerPropertyDetails />} />
+          <Route path="/dashboard/buyer/payment-history" element={<PaymentHistory />} />
+          <Route path="/dashboard/buyer/payment-details" element={<PaymentDetails />} />
+          <Route path="/dashboard/buyer/inquiry-history" element={<InquiryHistory />} />
+          <Route path="/dashboard/buyer/inquiry-details" element={<InquiryDetails />} />
+          <Route path="/dashboard/buyer/profile-settings" element={<ProfileSettings />} />
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={['landlord']} />}>
+          <Route path="/dashboard/landlord" element={<LandlordDashboard />} />
+          <Route path="/dashboard/landlord/my-properties" element={<LandlordMyProperties />} />
+          <Route path="/dashboard/landlord/property-details" element={<LandlordPropertyDetails />} />
+          <Route path="/dashboard/landlord/payment-history" element={<LandlordPaymentHistory />} />
+          <Route path="/dashboard/landlord/inquiries" element={<InquiriesList />} />
+          <Route path="/dashboard/landlord/inquiry-details" element={<LandlordInquiryDetails />} />
+          <Route path="/dashboard/landlord/add-property" element={<AddProperty />} />
+          <Route path="/dashboard/landlord/edit-property" element={<Editproperty />} />
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route path="/dashboard/admin" element={<AdminDashboard />} />
+          <Route path="/dashboard/admin/manage-users" element={<ManageUsers />} />
+          <Route path="/dashboard/admin/manage-properties" element={<ManageProperties />} />
+          <Route path="/dashboard/admin/property-details" element={<AdminPropertyDetails />} />
+          <Route path="/dashboard/admin/manage-payments" element={<ManagePayments />} />
+          <Route path="/dashboard/admin/manage-inquiries" element={<ManageInquiries />} />
+          <Route path="/dashboard/admin/manage-landlords" element={<ManageLandlords />} />
+          <Route path="/dashboard/admin/landlord-details" element={<LandlordDetails />} />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+};
+
+export default AppRoutes;
