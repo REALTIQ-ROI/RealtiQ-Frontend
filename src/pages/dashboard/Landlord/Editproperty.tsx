@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import { useAuth } from '../../../contexts/AuthContext';

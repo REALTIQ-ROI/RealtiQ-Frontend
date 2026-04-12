@@ -137,7 +137,7 @@ const MyProperties = () => {
             </div>
             <div className="flex flex-col">
               <span className="text-[10px] font-bold text-secondary uppercase tracking-widest mb-1">Portfolio Value</span>
-              <span className="text-xl font-bold text-primary tracking-tight">${(totalValue / 1000000).toFixed(1)}M USD</span>
+              <span className="text-xl font-bold text-primary tracking-tight">&#x20A6;{(totalValue / 1000000).toFixed(1)}M</span>
             </div>
           </div>
           <div className="flex gap-2 mt-6 md:mt-0">

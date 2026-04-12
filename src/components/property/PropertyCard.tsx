@@ -2,7 +2,7 @@
 import type { Property } from '../../types';
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
+  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value);
 
 const PropertyCard = ({ property }: { property: Property }) => {
   return (

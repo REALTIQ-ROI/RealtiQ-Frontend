@@ -86,12 +86,12 @@ const PaymentDetails = () => {
             </div>
 
             <div className="space-y-6">
-              <div className="grid grid-cols-12 pb-4 border-b border-surface-container-highest text-[10px] uppercase font-bold tracking-widest text-secondary"><div className="col-span-8">Description</div><div className="col-span-4 text-right">Amount (USD)</div></div>
-              <div className="grid grid-cols-12 py-2"><div className="col-span-8"><div className="font-bold text-on-surface">Property Base Price</div></div><div className="col-span-4 text-right font-semibold">${property?.price?.toLocaleString()}.00</div></div>
-              <div className="grid grid-cols-12 py-2"><div className="col-span-8"><div className="font-bold text-on-surface">Curator Platform Service Fee</div></div><div className="col-span-4 text-right font-semibold">$12,075.00</div></div>
+              <div className="grid grid-cols-12 pb-4 border-b border-surface-container-highest text-[10px] uppercase font-bold tracking-widest text-secondary"><div className="col-span-8">Description</div><div className="col-span-4 text-right">Amount (NGN)</div></div>
+              <div className="grid grid-cols-12 py-2"><div className="col-span-8"><div className="font-bold text-on-surface">Property Base Price</div></div><div className="col-span-4 text-right font-semibold">&#x20A6;{property?.price?.toLocaleString()}.00</div></div>
+              <div className="grid grid-cols-12 py-2"><div className="col-span-8"><div className="font-bold text-on-surface">Curator Platform Service Fee</div></div><div className="col-span-4 text-right font-semibold">&#x20A6;12,075.00</div></div>
               <div className="mt-8 pt-8 border-t-2 border-primary-container/10">
-                <div className="grid grid-cols-12 mb-2"><div className="col-span-8 text-right pr-12 text-secondary font-semibold">Subtotal</div><div className="col-span-4 text-right font-semibold">${payment?.amount?.toLocaleString()}.00</div></div>
-                <div className="grid grid-cols-12"><div className="col-span-8 text-right pr-12 flex flex-col justify-center"><span className="text-sm font-black uppercase tracking-widest">Total Amount Paid</span></div><div className="col-span-4 text-right text-3xl font-black tracking-tighter">${payment?.amount?.toLocaleString()}.00</div></div>
+                <div className="grid grid-cols-12 mb-2"><div className="col-span-8 text-right pr-12 text-secondary font-semibold">Subtotal</div><div className="col-span-4 text-right font-semibold">&#x20A6;{payment?.amount?.toLocaleString()}.00</div></div>
+                <div className="grid grid-cols-12"><div className="col-span-8 text-right pr-12 flex flex-col justify-center"><span className="text-sm font-black uppercase tracking-widest">Total Amount Paid</span></div><div className="col-span-4 text-right text-3xl font-black tracking-tighter">&#x20A6;{payment?.amount?.toLocaleString()}.00</div></div>
               </div>
             </div>
           </div>

@@ -5,8 +5,8 @@ import Button from '../ui/Button';
 const navItems = [
   { to: '/', label: 'Home' },
   { to: '/properties', label: 'Properties' },
-  { to: '/about-contact', label: 'About' },
-  { to: '/about-contact', label: 'Contact' },
+  { to: '/about', label: 'About' },
+  { to: '/contact', label: 'Contact' },
 ];
 
 const Navbar = () => {

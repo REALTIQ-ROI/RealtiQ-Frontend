@@ -4,6 +4,8 @@ import Home from '../pages/public/Home';
 import Listings from '../pages/public/Listings';
 import PropertyDetails from '../pages/public/PropertyDetails';
 import AboutAndContact from '../pages/public/AboutAndContact';
+import About from '../pages/public/About';
+import Contact from '../pages/public/Contact';
 import Checkout from '../pages/public/Checkout';
 import FeaturedListingControl from '../pages/public/FeaturedListingControl';
 import FiltersAndSort from '../pages/public/FiltersAndSort';
@@ -58,6 +60,8 @@ const AppRoutes = () => {
         <Route path="/properties" element={<Listings />} />
         <Route path="/properties/:id" element={<PropertyDetails />} />
         <Route path="/about-contact" element={<AboutAndContact />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/contact" element={<Contact />} />
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/featured-control" element={<FeaturedListingControl />} />
         <Route path="/filters" element={<FiltersAndSort />} />

@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -72,7 +72,7 @@ const AddProperty = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Price (USD)</label>
+                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Price (NGN)</label>
                     <input
                       className="w-full bg-surface-container-low border-none rounded-xl px-4 py-4"
                       placeholder="0.00"

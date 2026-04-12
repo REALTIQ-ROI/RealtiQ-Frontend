@@ -19,7 +19,7 @@ const LandlordPaymentHistory = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
           <div className="bg-surface-container-lowest p-8 rounded-xl">
             <p className="text-secondary text-xs font-bold tracking-widest uppercase">Total Revenue</p>
-            <h3 className="text-3xl font-black text-primary">${total.toLocaleString()}</h3>
+            <h3 className="text-3xl font-black text-primary">&#x20A6;{total.toLocaleString()}</h3>
           </div>
           <div className="bg-surface-container-lowest p-8 rounded-xl">
             <p className="text-secondary text-xs font-bold tracking-widest uppercase">Active Sales</p>
@@ -27,7 +27,7 @@ const LandlordPaymentHistory = () => {
           </div>
           <div className="bg-surface-container-lowest p-8 rounded-xl">
             <p className="text-secondary text-xs font-bold tracking-widest uppercase">Pending Deposits</p>
-            <h3 className="text-3xl font-black text-primary">$0.00</h3>
+            <h3 className="text-3xl font-black text-primary">&#x20A6;0.00</h3>
           </div>
         </div>
 
@@ -54,7 +54,7 @@ const LandlordPaymentHistory = () => {
                       <p className="text-xs text-secondary">ID: {item.id}</p>
                     </td>
                     <td className="px-8 py-6 text-sm font-medium text-slate-600 italic">{new Date(item.createdAt).toLocaleDateString()}</td>
-                    <td className="px-8 py-6 text-right font-bold text-slate-900">${item.amount.toLocaleString()}</td>
+                    <td className="px-8 py-6 text-right font-bold text-slate-900">&#x20A6;{item.amount.toLocaleString()}</td>
                     <td className="px-8 py-6 text-center">
                       <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border border-emerald-100">
                         {item.status}

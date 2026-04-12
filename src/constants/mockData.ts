@@ -1,16 +1,16 @@
-﻿import type { Inquiry, Property, User } from '../types';
+import type { Inquiry, Property, User } from '../types';
 
 export const mockProperties: Property[] = [
   {
     _id: 'p-1',
     title: 'The Glass Pavilion',
-    price: 18450000,
-    location: 'Beverly Hills, CA',
+    price: 18450000000,
+    location: 'Banana Island, Lagos',
     propertyType: 'Villa',
     bedrooms: 5,
     bathrooms: 6.5,
     description:
-      'A modern architectural masterpiece with floor-to-ceiling glass walls and panoramic skyline views.',
+      'A modern architectural masterpiece with floor-to-ceiling glass walls and panoramic lagoon views. Set on a premier plot in Banana Island, this villa fuses cutting-edge engineering with refined comfort, offering expansive living spaces, a private cinema, and meticulously landscaped gardens.',
     squareFeet: 8450,
     media: [
       {
@@ -23,20 +23,52 @@ export const mockProperties: Property[] = [
         public_id: 'p1-alt',
         type: 'image',
       },
+      {
+        url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80',
+        public_id: 'p1-living',
+        type: 'image',
+      },
+      {
+        url: 'https://images.unsplash.com/photo-1560185127-6ed189bf02f4?w=1200&q=80',
+        public_id: 'p1-kitchen',
+        type: 'image',
+      },
+      {
+        url: 'https://images.unsplash.com/photo-1584738766473-61c083514bf4?w=1200&q=80',
+        public_id: 'p1-bath',
+        type: 'image',
+      },
+      {
+        url: 'https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=1200&q=80',
+        public_id: 'p1-pool',
+        type: 'image',
+      },
     ],
     status: 'available',
     featured: true,
-    amenities: ['Private Cinema', 'Infinity Pool', 'Smart Home Automation'],
+    amenities: [
+      'Private Cinema',
+      'Infinity Pool',
+      'Smart Home Automation',
+      'Home Gym',
+      '5-Car Garage',
+      'Wine Cellar',
+      'Staff Quarters',
+      'Solar Power System',
+      'CCTV & Security',
+      'Rooftop Terrace',
+    ],
   },
   {
     _id: 'p-2',
     title: 'The Obsidian House',
-    price: 12450000,
-    location: 'Beverly Hills, CA',
+    price: 12450000000,
+    location: 'Eko Atlantic, Lagos',
     propertyType: 'Estate',
     bedrooms: 5,
     bathrooms: 6,
-    description: 'A sculptural residence balancing concrete forms with warm interior palettes.',
+    description:
+      'A sculptural residence balancing dark concrete forms with warm interior palettes. Located on Eko Atlantic, this estate commands dramatic ocean views and delivers a seamless indoor-outdoor lifestyle, complete with a resort-style pool, private spa, and a dedicated art gallery wing.',
     squareFeet: 8200,
     media: [
       {
@@ -44,20 +76,57 @@ export const mockProperties: Property[] = [
         public_id: 'p2-main',
         type: 'image',
       },
+      {
+        url: 'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=1200&q=80',
+        public_id: 'p2-exterior',
+        type: 'image',
+      },
+      {
+        url: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&q=80',
+        public_id: 'p2-outdoor',
+        type: 'image',
+      },
+      {
+        url: 'https://images.unsplash.com/photo-1613977257592-4871e5fcd7c4?w=1200&q=80',
+        public_id: 'p2-dining',
+        type: 'image',
+      },
+      {
+        url: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&q=80',
+        public_id: 'p2-bedroom',
+        type: 'image',
+      },
+      {
+        url: 'https://images.unsplash.com/photo-1505843513577-22bb7d21e455?w=1200&q=80',
+        public_id: 'p2-pool',
+        type: 'image',
+      },
     ],
     status: 'available',
     featured: true,
-    amenities: ['Wine Cellar', 'Spa', 'Home Theater'],
+    amenities: [
+      'Wine Cellar',
+      'Spa & Hammam',
+      'Home Theater',
+      'Art Gallery Wing',
+      'Ocean View Deck',
+      'Smart Home System',
+      'Generator Backup',
+      'Private Gym',
+      'Guard House',
+      'Landscaped Gardens',
+    ],
   },
   {
     _id: 'p-3',
     title: 'Skyline Anthology',
-    price: 9250000,
-    location: 'Tribeca, New York',
+    price: 9250000000,
+    location: 'Victoria Island, Lagos',
     propertyType: 'Penthouse',
     bedrooms: 3,
     bathrooms: 3.5,
-    description: 'A high-rise penthouse with expansive city views and premium finishes.',
+    description:
+      'A high-rise penthouse with expansive Victoria Island city views and premium finishes throughout. Floor-to-ceiling glazing wraps every room, blurring the boundary between interior luxury and the Lagos skyline. Featuring a private rooftop terrace, chef\'s kitchen, and concierge services.',
     squareFeet: 3800,
     media: [
       {
@@ -65,10 +134,46 @@ export const mockProperties: Property[] = [
         public_id: 'p3-main',
         type: 'image',
       },
+      {
+        url: 'https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?w=1200&q=80',
+        public_id: 'p3-terrace',
+        type: 'image',
+      },
+      {
+        url: 'https://images.unsplash.com/photo-1600573472592-401b489a3cdc?w=1200&q=80',
+        public_id: 'p3-bedroom',
+        type: 'image',
+      },
+      {
+        url: 'https://images.unsplash.com/photo-1529408632839-a54952c491e5?w=1200&q=80',
+        public_id: 'p3-view',
+        type: 'image',
+      },
+      {
+        url: 'https://images.unsplash.com/photo-1560185127-6ed189bf02f4?w=1200&q=80',
+        public_id: 'p3-kitchen',
+        type: 'image',
+      },
+      {
+        url: 'https://images.unsplash.com/photo-1584738766473-61c083514bf4?w=1200&q=80',
+        public_id: 'p3-bath',
+        type: 'image',
+      },
     ],
     status: 'available',
     featured: false,
-    amenities: ['City View Terrace', 'Smart Access', 'Concierge'],
+    amenities: [
+      'City View Rooftop Terrace',
+      'Smart Access & Security',
+      '24/7 Concierge',
+      "Chef's Kitchen",
+      'Residents Lounge',
+      'Underground Parking',
+      'High-Speed Elevator',
+      'Fitness Center Access',
+      'On-site Management',
+      'Backup Power',
+    ],
   },
 ];
 
