@@ -34,6 +34,7 @@ import ManageLandlords from '../pages/dashboard/Admin/ManageLandlords';
 import ManagePayments from '../pages/dashboard/Admin/ManagePayments';
 import ManageProperties from '../pages/dashboard/Admin/ManageProperties';
 import ManageUsers from '../pages/dashboard/Admin/ManageUsers';
+import FeaturedListings from '../pages/dashboard/Admin/FeaturedListings';
 import BuyerDashboard from '../pages/dashboard/Buyer/BuyerDashboard';
 import InquiryDetails from '../pages/dashboard/Buyer/InquiryDetails';
 import InquiryHistory from '../pages/dashboard/Buyer/InquiryHistory';
@@ -100,11 +101,13 @@ const AppRoutes = () => {
           <Route path="/dashboard/landlord" element={<LandlordDashboard />} />
           <Route path="/dashboard/landlord/my-properties" element={<LandlordMyProperties />} />
           <Route path="/dashboard/landlord/property-details" element={<LandlordPropertyDetails />} />
+          <Route path="/dashboard/landlord/property-details/:id" element={<LandlordPropertyDetails />} />
           <Route path="/dashboard/landlord/payment-history" element={<LandlordPaymentHistory />} />
           <Route path="/dashboard/landlord/inquiries" element={<InquiriesList />} />
           <Route path="/dashboard/landlord/inquiry-details" element={<LandlordInquiryDetails />} />
           <Route path="/dashboard/landlord/add-property" element={<AddProperty />} />
           <Route path="/dashboard/landlord/edit-property" element={<Editproperty />} />
+          <Route path="/dashboard/landlord/edit-property/:id" element={<Editproperty />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
@@ -116,6 +119,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/manage-inquiries" element={<ManageInquiries />} />
           <Route path="/dashboard/admin/manage-landlords" element={<ManageLandlords />} />
           <Route path="/dashboard/admin/landlord-details" element={<LandlordDetails />} />
+          <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
