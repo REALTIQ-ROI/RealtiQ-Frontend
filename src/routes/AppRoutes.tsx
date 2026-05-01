@@ -1,8 +1,6 @@
-﻿import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 import Home from '../pages/public/Home';
-import Listings from '../pages/public/Listings';
-import PropertyDetails from '../pages/public/PropertyDetails';
 import AboutAndContact from '../pages/public/AboutAndContact';
 import About from '../pages/public/About';
 import Contact from '../pages/public/Contact';
@@ -16,6 +14,8 @@ import PaymentFailed from '../pages/public/PaymentFailed';
 import PaymentSucess from '../pages/public/PaymentSucess';
 import PostPaymentRedirect from '../pages/public/PostPaymentRedirect';
 import Redirecting from '../pages/public/Redirecting';
+import Listings from '../pages/public/Listings';
+import PropertyDetails from '../pages/public/PropertyDetails';
 
 import Login from '../pages/auth/Login';
 import Register from '../pages/auth/Register';
@@ -61,8 +61,10 @@ const AppRoutes = () => {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
+
         <Route path="/properties" element={<Listings />} />
         <Route path="/properties/:id" element={<PropertyDetails />} />
+
         <Route path="/about-contact" element={<AboutAndContact />} />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />

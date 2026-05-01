@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
+import { resolveOwnerId } from '../../../types';
 
 const statusConfig = {
   available: { label: 'Active', className: 'bg-emerald-100 text-emerald-800' },
@@ -15,7 +17,22 @@ const LandlordMyProperties = () => {
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'drafts' | 'pending'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  const myProperties = properties.filter((item) => item.ownerId === user?._id);
+  const myProperties = properties.filter((item) => resolveOwnerId(item.ownerId) === user?._id);
+
+  const handleDelete = async (id: string) => {
+    const result = await Swal.fire({
+      title: 'Delete Property?',
+      text: 'This action cannot be undone.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Delete',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      reverseButtons: true,
+    });
+    if (result.isConfirmed) void deleteProperty(id);
+  };
 
   const totalValue = myProperties.reduce((sum, p) => sum + p.price, 0);
   const portfolioValue =
@@ -229,7 +246,7 @@ const LandlordMyProperties = () => {
                         <button
                           className="p-2 text-secondary hover:text-error hover:bg-error-container/20 rounded-lg transition-all"
                           title="Delete"
-                          onClick={() => void deleteProperty(property._id)}
+                          onClick={() => void handleDelete(property._id)}
                         >
                           <span className="material-symbols-outlined text-xl">delete</span>
                         </button>

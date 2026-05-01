@@ -1,8 +1,11 @@
 import { type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
+import MediaUploader from '../../../components/property/MediaUploader';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
+import type { MediaItem } from '../../../types';
 
 const AddProperty = () => {
   const { user } = useAuth();
@@ -15,32 +18,35 @@ const AddProperty = () => {
   const [bedrooms, setBedrooms] = useState('');
   const [bathrooms, setBathrooms] = useState('');
   const [description, setDescription] = useState('');
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!user) return;
+    if (!user || isSubmitting) return;
+    setIsSubmitting(true);
 
-    await addProperty(user._id, {
-      title,
-      price: Number(price || 0),
-      location,
-      propertyType: 'Sale Only',
-      bedrooms: Number(bedrooms || 0),
-      bathrooms: Number(bathrooms || 0),
-      description,
-      squareFeet: 0,
-      media: [
-        {
-          type: 'image',
-          public_id: 'manual-upload',
-          url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80',
-        },
-      ],
-      amenities: [],
-      featured: false,
-    });
+    try {
+      await addProperty(user._id, {
+        title,
+        price: Number(price || 0),
+        location,
+        propertyType: 'Sale Only',
+        bedrooms: Number(bedrooms || 0),
+        bathrooms: Number(bathrooms || 0),
+        description,
+        squareFeet: 0,
+        media,
+        amenities: [],
+      });
 
-    navigate('/dashboard/landlord/my-properties');
+      toast.success('Property listed successfully');
+      navigate('/dashboard/landlord/my-properties');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create property.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -127,11 +133,20 @@ const AddProperty = () => {
             </section>
 
             <div className="flex items-center gap-4 pt-8">
-              <button className="bg-primary text-white px-8 py-4 rounded-lg font-bold" type="submit">
-                Publish Property
+              <button
+                className="bg-primary text-white px-8 py-4 rounded-lg font-bold disabled:opacity-60"
+                type="submit"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Publishing…' : 'Publish Property'}
               </button>
-              <button className="text-secondary font-bold px-8 py-4 hover:bg-surface-container-low rounded-lg" type="button">
-                Save Draft
+              <button
+                className="text-secondary font-bold px-8 py-4 hover:bg-surface-container-low rounded-lg"
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => navigate('/dashboard/landlord/my-properties')}
+              >
+                Cancel
               </button>
             </div>
           </div>
@@ -139,9 +154,10 @@ const AddProperty = () => {
           <div className="lg:col-span-4 space-y-8">
             <div className="bg-surface-container-lowest p-8 rounded-xl ring-1 ring-black/5 shadow-sm">
               <h3 className="text-sm font-bold uppercase tracking-widest text-secondary mb-6">Visual Assets</h3>
-              <div className="aspect-[4/3] rounded-xl bg-surface-container-low flex items-center justify-center border-2 border-dashed border-outline-variant/30">
-                <span className="text-xs font-bold text-secondary uppercase tracking-tighter">Upload Hero Image</span>
-              </div>
+              <MediaUploader
+                value={media}
+                onChange={setMedia}
+              />
             </div>
 
             <div className="bg-primary-container p-8 rounded-xl text-white">

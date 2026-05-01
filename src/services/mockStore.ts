@@ -1,4 +1,5 @@
 ﻿import type { CreateInquiryPayload, Inquiry, LoginPayload, Property, PropertyFilters, RegisterPayload, User } from '../types';
+import { resolveOwnerId } from '../types';
 
 export interface PaymentRecord {
   id: string;
@@ -329,7 +330,7 @@ export const mockStore = {
       status: 'open',
       createdAt: new Date().toISOString(),
       userId: currentUser?._id,
-      ownerId: property.ownerId,
+      ownerId: resolveOwnerId(property.ownerId),
     };
 
     state.inquiries.unshift(inquiry);

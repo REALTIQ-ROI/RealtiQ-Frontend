@@ -1,4 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom';
+import Swal from 'sweetalert2';
+import { toast } from 'sonner';
 import PublicLayout from '../../components/layout/PublicLayout';
 import PropertyGallery from '../../components/property/PropertyGallery';
 import PropertyMeta from '../../components/property/PropertyMeta';
@@ -31,18 +33,32 @@ const PropertyDetails = () => {
   const { data: property, loading, error, execute } = useAsync(() => propertyService.getPropertyById(id), true);
 
   const handleBuyProperty = async () => {
-    if (!user || user.role !== 'buyer' || !property) {
+    if (!user) {
       navigate('/login-required');
       return;
     }
+    if (user.role !== 'buyer') {
+      toast.error('Only buyers can purchase properties.');
+      return;
+    }
+    if (!property) return;
+
+    const confirmed = await Swal.fire({
+      title: 'Proceed to Payment?',
+      text: 'You will be redirected to the secure payment gateway.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Continue',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#000000',
+      cancelButtonColor: '#6b7280',
+    });
+    if (!confirmed.isConfirmed) return;
 
     try {
       await buyProperty(property._id, user._id);
-      await execute();
-      navigate('/payment-success');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to complete purchase.';
-      alert(message);
+      toast.error(err instanceof Error ? err.message : 'Unable to complete purchase.');
     }
   };
 

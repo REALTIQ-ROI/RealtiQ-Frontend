@@ -4,6 +4,13 @@ export interface MediaItem {
   url: string;
   public_id: string;
   type: 'image' | 'video';
+  _id?: string;
+}
+
+export interface PropertyOwner {
+  _id: string;
+  name: string;
+  email: string;
 }
 
 export interface Property {
@@ -20,10 +27,16 @@ export interface Property {
   status: 'available' | 'sold';
   featured?: boolean;
   amenities?: string[];
-  ownerId?: string;
+  ownerId?: PropertyOwner | string;
   buyerId?: string;
   createdAt?: string;
+  updatedAt?: string;
 }
+
+export const resolveOwnerId = (ownerId?: PropertyOwner | string): string => {
+  if (!ownerId) return '';
+  return typeof ownerId === 'string' ? ownerId : ownerId._id;
+};
 
 export interface User {
   _id: string;

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import type { Property } from '../../../types';
+import { resolveOwnerId } from '../../../types';
 
 type FilterType = 'all' | 'available' | 'sold';
 
@@ -128,7 +129,7 @@ const ManageProperties = () => {
                 paginated.map((property) => {
                   const imageUrl = property.media?.[0]?.url;
                   const ownerInitials = property.ownerId
-                    ? property.ownerId.slice(0, 2).toUpperCase()
+                    ? resolveOwnerId(property.ownerId).slice(0, 2).toUpperCase()
                     : '??';
                   return (
                     <tr key={property._id} className="group hover:bg-surface-container-lowest transition-colors">
@@ -160,7 +161,7 @@ const ManageProperties = () => {
                             {ownerInitials}
                           </div>
                           <span className="text-sm font-medium text-secondary">
-                            {property.ownerId ? `…${property.ownerId.slice(-8)}` : 'N/A'}
+                            {property.ownerId ? `…${resolveOwnerId(property.ownerId).slice(-8)}` : 'N/A'}
                           </span>
                         </div>
                       </td>

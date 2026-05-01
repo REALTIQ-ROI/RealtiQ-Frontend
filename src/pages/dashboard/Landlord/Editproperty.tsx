@@ -1,5 +1,7 @@
 import { type FormEvent, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import Swal from 'sweetalert2';
+import { toast } from 'sonner';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
@@ -38,18 +40,35 @@ const Editproperty = () => {
     event.preventDefault();
     if (!property) return;
 
-    await updateProperty(property._id, {
-      title,
-      propertyType,
-      price: Number(price || 0),
-      description,
-      location: `${street}, ${city}, ${stateCode} ${zip}`,
-      bedrooms,
-      bathrooms,
-      squareFeet: Number(squareFeet.replace(/,/g, '') || 0),
+    const confirmed = await Swal.fire({
+      title: 'Save Changes?',
+      text: 'This will update your property listing.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Save',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#000000',
+      cancelButtonColor: '#6b7280',
+      reverseButtons: true,
     });
+    if (!confirmed.isConfirmed) return;
 
-    navigate('/dashboard/landlord/my-properties');
+    try {
+      await updateProperty(property._id, {
+        title,
+        propertyType,
+        price: Number(price || 0),
+        description,
+        location: `${street}, ${city}, ${stateCode} ${zip}`,
+        bedrooms,
+        bathrooms,
+        squareFeet: Number(squareFeet.replace(/,/g, '') || 0),
+      });
+      toast.success('Property updated successfully');
+      navigate('/dashboard/landlord/my-properties');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update property.');
+    }
   };
 
   return (

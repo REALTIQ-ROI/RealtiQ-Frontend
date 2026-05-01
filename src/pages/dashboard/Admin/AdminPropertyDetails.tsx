@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import { useProperties } from '../../../contexts/PropertiesContext';
+import { resolveOwnerId } from '../../../types';
 
 const sparkHeights = ['50%', '66%', '100%', '75%', '66%', '80%', '83%'];
 
@@ -29,7 +30,7 @@ const AdminPropertyDetails = () => {
   const secondImage = images[1]?.url;
   const thirdImage = images[2]?.url;
 
-  const ownerInitials = property.ownerId ? property.ownerId.slice(0, 2).toUpperCase() : 'NA';
+  const ownerInitials = property.ownerId ? resolveOwnerId(property.ownerId).slice(0, 2).toUpperCase() : 'NA';
 
   return (
     <AdminLayout>
@@ -300,7 +301,7 @@ const AdminPropertyDetails = () => {
                     Owner ID
                   </span>
                   <span className="text-xs text-secondary">
-                    {property.ownerId ? `…${property.ownerId.slice(-10)}` : 'Unknown'}
+                    {property.ownerId ? `…${resolveOwnerId(property.ownerId).slice(-10)}` : 'Unknown'}
                   </span>
                 </div>
               </div>
