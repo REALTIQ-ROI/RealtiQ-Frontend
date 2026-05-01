@@ -80,6 +80,9 @@ const AppRoutes = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email/:token" element={<VerifyEmail />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/auth/verify-email/:token" element={<VerifyEmail />} />
+        <Route path="/auth/verify-email" element={<VerifyEmail />} />
         <Route path="/registration-success" element={<RegistrationSuccess />} />
         <Route path="/auth-error" element={<AuthError />} />
         <Route path="/login-to-purchase" element={<LoginToPurchase />} />

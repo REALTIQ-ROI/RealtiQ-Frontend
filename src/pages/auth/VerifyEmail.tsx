@@ -1,16 +1,26 @@
-import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { authService } from '../../services/authService';
 import AuthLoader from '../../components/common/AuthLoader';
 
 type Status = 'loading' | 'success' | 'error';
 
 const VerifyEmail = () => {
-  const { token } = useParams<{ token: string }>();
+  const { token: pathToken } = useParams<{ token: string }>();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token') ?? pathToken;
+  const navigate = useNavigate();
   const [status, setStatus] = useState<Status>('loading');
   const [message, setMessage] = useState('');
+  const [countdown, setCountdown] = useState(3);
+  // Prevents React StrictMode's double-invocation from firing two API calls.
+  // The token is a one-time secret; a second request would return "already used".
+  const hasFired = useRef(false);
 
   useEffect(() => {
+    if (hasFired.current) return;
+    hasFired.current = true;
+
     if (!token) {
       setStatus('error');
       setMessage('Invalid verification link. No token provided.');
@@ -30,6 +40,24 @@ const VerifyEmail = () => {
         );
       });
   }, [token]);
+
+  // Auto-redirect to login after successful verification
+  useEffect(() => {
+    if (status !== 'success') return;
+
+    const interval = setInterval(() => {
+      setCountdown((c) => {
+        if (c <= 1) {
+          clearInterval(interval);
+          navigate('/login', { replace: true });
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [status, navigate]);
 
   if (status === 'loading') return <AuthLoader />;
 
@@ -58,8 +86,11 @@ const VerifyEmail = () => {
             >
               Email Verified
             </h1>
-            <p className="text-slate-500 text-sm leading-relaxed mb-8">
+            <p className="text-slate-500 text-sm leading-relaxed mb-2">
               {message || 'Email verified successfully. You can now log in.'}
+            </p>
+            <p className="text-slate-400 text-xs mb-8">
+              Redirecting to login in {countdown}s…
             </p>
             <Link
               to="/login"
