@@ -1,4 +1,5 @@
-﻿import AppRoutes from './routes/AppRoutes';
+import { Toaster } from 'sonner';
+import AppRoutes from './routes/AppRoutes';
 import { AuthProvider } from './contexts/AuthContext';
 import { PropertiesProvider } from './contexts/PropertiesContext';
 
@@ -7,6 +8,7 @@ function App() {
     <AuthProvider>
       <PropertiesProvider>
         <AppRoutes />
+        <Toaster position="top-right" richColors closeButton />
       </PropertiesProvider>
     </AuthProvider>
   );

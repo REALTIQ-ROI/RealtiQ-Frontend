@@ -1,4 +1,4 @@
-﻿export type UserRole = 'buyer' | 'landlord' | 'admin';
+export type UserRole = 'buyer' | 'landlord' | 'admin';
 
 export interface MediaItem {
   url: string;
@@ -30,6 +30,9 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
+  isVerified?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Payment {
@@ -56,7 +59,7 @@ export interface RegisterPayload {
   name: string;
   email: string;
   password: string;
-  role?: Exclude<UserRole, 'admin'>;
+  role: UserRole;
 }
 
 export interface PropertyFilters {

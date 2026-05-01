@@ -1,22 +1,33 @@
-﻿import { mockStore } from './mockStore';
-import type { AuthResponse, LoginPayload, RegisterPayload } from '../types';
+import api from '../lib/axios';
+import type { User, LoginPayload, RegisterPayload } from '../types';
 
-const buildToken = (userId: string) => `mock-jwt-${userId}-${Date.now()}`;
+export interface LoginResponse {
+  user: User;
+  token: string;
+}
+
+export interface RegisterResponse {
+  message: string;
+  user: User;
+}
+
+export interface VerifyEmailResponse {
+  message: string;
+}
 
 export const authService = {
-  async login(payload: LoginPayload): Promise<AuthResponse> {
-    const user = mockStore.login(payload);
-    return {
-      user,
-      token: buildToken(user._id),
-    };
+  async login(payload: LoginPayload): Promise<LoginResponse> {
+    const { data } = await api.post<LoginResponse>('/auth/login', payload);
+    return data;
   },
 
-  async register(payload: RegisterPayload): Promise<AuthResponse> {
-    const user = mockStore.register(payload);
-    return {
-      user,
-      token: buildToken(user._id),
-    };
+  async register(payload: RegisterPayload): Promise<RegisterResponse> {
+    const { data } = await api.post<RegisterResponse>('/auth/register', payload);
+    return data;
+  },
+
+  async verifyEmail(token: string): Promise<VerifyEmailResponse> {
+    const { data } = await api.get<VerifyEmailResponse>(`/auth/verify-email/${token}`);
+    return data;
   },
 };

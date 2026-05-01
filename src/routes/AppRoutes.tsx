@@ -19,6 +19,9 @@ import Redirecting from '../pages/public/Redirecting';
 
 import Login from '../pages/auth/Login';
 import Register from '../pages/auth/Register';
+import VerifyEmail from '../pages/auth/VerifyEmail';
+import RegistrationSuccess from '../pages/auth/RegistrationSuccess';
+import AuthError from '../pages/auth/AuthError';
 import LoginToPurchase from '../pages/auth/LoginToPurchase';
 import RegisterToPurchase from '../pages/auth/RegisterToPurchase';
 import AdminLogin from '../pages/auth/Admin/AdminLogin';
@@ -76,6 +79,9 @@ const AppRoutes = () => {
 
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/verify-email/:token" element={<VerifyEmail />} />
+        <Route path="/registration-success" element={<RegistrationSuccess />} />
+        <Route path="/auth-error" element={<AuthError />} />
         <Route path="/login-to-purchase" element={<LoginToPurchase />} />
         <Route path="/register-to-purchase" element={<RegisterToPurchase />} />
         <Route path="/auth/admin/login" element={<AdminLogin />} />

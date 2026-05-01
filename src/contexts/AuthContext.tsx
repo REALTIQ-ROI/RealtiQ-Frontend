@@ -1,4 +1,4 @@
-﻿import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import { authService } from '../services/authService';
 import type { LoginPayload, RegisterPayload, User } from '../types';
 
@@ -7,7 +7,7 @@ interface AuthContextValue {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (payload: LoginPayload) => Promise<void>;
+  login: (payload: LoginPayload) => Promise<User>;
   register: (payload: RegisterPayload) => Promise<void>;
   logout: () => void;
 }
@@ -15,10 +15,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const parseUser = (value: string | null): User | null => {
-  if (!value) {
-    return null;
-  }
-
+  if (!value) return null;
   try {
     return JSON.parse(value) as User;
   } catch {
@@ -38,12 +35,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(nextToken);
   };
 
-  const login = async (payload: LoginPayload) => {
+  const login = async (payload: LoginPayload): Promise<User> => {
     setIsLoading(true);
-
     try {
       const response = await authService.login(payload);
       persistSession(response.user, response.token);
+      return response.user;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to login.';
       throw new Error(message);
@@ -52,12 +49,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const register = async (payload: RegisterPayload) => {
+  const register = async (payload: RegisterPayload): Promise<void> => {
     setIsLoading(true);
-
     try {
-      const response = await authService.register(payload);
-      persistSession(response.user, response.token);
+      await authService.register(payload);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to register.';
       throw new Error(message);
@@ -83,6 +78,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       register,
       logout,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [user, token, isLoading],
   );
 
@@ -91,10 +87,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-
   if (!context) {
     throw new Error('useAuth must be used within AuthProvider');
   }
-
   return context;
 };
