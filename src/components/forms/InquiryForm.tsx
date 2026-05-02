@@ -18,15 +18,36 @@ const InquiryForm = ({ propertyId, onSubmitInquiry }: InquiryFormProps) => {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setLoading(true);
     setError(null);
 
+    if (!propertyId) {
+      setError('Please select a property before sending an inquiry.');
+      return;
+    }
+
+    if (!fullName.trim() || !email.trim() || !inquiryType.trim() || !message.trim()) {
+      setError('Please complete all inquiry fields.');
+      return;
+    }
+
+    if (message.trim().length < 20) {
+      setError('Message must be at least 20 characters.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    setLoading(true);
     try {
       await onSubmitInquiry({
         propertyId,
-        fullName,
-        email,
-        message,
+        fullName: fullName.trim(),
+        email: email.trim(),
+        message: message.trim(),
         inquiryType,
       });
       setFullName('');

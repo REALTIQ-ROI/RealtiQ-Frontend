@@ -1,27 +1,37 @@
-﻿import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
-import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
+import { resolveInquiryProperty, type ApiInquiry } from '../../../types';
+
+type FilterTab = 'all' | 'open' | 'closed';
+
+const formatDate = (dateStr: string) =>
+  new Date(dateStr).toLocaleString('en-NG', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  });
 
 const statusStyles: Record<string, string> = {
   open: 'bg-yellow-100 text-yellow-700',
   closed: 'bg-green-100 text-green-700',
-  scheduled: 'bg-blue-100 text-blue-700',
 };
 
-const statusLabel = (status: string) => {
-  if (status === 'closed') return 'Responded';
-  if (status === 'scheduled') return 'Scheduled';
-  return 'Pending';
-};
+const statusLabel = (status: ApiInquiry['status']) =>
+  status === 'closed' ? 'Responded' : 'Pending';
+
+const PLACEHOLDER_IMG =
+  'https://lh3.googleusercontent.com/aida-public/AB6AXuBxL6O9vohoafRE9IDJNjUsEXY6FseCx6W94YAa1rqCWzA0T_rrzgMNej1LpRdusNAYGdCPbXnhugD6rrA3jB3famHKj_e-RKIBdVrnISKWtPe1R4ujmq3tJ5QWv1satUoTMvXShAOfMe7DrcZbmshKi_S5Z3vtfl2l8drfbkc64N0L-5QUd9znYF6PWJkuXbgn8NRU8_Urt2D5EvqTQd6bHuL3v5sb6gtcOZz9QrZ00lY6kpcAq1DShMZxX2VtOpnERZ8mMQN0Iw';
 
 const InquiryHistory = () => {
   const { logout } = useAuth();
-  const { properties } = useProperties();
-  const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
+  const navigate = useNavigate();
+  const { data, loading, error, execute } = useAsync(() => inquiryService.getInquiries(), true);
+  const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
 
-  const inquiryList = (inquiries ?? []).slice(0, 4);
+  const allInquiries = data ?? [];
+  const filtered =
+    activeFilter === 'all' ? allInquiries : allInquiries.filter((i) => i.status === activeFilter);
 
   return (
     <div className="bg-surface font-body text-on-background antialiased">
@@ -82,7 +92,7 @@ const InquiryHistory = () => {
             <span className="material-symbols-outlined">mail</span>
           </button>
           <div className="w-8 h-8 rounded-full overflow-hidden bg-surface-container-high ml-2 cursor-pointer ring-2 ring-transparent hover:ring-primary transition-all">
-            <img className="w-full h-full object-cover" alt="User profile avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIChpKoOjaFxmBpsTuJIuEeOeMZX13QXR6lZ3qxRbjFfpqzweDTRVmQzv99AfNp6r90RlevIXtlJKSkNGA4rUXKjL5BehPEI2Sbc8aOR_iq0VVhll_I7BbcPr26GiUUlcZJLklafk72PhsWzliAwWo1PxJIq4MOKF18gMcErZHBqNjqkrrK86HPmZ1K2ikmTZ0kgeEA2pEJylKs5pCMg20TklEGcRcrerY2MEhRRaKBwxWOSmFjFHll6zTOFPOpjPBa7u8pQay9A" />
+            <div className="w-full h-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">U</div>
           </div>
         </div>
       </header>
@@ -102,68 +112,107 @@ const InquiryHistory = () => {
             </div>
           </div>
           <div className="mt-8 flex gap-3 overflow-x-auto pb-2 no-scrollbar">
-            <button className="px-6 py-2 bg-secondary-fixed text-on-secondary-fixed text-xs font-bold rounded-full transition-all">All Inquiries</button>
-            <button className="px-6 py-2 bg-surface-container-high text-on-surface-variant text-xs font-bold rounded-full hover:bg-secondary-fixed/50 transition-all">Responded</button>
-            <button className="px-6 py-2 bg-surface-container-high text-on-surface-variant text-xs font-bold rounded-full hover:bg-secondary-fixed/50 transition-all">Pending</button>
-            <button className="px-6 py-2 bg-surface-container-high text-on-surface-variant text-xs font-bold rounded-full hover:bg-secondary-fixed/50 transition-all">Scheduled</button>
+            <button
+              onClick={() => setActiveFilter('all')}
+              className={`px-6 py-2 text-xs font-bold rounded-full transition-all ${activeFilter === 'all' ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface-variant hover:bg-secondary-fixed/50'}`}
+            >
+              All Inquiries
+            </button>
+            <button
+              onClick={() => setActiveFilter('closed')}
+              className={`px-6 py-2 text-xs font-bold rounded-full transition-all ${activeFilter === 'closed' ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface-variant hover:bg-secondary-fixed/50'}`}
+            >
+              Responded
+            </button>
+            <button
+              onClick={() => setActiveFilter('open')}
+              className={`px-6 py-2 text-xs font-bold rounded-full transition-all ${activeFilter === 'open' ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface-variant hover:bg-secondary-fixed/50'}`}
+            >
+              Pending
+            </button>
           </div>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {inquiryList.map((inquiry) => {
-            const property = properties.find((item) => item._id === inquiry.propertyId);
-            const visualStatus = inquiry.status === 'closed' ? 'closed' : 'open';
-            return (
-              <div key={inquiry.id} className="group bg-surface-container-lowest rounded-xl overflow-hidden hover:translate-y-[-4px] transition-all duration-300 shadow-sm border border-outline-variant/10">
-                <div className="relative h-48 overflow-hidden">
-                  <img className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" src={property?.media[0]?.url ?? 'https://lh3.googleusercontent.com/aida-public/AB6AXuBxL6O9vohoafRE9IDJNjUsEXY6FseCx6W94YAa1rqCWzA0T_rrzgMNej1LpRdusNAYGdCPbXnhugD6rrA3jB3famHKj_e-RKIBdVrnISKWtPe1R4ujmq3tJ5QWv1satUoTMvXShAOfMe7DrcZbmshKi_S5Z3vtfl2l8drfbkc64N0L-5QUd9znYF6PWJkuXbgn8NRU8_Urt2D5EvqTQd6bHuL3v5sb6gtcOZz9QrZ00lY6kpcAq1DShMZxX2VtOpnERZ8mMQN0Iw'} alt={property?.title ?? 'Property'} />
-                  <div className="absolute top-4 right-4">
-                    <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full flex items-center gap-1 ${statusStyles[visualStatus] ?? 'bg-blue-100 text-blue-700'}`}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                      {statusLabel(inquiry.status)}
-                    </span>
+        {loading ? (
+          <div className="flex items-center justify-center py-32 gap-3 text-secondary">
+            <span className="material-symbols-outlined animate-spin text-3xl">progress_activity</span>
+            <span className="font-medium">Loading inquiries…</span>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-32 text-center">
+            <span className="material-symbols-outlined text-5xl text-red-400 mb-4">error_outline</span>
+            <p className="font-bold text-slate-700 mb-2">Failed to load inquiries</p>
+            <p className="text-secondary text-sm mb-6">{error}</p>
+            <button
+              onClick={() => void execute()}
+              className="px-6 py-3 bg-primary text-on-primary rounded-xl text-sm font-bold"
+            >
+              Retry
+            </button>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-32 text-secondary">
+            <span className="material-symbols-outlined text-6xl mb-4 opacity-30">chat_bubble</span>
+            <p className="font-semibold">No inquiries found</p>
+            <p className="text-sm mt-1">
+              {activeFilter !== 'all' ? 'Try a different filter' : 'Submit your first inquiry to get started'}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {filtered.map((inquiry) => {
+                const property = resolveInquiryProperty(inquiry.property);
+                return (
+                <div key={inquiry._id} className="group bg-surface-container-lowest rounded-xl overflow-hidden hover:translate-y-[-4px] transition-all duration-300 shadow-sm border border-outline-variant/10">
+                  <div className="relative h-48 overflow-hidden">
+                    <img
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      src={PLACEHOLDER_IMG}
+                      alt={property?.title ?? 'Property inquiry'}
+                    />
+                    <div className="absolute top-4 right-4">
+                      <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full flex items-center gap-1 ${statusStyles[inquiry.status] ?? 'bg-blue-100 text-blue-700'}`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                        {statusLabel(inquiry.status)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <div className="flex justify-between items-start mb-3">
+                      <h3 className="font-headline font-bold text-lg text-primary tracking-tight">{property?.title ?? 'Property unavailable'}</h3>
+                      <span className="text-[10px] font-medium text-secondary">{formatDate(inquiry.createdAt)}</span>
+                    </div>
+                    <p className="text-xs text-secondary/70 uppercase tracking-wider font-medium mb-2">{inquiry.inquiryType}</p>
+                    <p className="text-sm text-on-surface-variant leading-relaxed mb-6 line-clamp-3 italic">"{inquiry.message}"</p>
+                    <div className="flex items-center justify-between pt-4 border-t border-surface-container-low">
+                      <p className="text-xs text-secondary">{property?.location ?? 'Location unavailable'}</p>
+                      <button
+                        onClick={() => void navigate(`/dashboard/buyer/inquiry-details/${inquiry._id}`)}
+                        className="text-sm font-bold text-primary hover:underline transition-all"
+                      >
+                        View Details
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div className="p-6">
-                  <div className="flex justify-between items-start mb-3">
-                    <h3 className="font-headline font-bold text-lg text-primary tracking-tight">{property?.title ?? 'Property Inquiry'}</h3>
-                    <span className="text-[10px] font-medium text-secondary">{new Date(inquiry.createdAt).toLocaleDateString()}</span>
-                  </div>
-                  <p className="text-sm text-on-surface-variant leading-relaxed mb-6 line-clamp-3 italic">"{inquiry.message}"</p>
-                  <div className="flex items-center justify-between pt-4 border-t border-surface-container-low">
-                    <div className="flex -space-x-2">
-                      <img alt="Agent profile" className="w-8 h-8 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB0Y4jvpN3j_TmpYKBkPOOss147kFp7G6u-iYnXauJeghk_6pvaEUcgEv2-GnPzVRUvpwj3xnJUD_UUZyVRoLyoYL9XrS_h44ThbLfu338xl-r6JsYZqLkkxhO4Y6pIzYuHdg2cow-5qtVjdwtclOeuoPGs7gbm9pHo2yunbnBQf9JZX5mKX96M8Nh4PwkQ5AjFhwGaREmc90I7ZkSLiS59JhQIm1pwC-7MpRdNZr5u45XNt0xLniJshsKuPlP78u0bxBaCxux4fg" />
-                    </div>
-                    <button className="text-sm font-bold text-primary hover:underline transition-all">View Details</button>
-                  </div>
+              );
+              })}
+
+              <div className="lg:col-span-2 bg-primary-container text-on-primary-container rounded-xl p-8 flex flex-col justify-center relative overflow-hidden min-h-[280px]">
+                <div className="relative z-10 max-w-lg">
+                  <h3 className="font-headline font-bold text-2xl text-white mb-4">Concierge Assistant</h3>
+                  <p className="text-on-primary-container/80 text-sm leading-relaxed mb-8">Want to skip the wait? Our Premium Curator service can handle all negotiations and technical inquiries on your behalf, reducing response times by up to 60%.</p>
+                  <button className="px-8 py-3 bg-white text-primary text-xs font-bold rounded-md hover:scale-105 transition-transform">Enable Premium Concierge</button>
                 </div>
               </div>
-            );
-          })}
-
-          <div className="lg:col-span-2 bg-primary-container text-on-primary-container rounded-xl p-8 flex flex-col justify-center relative overflow-hidden min-h-[280px]">
-            <div className="relative z-10 max-w-lg">
-              <h3 className="font-headline font-bold text-2xl text-white mb-4">Concierge Assistant</h3>
-              <p className="text-on-primary-container/80 text-sm leading-relaxed mb-8">Want to skip the wait? Our Premium Curator service can handle all negotiations and technical inquiries on your behalf, reducing response times by up to 60%.</p>
-              <button className="px-8 py-3 bg-white text-primary text-xs font-bold rounded-md hover:scale-105 transition-transform">Enable Premium Concierge</button>
             </div>
-          </div>
-        </div>
 
-        <div className="mt-16 flex items-center justify-between border-t border-surface-container-high pt-8">
-          <p className="text-xs text-secondary font-medium tracking-wide">Showing {inquiryList.length} of {(inquiries ?? []).length} inquiries</p>
-          <div className="flex gap-2">
-            <button className="w-10 h-10 flex items-center justify-center rounded-md bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-colors">
-              <span className="material-symbols-outlined text-sm">chevron_left</span>
-            </button>
-            <button className="w-10 h-10 flex items-center justify-center rounded-md bg-primary text-on-primary font-bold text-xs">1</button>
-            <button className="w-10 h-10 flex items-center justify-center rounded-md bg-surface-container-lowest text-on-surface hover:bg-surface-container-high transition-colors font-bold text-xs">2</button>
-            <button className="w-10 h-10 flex items-center justify-center rounded-md bg-surface-container-lowest text-on-surface hover:bg-surface-container-high transition-colors font-bold text-xs">3</button>
-            <button className="w-10 h-10 flex items-center justify-center rounded-md bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-colors">
-              <span className="material-symbols-outlined text-sm">chevron_right</span>
-            </button>
-          </div>
-        </div>
+            <div className="mt-16 flex items-center justify-between border-t border-surface-container-high pt-8">
+              <p className="text-xs text-secondary font-medium tracking-wide">Showing {filtered.length} of {allInquiries.length} inquiries</p>
+            </div>
+          </>
+        )}
       </main>
 
       <div className="fixed bottom-8 right-8 z-50">

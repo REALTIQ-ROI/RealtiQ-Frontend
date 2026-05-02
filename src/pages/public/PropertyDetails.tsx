@@ -30,7 +30,7 @@ const PropertyDetails = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { buyProperty, refreshProperties } = useProperties();
-  const { data: property, loading, error, execute } = useAsync(() => propertyService.getPropertyById(id), true);
+  const { data: property, loading, error } = useAsync(() => propertyService.getPropertyById(id), true);
 
   const handleBuyProperty = async () => {
     if (!user) {
@@ -234,7 +234,8 @@ const PropertyDetails = () => {
               <InquiryForm
                 propertyId={property._id}
                 onSubmitInquiry={async (payload) => {
-                  await inquiryService.createInquiry(payload, user ?? undefined);
+                  await inquiryService.createInquiry(payload);
+                  toast.success('Inquiry submitted successfully.');
                   await refreshProperties();
                 }}
               />

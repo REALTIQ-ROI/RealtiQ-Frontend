@@ -13,7 +13,7 @@ const BuyerDashboard = () => {
 
   const myProperties = properties.filter((item) => item.buyerId === user?._id);
   const myInquiries = (inquiries ?? []).filter((item) => item.userId === user?._id);
-  const myPayments = (payments ?? []).filter((item) => item.buyerId === user?._id);
+  const myPayments = (payments ?? []).filter((item) => item.user?._id === user?._id);
 
   const featuredProperty = myProperties[0] ?? properties[0];
 

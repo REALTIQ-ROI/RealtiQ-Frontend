@@ -31,6 +31,7 @@ import LandlordRegistration from '../pages/auth/Landlord/LandlordRegistration';
 import Dashboard from '../pages/dashboard/Dashboard';
 import AdminDashboard from '../pages/dashboard/Admin/AdminDashboard';
 import AdminPropertyDetails from '../pages/dashboard/Admin/AdminPropertyDetails';
+import AdminInquiryDetails from '../pages/dashboard/Admin/AdminInquiryDetails';
 import LandlordDetails from '../pages/dashboard/Admin/LandlordDetails';
 import ManageInquiries from '../pages/dashboard/Admin/ManageInquiries';
 import ManageLandlords from '../pages/dashboard/Admin/ManageLandlords';
@@ -107,6 +108,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/buyer/payment-details" element={<PaymentDetails />} />
           <Route path="/dashboard/buyer/inquiry-history" element={<InquiryHistory />} />
           <Route path="/dashboard/buyer/inquiry-details" element={<InquiryDetails />} />
+          <Route path="/dashboard/buyer/inquiry-details/:id" element={<InquiryDetails />} />
           <Route path="/dashboard/buyer/profile-settings" element={<ProfileSettings />} />
         </Route>
 
@@ -118,6 +120,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/landlord/payment-history" element={<LandlordPaymentHistory />} />
           <Route path="/dashboard/landlord/inquiries" element={<InquiriesList />} />
           <Route path="/dashboard/landlord/inquiry-details" element={<LandlordInquiryDetails />} />
+          <Route path="/dashboard/landlord/inquiry-details/:id" element={<LandlordInquiryDetails />} />
           <Route path="/dashboard/landlord/add-property" element={<AddProperty />} />
           <Route path="/dashboard/landlord/edit-property" element={<Editproperty />} />
           <Route path="/dashboard/landlord/edit-property/:id" element={<Editproperty />} />
@@ -131,6 +134,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/manage-payments" element={<ManagePayments />} />
           <Route path="/dashboard/admin/payment-details/:id" element={<AdminPaymentDetails />} />
           <Route path="/dashboard/admin/manage-inquiries" element={<ManageInquiries />} />
+          <Route path="/dashboard/admin/inquiry-details/:id" element={<AdminInquiryDetails />} />
           <Route path="/dashboard/admin/manage-landlords" element={<ManageLandlords />} />
           <Route path="/dashboard/admin/landlord-details" element={<LandlordDetails />} />
           <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />

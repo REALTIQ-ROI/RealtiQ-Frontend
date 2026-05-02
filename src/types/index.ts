@@ -144,3 +144,34 @@ export interface CreateInquiryPayload {
   message: string;
   inquiryType: string;
 }
+
+export interface InquiryProperty {
+  _id: string;
+  title: string;
+  price: number;
+  location: string;
+}
+
+export interface InquiryUser {
+  _id: string;
+  name: string;
+  email: string;
+}
+
+export interface ApiInquiry {
+  _id: string;
+  property: InquiryProperty | string;
+  userId?: string | null;
+  user?: InquiryUser;
+  ownerId: string;
+  fullName: string;
+  email: string;
+  message: string;
+  inquiryType: string;
+  status: 'open' | 'closed';
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export const resolveInquiryProperty = (property: ApiInquiry['property']): InquiryProperty | null =>
+  typeof property === 'string' ? null : property;

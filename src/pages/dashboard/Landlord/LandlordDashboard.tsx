@@ -4,6 +4,7 @@ import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
 import { paymentService } from '../../../services/paymentService';
+import { resolveOwnerId } from '../../../types';
 
 const LandlordDashboard = () => {
   const { user } = useAuth();
@@ -11,10 +12,10 @@ const LandlordDashboard = () => {
   const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
   const { data: payments } = useAsync(() => paymentService.getPayments(), true);
 
-  const myProperties = properties.filter((item) => item.ownerId === user?._id);
+  const myProperties = properties.filter((item) => resolveOwnerId(item.ownerId) === user?._id);
   const myInquiries = (inquiries ?? []).filter((item) => item.ownerId === user?._id);
   const mySales = myProperties.filter((item) => item.status === 'sold');
-  const myPayments = (payments ?? []).filter((item) => myProperties.some((prop) => prop._id === item.propertyId));
+  const myPayments = (payments ?? []).filter((item) => myProperties.some((prop) => prop._id === item.property?._id));
 
   return (
     <LandlordPortalLayout

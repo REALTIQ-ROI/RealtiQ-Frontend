@@ -233,7 +233,7 @@ const AdminDashboard = () => {
               })}
 
               {recentInquiries.map((inq) => (
-                <div key={inq.id} className="flex gap-4">
+                <div key={inq._id} className="flex gap-4">
                   <div className="relative">
                     <div className="w-10 h-10 rounded-full bg-on-tertiary-container flex items-center justify-center text-white">
                       <span className="material-symbols-outlined text-lg">mail</span>
