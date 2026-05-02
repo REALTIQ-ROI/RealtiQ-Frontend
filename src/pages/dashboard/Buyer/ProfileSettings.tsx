@@ -1,21 +1,63 @@
-﻿import { useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
+import Button from '../../../components/ui/Button';
+import ErrorState from '../../../components/ui/ErrorState';
+import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
+
+const phoneRegex = /^(\+234|234|0)[789][01]\d{8}$/;
+
+const formatDate = (date?: string) =>
+  date ? new Date(date).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
 
 const ProfileSettings = () => {
   const { user, logout } = useAuth();
-  const [name, setName] = useState(user?.name ?? 'Alexander Sterling');
-  const [email] = useState(user?.email ?? 'a.sterling@curator.com');
-  const [phone, setPhone] = useState('+1 (555) 902-1240');
-  const [saved, setSaved] = useState(false);
+  const { data: profile, loading, error, execute } = useAsync(
+    () => (user?._id ? userService.fetchUserById(user._id) : Promise.reject(new Error('Missing user id'))),
+    Boolean(user?._id),
+  );
+  const [name, setName] = useState(user?.name ?? '');
+  const [phone, setPhone] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const onSave = async () => {
+  useEffect(() => {
+    if (profile) {
+      setName(profile.name);
+      setPhone(profile.phone ?? '');
+    }
+  }, [profile]);
+
+  const onSave = async (event: FormEvent) => {
+    event.preventDefault();
     if (!user) return;
-    await userService.updateUserName(user._id, name);
-    localStorage.setItem('user', JSON.stringify({ ...user, name }));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (!name.trim()) {
+      setFormError('Name is required.');
+      return;
+    }
+    if (phone.trim() && !phoneRegex.test(phone.trim())) {
+      setFormError('Enter a valid Nigerian phone number.');
+      return;
+    }
+
+    setSaving(true);
+    setFormError(null);
+    try {
+      const updated = await userService.updateUser(user._id, {
+        name: name.trim(),
+        phone: phone.trim() || undefined,
+      });
+      localStorage.setItem('user', JSON.stringify({ ...user, ...updated }));
+      toast.success('Profile updated successfully.');
+      await execute();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Unable to update profile.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -42,70 +84,78 @@ const ProfileSettings = () => {
         <div className="flex items-center gap-4"><span className="text-xl font-bold tracking-tighter text-slate-900 font-headline">Architectural Curator</span></div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-4 text-slate-500"><button className="hover:text-slate-900 transition-colors"><span className="material-symbols-outlined">notifications</span></button><button className="hover:text-slate-900 transition-colors"><span className="material-symbols-outlined">mail</span></button></div>
-          <div className="h-8 w-8 rounded-full overflow-hidden bg-surface-container-high"><img className="w-full h-full object-cover" alt="avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4k4NZjc2PlvqPjN82Q6qi2QBMqPmsUlHw9XGV9c-hdSSiyKcR6MdOZsSj1-2y59IZaUlR3dMfTZczisy75_QL54tphufxe5sfoSUXyIquYDgGXYf1I8rnYZ0Oki8WRVpcHREg9QJVwad-rPgHp96GP3_sc03v_RPY35QsphxxhtQrOXQ5T31Tmtl1eVSZMGPkAsNcxdQMQViOohCRajKnFg2iwkOwB78fI3hXk1vXF6oVykjlcCOMDSmoolZqJebKISSJGvf8ow" /></div>
+          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+            {(profile?.name ?? user?.name ?? 'U').slice(0, 1).toUpperCase()}
+          </div>
         </div>
       </header>
 
       <main className="ml-64 pt-24 pb-20 px-12 min-h-screen">
         <div className="max-w-4xl mx-auto">
-          <div className="mb-12"><span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary font-headline mb-2 block">Account Management</span><h2 className="text-5xl font-extrabold font-headline text-primary tracking-tighter">Profile Settings</h2></div>
-
-          <div className="space-y-12">
-            <section className="bg-surface-container-low p-8 rounded-xl">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div><h3 className="text-lg font-bold font-headline mb-1">Personal Details</h3><p className="text-sm text-secondary leading-relaxed">Update your public identity and contact information for property inquiries.</p></div>
-                <div className="md:col-span-2 space-y-6">
-                  <div className="grid grid-cols-1 gap-4">
-                    <div className="space-y-1.5"><label className="text-[11px] font-bold uppercase tracking-wider text-secondary">Full Name</label><input className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 focus:ring-surface-tint rounded-lg px-4 py-3 text-sm transition-all outline-none" type="text" value={name} onChange={(e) => setName(e.target.value)} /></div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1.5"><label className="text-[11px] font-bold uppercase tracking-wider text-secondary">Email Address</label><input className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 rounded-lg px-4 py-3 text-sm" type="email" value={email} readOnly /></div>
-                      <div className="space-y-1.5"><label className="text-[11px] font-bold uppercase tracking-wider text-secondary">Phone Number</label><input className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 focus:ring-surface-tint rounded-lg px-4 py-3 text-sm transition-all outline-none" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="flex flex-col md:flex-row gap-12 items-start">
-              <div className="w-full md:w-1/3"><h3 className="text-lg font-bold font-headline mb-2">Password Management</h3><p className="text-sm text-secondary leading-relaxed">Ensure your account remains secure with a complex password of at least 12 characters.</p></div>
-              <div className="w-full md:w-2/3 bg-surface-container-lowest p-8 rounded-xl shadow-[0_20px_40px_rgba(25,28,30,0.06)]">
-                <div className="space-y-6">
-                  <div className="space-y-1.5"><label className="text-[11px] font-bold uppercase tracking-wider text-secondary">Current Password</label><input className="w-full bg-surface-container-low border-none ring-1 ring-outline-variant/20 rounded-lg px-4 py-3 text-sm" type="password" /></div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5"><label className="text-[11px] font-bold uppercase tracking-wider text-secondary">New Password</label><input className="w-full bg-surface-container-low border-none ring-1 ring-outline-variant/20 rounded-lg px-4 py-3 text-sm" type="password" /></div>
-                    <div className="space-y-1.5"><label className="text-[11px] font-bold uppercase tracking-wider text-secondary">Confirm New Password</label><input className="w-full bg-surface-container-low border-none ring-1 ring-outline-variant/20 rounded-lg px-4 py-3 text-sm" type="password" /></div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="bg-surface-container-low p-8 rounded-xl">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div><h3 className="text-lg font-bold font-headline mb-1">Preferences</h3><p className="text-sm text-secondary leading-relaxed">Control how and when you receive updates about listings and tours.</p></div>
-                <div className="md:col-span-2 space-y-1">
-                  {['New Listing Alerts', 'Tour Confirmations', 'Market Reports'].map((label, index) => (
-                    <div key={label} className="flex items-center justify-between py-4 group">
-                      <div className="space-y-0.5"><span className="text-sm font-bold block">{label}</span></div>
-                      <div className={`relative inline-flex h-5 w-10 flex-shrink-0 rounded-full p-0.5 ${index === 2 ? 'bg-surface-container-highest' : 'bg-primary-container'}`}><span className={`inline-block h-4 w-4 transform rounded-full bg-white ${index === 2 ? 'translate-x-0' : 'translate-x-5'}`}></span></div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </section>
-
-            <div className="flex items-center justify-end gap-6 pt-8">
-              {saved ? <span className="text-green-700 text-sm font-semibold">Saved successfully</span> : null}
-              <button className="text-secondary text-sm font-semibold hover:text-primary transition-colors">Discard Changes</button>
-              <button className="bg-primary text-on-primary px-8 py-4 rounded-md text-sm font-bold font-headline tracking-wide hover:opacity-90 transition-opacity" onClick={() => void onSave()}>Save Profile Settings</button>
-            </div>
+          <div className="mb-12">
+            <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-secondary font-headline mb-2 block">Account Management</span>
+            <h2 className="text-5xl font-extrabold font-headline text-primary tracking-tighter">Profile Settings</h2>
           </div>
+
+          {loading ? (
+            <LoadingState label="Loading profile..." />
+          ) : error ? (
+            <ErrorState message={error} onRetry={() => void execute()} />
+          ) : (
+            <form className="space-y-12" onSubmit={onSave}>
+              <section className="bg-surface-container-low p-8 rounded-xl">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div>
+                    <h3 className="text-lg font-bold font-headline mb-1">Personal Details</h3>
+                    <p className="text-sm text-secondary leading-relaxed">Update your public identity and contact information.</p>
+                  </div>
+                  <div className="md:col-span-2 space-y-6">
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-secondary">Full Name</label>
+                        <input className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 focus:ring-surface-tint rounded-lg px-4 py-3 text-sm transition-all outline-none" type="text" value={name} onChange={(e) => setName(e.target.value)} />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-bold uppercase tracking-wider text-secondary">Email Address</label>
+                          <input className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 rounded-lg px-4 py-3 text-sm" type="email" value={profile?.email ?? user?.email ?? ''} readOnly />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-bold uppercase tracking-wider text-secondary">Phone Number</label>
+                          <input className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 focus:ring-surface-tint rounded-lg px-4 py-3 text-sm transition-all outline-none" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="08012345678" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="bg-surface-container-lowest p-8 rounded-xl border border-outline-variant/10">
+                <h3 className="text-lg font-bold font-headline mb-5">Profile Summary</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <p><strong>Role:</strong> <span className="capitalize">{profile?.role ?? user?.role}</span></p>
+                  <p><strong>Verification:</strong> {profile?.isVerified ? 'Verified' : 'Unverified'}</p>
+                  <p><strong>Created:</strong> {formatDate(profile?.createdAt)}</p>
+                  <p><strong>Updated:</strong> {formatDate(profile?.updatedAt)}</p>
+                </div>
+              </section>
+
+              {formError ? <p className="text-error text-sm font-semibold">{formError}</p> : null}
+
+              <div className="flex items-center justify-end gap-6 pt-2">
+                <button className="text-secondary text-sm font-semibold hover:text-primary transition-colors" type="button" onClick={() => {
+                  setName(profile?.name ?? user?.name ?? '');
+                  setPhone(profile?.phone ?? '');
+                  setFormError(null);
+                }}>
+                  Discard Changes
+                </button>
+                <Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save Profile Settings'}</Button>
+              </div>
+            </form>
+          )}
         </div>
       </main>
-
-      <div className="fixed bottom-8 right-8 bg-surface-container-lowest/80 backdrop-blur-xl p-4 rounded-xl border border-white/20 shadow-xl flex items-center gap-4">
-        <div className="h-10 w-10 bg-secondary-container rounded-lg flex items-center justify-center text-on-secondary-fixed"><span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>verified_user</span></div>
-        <div><p className="text-[10px] font-bold uppercase tracking-widest text-secondary">Privacy Status</p><p className="text-xs font-semibold">Two-Factor Enabled</p></div>
-      </div>
     </div>
   );
 };

@@ -33,6 +33,7 @@ import AdminDashboard from '../pages/dashboard/Admin/AdminDashboard';
 import AdminPropertyDetails from '../pages/dashboard/Admin/AdminPropertyDetails';
 import AdminInquiryDetails from '../pages/dashboard/Admin/AdminInquiryDetails';
 import LandlordDetails from '../pages/dashboard/Admin/LandlordDetails';
+import UserDetails from '../pages/dashboard/Admin/UserDetails';
 import ManageInquiries from '../pages/dashboard/Admin/ManageInquiries';
 import ManageLandlords from '../pages/dashboard/Admin/ManageLandlords';
 import ManagePayments from '../pages/dashboard/Admin/ManagePayments';
@@ -129,6 +130,7 @@ const AppRoutes = () => {
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route path="/dashboard/admin" element={<AdminDashboard />} />
           <Route path="/dashboard/admin/manage-users" element={<ManageUsers />} />
+          <Route path="/dashboard/admin/users/:id" element={<UserDetails />} />
           <Route path="/dashboard/admin/manage-properties" element={<ManageProperties />} />
           <Route path="/dashboard/admin/property-details" element={<AdminPropertyDetails />} />
           <Route path="/dashboard/admin/manage-payments" element={<ManagePayments />} />
@@ -137,6 +139,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/inquiry-details/:id" element={<AdminInquiryDetails />} />
           <Route path="/dashboard/admin/manage-landlords" element={<ManageLandlords />} />
           <Route path="/dashboard/admin/landlord-details" element={<LandlordDetails />} />
+          <Route path="/dashboard/admin/landlord-details/:id" element={<LandlordDetails />} />
           <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />
         </Route>
 

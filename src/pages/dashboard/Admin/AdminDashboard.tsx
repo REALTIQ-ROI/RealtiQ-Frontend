@@ -1,12 +1,50 @@
 import AdminLayout from '../../../components/layout/AdminLayout';
+import ErrorState from '../../../components/ui/ErrorState';
 import { useAsync } from '../../../hooks/useAsync';
-import { userService } from '../../../services/userService';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { inquiryService } from '../../../services/inquiryService';
-import { paymentService } from '../../../services/paymentService';
+import { adminService } from '../../../services/adminService';
 import type { Property } from '../../../types';
 
 const barHeights = [30, 45, 40, 65, 50, 35, 60, 85, 45, 55, 70, 40, 30, 50, 95, 45, 60, 35, 75, 55];
+
+const emptyStats = {
+  totalUsers: 0,
+  totalProperties: 0,
+  activeListings: 0,
+  soldProperties: 0,
+  totalInquiries: 0,
+  totalRevenue: 0,
+};
+
+const formatNGN = (value: number) =>
+  new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    maximumFractionDigits: 0,
+  }).format(value);
+
+const StatCard = ({ title, value, icon }: { title: string; value: string | number; icon: string }) => (
+  <div className="bg-surface-container-lowest p-6 rounded-xl transition-all hover:-translate-y-1">
+    <div className="flex items-start justify-between">
+      <div className="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-fixed">
+        <span className="material-symbols-outlined text-2xl">{icon}</span>
+      </div>
+    </div>
+    <div className="mt-4">
+      <p className="text-secondary text-sm font-medium">{title}</p>
+      <h3 className="text-3xl font-extrabold tracking-tight mt-1 font-headline">{value}</h3>
+    </div>
+  </div>
+);
+
+const StatSkeleton = () => (
+  <div className="bg-surface-container-lowest p-6 rounded-xl animate-pulse">
+    <div className="w-12 h-12 rounded-full bg-surface-container-high mb-4" />
+    <div className="h-4 w-28 bg-surface-container-high rounded mb-3" />
+    <div className="h-8 w-20 bg-surface-container-high rounded" />
+  </div>
+);
 
 const PropertyCard = ({ property }: { property: Property }) => {
   const imageUrl = property.media?.[0]?.url;
@@ -63,20 +101,12 @@ const PropertyCard = ({ property }: { property: Property }) => {
 
 const AdminDashboard = () => {
   const { properties } = useProperties();
-  const { data: users } = useAsync(() => userService.getUsers(), true);
-  const { data: landlords } = useAsync(() => userService.getLandlords(), true);
+  const { data: statsData, loading: statsLoading, error: statsError, execute: refreshStats } = useAsync(
+    () => adminService.fetchAdminStats(),
+    true,
+  );
   const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
-  const { data: payments } = useAsync(() => paymentService.getPayments(), true);
-
-  const totalRevenue = payments
-    ? payments.filter((p) => p.status === 'paid').reduce((acc, p) => acc + p.amount, 0)
-    : 0;
-
-  const formatRevenue = (n: number) => {
-    if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}k`;
-    return `$${n}`;
-  };
+  const stats = statsData ?? emptyStats;
 
   const featuredProperties = properties.filter((p) => p.featured).slice(0, 3);
   const displayProperties = featuredProperties.length > 0 ? featuredProperties : properties.slice(0, 3);
@@ -100,73 +130,37 @@ const AdminDashboard = () => {
               <span className="material-symbols-outlined text-lg">calendar_today</span>
               <span>Last 30 Days</span>
             </button>
-            <button className="bg-primary text-on-primary px-6 py-2 rounded-lg font-bold flex items-center gap-2 hover:opacity-90 transition-all">
-              <span className="material-symbols-outlined text-lg">download</span>
-              <span>Export Report</span>
+            <button
+              className="bg-primary text-on-primary px-6 py-2 rounded-lg font-bold flex items-center gap-2 hover:opacity-90 transition-all"
+              onClick={() => void refreshStats()}
+            >
+              <span className="material-symbols-outlined text-lg">refresh</span>
+              <span>Refresh Stats</span>
             </button>
           </div>
         </section>
 
         {/* Metrics Grid */}
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Total Properties */}
-          <div className="bg-surface-container-lowest p-6 rounded-xl transition-all hover:-translate-y-1">
-            <div className="flex items-start justify-between">
-              <div className="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-fixed">
-                <span className="material-symbols-outlined text-2xl">home_work</span>
-              </div>
-              <span className="text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full text-xs font-bold">+12.5%</span>
-            </div>
-            <div className="mt-4">
-              <p className="text-secondary text-sm font-medium">Total Properties</p>
-              <h3 className="text-3xl font-extrabold tracking-tight mt-1 font-headline">{properties.length}</h3>
-            </div>
+        {statsError ? (
+          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20">
+            <ErrorState message="Unable to load dashboard stats" onRetry={() => void refreshStats()} />
           </div>
-
-          {/* Total Landlords */}
-          <div className="bg-surface-container-lowest p-6 rounded-xl transition-all hover:-translate-y-1">
-            <div className="flex items-start justify-between">
-              <div className="w-12 h-12 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed">
-                <span className="material-symbols-outlined text-2xl">person_pin</span>
-              </div>
-              <span className="text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full text-xs font-bold">+4.2%</span>
-            </div>
-            <div className="mt-4">
-              <p className="text-secondary text-sm font-medium">Total Landlords</p>
-              <h3 className="text-3xl font-extrabold tracking-tight mt-1 font-headline">{landlords?.length ?? 0}</h3>
-            </div>
-          </div>
-
-          {/* Total Users */}
-          <div className="bg-surface-container-lowest p-6 rounded-xl transition-all hover:-translate-y-1">
-            <div className="flex items-start justify-between">
-              <div className="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface">
-                <span className="material-symbols-outlined text-2xl">group</span>
-              </div>
-              <span className="text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full text-xs font-bold">+18.1%</span>
-            </div>
-            <div className="mt-4">
-              <p className="text-secondary text-sm font-medium">Total Users</p>
-              <h3 className="text-3xl font-extrabold tracking-tight mt-1 font-headline">{users?.length ?? 0}</h3>
-            </div>
-          </div>
-
-          {/* Total Revenue */}
-          <div className="bg-surface-container-lowest p-6 rounded-xl transition-all hover:-translate-y-1">
-            <div className="flex items-start justify-between">
-              <div className="w-12 h-12 rounded-full bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed">
-                <span className="material-symbols-outlined text-2xl">payments</span>
-              </div>
-              <span className="text-rose-600 bg-rose-50 px-2 py-1 rounded-full text-xs font-bold">
-                {payments ? `${payments.length}` : '—'} txns
-              </span>
-            </div>
-            <div className="mt-4">
-              <p className="text-secondary text-sm font-medium">Total Revenue</p>
-              <h3 className="text-3xl font-extrabold tracking-tight mt-1 font-headline">{formatRevenue(totalRevenue)}</h3>
-            </div>
-          </div>
-        </section>
+        ) : (
+          <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {statsLoading ? (
+              Array.from({ length: 6 }, (_, index) => <StatSkeleton key={index} />)
+            ) : (
+              <>
+                <StatCard title="Total Users" value={stats.totalUsers.toLocaleString()} icon="group" />
+                <StatCard title="Total Properties" value={stats.totalProperties.toLocaleString()} icon="home_work" />
+                <StatCard title="Active Listings" value={stats.activeListings.toLocaleString()} icon="real_estate_agent" />
+                <StatCard title="Sold Properties" value={stats.soldProperties.toLocaleString()} icon="verified" />
+                <StatCard title="Total Inquiries" value={stats.totalInquiries.toLocaleString()} icon="mail" />
+                <StatCard title="Total Revenue" value={formatNGN(stats.totalRevenue)} icon="payments" />
+              </>
+            )}
+          </section>
+        )}
 
         {/* Charts & Activity */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">

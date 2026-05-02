@@ -43,9 +43,25 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
+  phone?: string;
   isVerified?: boolean;
+  propertyCount?: number;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface UpdateUserPayload {
+  name: string;
+  phone?: string;
+}
+
+export interface AdminStats {
+  totalUsers: number;
+  totalProperties: number;
+  activeListings: number;
+  soldProperties: number;
+  totalInquiries: number;
+  totalRevenue: number;
 }
 
 export interface Payment {
