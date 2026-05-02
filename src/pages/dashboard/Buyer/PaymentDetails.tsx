@@ -1,110 +1,392 @@
-﻿import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import Swal from 'sweetalert2';
+import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
-import { useProperties } from '../../../contexts/PropertiesContext';
-import { useAsync } from '../../../hooks/useAsync';
 import { paymentService } from '../../../services/paymentService';
+import type { ApiPayment } from '../../../types';
+
+const formatNGN = (amount: number) =>
+  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(amount);
+
+const formatDate = (dateStr: string) =>
+  new Date(dateStr).toLocaleString('en-NG', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+
+const statusBadge = (status: ApiPayment['status']) => {
+  const cfg: Record<ApiPayment['status'], string> = {
+    paid: 'bg-green-100 text-green-700',
+    pending: 'bg-amber-100 text-amber-700',
+    failed: 'bg-red-100 text-red-700',
+  };
+  return (
+    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold capitalize ${cfg[status]}`}>
+      {status}
+    </span>
+  );
+};
 
 const PaymentDetails = () => {
+  const { id } = useParams<{ id: string }>();
   const { user, logout } = useAuth();
-  const { properties } = useProperties();
-  const { data: payments } = useAsync(() => paymentService.getPayments(), true);
+  const navigate = useNavigate();
 
-  const payment = (payments ?? []).find((item) => item.buyerId === user?._id) ?? (payments ?? [])[0];
-  const property = properties.find((item) => item._id === payment?.propertyId);
+  const [payment, setPayment] = useState<ApiPayment | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+
+  useEffect(() => {
+    if (!id) {
+      setError('No payment ID provided.');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    paymentService
+      .getPaymentById(id)
+      .then(setPayment)
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : 'Payment not found.');
+      })
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  const handleVerify = async () => {
+    if (!payment) return;
+    const confirmed = await Swal.fire({
+      title: 'Verify Payment?',
+      text: 'This will check payment status with Paystack',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Verify',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#000000',
+      cancelButtonColor: '#6b7280',
+      reverseButtons: true,
+    });
+    if (!confirmed.isConfirmed) return;
+
+    setVerifying(true);
+    try {
+      const result = await paymentService.verifyPayment(payment.reference);
+      if (result.verified) {
+        toast.success('Payment verified successfully');
+        setPayment((prev) => (prev ? { ...prev, status: 'paid' } : prev));
+      } else {
+        toast.error('Payment verification failed');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to verify payment');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (!id) return;
+    setVerifying(true);
+    try {
+      const refreshed = await paymentService.getPaymentById(id);
+      setPayment(refreshed);
+      toast.success('Status refreshed');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to refresh');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const sidebar = (
+    <aside className="fixed left-0 top-0 h-screen w-64 z-50 bg-white flex flex-col p-6 gap-y-2 shadow-2xl shadow-slate-200/50">
+      <div className="mb-8">
+        <h2 className="text-2xl font-black text-slate-900">Curator</h2>
+        <p className="text-xs tracking-widest uppercase text-slate-500 font-semibold">Premium Real Estate</p>
+      </div>
+      <nav className="flex-1 flex flex-col gap-y-1">
+        <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 text-sm font-semibold" to="/dashboard/buyer"><span className="material-symbols-outlined">dashboard</span> Overview</Link>
+        <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 text-sm font-semibold" to="/dashboard/buyer/my-properties"><span className="material-symbols-outlined">domain</span> My Properties</Link>
+        <Link className="flex items-center gap-3 px-4 py-3 text-slate-900 bg-slate-100 rounded-md font-bold text-sm" to="/dashboard/buyer/payment-history"><span className="material-symbols-outlined">payments</span> Payment History</Link>
+        <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 text-sm font-semibold" to="/dashboard/buyer/inquiry-history"><span className="material-symbols-outlined">chat_bubble</span> Inquiry History</Link>
+        <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 text-sm font-semibold" to="/dashboard/buyer/profile-settings"><span className="material-symbols-outlined">settings</span> Settings</Link>
+      </nav>
+      <div className="mt-auto flex flex-col gap-y-1">
+        <button className="text-left flex items-center gap-3 px-4 py-2 text-slate-500 hover:text-slate-900 text-xs font-semibold uppercase tracking-wider"><span className="material-symbols-outlined text-sm">help</span> Help Center</button>
+        <button className="text-left flex items-center gap-3 px-4 py-2 text-slate-500 hover:text-slate-900 text-xs font-semibold uppercase tracking-wider" onClick={logout}><span className="material-symbols-outlined text-sm">logout</span> Logout</button>
+      </div>
+    </aside>
+  );
+
+  if (loading) {
+    return (
+      <div className="text-on-surface bg-[#f7f9fb] min-h-screen">
+        {sidebar}
+        <div className="ml-64 pt-24 flex items-center justify-center py-32 gap-3 text-secondary">
+          <span className="material-symbols-outlined animate-spin text-3xl">progress_activity</span>
+          <span className="font-medium">Loading payment details…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !payment) {
+    return (
+      <div className="text-on-surface bg-[#f7f9fb] min-h-screen">
+        {sidebar}
+        <div className="ml-64 pt-24 flex flex-col items-center justify-center py-32 text-center">
+          <span className="material-symbols-outlined text-5xl text-red-400 mb-4">error_outline</span>
+          <p className="text-lg font-bold text-slate-700 mb-2">Payment Not Found</p>
+          <p className="text-secondary text-sm mb-6">{error}</p>
+          <button
+            onClick={() => void navigate('/dashboard/buyer/payment-history')}
+            className="px-6 py-3 bg-primary text-on-primary rounded-xl text-sm font-bold"
+          >
+            Back to Payment History
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const canVerify = payment.status === 'pending' && (user?.role === 'buyer' || user?.role === 'admin');
 
   return (
-    <div className="text-on-surface bg-[#f7f9fb]">
-      <aside className="fixed left-0 top-0 h-screen w-64 z-50 bg-white flex flex-col p-6 gap-y-2 shadow-2xl shadow-slate-200/50">
-        <div className="mb-8">
-          <h2 className="text-2xl font-black text-slate-900">Curator</h2>
-          <p className="text-xs tracking-widest uppercase text-slate-500 font-semibold">Premium Real Estate</p>
-        </div>
-        <nav className="flex-1 flex flex-col gap-y-1">
-          <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 text-sm font-semibold" to="/dashboard/buyer"><span className="material-symbols-outlined">dashboard</span> Overview</Link>
-          <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 text-sm font-semibold" to="/dashboard/buyer/my-properties"><span className="material-symbols-outlined">domain</span> My Properties</Link>
-          <Link className="flex items-center gap-3 px-4 py-3 text-slate-900 bg-slate-100 rounded-md font-bold scale-98 transition-all text-sm" to="/dashboard/buyer/payment-history"><span className="material-symbols-outlined">payments</span> Payment History</Link>
-          <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 text-sm font-semibold" to="/dashboard/buyer/inquiry-history"><span className="material-symbols-outlined">chat_bubble</span> Inquiry History</Link>
-          <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 text-sm font-semibold" to="/dashboard/buyer/profile-settings"><span className="material-symbols-outlined">settings</span> Settings</Link>
-        </nav>
-        <div className="mt-auto flex flex-col gap-y-1">
-          <button className="text-left flex items-center gap-3 px-4 py-2 text-slate-500 hover:text-slate-900 text-xs font-semibold uppercase tracking-wider"><span className="material-symbols-outlined text-sm">help</span> Help Center</button>
-          <button className="text-left flex items-center gap-3 px-4 py-2 text-slate-500 hover:text-slate-900 text-xs font-semibold uppercase tracking-wider" onClick={logout}><span className="material-symbols-outlined text-sm">logout</span> Logout</button>
-        </div>
-      </aside>
+    <div className="text-on-surface bg-[#f7f9fb] min-h-screen">
+      {sidebar}
 
       <header className="fixed top-0 w-full z-40 bg-slate-50/80 backdrop-blur-xl flex justify-between items-center px-8 h-16 ml-64">
-        <div className="flex items-center gap-4"><span className="text-xl font-bold tracking-tighter text-slate-900">Architectural Curator</span></div>
-        <div className="flex items-center gap-6">
-          <div className="relative flex items-center bg-surface-container-low px-4 py-2 rounded-full w-64">
-            <span className="material-symbols-outlined text-slate-400 mr-2 text-sm">search</span>
-            <input className="bg-transparent border-none text-sm focus:ring-0 p-0 w-full" placeholder="Search transactions..." type="text" />
-          </div>
-          <div className="flex items-center gap-4 text-slate-500">
-            <span className="material-symbols-outlined cursor-pointer hover:text-slate-900 transition-colors">notifications</span>
-            <span className="material-symbols-outlined cursor-pointer hover:text-slate-900 transition-colors">mail</span>
-            <div className="h-8 w-8 rounded-full overflow-hidden bg-slate-200"><img alt="User profile avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCEmGtZe7qZKARcW2G2y7COD79No5cOU-LvzZBNE859za-KNhahuc2W-CLBX18ef0SFpY84kjauUVeWjTW__d0_8HImX2fohboV9vpq5zwaxKwYqY06dcmN7fkR7I-XMXE77Mel8lj48F4DjbpvavTshBUn3bnWItt8gw2kbGz92SfoSe7i92WPDxylKZjzL-_xzYICLKwxaWAHP4B7sEn9QLbJmIIPuWitAcCwsfON5HfzFqB4Zm0-EBdI72Q9TeE8LAkCN_JKyA" /></div>
+        <div className="flex items-center gap-4">
+          <span className="text-xl font-bold tracking-tighter text-slate-900">RealtiQ</span>
+        </div>
+        <div className="flex items-center gap-4 text-slate-500">
+          <span className="material-symbols-outlined cursor-pointer hover:text-slate-900 transition-colors">notifications</span>
+          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary text-sm">
+            {user?.name?.charAt(0) ?? 'U'}
           </div>
         </div>
       </header>
 
       <main className="ml-64 pt-24 pb-20 px-12 max-w-7xl mx-auto">
+        {/* Header */}
         <div className="mb-10 flex justify-between items-end">
           <div>
-            <nav className="flex gap-2 text-xs font-semibold text-secondary mb-2 uppercase tracking-widest"><span>Payments</span><span>/</span><span className="text-on-surface">{payment?.id ?? 'TXN-000'}</span></nav>
+            <nav className="flex gap-2 text-xs font-semibold text-secondary mb-2 uppercase tracking-widest items-center">
+              <button onClick={() => void navigate('/dashboard/buyer/payment-history')} className="hover:text-primary transition-colors">
+                Payments
+              </button>
+              <span className="material-symbols-outlined text-xs">chevron_right</span>
+              <span className="text-on-surface font-mono">{payment.reference}</span>
+            </nav>
             <h1 className="text-4xl font-extrabold tracking-tight text-primary">Transaction Receipt</h1>
           </div>
-          <button className="flex items-center gap-2 bg-primary text-on-primary px-6 py-3 rounded-lg font-bold text-sm hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-primary/10"><span className="material-symbols-outlined text-sm">download</span>Download PDF</button>
+          <div className="flex items-center gap-3">
+            {canVerify && (
+              <button
+                disabled={verifying}
+                onClick={() => void handleVerify()}
+                className="flex items-center gap-2 bg-amber-500 text-white px-6 py-3 rounded-lg font-bold text-sm hover:opacity-90 transition-all disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-sm">verified</span>
+                {verifying ? 'Verifying…' : 'Verify Payment'}
+              </button>
+            )}
+            {payment.status === 'pending' && (
+              <button
+                disabled={verifying}
+                onClick={() => void handleRefresh()}
+                className="flex items-center gap-2 bg-surface-container-low border border-outline-variant/30 px-4 py-3 rounded-lg font-bold text-sm hover:bg-surface-container transition-all disabled:opacity-50"
+              >
+                <span className={`material-symbols-outlined text-sm ${verifying ? 'animate-spin' : ''}`}>refresh</span>
+                Refresh
+              </button>
+            )}
+          </div>
         </div>
 
+        {/* Payment status banner for pending/failed */}
+        {payment.status === 'pending' && (
+          <div className="mb-8 p-6 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-4">
+            <span className="material-symbols-outlined text-3xl text-amber-500" style={{ fontVariationSettings: "'FILL' 1" }}>pending</span>
+            <div>
+              <h3 className="font-bold text-amber-800">Payment Pending</h3>
+              <p className="text-amber-700 text-sm">We are waiting for payment confirmation</p>
+            </div>
+          </div>
+        )}
+        {payment.status === 'failed' && (
+          <div className="mb-8 p-6 bg-red-50 border border-red-200 rounded-xl flex items-center gap-4">
+            <span className="material-symbols-outlined text-3xl text-red-500" style={{ fontVariationSettings: "'FILL' 1" }}>cancel</span>
+            <div>
+              <h3 className="font-bold text-red-800">Payment Failed</h3>
+              <p className="text-red-700 text-sm">We could not verify this payment</p>
+            </div>
+          </div>
+        )}
+        {payment.status === 'paid' && (
+          <div className="mb-8 p-6 bg-green-50 border border-green-200 rounded-xl flex items-center gap-4">
+            <span className="material-symbols-outlined text-3xl text-green-600" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+            <div className="flex-1">
+              <h3 className="font-bold text-green-800">Payment Successful</h3>
+              <p className="text-green-700 text-sm">Your property purchase has been confirmed</p>
+            </div>
+            <button
+              onClick={() => void navigate(`/properties/${payment.property._id}`)}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 transition-colors"
+            >
+              View Property
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-12 gap-8 items-start">
+          {/* Receipt card */}
           <div className="col-span-8 bg-surface-container-lowest p-12 rounded-xl shadow-2xl shadow-slate-200/30 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-surface-container-low -mr-16 -mt-16 rounded-full opacity-50"></div>
-            <div className="flex justify-between items-start mb-16 relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-surface-container-low -mr-16 -mt-16 rounded-full opacity-50" />
+            <div className="flex justify-between items-start mb-10 relative">
               <div>
-                <div className="text-2xl font-black mb-1">RealtiQ <span className="text-secondary font-medium">| Curator</span></div>
-                <p className="text-secondary text-sm">Transaction Reference: <span className="text-on-surface font-mono font-bold tracking-tight">{payment?.id ?? 'N/A'}</span></p>
+                <div className="text-2xl font-black mb-1">RealtiQ <span className="text-secondary font-medium">| Payments</span></div>
+                <p className="text-secondary text-sm">Reference: <span className="text-on-surface font-mono font-bold tracking-tight">{payment.reference}</span></p>
               </div>
               <div className="text-right">
-                <div className="bg-secondary-fixed text-on-secondary-fixed px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest inline-block mb-2">Processed</div>
-                <p className="text-sm font-semibold text-on-surface">{payment ? new Date(payment.createdAt).toLocaleDateString() : '-'}</p>
-                <p className="text-xs text-secondary">{payment ? new Date(payment.createdAt).toLocaleTimeString() : '-'}</p>
+                {statusBadge(payment.status)}
+                <p className="text-sm font-semibold text-on-surface mt-2">{formatDate(payment.createdAt)}</p>
               </div>
             </div>
 
-            <div className="flex gap-8 p-6 bg-surface-container-low rounded-xl mb-12">
-              <div className="w-32 h-32 rounded-lg overflow-hidden flex-shrink-0"><img alt="Property thumbnail" src={property?.media[0]?.url} /></div>
-              <div className="flex flex-col justify-center">
-                <span className="text-[10px] uppercase font-bold tracking-widest text-secondary mb-1">Purchased Asset</span>
-                <h3 className="text-xl font-bold mb-1">{property?.title ?? 'Property'}</h3>
-                <p className="text-sm text-secondary mb-3">{property?.location ?? '-'}</p>
-                <div className="flex gap-4">
-                  <span className="flex items-center gap-1 text-xs font-semibold text-on-surface-variant"><span className="material-symbols-outlined text-sm">bed</span>{property?.bedrooms ?? 0} Beds</span>
-                  <span className="flex items-center gap-1 text-xs font-semibold text-on-surface-variant"><span className="material-symbols-outlined text-sm">bathtub</span>{property?.bathrooms ?? 0} Baths</span>
-                  <span className="flex items-center gap-1 text-xs font-semibold text-on-surface-variant"><span className="material-symbols-outlined text-sm">square_foot</span>{property?.squareFeet?.toLocaleString() ?? 0} sqft</span>
+            {/* Transaction Details */}
+            <div className="mb-10">
+              <h3 className="text-xs font-bold text-secondary uppercase tracking-widest mb-6">Transaction Details</h3>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { label: 'Payment Reference', value: payment.reference, mono: true },
+                  { label: 'Amount', value: formatNGN(payment.amount) },
+                  { label: 'Status', value: payment.status.toUpperCase() },
+                  { label: 'Transaction Date', value: formatDate(payment.createdAt) },
+                  ...(payment.paystackData
+                    ? [
+                        { label: 'Payment Channel', value: payment.paystackData.channel },
+                        { label: 'Currency', value: payment.paystackData.currency },
+                        { label: 'Gateway Response', value: payment.paystackData.gateway_response },
+                        { label: 'Processing Fees', value: formatNGN(payment.paystackData.fees) },
+                      ]
+                    : []),
+                ].map((row) => (
+                  <div key={row.label} className="bg-surface-container-low p-4 rounded-lg">
+                    <p className="text-[10px] uppercase tracking-widest text-secondary font-bold mb-1">{row.label}</p>
+                    <p className={`font-bold text-sm text-on-surface ${row.mono ? 'font-mono' : ''}`}>{row.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Property Details */}
+            <div className="mb-10">
+              <h3 className="text-xs font-bold text-secondary uppercase tracking-widest mb-6">Property Details</h3>
+              <div className="flex gap-6 p-6 bg-surface-container-low rounded-xl">
+                <div className="w-16 h-16 rounded-lg bg-surface-container-high flex items-center justify-center flex-shrink-0">
+                  <span className="material-symbols-outlined text-secondary text-2xl">home_work</span>
+                </div>
+                <div className="flex flex-col justify-center">
+                  <h4 className="font-bold text-on-surface">{payment.property.title}</h4>
+                  <p className="text-sm text-secondary flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">location_on</span>
+                    {payment.property.location}
+                  </p>
+                  <p className="text-sm font-bold text-primary mt-1">{formatNGN(payment.property.price)}</p>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-6">
-              <div className="grid grid-cols-12 pb-4 border-b border-surface-container-highest text-[10px] uppercase font-bold tracking-widest text-secondary"><div className="col-span-8">Description</div><div className="col-span-4 text-right">Amount (NGN)</div></div>
-              <div className="grid grid-cols-12 py-2"><div className="col-span-8"><div className="font-bold text-on-surface">Property Base Price</div></div><div className="col-span-4 text-right font-semibold">&#x20A6;{property?.price?.toLocaleString()}.00</div></div>
-              <div className="grid grid-cols-12 py-2"><div className="col-span-8"><div className="font-bold text-on-surface">Curator Platform Service Fee</div></div><div className="col-span-4 text-right font-semibold">&#x20A6;12,075.00</div></div>
-              <div className="mt-8 pt-8 border-t-2 border-primary-container/10">
-                <div className="grid grid-cols-12 mb-2"><div className="col-span-8 text-right pr-12 text-secondary font-semibold">Subtotal</div><div className="col-span-4 text-right font-semibold">&#x20A6;{payment?.amount?.toLocaleString()}.00</div></div>
-                <div className="grid grid-cols-12"><div className="col-span-8 text-right pr-12 flex flex-col justify-center"><span className="text-sm font-black uppercase tracking-widest">Total Amount Paid</span></div><div className="col-span-4 text-right text-3xl font-black tracking-tighter">&#x20A6;{payment?.amount?.toLocaleString()}.00</div></div>
+            {/* Buyer Details */}
+            <div>
+              <h3 className="text-xs font-bold text-secondary uppercase tracking-widest mb-6">Buyer Details</h3>
+              <div className="flex items-center gap-4 p-6 bg-surface-container-low rounded-xl">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary">
+                  {payment.user.name.charAt(0)}
+                </div>
+                <div>
+                  <p className="font-bold text-on-surface">{payment.user.name}</p>
+                  <p className="text-sm text-secondary">{payment.user.email}</p>
+                </div>
               </div>
             </div>
           </div>
 
+          {/* Sidebar */}
           <div className="col-span-4 space-y-6">
             <div className="bg-white p-8 rounded-xl shadow-sm">
-              <h4 className="text-xs font-black uppercase tracking-widest text-secondary mb-6">Payment Method</h4>
-              <div className="flex items-center gap-4 p-4 bg-surface-container-low rounded-lg mb-4"><div className="w-12 h-8 bg-on-background rounded flex items-center justify-center"><span className="text-[10px] font-bold text-white tracking-widest">VISA</span></div><div><p className="text-sm font-bold">Infinite Preferred</p><p className="text-xs text-secondary">Ending in 9901</p></div></div>
-              <div className="space-y-3"><div className="flex justify-between text-xs"><span className="text-secondary font-medium">Authorization Code</span><span className="font-mono font-bold">AUTH-99210-XC</span></div><div className="flex justify-between text-xs"><span className="text-secondary font-medium">Cardholder</span><span className="font-bold">Jonathan Sterling</span></div></div>
+              <h4 className="text-xs font-black uppercase tracking-widest text-secondary mb-4">Payment Summary</h4>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-sm text-secondary">Amount</span>
+                  <span className="font-bold">{formatNGN(payment.amount)}</span>
+                </div>
+                {payment.paystackData && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-secondary">Fees</span>
+                      <span className="font-semibold">{formatNGN(payment.paystackData.fees)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-secondary">Channel</span>
+                      <span className="font-semibold capitalize">{payment.paystackData.channel.replace('_', ' ')}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-secondary">Currency</span>
+                      <span className="font-semibold">{payment.paystackData.currency}</span>
+                    </div>
+                  </>
+                )}
+                <div className="pt-3 border-t border-surface-container">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-bold text-secondary">Status</span>
+                    {statusBadge(payment.status)}
+                  </div>
+                </div>
+              </div>
             </div>
+
+            {payment.status === 'pending' && canVerify && (
+              <div className="bg-amber-50 border border-amber-200 p-6 rounded-xl">
+                <h4 className="text-sm font-bold text-amber-800 mb-2">Pending Verification</h4>
+                <p className="text-xs text-amber-700 mb-4">Payment awaiting confirmation. Use the verify button to check status with Paystack.</p>
+                <button
+                  disabled={verifying}
+                  onClick={() => void handleVerify()}
+                  className="w-full py-2 bg-amber-500 text-white rounded-lg text-sm font-bold hover:bg-amber-600 transition-colors disabled:opacity-50"
+                >
+                  {verifying ? 'Verifying…' : 'Verify Payment'}
+                </button>
+              </div>
+            )}
+
+            {payment.status === 'failed' && (
+              <div className="bg-red-50 border border-red-200 p-6 rounded-xl">
+                <h4 className="text-sm font-bold text-red-800 mb-2">Payment Failed</h4>
+                <p className="text-xs text-red-700 mb-4">We could not verify this payment. You can retry verification below.</p>
+                {canVerify && (
+                  <button
+                    disabled={verifying}
+                    onClick={() => void handleVerify()}
+                    className="w-full py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    {verifying ? 'Verifying…' : 'Retry Verification'}
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="bg-primary-container p-8 rounded-xl text-on-primary-container">
-              <div className="flex items-start gap-4 mb-6"><div className="bg-on-primary-container/20 p-2 rounded-lg"><span className="material-symbols-outlined text-secondary-fixed">verified_user</span></div><div><h4 className="text-sm font-bold text-white">Verified Transaction</h4><p className="text-xs opacity-70">Secured by RealtiQ Trust Engine</p></div></div>
-              <button className="w-full bg-secondary-fixed text-on-secondary-fixed py-3 rounded-lg font-bold text-xs uppercase tracking-widest hover:opacity-90 transition-all">View Digital Deed</button>
+              <div className="flex items-start gap-4 mb-4">
+                <div className="bg-on-primary-container/20 p-2 rounded-lg">
+                  <span className="material-symbols-outlined text-secondary-fixed">verified_user</span>
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">Secured Transaction</h4>
+                  <p className="text-xs opacity-70">Powered by Paystack</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

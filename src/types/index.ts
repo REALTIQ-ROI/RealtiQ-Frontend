@@ -57,6 +57,47 @@ export interface Payment {
   createdAt: string;
 }
 
+export interface PaymentUser {
+  _id: string;
+  name: string;
+  email: string;
+}
+
+export interface PaymentProperty {
+  _id: string;
+  title: string;
+  price: number;
+  location: string;
+}
+
+export interface PaystackData {
+  status: string;
+  gateway_response: string;
+  channel: string;
+  currency: string;
+  fees: number;
+}
+
+export interface ApiPayment {
+  _id: string;
+  user: PaymentUser;
+  property: PaymentProperty;
+  amount: number;
+  status: 'pending' | 'paid' | 'failed';
+  reference: string;
+  createdAt: string;
+  paystackData?: PaystackData;
+}
+
+export interface VerifyPaymentResponse {
+  verified: boolean;
+  payment: {
+    _id: string;
+    status: 'pending' | 'paid' | 'failed';
+    reference: string;
+  };
+}
+
 export interface AuthResponse {
   user: User;
   token: string;

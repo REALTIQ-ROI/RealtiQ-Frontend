@@ -1,17 +1,19 @@
-﻿import { mockStore } from './mockStore';
-import type { Payment } from '../types';
-
-export interface PaymentIntentPayload {
-  propertyId: string;
-  amount: number;
-}
+import api from '../lib/axios';
+import type { ApiPayment, VerifyPaymentResponse } from '../types';
 
 export const paymentService = {
-  async initializePayment(_: PaymentIntentPayload): Promise<{ redirectUrl: string }> {
-    return { redirectUrl: '/payment-success' };
+  async getPayments(): Promise<ApiPayment[]> {
+    const { data } = await api.get<ApiPayment[]>('/payments');
+    return data;
   },
 
-  async getPayments(): Promise<Payment[]> {
-    return mockStore.getPayments();
+  async getPaymentById(id: string): Promise<ApiPayment> {
+    const { data } = await api.get<ApiPayment>(`/payments/${id}`);
+    return data;
+  },
+
+  async verifyPayment(reference: string): Promise<VerifyPaymentResponse> {
+    const { data } = await api.get<VerifyPaymentResponse>(`/payments/verify/${reference}`);
+    return data;
   },
 };

@@ -38,6 +38,7 @@ import ManagePayments from '../pages/dashboard/Admin/ManagePayments';
 import ManageProperties from '../pages/dashboard/Admin/ManageProperties';
 import ManageUsers from '../pages/dashboard/Admin/ManageUsers';
 import FeaturedListings from '../pages/dashboard/Admin/FeaturedListings';
+import AdminPaymentDetails from '../pages/dashboard/Admin/AdminPaymentDetails';
 import BuyerDashboard from '../pages/dashboard/Buyer/BuyerDashboard';
 import InquiryDetails from '../pages/dashboard/Buyer/InquiryDetails';
 import InquiryHistory from '../pages/dashboard/Buyer/InquiryHistory';
@@ -102,6 +103,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/buyer/my-properties" element={<MyProperties />} />
           <Route path="/dashboard/buyer/property-details" element={<BuyerPropertyDetails />} />
           <Route path="/dashboard/buyer/payment-history" element={<PaymentHistory />} />
+          <Route path="/dashboard/buyer/payment-details/:id" element={<PaymentDetails />} />
           <Route path="/dashboard/buyer/payment-details" element={<PaymentDetails />} />
           <Route path="/dashboard/buyer/inquiry-history" element={<InquiryHistory />} />
           <Route path="/dashboard/buyer/inquiry-details" element={<InquiryDetails />} />
@@ -127,6 +129,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/manage-properties" element={<ManageProperties />} />
           <Route path="/dashboard/admin/property-details" element={<AdminPropertyDetails />} />
           <Route path="/dashboard/admin/manage-payments" element={<ManagePayments />} />
+          <Route path="/dashboard/admin/payment-details/:id" element={<AdminPaymentDetails />} />
           <Route path="/dashboard/admin/manage-inquiries" element={<ManageInquiries />} />
           <Route path="/dashboard/admin/manage-landlords" element={<ManageLandlords />} />
           <Route path="/dashboard/admin/landlord-details" element={<LandlordDetails />} />
