@@ -7,8 +7,9 @@ export interface LoginResponse {
 }
 
 export interface RegisterResponse {
-  message: string;
+  message?: string;
   user: User;
+  token?: string;
 }
 
 export interface VerifyEmailResponse {

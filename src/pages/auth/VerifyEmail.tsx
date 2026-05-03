@@ -10,8 +10,8 @@ const VerifyEmail = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? pathToken;
   const navigate = useNavigate();
-  const [status, setStatus] = useState<Status>('loading');
-  const [message, setMessage] = useState('');
+  const [status, setStatus] = useState<Status>(token ? 'loading' : 'error');
+  const [message, setMessage] = useState(token ? '' : 'Invalid verification link. No token provided.');
   const [countdown, setCountdown] = useState(3);
   // Prevents React StrictMode's double-invocation from firing two API calls.
   // The token is a one-time secret; a second request would return "already used".
@@ -22,8 +22,6 @@ const VerifyEmail = () => {
     hasFired.current = true;
 
     if (!token) {
-      setStatus('error');
-      setMessage('Invalid verification link. No token provided.');
       return;
     }
 

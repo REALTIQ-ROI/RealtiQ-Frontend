@@ -35,10 +35,20 @@ const PaymentHistory = () => {
   const navigate = useNavigate();
   const { data, loading, error, execute } = useAsync(() => paymentService.getPayments(), true);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [query, setQuery] = useState('');
   const [verifying, setVerifying] = useState<string | null>(null);
 
   const payments = data ?? [];
-  const filtered = activeTab === 'all' ? payments : payments.filter((p) => p.status === activeTab);
+  const filtered = payments.filter((payment) => {
+    const matchesTab = activeTab === 'all' || payment.status === activeTab;
+    const needle = query.trim().toLowerCase();
+    const matchesQuery =
+      !needle ||
+      `${payment.reference} ${payment.property.title} ${payment.property.location} ${payment.amount}`
+        .toLowerCase()
+        .includes(needle);
+    return matchesTab && matchesQuery;
+  });
 
   const totalInvested = payments.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
   const pendingAmount = payments.filter((p) => p.status === 'pending').reduce((s, p) => s + p.amount, 0);
@@ -110,7 +120,13 @@ const PaymentHistory = () => {
         <div className="flex items-center gap-4 flex-1">
           <div className="relative w-full max-w-md">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
-            <input className="w-full bg-surface-container-low border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-surface-tint/20" placeholder="Search transactions..." type="text" />
+            <input
+              className="w-full bg-surface-container-low border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-surface-tint/20"
+              placeholder="Search transactions..."
+              type="text"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
           </div>
         </div>
         <div className="flex items-center gap-6">

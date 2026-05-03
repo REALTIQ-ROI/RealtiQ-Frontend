@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { resolveOwnerId } from '../../../types';
@@ -10,11 +10,12 @@ const AdminPropertyDetails = () => {
   const { properties, updateProperty } = useProperties();
   const location = useLocation();
   const navigate = useNavigate();
+  const { id } = useParams();
   const [adminNote, setAdminNote] = useState('');
 
-  const propertyId = (location.state as { propertyId?: string } | null)?.propertyId;
+  const propertyId = id ?? (location.state as { propertyId?: string } | null)?.propertyId;
   const property = propertyId
-    ? properties.find((p) => p._id === propertyId) ?? properties[0]
+    ? properties.find((p) => p._id === propertyId) ?? null
     : properties[0];
 
   if (!property) {

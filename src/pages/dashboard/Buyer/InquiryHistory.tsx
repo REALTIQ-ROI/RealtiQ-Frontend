@@ -28,10 +28,20 @@ const InquiryHistory = () => {
   const navigate = useNavigate();
   const { data, loading, error, execute } = useAsync(() => inquiryService.getInquiries(), true);
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
+  const [query, setQuery] = useState('');
 
   const allInquiries = data ?? [];
-  const filtered =
-    activeFilter === 'all' ? allInquiries : allInquiries.filter((i) => i.status === activeFilter);
+  const filtered = allInquiries.filter((inquiry) => {
+    const property = resolveInquiryProperty(inquiry.property);
+    const matchesStatus = activeFilter === 'all' || inquiry.status === activeFilter;
+    const needle = query.trim().toLowerCase();
+    const matchesQuery =
+      !needle ||
+      `${inquiry.fullName} ${inquiry.email} ${inquiry.inquiryType} ${inquiry.message} ${property?.title ?? ''} ${property?.location ?? ''}`
+        .toLowerCase()
+        .includes(needle);
+    return matchesStatus && matchesQuery;
+  });
 
   return (
     <div className="bg-surface font-body text-on-background antialiased">
@@ -80,7 +90,13 @@ const InquiryHistory = () => {
             <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-on-surface-variant">
               <span className="material-symbols-outlined text-lg">search</span>
             </span>
-            <input className="pl-10 pr-4 py-1.5 bg-surface-container-low border-none rounded-md text-sm focus:ring-2 focus:ring-primary w-64 transition-all outline-none" placeholder="Search inquiries..." type="text" />
+            <input
+              className="pl-10 pr-4 py-1.5 bg-surface-container-low border-none rounded-md text-sm focus:ring-2 focus:ring-primary w-64 transition-all outline-none"
+              placeholder="Search inquiries..."
+              type="text"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
           </div>
         </div>
         <div className="flex items-center gap-4 pr-64">

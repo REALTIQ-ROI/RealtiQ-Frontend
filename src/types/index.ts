@@ -28,7 +28,7 @@ export interface Property {
   featured?: boolean;
   amenities?: string[];
   ownerId?: PropertyOwner | string;
-  buyerId?: string;
+  buyerId?: PropertyOwner | string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -36,6 +36,11 @@ export interface Property {
 export const resolveOwnerId = (ownerId?: PropertyOwner | string): string => {
   if (!ownerId) return '';
   return typeof ownerId === 'string' ? ownerId : ownerId._id;
+};
+
+export const resolveBuyerId = (buyerId?: PropertyOwner | string): string => {
+  if (!buyerId) return '';
+  return typeof buyerId === 'string' ? buyerId : buyerId._id;
 };
 
 export interface User {

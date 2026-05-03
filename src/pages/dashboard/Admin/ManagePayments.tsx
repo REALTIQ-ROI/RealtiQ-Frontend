@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 import AdminLayout from '../../../components/layout/AdminLayout';
+import ErrorState from '../../../components/ui/ErrorState';
+import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { paymentService } from '../../../services/paymentService';
 import type { ApiPayment } from '../../../types';
@@ -32,7 +34,7 @@ const statusBadge = (status: ApiPayment['status']) => {
 
 const ManagePayments = () => {
   const navigate = useNavigate();
-  const { data, execute } = useAsync(() => paymentService.getPayments(), true);
+  const { data, loading, error, execute } = useAsync(() => paymentService.getPayments(), true);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [verifying, setVerifying] = useState<string | null>(null);
 
@@ -138,7 +140,19 @@ const ManagePayments = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-container">
-                {filtered.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={7}>
+                      <LoadingState label="Loading payments..." />
+                    </td>
+                  </tr>
+                ) : error ? (
+                  <tr>
+                    <td colSpan={7}>
+                      <ErrorState message={error} onRetry={() => void execute()} />
+                    </td>
+                  </tr>
+                ) : filtered.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-16 text-center">
                       <span className="material-symbols-outlined text-4xl text-secondary/30 block mb-2">receipt_long</span>

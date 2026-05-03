@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import type { Property } from '../../../types';
@@ -28,12 +29,19 @@ const ManageProperties = () => {
   const { properties, updateProperty, deleteProperty } = useProperties();
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [sortBy, setSortBy] = useState<'recent' | 'price-desc' | 'price-asc'>('recent');
   const [page, setPage] = useState(1);
 
-  const filtered = properties.filter((p) => {
-    if (activeFilter === 'all') return true;
-    return p.status === activeFilter;
-  });
+  const filtered = properties
+    .filter((p) => {
+      if (activeFilter === 'all') return true;
+      return p.status === activeFilter;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'price-desc') return b.price - a.price;
+      if (sortBy === 'price-asc') return a.price - b.price;
+      return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
+    });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
   const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
@@ -44,7 +52,24 @@ const ManageProperties = () => {
   };
 
   const handleViewDetails = (property: Property) => {
-    void navigate('/dashboard/admin/property-details', { state: { propertyId: property._id } });
+    void navigate(`/dashboard/admin/property-details/${property._id}`);
+  };
+
+  const handleDelete = async (property: Property) => {
+    const confirmed = await Swal.fire({
+      title: 'Delete this property?',
+      text: 'This action cannot be undone.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Delete Property',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      reverseButtons: true,
+    });
+    if (confirmed.isConfirmed) {
+      await deleteProperty(property._id);
+    }
   };
 
   const filters: { label: string; value: FilterType }[] = [
@@ -97,10 +122,17 @@ const ManageProperties = () => {
           ))}
           <div className="ml-auto flex items-center gap-2">
             <span className="text-xs text-secondary font-medium">Sort by:</span>
-            <select className="bg-transparent border-none text-sm font-bold focus:ring-0 cursor-pointer">
-              <option>Recently Added</option>
-              <option>Price (High to Low)</option>
-              <option>Price (Low to High)</option>
+            <select
+              className="bg-transparent border-none text-sm font-bold focus:ring-0 cursor-pointer"
+              value={sortBy}
+              onChange={(event) => {
+                setSortBy(event.target.value as typeof sortBy);
+                setPage(1);
+              }}
+            >
+              <option value="recent">Recently Added</option>
+              <option value="price-desc">Price (High to Low)</option>
+              <option value="price-asc">Price (Low to High)</option>
             </select>
           </div>
         </div>
@@ -200,7 +232,7 @@ const ManageProperties = () => {
                           <button
                             className="p-2 text-secondary hover:text-error hover:bg-error-container rounded-lg transition-all"
                             title="Delete"
-                            onClick={() => void deleteProperty(property._id)}
+                            onClick={() => void handleDelete(property)}
                           >
                             <span className="material-symbols-outlined text-lg">delete</span>
                           </button>

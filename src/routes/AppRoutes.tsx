@@ -104,6 +104,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/buyer" element={<BuyerDashboard />} />
           <Route path="/dashboard/buyer/my-properties" element={<MyProperties />} />
           <Route path="/dashboard/buyer/property-details" element={<BuyerPropertyDetails />} />
+          <Route path="/dashboard/buyer/property-details/:id" element={<BuyerPropertyDetails />} />
           <Route path="/dashboard/buyer/payment-history" element={<PaymentHistory />} />
           <Route path="/dashboard/buyer/payment-details/:id" element={<PaymentDetails />} />
           <Route path="/dashboard/buyer/payment-details" element={<PaymentDetails />} />
@@ -133,6 +134,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/users/:id" element={<UserDetails />} />
           <Route path="/dashboard/admin/manage-properties" element={<ManageProperties />} />
           <Route path="/dashboard/admin/property-details" element={<AdminPropertyDetails />} />
+          <Route path="/dashboard/admin/property-details/:id" element={<AdminPropertyDetails />} />
           <Route path="/dashboard/admin/manage-payments" element={<ManagePayments />} />
           <Route path="/dashboard/admin/payment-details/:id" element={<AdminPaymentDetails />} />
           <Route path="/dashboard/admin/manage-inquiries" element={<ManageInquiries />} />

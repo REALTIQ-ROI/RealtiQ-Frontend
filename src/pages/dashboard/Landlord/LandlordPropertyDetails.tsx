@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
+import { resolveOwnerId } from '../../../types';
 
 const LandlordPropertyDetails = () => {
   const { user } = useAuth();
@@ -10,7 +11,7 @@ const LandlordPropertyDetails = () => {
 
   const property = id
     ? (properties.find((item) => item._id === id) ?? null)
-    : (properties.find((item) => item.ownerId === user?._id) ?? null);
+    : (properties.find((item) => resolveOwnerId(item.ownerId) === user?._id) ?? null);
 
   const heroImage = property?.media?.[0]?.url;
 
@@ -48,16 +49,16 @@ const LandlordPropertyDetails = () => {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <span className="px-3 py-1 bg-green-100 text-green-700 text-[10px] font-black tracking-widest uppercase rounded-full">
-                {property?.status === 'available' ? 'Active' : property?.status ?? 'Active'}
+                {property?.status === 'available' ? 'Active' : property?.status ?? 'Not Found'}
               </span>
               <span className="text-secondary text-sm font-medium">Listed recently</span>
             </div>
             <h1 className="text-4xl font-extrabold tracking-tighter text-slate-900 mb-2">
-              {property?.title ?? 'The Glass Pavilion'}
+              {property?.title ?? 'Property not found'}
             </h1>
             <p className="text-secondary font-medium flex items-center gap-2">
               <span className="material-symbols-outlined text-sm">location_on</span>
-              {property?.location ?? '882 Modernist Way, Beverly Hills, CA 90210'}
+              {property?.location ?? 'Select a property from your portfolio'}
             </p>
           </div>
           <div className="flex gap-3">
@@ -66,7 +67,7 @@ const LandlordPropertyDetails = () => {
               Preview Listing
             </button>
             <Link
-              to={`/dashboard/landlord/edit-property/${property?._id ?? ''}`}
+              to={property ? `/dashboard/landlord/edit-property/${property._id}` : '/dashboard/landlord/my-properties'}
               className="px-6 py-3 bg-primary text-white font-bold rounded-lg hover:opacity-90 transition-all flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-lg">edit</span>

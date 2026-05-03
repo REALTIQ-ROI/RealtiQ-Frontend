@@ -1,12 +1,32 @@
 ﻿import { Link } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
+import { resolveBuyerId } from '../../../types';
+import { useMemo, useState } from 'react';
 
 const MyProperties = () => {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const { properties } = useProperties();
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<'all' | 'residential' | 'commercial'>('all');
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 6;
 
-  const myProperties = properties.filter((item) => item.buyerId).slice(0, 5);
+  const myProperties = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return properties.filter((item) => {
+      const matchesBuyer = resolveBuyerId(item.buyerId) === user?._id;
+      const matchesQuery =
+        !needle ||
+        `${item.title} ${item.location} ${item.propertyType}`.toLowerCase().includes(needle);
+      const matchesCategory =
+        category === 'all' ||
+        (category === 'commercial' ? item.propertyType === 'commercial' : item.propertyType !== 'commercial');
+      return matchesBuyer && matchesQuery && matchesCategory;
+    });
+  }, [category, properties, query, user?._id]);
+  const totalPages = Math.max(1, Math.ceil(myProperties.length / itemsPerPage));
+  const paginated = myProperties.slice((page - 1) * itemsPerPage, page * itemsPerPage);
   const totalValue = myProperties.reduce((sum, item) => sum + item.price, 0);
 
   return (
@@ -55,7 +75,16 @@ const MyProperties = () => {
           <span className="text-xl font-bold tracking-tighter text-slate-900">Architectural Curator</span>
           <div className="hidden md:flex items-center bg-surface-container-low px-4 py-1.5 rounded-full border border-outline-variant/20">
             <span className="material-symbols-outlined text-sm mr-2">search</span>
-            <input className="bg-transparent border-none focus:ring-0 text-sm w-48 font-medium" placeholder="Search portfolio..." type="text" />
+            <input
+              className="bg-transparent border-none focus:ring-0 text-sm w-48 font-medium"
+              placeholder="Search portfolio..."
+              type="text"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setPage(1);
+              }}
+            />
           </div>
         </div>
         <div className="flex items-center gap-6">
@@ -77,19 +106,36 @@ const MyProperties = () => {
           </div>
           <div className="mt-8 flex items-center justify-between">
             <div className="flex gap-4">
-              <span className="px-6 py-2 bg-secondary-fixed text-on-secondary-fixed text-sm font-bold rounded-full">All Assets ({myProperties.length})</span>
-              <span className="px-6 py-2 bg-surface-container-high text-on-surface-variant text-sm font-semibold rounded-full">Residential</span>
-              <span className="px-6 py-2 bg-surface-container-high text-on-surface-variant text-sm font-semibold rounded-full">Commercial</span>
+              {[
+                { key: 'all', label: `All Assets (${myProperties.length})` },
+                { key: 'residential', label: 'Residential' },
+                { key: 'commercial', label: 'Commercial' },
+              ].map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => {
+                    setCategory(item.key as typeof category);
+                    setPage(1);
+                  }}
+                  className={`px-6 py-2 text-sm font-bold rounded-full ${
+                    category === item.key
+                      ? 'bg-secondary-fixed text-on-secondary-fixed'
+                      : 'bg-surface-container-high text-on-surface-variant'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
             <Link className="bg-primary text-on-primary px-6 py-2.5 rounded-md text-sm font-bold flex items-center gap-2 hover:opacity-90 transition-opacity" to="/properties">
               <span className="material-symbols-outlined text-sm">add</span>
-              Register New Property
+              Browse Properties
             </Link>
           </div>
         </section>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {myProperties.map((property) => (
+          {paginated.map((property) => (
             <div key={property._id} className="group flex flex-col bg-surface-container-lowest rounded-xl overflow-hidden hover:translate-y-[-4px] transition-all duration-300">
               <div className="relative h-64 overflow-hidden">
                 <img alt={property.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" src={property.media[0]?.url} />
@@ -119,6 +165,14 @@ const MyProperties = () => {
             </div>
           ))}
 
+          {myProperties.length === 0 ? (
+            <div className="md:col-span-2 lg:col-span-3 bg-surface-container-lowest rounded-xl p-12 text-center text-secondary">
+              <span className="material-symbols-outlined text-6xl opacity-30 mb-4 block">domain_disabled</span>
+              <p className="font-bold text-primary">No purchased properties found</p>
+              <p className="text-sm mt-1">Browse available listings to start your portfolio.</p>
+            </div>
+          ) : null}
+
           <Link className="group flex flex-col items-center justify-center bg-surface-container-low border-2 border-dashed border-outline-variant/40 rounded-xl p-8 hover:bg-surface-container-highest transition-all duration-300 cursor-pointer min-h-[400px]" to="/properties">
             <div className="w-16 h-16 rounded-full bg-surface-container-lowest flex items-center justify-center mb-6 shadow-sm">
               <span className="material-symbols-outlined text-3xl text-primary">add_business</span>
@@ -141,12 +195,19 @@ const MyProperties = () => {
             </div>
           </div>
           <div className="flex gap-2 mt-6 md:mt-0">
-            <button className="w-10 h-10 flex items-center justify-center rounded-md bg-surface-container-lowest text-primary border border-outline-variant/10 hover:bg-surface-container-high transition-colors">
+            <button
+              className="w-10 h-10 flex items-center justify-center rounded-md bg-surface-container-lowest text-primary border border-outline-variant/10 hover:bg-surface-container-high transition-colors disabled:opacity-40"
+              disabled={page === 1}
+              onClick={() => setPage((value) => Math.max(1, value - 1))}
+            >
               <span className="material-symbols-outlined">chevron_left</span>
             </button>
-            <button className="w-10 h-10 flex items-center justify-center rounded-md bg-primary text-on-primary font-bold text-sm">1</button>
-            <button className="w-10 h-10 flex items-center justify-center rounded-md bg-surface-container-lowest text-primary border border-outline-variant/10 hover:bg-surface-container-high transition-colors font-bold text-sm">2</button>
-            <button className="w-10 h-10 flex items-center justify-center rounded-md bg-surface-container-lowest text-primary border border-outline-variant/10 hover:bg-surface-container-high transition-colors">
+            <span className="px-4 text-xs font-bold text-secondary">Page {page} of {totalPages}</span>
+            <button
+              className="w-10 h-10 flex items-center justify-center rounded-md bg-surface-container-lowest text-primary border border-outline-variant/10 hover:bg-surface-container-high transition-colors disabled:opacity-40"
+              disabled={page === totalPages}
+              onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+            >
               <span className="material-symbols-outlined">chevron_right</span>
             </button>
           </div>

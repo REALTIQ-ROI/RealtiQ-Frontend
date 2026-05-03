@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface UseAsyncState<T> {
   data: T | null;
@@ -7,30 +7,37 @@ interface UseAsyncState<T> {
 }
 
 export const useAsync = <T,>(asyncFn: () => Promise<T>, immediate = true) => {
+  const asyncFnRef = useRef(asyncFn);
   const [state, setState] = useState<UseAsyncState<T>>({
     data: null,
     loading: immediate,
     error: null,
   });
 
-  const execute = async () => {
+  useEffect(() => {
+    asyncFnRef.current = asyncFn;
+  }, [asyncFn]);
+
+  const execute = useCallback(async () => {
     setState((previous) => ({ ...previous, loading: true, error: null }));
 
     try {
-      const data = await asyncFn();
+      const data = await asyncFnRef.current();
       setState({ data, loading: false, error: null });
       return data;
     } catch {
       setState({ data: null, loading: false, error: 'Something went wrong. Please try again.' });
       return null;
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (immediate) {
-      void execute();
+      queueMicrotask(() => {
+        void execute();
+      });
     }
-  }, [immediate]);
+  }, [execute, immediate]);
 
   return { ...state, execute };
 };

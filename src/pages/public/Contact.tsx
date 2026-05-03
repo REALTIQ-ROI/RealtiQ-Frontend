@@ -35,7 +35,6 @@ const inquiryTypes = [
 
 const Contact = () => {
   const [form, setForm] = useState({ name: '', email: '', phone: '', type: '', message: '' });
-  const [submitted, setSubmitted] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -43,7 +42,6 @@ const Contact = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
   };
 
   return (
@@ -70,20 +68,10 @@ const Contact = () => {
               <h2 className="text-2xl font-bold mb-1">Send us a message</h2>
               <p className="text-on-surface-variant text-sm mb-8">We typically respond within 2 business hours.</p>
 
-              {submitted ? (
-                <div className="text-center py-12">
-                  <span className="material-symbols-outlined text-5xl text-primary mb-4 block">check_circle</span>
-                  <h3 className="text-xl font-bold mb-2">Message Received</h3>
-                  <p className="text-on-surface-variant text-sm">A member of our team will be in touch shortly.</p>
-                  <button
-                    className="mt-6 text-primary text-sm font-semibold hover:underline"
-                    onClick={() => { setSubmitted(false); setForm({ name: '', email: '', phone: '', type: '', message: '' }); }}
-                  >
-                    Send another message
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Contact form delivery is coming soon. Use phone or email for live support.
+              </div>
+              <form onSubmit={handleSubmit} className="space-y-5 opacity-70">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Full Name *</label>
@@ -149,12 +137,12 @@ const Contact = () => {
                   </div>
                   <button
                     type="submit"
-                    className="w-full bg-primary text-on-primary font-bold py-4 rounded-xl hover:opacity-90 transition-all active:scale-[0.98]"
+                    disabled
+                    className="w-full bg-surface-container-high text-secondary font-bold py-4 rounded-xl cursor-not-allowed"
                   >
-                    Send Message
+                    Contact Form Coming Soon
                   </button>
                 </form>
-              )}
             </div>
           </div>
 

@@ -14,10 +14,19 @@ const statusConfig = {
 const LandlordMyProperties = () => {
   const { user } = useAuth();
   const { properties, deleteProperty } = useProperties();
-  const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'drafts' | 'pending'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'available' | 'sold'>('all');
+  const [query, setQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  const myProperties = properties.filter((item) => resolveOwnerId(item.ownerId) === user?._id);
+  const myProperties = properties.filter((item) => {
+    const needle = query.trim().toLowerCase();
+    const matchesOwner = resolveOwnerId(item.ownerId) === user?._id;
+    const matchesStatus = activeFilter === 'all' || item.status === activeFilter;
+    const matchesQuery =
+      !needle ||
+      `${item.title} ${item.location} ${item.propertyType}`.toLowerCase().includes(needle);
+    return matchesOwner && matchesStatus && matchesQuery;
+  });
 
   const handleDelete = async (id: string) => {
     const result = await Swal.fire({
@@ -51,6 +60,8 @@ const LandlordMyProperties = () => {
             className="bg-surface-container-low border-none rounded-full pl-10 pr-4 py-1.5 text-sm w-64 focus:ring-2 focus:ring-surface-tint/20 transition-all"
             placeholder="Search properties..."
             type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
           />
         </div>
       }
@@ -136,22 +147,16 @@ const LandlordMyProperties = () => {
               All <span className="bg-white/40 px-2 rounded-full text-[10px]">{myProperties.length}</span>
             </button>
             <button
-              onClick={() => setActiveFilter('active')}
-              className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${activeFilter === 'active' ? 'bg-secondary-fixed text-on-secondary-fixed font-bold' : 'hover:bg-surface-container-low text-secondary'}`}
+              onClick={() => setActiveFilter('available')}
+              className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${activeFilter === 'available' ? 'bg-secondary-fixed text-on-secondary-fixed font-bold' : 'hover:bg-surface-container-low text-secondary'}`}
             >
               Active
             </button>
             <button
-              onClick={() => setActiveFilter('drafts')}
-              className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${activeFilter === 'drafts' ? 'bg-secondary-fixed text-on-secondary-fixed font-bold' : 'hover:bg-surface-container-low text-secondary'}`}
+              onClick={() => setActiveFilter('sold')}
+              className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${activeFilter === 'sold' ? 'bg-secondary-fixed text-on-secondary-fixed font-bold' : 'hover:bg-surface-container-low text-secondary'}`}
             >
-              Drafts
-            </button>
-            <button
-              onClick={() => setActiveFilter('pending')}
-              className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${activeFilter === 'pending' ? 'bg-secondary-fixed text-on-secondary-fixed font-bold' : 'hover:bg-surface-container-low text-secondary'}`}
-            >
-              Pending
+              Sold
             </button>
           </div>
           <div className="flex items-center gap-3">
@@ -186,7 +191,13 @@ const LandlordMyProperties = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-container">
-              {myProperties.map((property) => {
+              {myProperties.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-16 text-center text-secondary text-sm">
+                    No properties match the current filters.
+                  </td>
+                </tr>
+              ) : myProperties.map((property) => {
                 const cfg = statusConfig[property.status] ?? statusConfig.available;
                 const thumb = property.media?.[0]?.url;
                 return (

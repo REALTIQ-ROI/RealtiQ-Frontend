@@ -172,9 +172,14 @@ const PropertyDetails = () => {
                 <h3 className="text-xl font-bold text-on-primary mb-1">Take a Virtual Tour</h3>
                 <p className="text-on-primary/70 text-sm">Experience this property from the comfort of your home with our immersive 3D walkthrough.</p>
               </div>
-              <Button variant="secondary" onClick={() => alert('Virtual tour coming soon')}>
+              <Button
+                variant="secondary"
+                disabled
+                title="Virtual tours are coming soon"
+                className="disabled:opacity-60 disabled:cursor-not-allowed"
+              >
                 <span className="material-symbols-outlined text-sm mr-1">360</span>
-                Start 3D Tour
+                Virtual Tour Coming Soon
               </Button>
             </div>
 

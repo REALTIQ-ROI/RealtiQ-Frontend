@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import { authService } from '../services/authService';
 import type { LoginPayload, RegisterPayload, User } from '../types';
@@ -52,7 +53,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const register = async (payload: RegisterPayload): Promise<void> => {
     setIsLoading(true);
     try {
-      await authService.register(payload);
+      const response = await authService.register(payload);
+      if (response.token) {
+        persistSession(response.user, response.token);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to register.';
       throw new Error(message);
