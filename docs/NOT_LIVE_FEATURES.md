@@ -268,6 +268,8 @@ router.post("/reset-password", resetPassword);
 - `src/pages/auth/Landlord/LandlordLogin.tsx`
 - new reset-password page if route is added
 
+Continue from here
+
 ## 4. Virtual Tours and Gallery Management
 
 ### Why It Is Not Live

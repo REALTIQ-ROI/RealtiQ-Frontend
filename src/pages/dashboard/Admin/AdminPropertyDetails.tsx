@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import { useProperties } from '../../../contexts/PropertiesContext';
@@ -276,7 +276,7 @@ const AdminPropertyDetails = () => {
               </div>
 
               {/* Sparkline */}
-              <div className="mt-8 pt-8 border-t border-surface-container-high/50">
+              {/* <div className="mt-8 pt-8 border-t border-surface-container-high/50">
                 <span className="text-[10px] uppercase tracking-widest text-secondary font-bold mb-4 block">7-Day Traffic</span>
                 <div className="flex items-end gap-1.5 h-16">
                   {sparkHeights.map((h, i) => (
@@ -287,7 +287,7 @@ const AdminPropertyDetails = () => {
                     />
                   ))}
                 </div>
-              </div>
+              </div> */}
             </div>
 
             {/* Owner Contact Card */}

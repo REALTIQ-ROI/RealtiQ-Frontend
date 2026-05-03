@@ -111,18 +111,21 @@ const BuyerDashboard = () => {
             <div>
               <span className="text-xs font-label uppercase tracking-[0.2em] text-secondary font-bold mb-2 block">Executive Overview</span>
               <h2 className="text-4xl font-headline font-extrabold tracking-tighter text-on-surface">Welcome back, {user?.name?.split(' ')[0] ?? 'Alexander'}.</h2>
-              <p className="text-on-surface-variant max-w-xl mt-2 font-body text-sm leading-relaxed">
+              {/* <p className="text-on-surface-variant max-w-xl mt-2 font-body text-sm leading-relaxed">
                 Your portfolio has appreciated by <span className="text-primary font-bold">1.2%</span> this month. You have <span className="font-bold">{myInquiries.filter((item) => item.status === 'open').length} active inquiries</span> awaiting your review.
+              </p> */}
+              <p className="text-on-surface-variant max-w-xl mt-2 font-body text-sm leading-relaxed">
+                You have <span className="font-bold">{myInquiries.filter((item) => item.status === 'open').length} active inquiries</span> awaiting your review.
               </p>
             </div>
             <div className="flex gap-3">
-              <button className="flex items-center gap-2 px-5 py-2.5 bg-surface-container-high rounded-lg text-sm font-headline font-bold text-on-surface hover:bg-surface-dim transition-colors">
+              {/* <button className="flex items-center gap-2 px-5 py-2.5 bg-surface-container-high rounded-lg text-sm font-headline font-bold text-on-surface hover:bg-surface-dim transition-colors">
                 <span className="material-symbols-outlined text-[18px]">receipt_long</span>
                 Tax Reports
-              </button>
+              </button> */}
               <Link className="flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-lg text-sm font-headline font-bold hover:opacity-90 transition-opacity" to="/properties">
-                <span className="material-symbols-outlined text-[18px]">add</span>
-                List Property
+                {/* <span className="material-symbols-outlined text-[18px]">add</span> */}
+                View Properties
               </Link>
             </div>
           </section>
@@ -141,7 +144,7 @@ const BuyerDashboard = () => {
               </div>
             </div>
 
-            <div className="col-span-12 md:col-span-4 bg-primary-container p-8 rounded-xl flex flex-col justify-between min-h-[180px] text-white">
+            {/* <div className="col-span-12 md:col-span-4 bg-primary-container p-8 rounded-xl flex flex-col justify-between min-h-[180px] text-white">
               <div className="flex justify-between items-start">
                 <p className="text-xs font-label uppercase tracking-widest text-on-primary-container font-bold">Total Investment</p>
                 <span className="material-symbols-outlined text-secondary-fixed-dim">account_balance_wallet</span>
@@ -152,9 +155,9 @@ const BuyerDashboard = () => {
                 </div>
                 <p className="text-[10px] text-on-primary-container uppercase mt-2 tracking-widest">+12.4% Annual Growth</p>
               </div>
-            </div>
+            </div> */}
 
-            <div className="col-span-12 md:col-span-4 row-span-2 bg-surface-container-low p-8 rounded-xl flex flex-col gap-6">
+            {/* <div className="col-span-12 md:col-span-4 row-span-2 bg-surface-container-low p-8 rounded-xl flex flex-col gap-6">
               <div>
                 <h3 className="font-headline font-extrabold text-xl tracking-tight mb-1">Market Insights</h3>
                 <p className="text-xs text-secondary font-body">Minimalist Brutalism in 2024</p>
@@ -184,7 +187,7 @@ const BuyerDashboard = () => {
               <div className="mt-auto bg-white/50 p-4 rounded-lg border border-white">
                 <p className="text-[11px] leading-relaxed italic text-secondary">"The shift toward utilitarian luxury in Zurich is driving yields up by 150bps." Portfolio AI</p>
               </div>
-            </div>
+            </div> */}
 
             <div className="col-span-12 md:col-span-8 bg-surface-container-lowest p-8 rounded-xl flex flex-col gap-6">
               <div className="flex justify-between items-center">
@@ -251,16 +254,16 @@ const BuyerDashboard = () => {
                       <p className="text-xs font-bold text-secondary uppercase tracking-[0.2em] mb-1">{featuredProperty?.location ?? 'Copenhagen, Denmark'}</p>
                       <h4 className="font-headline font-black text-2xl tracking-tight">{featuredProperty?.title ?? 'The Nordic Glass Pavilion'}</h4>
                     </div>
-                    <div className="text-right">
+                    {/* <div className="text-right">
                       <p className="text-xs text-on-surface-variant">Annual Yield</p>
                       <p className="font-headline font-black text-2xl text-primary">6.8%</p>
-                    </div>
+                    </div> */}
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="col-span-12 md:col-span-5 pt-0 md:pt-16">
+            {/* <div className="col-span-12 md:col-span-5 pt-0 md:pt-16">
               <div className="bg-secondary-container p-10 rounded-xl relative overflow-hidden group">
                 <div className="relative z-10">
                   <h3 className="font-headline font-black text-3xl text-on-secondary-fixed leading-tight mb-4">Expanding to <br />Lake Como?</h3>
@@ -272,7 +275,7 @@ const BuyerDashboard = () => {
                 </div>
                 <span className="material-symbols-outlined absolute -bottom-8 -right-8 text-[200px] text-on-secondary-fixed-variant/5 group-hover:scale-110 transition-transform duration-700">water</span>
               </div>
-            </div>
+            </div> */}
           </section>
         </div>
       </main>

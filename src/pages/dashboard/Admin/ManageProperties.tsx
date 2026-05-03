@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import AdminLayout from '../../../components/layout/AdminLayout';
@@ -299,7 +299,7 @@ const ManageProperties = () => {
         </div>
 
         {/* Bento Info Cards */}
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2 bg-primary-container text-on-primary-container p-8 rounded-xl relative overflow-hidden">
             <div className="relative z-10">
               <h3 className="text-2xl font-bold mb-4 font-headline">Portfolio Performance Report</h3>
@@ -332,7 +332,7 @@ const ManageProperties = () => {
               <span className="material-symbols-outlined text-sm">arrow_forward</span>
             </button>
           </div>
-        </div>
+        </div> */}
       </section>
     </AdminLayout>
   );

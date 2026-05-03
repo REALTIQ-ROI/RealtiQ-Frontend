@@ -1,4 +1,4 @@
-import AdminLayout from '../../../components/layout/AdminLayout';
+﻿import AdminLayout from '../../../components/layout/AdminLayout';
 import ErrorState from '../../../components/ui/ErrorState';
 import { useAsync } from '../../../hooks/useAsync';
 import { useProperties } from '../../../contexts/PropertiesContext';
@@ -163,8 +163,8 @@ const AdminDashboard = () => {
         )}
 
         {/* Charts & Activity */}
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Bar Chart */}
+        {/* <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          Bar Chart
           <div className="lg:col-span-2 bg-surface-container-lowest rounded-xl p-8 overflow-hidden">
             <div className="flex items-center justify-between mb-8">
               <div>
@@ -196,7 +196,7 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* Recent Activity */}
+          Recent Activity
           <div className="bg-surface-container-low rounded-xl p-8 flex flex-col">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-xl font-bold tracking-tight font-headline">Recent Activity</h3>
@@ -261,15 +261,15 @@ const AdminDashboard = () => {
               </div>
             </div>
           </div>
-        </section>
+        </section> */}
 
         {/* Featured Properties */}
         <section className="space-y-6 pb-12">
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-extrabold tracking-tight font-headline">Active Featured Listings</h3>
-            <button className="text-sm font-bold text-primary flex items-center gap-1 hover:gap-2 transition-all">
+            {/* <button className="text-sm font-bold text-primary flex items-center gap-1 hover:gap-2 transition-all">
               View Analytics <span className="material-symbols-outlined text-sm">arrow_forward</span>
-            </button>
+            </button> */}
           </div>
 
           {displayProperties.length > 0 ? (

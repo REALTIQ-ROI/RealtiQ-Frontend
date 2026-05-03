@@ -132,7 +132,7 @@ const LandlordMyProperties = () => {
           </div>
           <div className="bg-surface-container-low p-6 rounded-xl">
             <p className="text-label text-secondary font-medium uppercase tracking-tighter text-xs mb-1">Avg. Yield</p>
-            <p className="text-3xl font-black text-slate-900">6.2%</p>
+            <p className="text-3xl font-black text-slate-900">0%</p>
             <p className="mt-4 text-xs text-secondary">Based on current occupancy</p>
           </div>
         </div>
@@ -294,7 +294,7 @@ const LandlordMyProperties = () => {
         </div>
 
         {/* Promotion Section */}
-        <div className="mt-16 bg-primary-container rounded-2xl p-8 relative overflow-hidden">
+        {/* <div className="mt-16 bg-primary-container rounded-2xl p-8 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-1/3 h-full opacity-10 pointer-events-none">
             <div className="w-full h-full bg-white/20" />
           </div>
@@ -309,12 +309,12 @@ const LandlordMyProperties = () => {
               <span className="material-symbols-outlined text-sm">arrow_forward</span>
             </button>
           </div>
-        </div>
+        </div> */}
       </main>
 
       <footer className="mt-auto p-8 text-center">
         <p className="text-[10px] text-secondary font-medium uppercase tracking-[0.2em]">
-          RealtiQ Architecture Management System © 2024
+          RealtiQ © 2026
         </p>
       </footer>
 

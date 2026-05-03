@@ -67,14 +67,14 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             <span className="material-symbols-outlined">add</span>
             <span>New Listing</span>
           </NavLink>
-          <button
+          {/* <button
             className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 cursor-not-allowed transition-colors"
             disabled
             title="Admin settings are coming soon"
           >
             <span className="material-symbols-outlined">settings</span>
             <span>Settings</span>
-          </button>
+          </button> */}
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 transition-colors"
@@ -88,7 +88,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       {/* Fixed Top Nav */}
       <header className="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 z-40 bg-white/80 backdrop-blur-xl flex items-center justify-between px-8 border-b border-slate-100">
         <div className="flex items-center flex-1 max-w-xl">
-          <div className="relative w-full">
+          {/* <div className="relative w-full">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
             <input
               className="w-full bg-surface-container-low border-none rounded-full py-2 pl-10 pr-4 text-sm transition-all placeholder:text-slate-400 disabled:cursor-not-allowed"
@@ -96,7 +96,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
               type="text"
               disabled
             />
-          </div>
+          </div> */}
         </div>
 
         <div className="flex items-center gap-6 text-sm font-medium">

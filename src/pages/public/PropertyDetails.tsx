@@ -184,10 +184,10 @@ const PropertyDetails = () => {
             </div>
 
             {/* Location & Neighbourhood */}
-            <div>
+            {/* <div>
               <h2 className="text-2xl font-bold mb-4">Location & Neighbourhood</h2>
               <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 overflow-hidden">
-                {/* Map placeholder */}
+                Map placeholder 
                 <div className="h-48 bg-gradient-to-br from-surface-container-low to-surface-container flex items-center justify-center">
                   <div className="text-center">
                     <span className="material-symbols-outlined text-4xl text-secondary">map</span>
@@ -206,7 +206,7 @@ const PropertyDetails = () => {
                   ))}
                 </div>
               </div>
-            </div>
+            </div> */}
 
             {/* Investment Potential */}
             <div>

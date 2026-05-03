@@ -137,7 +137,7 @@ const RegisterToPurchase = () => {
               </div>
 
               {/* Phone — decorative only (not submitted) */}
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <label className="block text-xs font-semibold tracking-wider text-secondary uppercase" htmlFor="phone">
                   Phone Number
                 </label>
@@ -151,7 +151,7 @@ const RegisterToPurchase = () => {
                     type="tel"
                   />
                 </div>
-              </div>
+              </div> */}
 
               <div className="space-y-2">
                 <label className="block text-xs font-semibold tracking-wider text-secondary uppercase" htmlFor="password">

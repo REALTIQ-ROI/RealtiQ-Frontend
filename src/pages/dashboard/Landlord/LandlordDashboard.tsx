@@ -1,4 +1,4 @@
-import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
+﻿import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
@@ -36,7 +36,7 @@ const LandlordDashboard = () => {
         <div className="mb-10">
           <p className="text-[0.65rem] uppercase tracking-[0.2em] font-bold text-secondary mb-2">Architectural Dashboard</p>
           <h2 className="text-4xl font-extrabold text-primary tracking-tighter">Welcome back, {user?.name?.split(' ')[0] ?? 'Landlord'}.</h2>
-          <p className="text-secondary mt-2 font-medium">Your portfolio is currently performing at 94% occupancy.</p>
+          {/* <p className="text-secondary mt-2 font-medium">Your portfolio is currently performing at 94% occupancy.</p> */}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
