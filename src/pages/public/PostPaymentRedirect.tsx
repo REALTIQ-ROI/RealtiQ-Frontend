@@ -9,20 +9,20 @@ type VerifyStatus = 'verifying' | 'success' | 'failed';
 const PostPaymentRedirect = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const reference = searchParams.get('reference') ?? searchParams.get('trxref');
+  const reference = searchParams.get('reference') ?? searchParams.get('trxref') ?? paymentService.getPendingPaymentReference();
   const hasFired = useRef(false);
 
-  const [status, setStatus] = useState<VerifyStatus>('verifying');
+  const [status, setStatus] = useState<VerifyStatus>(reference ? 'verifying' : 'failed');
   const [paymentId, setPaymentId] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(
+    reference ? null : 'No payment reference found in the URL.',
+  );
 
   useEffect(() => {
     if (hasFired.current) return;
     hasFired.current = true;
 
     if (!reference) {
-      setStatus('failed');
-      setErrorMessage('No payment reference found in the URL.');
       return;
     }
 
@@ -32,6 +32,7 @@ const PostPaymentRedirect = () => {
         if (result.verified) {
           setPaymentId(result.payment._id);
           setStatus('success');
+          paymentService.clearPendingPayment();
           toast.success('Payment verified successfully');
         } else {
           setStatus('failed');
@@ -58,6 +59,7 @@ const PostPaymentRedirect = () => {
         if (result.verified) {
           setPaymentId(result.payment._id);
           setStatus('success');
+          paymentService.clearPendingPayment();
           toast.success('Payment verified successfully');
         } else {
           setStatus('failed');

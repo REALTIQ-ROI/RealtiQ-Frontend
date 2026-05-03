@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import Swal from 'sweetalert2';
 import { propertyService, type CreatePropertyPayload, type PropertyFiltersQuery } from '../services/propertyService';
+import { paymentService } from '../services/paymentService';
 import type { Property } from '../types';
 
 interface UsePropertiesOptions {
@@ -148,6 +149,11 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
   };
 
   const buyProperty = async (id: string): Promise<void> => {
+    if (!id) {
+      toast.error('Unable to initialize payment. Please try again.');
+      return;
+    }
+
     const result = await Swal.fire({
       title: 'Proceed to Payment?',
       text: 'You will be redirected to the payment gateway.',
@@ -160,10 +166,15 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
     });
     if (!result.isConfirmed) return;
     try {
-      const { redirectUrl } = await propertyService.buyProperty(id);
-      window.location.href = redirectUrl;
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Unable to initiate payment');
+      const checkout = await propertyService.buyProperty(id);
+      paymentService.redirectToCheckout(checkout, id);
+    } catch {
+      try {
+        const checkout = await paymentService.initializePayment(id);
+        paymentService.redirectToCheckout(checkout, id);
+      } catch {
+        toast.error('Unable to initialize payment. Please try again.');
+      }
     }
   };
 

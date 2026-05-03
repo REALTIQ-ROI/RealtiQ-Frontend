@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
@@ -10,6 +11,7 @@ import LoadingState from '../../components/ui/LoadingState';
 import Button from '../../components/ui/Button';
 import { useAsync } from '../../hooks/useAsync';
 import { propertyService } from '../../services/propertyService';
+import { paymentService } from '../../services/paymentService';
 import { inquiryService } from '../../services/inquiryService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProperties } from '../../contexts/PropertiesContext';
@@ -31,17 +33,23 @@ const PropertyDetails = () => {
   const { user } = useAuth();
   const { buyProperty, refreshProperties } = useProperties();
   const { data: property, loading, error } = useAsync(() => propertyService.getPropertyById(id), true);
+  const [isInitializingPayment, setIsInitializingPayment] = useState(false);
 
   const handleBuyProperty = async () => {
+    if (!property?._id) {
+      toast.error('Unable to initialize payment. Please try again.');
+      return;
+    }
+
     if (!user) {
-      navigate('/login-required');
+      paymentService.persistPendingPaymentProperty(property._id);
+      navigate('/login-to-purchase');
       return;
     }
     if (user.role !== 'buyer') {
       toast.error('Only buyers can purchase properties.');
       return;
     }
-    if (!property) return;
 
     const confirmed = await Swal.fire({
       title: 'Proceed to Payment?',
@@ -55,10 +63,12 @@ const PropertyDetails = () => {
     });
     if (!confirmed.isConfirmed) return;
 
+    setIsInitializingPayment(true);
     try {
       await buyProperty(property._id, user._id);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Unable to complete purchase.');
+    } catch {
+      toast.error('Unable to initialize payment. Please try again.');
+      setIsInitializingPayment(false);
     }
   };
 
@@ -228,8 +238,20 @@ const PropertyDetails = () => {
                   {property.status.toUpperCase()}
                 </span>
               </div>
-              <Button fullWidth disabled={property.status === 'sold'} onClick={() => void handleBuyProperty()}>
-                {property.status === 'sold' ? 'Already Sold' : 'Buy Property'}
+              <Button
+                fullWidth
+                disabled={property.status === 'sold' || isInitializingPayment}
+                onClick={() => void handleBuyProperty()}
+                className="disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isInitializingPayment && (
+                  <span className="material-symbols-outlined text-sm mr-2 animate-spin align-middle">progress_activity</span>
+                )}
+                {property.status === 'sold'
+                  ? 'Already Sold'
+                  : isInitializingPayment
+                    ? 'Initializing Payment...'
+                    : 'Buy Property'}
               </Button>
               <InquiryForm
                 propertyId={property._id}

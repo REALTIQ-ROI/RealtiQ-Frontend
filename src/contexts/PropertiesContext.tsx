@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { propertyService, type CreatePropertyPayload } from '../services/propertyService';
+import { paymentService } from '../services/paymentService';
 import type { Property } from '../types';
 
 interface PropertiesContextValue {
@@ -55,9 +56,18 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
     await refreshProperties();
   };
 
-  const buyProperty = async (propertyId: string, _buyerId: string): Promise<void> => {
-    const result = await propertyService.buyProperty(propertyId);
-    window.location.href = result.redirectUrl;
+  const buyProperty = async (propertyId: string): Promise<void> => {
+    if (!propertyId) {
+      throw new Error('Missing property ID.');
+    }
+
+    try {
+      const result = await propertyService.buyProperty(propertyId);
+      paymentService.redirectToCheckout(result, propertyId);
+    } catch {
+      const result = await paymentService.initializePayment(propertyId);
+      paymentService.redirectToCheckout(result, propertyId);
+    }
   };
 
   const value = useMemo<PropertiesContextValue>(
