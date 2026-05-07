@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import PublicLayout from '../../components/layout/PublicLayout';
+import { contactService } from '../../services/contactService';
 
 const offices = [
   {
@@ -35,13 +36,53 @@ const inquiryTypes = [
 
 const Contact = () => {
   const [form, setForm] = useState({ name: '', email: '', phone: '', type: '', message: '' });
+  const [errors, setErrors] = useState<Partial<Record<keyof typeof form, string>>>({});
+  const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    setErrors((prev) => ({ ...prev, [e.target.name]: undefined }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const validate = () => {
+    const nextErrors: Partial<Record<keyof typeof form, string>> = {};
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!form.name.trim()) nextErrors.name = 'Enter your full name.';
+    if (!emailPattern.test(form.email.trim())) nextErrors.email = 'Enter a valid email address.';
+    if (!form.type) nextErrors.type = 'Select an enquiry type.';
+    if (form.message.trim().length < 10) nextErrors.message = 'Message must be at least 10 characters.';
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setStatus(null);
+
+    if (!validate()) return;
+
+    setIsSubmitting(true);
+    try {
+      const response = await contactService.submitMessage({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim() || undefined,
+        type: form.type,
+        message: form.message.trim(),
+      });
+      setStatus({ type: 'success', message: response.message || 'Thanks. Your message has been sent successfully.' });
+      setForm({ name: '', email: '', phone: '', type: '', message: '' });
+    } catch (err) {
+      setStatus({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Unable to send your message. Please try again.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -68,10 +109,18 @@ const Contact = () => {
               <h2 className="text-2xl font-bold mb-1">Send us a message</h2>
               <p className="text-on-surface-variant text-sm mb-8">We typically respond within 2 business hours.</p>
 
-              <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Contact form delivery is coming soon. Use phone or email for live support.
-              </div>
-              <form onSubmit={handleSubmit} className="space-y-5 opacity-70">
+              {status ? (
+                <div
+                  className={`mb-6 rounded-xl border px-4 py-3 text-sm ${
+                    status.type === 'success'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                      : 'border-red-200 bg-red-50 text-red-800'
+                  }`}
+                >
+                  {status.message}
+                </div>
+              ) : null}
+              <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Full Name *</label>
@@ -83,6 +132,7 @@ const Contact = () => {
                         placeholder="Your full name"
                         className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                       />
+                      {errors.name ? <p className="mt-2 text-xs text-error">{errors.name}</p> : null}
                     </div>
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Email Address *</label>
@@ -95,6 +145,7 @@ const Contact = () => {
                         placeholder="you@example.com"
                         className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                       />
+                      {errors.email ? <p className="mt-2 text-xs text-error">{errors.email}</p> : null}
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -121,6 +172,7 @@ const Contact = () => {
                         <option value="">Select a type...</option>
                         {inquiryTypes.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
+                      {errors.type ? <p className="mt-2 text-xs text-error">{errors.type}</p> : null}
                     </div>
                   </div>
                   <div>
@@ -134,13 +186,14 @@ const Contact = () => {
                       placeholder="Tell us how we can help..."
                       className="w-full bg-surface-container-low border border-outline-variant/20 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
                     />
+                    {errors.message ? <p className="mt-2 text-xs text-error">{errors.message}</p> : null}
                   </div>
                   <button
                     type="submit"
-                    disabled
-                    className="w-full bg-surface-container-high text-secondary font-bold py-4 rounded-xl cursor-not-allowed"
+                    disabled={isSubmitting}
+                    className="w-full bg-primary text-on-primary font-bold py-4 rounded-xl hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    Contact Form Coming Soon
+                    {isSubmitting ? 'Sending Message...' : 'Send Message'}
                   </button>
                 </form>
             </div>

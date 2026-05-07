@@ -169,6 +169,14 @@ const Login = () => {
                     </span>
                   </button>
                 </div>
+                <div className="mt-2 text-right">
+                  <Link
+                    to={`/forgot-password?role=${role}&email=${encodeURIComponent(email)}`}
+                    className="text-xs font-bold text-primary hover:underline uppercase tracking-wider"
+                  >
+                    Forgot Password?
+                  </Link>
+                </div>
               </div>
 
               <button

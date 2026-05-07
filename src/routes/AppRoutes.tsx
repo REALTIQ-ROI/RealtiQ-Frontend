@@ -24,6 +24,8 @@ import RegistrationSuccess from '../pages/auth/RegistrationSuccess';
 import AuthError from '../pages/auth/AuthError';
 import LoginToPurchase from '../pages/auth/LoginToPurchase';
 import RegisterToPurchase from '../pages/auth/RegisterToPurchase';
+import ForgotPassword from '../pages/auth/ForgotPassword';
+import ResetPassword from '../pages/auth/ResetPassword';
 import AdminLogin from '../pages/auth/Admin/AdminLogin';
 import LandlordLogin from '../pages/auth/Landlord/LandlordLogin';
 import LandlordRegistration from '../pages/auth/Landlord/LandlordRegistration';
@@ -84,6 +86,12 @@ const AppRoutes = () => {
 
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
+        <Route path="/auth/reset-password" element={<ResetPassword />} />
+        <Route path="/auth/reset-password/:token" element={<ResetPassword />} />
         <Route path="/verify-email/:token" element={<VerifyEmail />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/auth/verify-email/:token" element={<VerifyEmail />} />

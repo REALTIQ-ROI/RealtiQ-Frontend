@@ -68,9 +68,12 @@ const LandlordLogin = () => {
                   <label className="block font-semibold text-[0.75rem] text-on-surface-variant uppercase tracking-wider" htmlFor="password">
                     Password
                   </label>
-                  <button type="button" className="text-[0.7rem] text-surface-tint hover:text-primary font-bold transition-colors uppercase tracking-wider">
+                  <Link
+                    to={`/forgot-password?role=landlord&email=${encodeURIComponent(email)}`}
+                    className="text-[0.7rem] text-surface-tint hover:text-primary font-bold transition-colors uppercase tracking-wider"
+                  >
                     Forgot?
-                  </button>
+                  </Link>
                 </div>
                 <input
                   className="w-full bg-surface-container-low rounded-md px-4 py-3 text-on-surface placeholder:text-outline focus:ring-0 focus:border-surface-tint transition-all outline-none"

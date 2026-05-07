@@ -115,9 +115,12 @@ const LoginToPurchase = () => {
                   <label className="text-xs font-bold tracking-widest uppercase text-secondary" htmlFor="password">
                     Security Code
                   </label>
-                  <button type="button" className="text-[11px] font-bold text-primary hover:underline underline-offset-4 uppercase tracking-tighter">
+                  <Link
+                    to={`/forgot-password?role=buyer&email=${encodeURIComponent(email)}`}
+                    className="text-[11px] font-bold text-primary hover:underline underline-offset-4 uppercase tracking-tighter"
+                  >
                     Forgot?
-                  </button>
+                  </Link>
                 </div>
                 <input
                   className="w-full h-14 px-5 bg-surface-container-low border-none rounded-xl text-on-surface placeholder:text-outline/50 focus:ring-2 focus:ring-surface-tint/20 transition-all outline-none"
