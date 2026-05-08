@@ -1,11 +1,11 @@
 import axios, { type AxiosError } from 'axios';
 
 // const api = axios.create({
-//   baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000/api',
+//   baseURL: 'http://localhost:5000/api',
 //   timeout: 10_000,
 // });
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'https://api.realtiq.com.ng/api',
+  baseURL: 'https://api.realtiq.com.ng/api',
   timeout: 10_000,
 });
 
