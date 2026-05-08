@@ -3,17 +3,17 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
-import { paymentService } from '../../../services/paymentService';
+// import { paymentService } from '../../../services/paymentService';
 
 const BuyerDashboard = () => {
   const { user, logout } = useAuth();
   const { properties } = useProperties();
   const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
-  const { data: payments } = useAsync(() => paymentService.getPayments(), true);
+  // const { data: payments } = useAsync(() => paymentService.getPayments(), true);
 
   const myProperties = properties.filter((item) => item.buyerId === user?._id);
   const myInquiries = (inquiries ?? []).filter((item) => item.userId === user?._id);
-  const myPayments = (payments ?? []).filter((item) => item.user?._id === user?._id);
+  // const myPayments = (payments ?? []).filter((item) => item.user?._id === user?._id);
 
   const featuredProperty = myProperties[0] ?? properties[0];
 

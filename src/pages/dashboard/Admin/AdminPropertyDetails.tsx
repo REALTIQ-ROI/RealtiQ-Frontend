@@ -4,7 +4,7 @@ import AdminLayout from '../../../components/layout/AdminLayout';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { resolveOwnerId } from '../../../types';
 
-const sparkHeights = ['50%', '66%', '100%', '75%', '66%', '80%', '83%'];
+// const sparkHeights = ['50%', '66%', '100%', '75%', '66%', '80%', '83%'];
 
 const AdminPropertyDetails = () => {
   const { properties, updateProperty } = useProperties();

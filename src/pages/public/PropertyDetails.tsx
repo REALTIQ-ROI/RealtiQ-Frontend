@@ -19,13 +19,13 @@ import { useProperties } from '../../contexts/PropertiesContext';
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value);
 
-const nearbyPlaces = [
-  { icon: 'school', label: 'Top International School', distance: '0.8 km' },
-  { icon: 'local_hospital', label: 'Premium Medical Centre', distance: '1.2 km' },
-  { icon: 'shopping_bag', label: 'Luxury Shopping Mall', distance: '1.5 km' },
-  { icon: 'restaurant', label: 'Fine Dining District', distance: '0.5 km' },
-  { icon: 'local_airport', label: 'International Airport', distance: '22 km' },
-];
+// const nearbyPlaces = [
+//   { icon: 'school', label: 'Top International School', distance: '0.8 km' },
+//   { icon: 'local_hospital', label: 'Premium Medical Centre', distance: '1.2 km' },
+//   { icon: 'shopping_bag', label: 'Luxury Shopping Mall', distance: '1.5 km' },
+//   { icon: 'restaurant', label: 'Fine Dining District', distance: '0.5 km' },
+//   { icon: 'local_airport', label: 'International Airport', distance: '22 km' },
+// ];
 
 const PropertyDetails = () => {
   const { id = '' } = useParams();

@@ -2,11 +2,11 @@
 import ErrorState from '../../../components/ui/ErrorState';
 import { useAsync } from '../../../hooks/useAsync';
 import { useProperties } from '../../../contexts/PropertiesContext';
-import { inquiryService } from '../../../services/inquiryService';
+// import { inquiryService } from '../../../services/inquiryService';
 import { adminService } from '../../../services/adminService';
 import type { Property } from '../../../types';
 
-const barHeights = [30, 45, 40, 65, 50, 35, 60, 85, 45, 55, 70, 40, 30, 50, 95, 45, 60, 35, 75, 55];
+// const barHeights = [30, 45, 40, 65, 50, 35, 60, 85, 45, 55, 70, 40, 30, 50, 95, 45, 60, 35, 75, 55];
 
 const emptyStats = {
   totalUsers: 0,
@@ -105,14 +105,14 @@ const AdminDashboard = () => {
     () => adminService.fetchAdminStats(),
     true,
   );
-  const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
+  // const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
   const stats = statsData ?? emptyStats;
 
   const featuredProperties = properties.filter((p) => p.featured).slice(0, 3);
   const displayProperties = featuredProperties.length > 0 ? featuredProperties : properties.slice(0, 3);
 
-  const recentInquiries = (inquiries ?? []).slice(0, 2);
-  const recentProperties = properties.slice(0, 2);
+  // const recentInquiries = (inquiries ?? []).slice(0, 2);
+  // const recentProperties = properties.slice(0, 2);
 
   return (
     <AdminLayout>
