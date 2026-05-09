@@ -5,7 +5,7 @@ import axios, { type AxiosError } from 'axios';
 //   timeout: 10_000,
 // });
 const api = axios.create({
-  baseURL: 'https://api.realtiq.com.ng/api',
+  baseURL: import.meta.env.DEV ? '/api' : 'https://api.realtiq.com.ng/api',
   timeout: 10_000,
 });
 

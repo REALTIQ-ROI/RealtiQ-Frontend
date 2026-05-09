@@ -1,12 +1,12 @@
-import { useState, type FormEvent } from 'react';
+﻿import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 
 const AdminLogin = () => {
   const navigate = useNavigate();
   const { login, isLoading } = useAuth();
-  const [email, setEmail] = useState('admin@realtiq.com');
-  const [password, setPassword] = useState('Admin@12345');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,12 +117,12 @@ const AdminLogin = () => {
                   <label className="font-label text-sm font-semibold text-on-surface-variant" htmlFor="password">
                     Password
                   </label>
-                  <Link
+                  {/* <Link
                     className="text-sm font-semibold text-primary hover:underline underline-offset-4 transition-all"
                     to={`/forgot-password?email=${encodeURIComponent(email)}`}
                   >
                     Forgot Password?
-                  </Link>
+                  </Link> */}
                 </div>
                 <div className="relative group">
                   <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-xl transition-colors group-focus-within:text-primary">

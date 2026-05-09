@@ -4,18 +4,16 @@ import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import type { UserRole } from '../../types';
 
-type Role = Extract<UserRole, 'buyer' | 'landlord' | 'admin'>;
+type Role = Extract<UserRole, 'buyer' | 'landlord'>;
 
 const ROLES: { value: Role; label: string }[] = [
   { value: 'buyer', label: 'Buyer' },
   { value: 'landlord', label: 'Landlord' },
-  { value: 'admin', label: 'Admin' },
 ];
 
 const DASHBOARD_PATHS: Record<Role, string> = {
   buyer: '/dashboard/buyer',
   landlord: '/dashboard/landlord',
-  admin: '/dashboard/admin',
 };
 
 const Login = () => {

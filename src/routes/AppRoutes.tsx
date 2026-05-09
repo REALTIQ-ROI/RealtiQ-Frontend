@@ -100,7 +100,7 @@ const AppRoutes = () => {
         <Route path="/auth-error" element={<AuthError />} />
         <Route path="/login-to-purchase" element={<LoginToPurchase />} />
         <Route path="/register-to-purchase" element={<RegisterToPurchase />} />
-        <Route path="/auth/admin/login" element={<AdminLogin />} />
+        <Route path="/real/admin" element={<AdminLogin />} />
         <Route path="/auth/landlord/login" element={<LandlordLogin />} />
         <Route path="/auth/landlord/register" element={<LandlordRegistration />} />
 
