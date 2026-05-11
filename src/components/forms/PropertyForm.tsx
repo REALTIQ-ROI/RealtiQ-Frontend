@@ -18,7 +18,7 @@ const PropertyForm = ({ initialValue, submitLabel, onSubmit }: PropertyFormProps
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState(1000000);
   const [location, setLocation] = useState('');
-  const [propertyType, setPropertyType] = useState('Villa');
+  const [propertyType, setPropertyType] = useState('house');
   const [bedrooms, setBedrooms] = useState(3);
   const [bathrooms, setBathrooms] = useState(2);
   const [description, setDescription] = useState('');
@@ -35,7 +35,7 @@ const PropertyForm = ({ initialValue, submitLabel, onSubmit }: PropertyFormProps
     setTitle(initialValue.title ?? '');
     setPrice(initialValue.price ?? 1000000);
     setLocation(initialValue.location ?? '');
-    setPropertyType(initialValue.propertyType ?? 'Villa');
+    setPropertyType(initialValue.propertyType ?? 'house');
     setBedrooms(initialValue.bedrooms ?? 3);
     setBathrooms(initialValue.bathrooms ?? 2);
     setDescription(initialValue.description ?? '');
@@ -78,7 +78,23 @@ const PropertyForm = ({ initialValue, submitLabel, onSubmit }: PropertyFormProps
       <Input label="Title" value={title} onChange={(event) => setTitle(event.target.value)} required />
       <Input label="Location" value={location} onChange={(event) => setLocation(event.target.value)} required />
       <Input label="Price" type="number" value={price} onChange={(event) => setPrice(Number(event.target.value))} required />
-      <Input label="Type" value={propertyType} onChange={(event) => setPropertyType(event.target.value)} required />
+      <div className="space-y-2">
+        <label className="block text-on-surface font-label text-xs font-bold uppercase tracking-wider">Type</label>
+        <select
+          className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-surface-tint/20"
+          value={propertyType}
+          onChange={(event) => setPropertyType(event.target.value)}
+          required
+        >
+          <option value="house">House</option>
+          <option value="apartment">Apartment</option>
+          <option value="land">Land</option>
+          <option value="commercial">Commercial</option>
+          <option value="villa">Villa</option>
+          <option value="penthouse">Penthouse</option>
+          <option value="estate">Estate</option>
+        </select>
+      </div>
       <Input label="Bedrooms" type="number" value={bedrooms} onChange={(event) => setBedrooms(Number(event.target.value))} required />
       <Input label="Bathrooms" type="number" value={bathrooms} onChange={(event) => setBathrooms(Number(event.target.value))} required />
       <Input label="Square Feet" type="number" value={squareFeet} onChange={(event) => setSquareFeet(Number(event.target.value))} required />
