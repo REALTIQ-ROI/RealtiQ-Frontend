@@ -28,6 +28,22 @@ const PropertyDetails = () => {
             <div className="text-sm text-on-surface-variant">
               {property.bedrooms} beds • {property.bathrooms} baths • {property.squareFeet.toLocaleString()} sqft
             </div>
+            {property.amenities && property.amenities.length > 0 && (
+              <div className="pt-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-secondary mb-2">Amenities</p>
+                <div className="flex flex-wrap gap-2">
+                  {property.amenities.map((amenity) => (
+                    <span
+                      key={amenity}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container rounded-full text-xs font-medium text-on-surface-variant"
+                    >
+                      <span className="material-symbols-outlined text-xs text-primary">check_circle</span>
+                      {amenity}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </article>
         ) : (
           <p className="text-secondary">No purchased property selected.</p>

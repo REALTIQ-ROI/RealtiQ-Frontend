@@ -162,6 +162,25 @@ const LandlordPropertyDetails = () => {
                 {property?.description ??
                   'An architectural masterpiece defined by its seamless integration with the surrounding landscape. Featuring floor-to-ceiling glass walls, the residence offers panoramic views of the canyons. The interior boasts European oak flooring, a chef\'s kitchen with Gaggenau appliances, and a private wellness wing.'}
               </p>
+
+              {/* Amenities */}
+              {property?.amenities && property.amenities.length > 0 && (
+                <div className="mb-8">
+                  <h4 className="text-slate-900 font-bold text-xl mb-4">Amenities</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    {property.amenities.map((amenity) => (
+                      <div
+                        key={amenity}
+                        className="flex items-center gap-2 text-sm text-secondary bg-surface-container-low rounded-lg px-4 py-3"
+                      >
+                        <span className="material-symbols-outlined text-sm text-primary">check_circle</span>
+                        {amenity}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <h4 className="text-slate-900 font-bold text-xl mb-4">Investment Highlights</h4>
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center gap-3 text-secondary">

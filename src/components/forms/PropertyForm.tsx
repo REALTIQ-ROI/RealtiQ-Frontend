@@ -80,20 +80,27 @@ const PropertyForm = ({ initialValue, submitLabel, onSubmit }: PropertyFormProps
       <Input label="Price" type="number" value={price} onChange={(event) => setPrice(Number(event.target.value))} required />
       <div className="space-y-2">
         <label className="block text-on-surface font-label text-xs font-bold uppercase tracking-wider">Type</label>
-        <select
-          className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-surface-tint/20"
-          value={propertyType}
-          onChange={(event) => setPropertyType(event.target.value)}
-          required
-        >
-          <option value="house">House</option>
-          <option value="apartment">Apartment</option>
-          <option value="land">Land</option>
-          <option value="commercial">Commercial</option>
-          <option value="villa">Villa</option>
-          <option value="penthouse">Penthouse</option>
-          <option value="estate">Estate</option>
-        </select>
+        <div className="relative">
+          <select
+            className="w-full appearance-none bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-surface-tint/20 pr-10"
+            value={propertyType}
+            onChange={(event) => setPropertyType(event.target.value)}
+            required
+          >
+            <option value="house">House</option>
+            <option value="apartment">Apartment</option>
+            <option value="land">Land</option>
+            <option value="commercial">Commercial</option>
+            <option value="villa">Villa</option>
+            <option value="penthouse">Penthouse</option>
+            <option value="estate">Estate</option>
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+            <svg className="h-4 w-4 text-on-surface-variant" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+            </svg>
+          </div>
+        </div>
       </div>
       <Input label="Bedrooms" type="number" value={bedrooms} onChange={(event) => setBedrooms(Number(event.target.value))} required />
       <Input label="Bathrooms" type="number" value={bathrooms} onChange={(event) => setBathrooms(Number(event.target.value))} required />
