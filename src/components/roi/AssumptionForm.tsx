@@ -95,8 +95,8 @@ const AssumptionForm = ({ initialValue, saving = false, onSubmit }: AssumptionFo
             id={field}
             label={fieldLabels[field]}
             type="number"
-            step="0.01"
-            min={field === 'usdNgn' ? 0.01 : undefined}
+            step="any"
+            min={field === 'usdNgn' ? 0 : undefined}
             value={Number(form[field])}
             error={errors[field]}
             onChange={(event) => updateNumber(field, event.target.value)}

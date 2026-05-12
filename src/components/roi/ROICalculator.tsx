@@ -241,8 +241,8 @@ const ROICalculator = ({ property, onScenarioSaved }: ROICalculatorProps) => {
             <section>
               <h2 className="text-xl font-bold mb-4">Core Inputs</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input id="cost" label="Property Cost" type="number" min="0.01" value={inputs.cost} error={errors.cost} onChange={(event) => updateNumber('cost', event.target.value)} />
-                <Input id="targetUsd" label="Target USD" type="number" min="0" value={inputs.targetUsd} error={errors.targetUsd} onChange={(event) => updateNumber('targetUsd', event.target.value)} />
+                <Input id="cost" label="Property Cost" type="number" min="0" step="any" value={inputs.cost} error={errors.cost} onChange={(event) => updateNumber('cost', event.target.value)} />
+                <Input id="targetUsd" label="Target USD" type="number" min="0" step="any" value={inputs.targetUsd} error={errors.targetUsd} onChange={(event) => updateNumber('targetUsd', event.target.value)} />
                 <Input id="startDate" label="Start Month" type="month" value={inputs.startDate} error={errors.startDate} onChange={(event) => updateDate('startDate', event.target.value)} />
                 <Input id="endDate" label="End Month" type="month" value={inputs.endDate} error={errors.endDate} onChange={(event) => updateDate('endDate', event.target.value)} />
               </div>
@@ -257,8 +257,8 @@ const ROICalculator = ({ property, onScenarioSaved }: ROICalculatorProps) => {
                     id={field}
                     label={fieldLabels[field]}
                     type="number"
-                    step="0.01"
-                    min={['usdNgn', 'entryUsdNgn'].includes(field) ? 0.01 : undefined}
+                    step="any"
+                    min={['usdNgn', 'entryUsdNgn'].includes(field) ? 0 : undefined}
                     value={Number(inputs[field])}
                     error={errors[field]}
                     onChange={(event) => updateNumber(field, event.target.value)}
