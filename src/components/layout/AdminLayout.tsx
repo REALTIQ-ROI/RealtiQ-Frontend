@@ -13,6 +13,7 @@ const navLinks = [
   { to: '/dashboard/admin/manage-users', label: 'Manage Users', icon: 'group' },
   { to: '/dashboard/admin/manage-inquiries', label: 'Inquiries', icon: 'mail' },
   { to: '/dashboard/admin/manage-payments', label: 'Payments', icon: 'payments' },
+  { to: '/dashboard/admin/roi-assumptions', label: 'ROI Assumptions', icon: 'monitoring' },
   { to: '/dashboard/admin/featured', label: 'Featured Listings', icon: 'star' },
 ];
 

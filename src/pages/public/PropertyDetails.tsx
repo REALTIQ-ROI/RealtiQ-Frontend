@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
@@ -13,8 +13,11 @@ import { useAsync } from '../../hooks/useAsync';
 import { propertyService } from '../../services/propertyService';
 import { paymentService } from '../../services/paymentService';
 import { inquiryService } from '../../services/inquiryService';
+import { roiService, type MarketBenchmark, type ROIScenario } from '../../services/roiService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProperties } from '../../contexts/PropertiesContext';
+import BenchmarkCard from '../../components/roi/BenchmarkCard';
+import ScenarioList from '../../components/roi/ScenarioList';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value);
@@ -34,6 +37,36 @@ const PropertyDetails = () => {
   const { buyProperty, refreshProperties } = useProperties();
   const { data: property, loading, error } = useAsync(() => propertyService.getPropertyById(id), true);
   const [isInitializingPayment, setIsInitializingPayment] = useState(false);
+  const [scenarios, setScenarios] = useState<ROIScenario[]>([]);
+  const [loadingScenarios, setLoadingScenarios] = useState(false);
+  const [benchmark, setBenchmark] = useState<MarketBenchmark | null>(null);
+  const [loadingBenchmark, setLoadingBenchmark] = useState(false);
+  const [savingScenario, setSavingScenario] = useState(false);
+
+  const refreshScenarios = useCallback(async (propertyId: string) => {
+    if (!user) return;
+    setLoadingScenarios(true);
+    try {
+      const nextScenarios = await roiService.getPropertyScenarios(propertyId);
+      setScenarios(nextScenarios);
+    } catch {
+      setScenarios([]);
+    } finally {
+      setLoadingScenarios(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!property?._id) return;
+
+    setLoadingBenchmark(true);
+    roiService.getMarketBenchmark({ location: property.location, propertyType: property.propertyType })
+      .then(setBenchmark)
+      .catch(() => setBenchmark(null))
+      .finally(() => setLoadingBenchmark(false));
+
+    void refreshScenarios(property._id);
+  }, [property, refreshScenarios]);
 
   const handleBuyProperty = async () => {
     if (!property?._id) {
@@ -69,6 +102,38 @@ const PropertyDetails = () => {
     } catch {
       toast.error('Unable to initialize payment. Please try again.');
       setIsInitializingPayment(false);
+    }
+  };
+
+  const handleSaveROIScenario = async () => {
+    if (!property?._id) return;
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    const startDate = new Date().toISOString().slice(0, 7);
+    const end = new Date();
+    end.setFullYear(end.getFullYear() + 3);
+
+    setSavingScenario(true);
+    try {
+      const assumptions = await roiService.getAssumptions();
+      await roiService.savePropertyScenario(property._id, {
+        source: 'property_detail',
+        inputs: {
+          startDate,
+          endDate: end.toISOString().slice(0, 7),
+          alpha: assumptions.defaultAlpha,
+          beta: assumptions.defaultBeta,
+        },
+      });
+      toast.success('ROI scenario saved.');
+      await refreshScenarios(property._id);
+    } catch (saveError) {
+      toast.error(saveError instanceof Error ? saveError.message : 'Unable to save ROI scenario.');
+    } finally {
+      setSavingScenario(false);
     }
   };
 
@@ -228,6 +293,29 @@ const PropertyDetails = () => {
                   <p className="text-xs text-secondary uppercase tracking-wider mt-1">Title Document</p>
                 </div>
               </div>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Market Benchmark</h2>
+              <BenchmarkCard benchmark={benchmark} propertyPrice={property.price} loading={loadingBenchmark} />
+            </div>
+
+            <div>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold">ROI Scenarios</h2>
+                  <p className="text-sm text-secondary">Saved calculations for this property.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void handleSaveROIScenario()}
+                  disabled={savingScenario}
+                >
+                  {savingScenario ? 'Saving...' : 'Save ROI Scenario'}
+                </Button>
+              </div>
+              <ScenarioList scenarios={scenarios} loading={loadingScenarios} />
             </div>
           </div>
 

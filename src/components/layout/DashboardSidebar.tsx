@@ -9,6 +9,7 @@ const roleLinks: Record<UserRole, Array<{ to: string; label: string }>> = {
   buyer: [
     { to: '/dashboard/buyer', label: 'Overview' },
     { to: '/dashboard/buyer/my-properties', label: 'My Properties' },
+    { to: '/dashboard/roi-scenarios', label: 'ROI Scenarios' },
     { to: '/dashboard/buyer/payment-history', label: 'Payments' },
     { to: '/dashboard/buyer/inquiry-history', label: 'Inquiries' },
     { to: '/dashboard/buyer/profile-settings', label: 'Profile' },
@@ -26,6 +27,7 @@ const roleLinks: Record<UserRole, Array<{ to: string; label: string }>> = {
     { to: '/dashboard/admin/manage-properties', label: 'Properties' },
     { to: '/dashboard/admin/manage-payments', label: 'Payments' },
     { to: '/dashboard/admin/manage-inquiries', label: 'Inquiries' },
+    { to: '/dashboard/admin/roi-assumptions', label: 'ROI Assumptions' },
   ],
 };
 

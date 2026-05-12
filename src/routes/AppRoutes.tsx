@@ -62,6 +62,8 @@ import LandlordPropertyDetails from '../pages/dashboard/Landlord/LandlordPropert
 import ProtectedRoute from './ProtectedRoute';
 import ROICalculatorPage from '../pages/dashboard/ROI/ROICalculatorPage';
 import PropertyROICalculatorPage from '../pages/dashboard/ROI/PropertyROICalculatorPage';
+import MyROIScenarios from '../pages/dashboard/ROI/MyROIScenarios';
+import ROIAssumptions from '../pages/dashboard/Admin/ROIAssumptions';
 
 const AppRoutes = () => {
   return (
@@ -125,6 +127,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/buyer/inquiry-details" element={<InquiryDetails />} />
           <Route path="/dashboard/buyer/inquiry-details/:id" element={<InquiryDetails />} />
           <Route path="/dashboard/buyer/profile-settings" element={<ProfileSettings />} />
+          <Route path="/dashboard/roi-scenarios" element={<MyROIScenarios />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['landlord']} />}>
@@ -156,6 +159,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/landlord-details" element={<LandlordDetails />} />
           <Route path="/dashboard/admin/landlord-details/:id" element={<LandlordDetails />} />
           <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />
+          <Route path="/dashboard/admin/roi-assumptions" element={<ROIAssumptions />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

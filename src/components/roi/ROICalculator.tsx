@@ -1,230 +1,173 @@
-import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
-import Button from "../ui/Button";
-import Card from "../ui/Card";
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { toast } from 'sonner';
+import Button from '../ui/Button';
+import Card from '../ui/Card';
+import Input from '../ui/Input';
+import BenchmarkCard from './BenchmarkCard';
+import ROIAssumptionsDisplay from './ROIAssumptionsDisplay';
+import ROIResultsCard from './ROIResultsCard';
 import {
   roiService,
   type MarketBenchmark,
   type ROIAssumptions,
-  type ROIScenarioPayload,
-} from "../../services/roiService";
-import type { Property } from "../../types";
-import {
-  calculateROI,
-  estimateDefaultRent,
-  type ROICalculationInput,
-  type ROICalculationResult,
-} from "../../utils/roiCalculator";
-
-interface ROIProperty extends Property {
-  completionStage?: string;
-  category?: string;
-  currency?: string;
-}
+  type ROICalculationInputs,
+  type ROICalculationResults,
+} from '../../services/roiService';
+import type { Property } from '../../types';
+import { formatNaira } from './roiFormatters';
 
 interface ROICalculatorProps {
-  property?: ROIProperty | null;
+  property?: Property | null;
+  onScenarioSaved?: () => void;
 }
 
-interface ROIFormState {
-  purchasePrice: number;
-  annualRent: number;
-  operatingExpenses: number;
-  appreciationRate: number;
-  holdingPeriodYears: number;
-  downPaymentPercent: number;
-  closingCosts: number;
-  location: string;
-  propertyType: string;
-  completionStage: string;
-  category: string;
-  currency: string;
-}
+type ROIFormErrors = Partial<Record<keyof ROICalculationInputs, string>>;
 
-const defaultAssumptions: ROIAssumptions = {
-  inflationRate: 0,
-  rentalYieldPercent: 0,
-  appreciationRate: 0,
-  operatingExpensePercent: 0,
-  closingCostPercent: 0,
-  downPaymentPercent: 100,
-  holdingPeriodYears: 5,
-  currency: "NGN",
+const currentMonth = new Date().toISOString().slice(0, 7);
+const futureMonth = new Date(new Date().setFullYear(new Date().getFullYear() + 3)).toISOString().slice(0, 7);
+
+const defaultInputs: ROICalculationInputs = {
+  cost: 0,
+  startDate: currentMonth,
+  endDate: futureMonth,
+  inflation: 0,
+  mmf: 0,
+  mpr: 0,
+  usdNgn: 1,
+  entryUsdNgn: 1,
+  usInflation: 0,
+  usTreasury: 0,
+  alpha: 15,
+  beta: 0.25,
+  targetUsd: 0,
 };
 
-const propertyTypeOptions = [
-  "house",
-  "apartment",
-  "land",
-  "commercial",
-  "villa",
-  "penthouse",
-  "estate",
+const numericFields: Array<keyof ROICalculationInputs> = [
+  'cost',
+  'inflation',
+  'mmf',
+  'mpr',
+  'usdNgn',
+  'entryUsdNgn',
+  'usInflation',
+  'usTreasury',
+  'alpha',
+  'beta',
+  'targetUsd',
 ];
-const completionStageOptions = [
-  "completed",
-  "off-plan",
-  "shell",
-  "semi-finished",
-  "fully-finished",
-  "furnished",
-];
-const categoryOptions = ["sale"];
 
-const formatCurrency = (value: number, currency: string) =>
-  new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(Number.isFinite(value) ? value : 0);
+const fieldLabels: Record<keyof ROICalculationInputs, string> = {
+  cost: 'Property Cost',
+  startDate: 'Start Month',
+  endDate: 'End Month',
+  inflation: 'Inflation',
+  mmf: 'MMF',
+  mpr: 'MPR',
+  usdNgn: 'Current USD/NGN',
+  entryUsdNgn: 'Entry USD/NGN',
+  usInflation: 'US Inflation',
+  usTreasury: 'US Treasury',
+  alpha: 'Alpha',
+  beta: 'Beta',
+  targetUsd: 'Target USD',
+};
 
-const formatPercent = (value: number) =>
-  `${Number.isFinite(value) ? value.toFixed(1) : "0.0"}%`;
+const buildInputs = (property?: Property | null, assumptions?: ROIAssumptions | null): ROICalculationInputs => {
+  const cost = property?.price ?? defaultInputs.cost;
+  const usdNgn = assumptions?.usdNgn || defaultInputs.usdNgn;
+  return {
+    ...defaultInputs,
+    cost,
+    targetUsd: cost && usdNgn ? Math.round(cost / usdNgn) : 0,
+    inflation: assumptions?.inflation ?? defaultInputs.inflation,
+    mmf: assumptions?.mmf ?? defaultInputs.mmf,
+    mpr: assumptions?.mpr ?? defaultInputs.mpr,
+    usdNgn,
+    entryUsdNgn: usdNgn,
+    usInflation: assumptions?.usInflation ?? defaultInputs.usInflation,
+    usTreasury: assumptions?.usTreasury ?? defaultInputs.usTreasury,
+    alpha: assumptions?.defaultAlpha ?? defaultInputs.alpha,
+    beta: assumptions?.defaultBeta ?? defaultInputs.beta,
+  };
+};
 
-const toInput = (state: ROIFormState): ROICalculationInput => ({
-  purchasePrice: state.purchasePrice,
-  annualRent: state.annualRent,
-  operatingExpenses: state.operatingExpenses,
-  appreciationRate: state.appreciationRate,
-  holdingPeriodYears: state.holdingPeriodYears,
-  downPaymentPercent: state.downPaymentPercent,
-  closingCosts: state.closingCosts,
-  currency: state.currency,
-});
-
-const ROICalculator = ({ property }: ROICalculatorProps) => {
-  const [assumptions, setAssumptions] =
-    useState<ROIAssumptions>(defaultAssumptions);
-  const [form, setForm] = useState<ROIFormState>({
-    purchasePrice: property?.price ?? 0,
-    annualRent: 0,
-    operatingExpenses: 0,
-    appreciationRate: 0,
-    holdingPeriodYears: 5,
-    downPaymentPercent: 100,
-    closingCosts: 0,
-    location: property?.location ?? "",
-    propertyType: property?.propertyType ?? "house",
-    completionStage: property?.completionStage ?? "completed",
-    category: property?.category ?? "sale",
-    currency: property?.currency ?? "NGN",
-  });
-  const [result, setResult] = useState<ROICalculationResult | null>(null);
+const ROICalculator = ({ property, onScenarioSaved }: ROICalculatorProps) => {
+  const [assumptions, setAssumptions] = useState<ROIAssumptions | null>(null);
+  const [inputs, setInputs] = useState<ROICalculationInputs>(() => buildInputs(property));
+  const [results, setResults] = useState<ROICalculationResults | null>(null);
   const [benchmark, setBenchmark] = useState<MarketBenchmark | null>(null);
+  const [errors, setErrors] = useState<ROIFormErrors>({});
   const [loadingAssumptions, setLoadingAssumptions] = useState(true);
   const [calculating, setCalculating] = useState(false);
   const [loadingBenchmark, setLoadingBenchmark] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
-
+    let active = true;
     const loadAssumptions = async () => {
       setLoadingAssumptions(true);
       try {
         const nextAssumptions = await roiService.getAssumptions();
-        if (!isMounted) return;
+        if (!active) return;
         setAssumptions(nextAssumptions);
-        setForm((current) => {
-          const purchasePrice = property?.price ?? current.purchasePrice;
-          const annualRent =
-            current.annualRent ||
-            estimateDefaultRent(
-              purchasePrice,
-              nextAssumptions.rentalYieldPercent,
-            );
-          return {
-            ...current,
-            purchasePrice,
-            annualRent,
-            operatingExpenses:
-              current.operatingExpenses ||
-              Math.round(
-                annualRent * (nextAssumptions.operatingExpensePercent / 100),
-              ),
-            appreciationRate:
-              current.appreciationRate || nextAssumptions.appreciationRate,
-            holdingPeriodYears:
-              current.holdingPeriodYears || nextAssumptions.holdingPeriodYears,
-            downPaymentPercent:
-              current.downPaymentPercent || nextAssumptions.downPaymentPercent,
-            closingCosts:
-              current.closingCosts ||
-              Math.round(
-                purchasePrice * (nextAssumptions.closingCostPercent / 100),
-              ),
-            currency:
-              property?.currency ??
-              nextAssumptions.currency ??
-              current.currency,
-          };
-        });
-      } catch {
-        toast.error("Unable to load ROI assumptions from the server.");
+        setInputs(buildInputs(property, nextAssumptions));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Unable to load ROI assumptions.');
       } finally {
-        if (isMounted) {
-          setLoadingAssumptions(false);
-        }
+        if (active) setLoadingAssumptions(false);
       }
     };
-
     void loadAssumptions();
-
     return () => {
-      isMounted = false;
+      active = false;
     };
   }, [property]);
 
-  useEffect(() => {
-    if (!property) return;
+  const hasResults = useMemo(() => results !== null, [results]);
 
-    setForm((current) => ({
-      ...current,
-      purchasePrice: property.price ?? current.purchasePrice,
-      location: property.location ?? current.location,
-      propertyType: property.propertyType ?? current.propertyType,
-      completionStage: property.completionStage ?? current.completionStage,
-      category: property.category ?? current.category,
-      currency: property.currency ?? current.currency,
-    }));
-  }, [property]);
-
-  const localResult = useMemo(() => calculateROI(toInput(form)), [form]);
-
-  const updateField = (field: keyof ROIFormState, value: string) => {
-    setForm((current) => ({
-      ...current,
-      [field]: [
-        "location",
-        "propertyType",
-        "completionStage",
-        "category",
-        "currency",
-      ].includes(field)
-        ? value
-        : Number(value),
-    }));
+  const updateNumber = (field: keyof ROICalculationInputs, value: string) => {
+    setInputs((current) => ({ ...current, [field]: Number(value) }));
+    setErrors((current) => ({ ...current, [field]: undefined }));
+    setResults(null);
   };
 
-  const handleCalculate = async () => {
-    setCalculating(true);
-    const payload: ROIScenarioPayload = {
-      ...toInput(form),
-      propertyId: property?._id,
-      propertyTitle: property?.title,
-      location: form.location,
-      propertyType: form.propertyType,
-      completionStage: form.completionStage,
-      category: form.category,
-      benchmark,
-    };
+  const updateDate = (field: keyof ROICalculationInputs, value: string) => {
+    setInputs((current) => ({ ...current, [field]: value }));
+    setErrors((current) => ({ ...current, [field]: undefined }));
+    setResults(null);
+  };
 
+  const validate = () => {
+    const nextErrors: ROIFormErrors = {};
+    numericFields.forEach((field) => {
+      const value = Number(inputs[field]);
+      if (!Number.isFinite(value)) nextErrors[field] = `${fieldLabels[field]} must be a number.`;
+      if (['cost', 'usdNgn', 'entryUsdNgn'].includes(field) && value <= 0) {
+        nextErrors[field] = `${fieldLabels[field]} must be greater than zero.`;
+      }
+      if (field === 'targetUsd' && value < 0) {
+        nextErrors[field] = 'Target USD cannot be negative.';
+      }
+    });
+    if (!inputs.startDate) nextErrors.startDate = 'Start month is required.';
+    if (!inputs.endDate) nextErrors.endDate = 'End month is required.';
+    if (inputs.startDate && inputs.endDate && inputs.endDate <= inputs.startDate) {
+      nextErrors.endDate = 'End month must be after start month.';
+    }
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleCalculate = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    if (!validate()) return;
+    setCalculating(true);
     try {
-      const serverResult = await roiService.calculate(payload);
-      setResult(serverResult);
-    } catch {
-      setResult(localResult);
-      toast.error("Server ROI calculation failed. Showing the local estimate.");
+      const nextResults = await roiService.calculate(inputs);
+      setResults(nextResults);
+      toast.success('ROI calculation complete.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to calculate ROI.');
     } finally {
       setCalculating(false);
     }
@@ -234,30 +177,12 @@ const ROICalculator = ({ property }: ROICalculatorProps) => {
     setLoadingBenchmark(true);
     try {
       const nextBenchmark = await roiService.getMarketBenchmark({
-        location: form.location,
-        propertyType: form.propertyType,
-        completionStage: form.completionStage,
-        category: form.category,
-        currency: form.currency,
+        location: property?.location,
+        propertyType: property?.propertyType,
       });
       setBenchmark(nextBenchmark);
-      if (nextBenchmark.averageRent) {
-        setForm((current) => ({
-          ...current,
-          annualRent: Math.round(
-            nextBenchmark.averageRent ?? current.annualRent,
-          ),
-        }));
-      }
-      if (nextBenchmark.appreciationRate) {
-        setForm((current) => ({
-          ...current,
-          appreciationRate:
-            nextBenchmark.appreciationRate ?? current.appreciationRate,
-        }));
-      }
-    } catch {
-      toast.error("Unable to load market benchmark from the server.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to load market benchmark.');
     } finally {
       setLoadingBenchmark(false);
     }
@@ -265,335 +190,104 @@ const ROICalculator = ({ property }: ROICalculatorProps) => {
 
   const handleSaveScenario = async () => {
     if (!property?._id) {
-      toast.error("Open this calculator from a property to save a scenario.");
+      toast.error('Open a property ROI calculator to save this scenario.');
       return;
     }
+    if (!validate()) return;
 
-    const activeResult = result ?? localResult;
     setSaving(true);
     try {
       await roiService.savePropertyScenario(property._id, {
-        ...toInput(form),
-        propertyId: property._id,
-        propertyTitle: property.title,
-        location: form.location,
-        propertyType: form.propertyType,
-        completionStage: form.completionStage,
-        category: form.category,
-        benchmark,
-        result: activeResult,
+        source: 'property_detail',
+        inputs: {
+          startDate: inputs.startDate,
+          endDate: inputs.endDate,
+          alpha: inputs.alpha,
+          beta: inputs.beta,
+        },
       });
-      toast.success("ROI scenario saved.");
-    } catch {
-      toast.error("Unable to save ROI scenario.");
+      toast.success('ROI scenario saved.');
+      onScenarioSaved?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save ROI scenario.');
     } finally {
       setSaving(false);
     }
   };
 
-  const activeResult = result ?? localResult;
-
   return (
     <div className="space-y-6">
-      <Card className="overflow-hidden">
-        <div className="bg-primary text-on-primary p-6 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-on-primary/70 font-bold">
-              Investment Tool
-            </p>
-            <h1 className="text-3xl font-extrabold tracking-tight mt-2">
-              ROI Calculator
-            </h1>
-            <p className="text-sm text-on-primary/75 mt-2 max-w-2xl">
-              Analyze rental yield, resale upside, and total return using live
-              assumptions and market benchmarks.
-            </p>
-          </div>
-          {property ? (
-            <div className="text-sm text-on-primary/80 md:text-right">
-              <p className="font-bold text-on-primary">{property.title}</p>
-              <p>{property.location}</p>
-            </div>
-          ) : null}
-        </div>
+      <ROIAssumptionsDisplay assumptions={assumptions} loading={loadingAssumptions} />
 
-        <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Property Inputs</h2>
-                {loadingAssumptions ? (
-                  <span className="text-xs text-secondary">
-                    Loading assumptions...
-                  </span>
-                ) : null}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label className="space-y-2 text-sm font-semibold">
-                  Purchase Cost
-                  <input
-                    className="w-full bg-surface-container-low rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                    type="number"
-                    min="0"
-                    value={form.purchasePrice}
-                    onChange={(event) =>
-                      updateField("purchasePrice", event.target.value)
-                    }
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-semibold">
-                  Annual Rent
-                  <input
-                    className="w-full bg-surface-container-low rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                    type="number"
-                    min="0"
-                    value={form.annualRent}
-                    onChange={(event) =>
-                      updateField("annualRent", event.target.value)
-                    }
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-semibold">
-                  Operating Expenses
-                  <input
-                    className="w-full bg-surface-container-low rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                    type="number"
-                    min="0"
-                    value={form.operatingExpenses}
-                    onChange={(event) =>
-                      updateField("operatingExpenses", event.target.value)
-                    }
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-semibold">
-                  Closing Costs
-                  <input
-                    className="w-full bg-surface-container-low rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                    type="number"
-                    min="0"
-                    value={form.closingCosts}
-                    onChange={(event) =>
-                      updateField("closingCosts", event.target.value)
-                    }
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-semibold">
-                  Appreciation Rate
-                  <input
-                    className="w-full bg-surface-container-low rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={form.appreciationRate}
-                    onChange={(event) =>
-                      updateField("appreciationRate", event.target.value)
-                    }
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-semibold">
-                  Holding Period
-                  <input
-                    className="w-full bg-surface-container-low rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                    type="number"
-                    min="1"
-                    value={form.holdingPeriodYears}
-                    onChange={(event) =>
-                      updateField("holdingPeriodYears", event.target.value)
-                    }
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-semibold">
-                  Down Payment %
-                  <input
-                    className="w-full bg-surface-container-low rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={form.downPaymentPercent}
-                    onChange={(event) =>
-                      updateField("downPaymentPercent", event.target.value)
-                    }
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-semibold">
-                  Currency
-                  <select
-                    className="w-full bg-surface-container-low rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                    value={form.currency}
-                    onChange={(event) =>
-                      updateField("currency", event.target.value)
-                    }
-                  >
-                    <option value="NGN">NGN</option>
-                    <option value="USD">USD</option>
-                  </select>
-                </label>
-              </div>
-            </section>
-
-            <section>
-              <h2 className="text-xl font-bold mb-4">Market Context</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label className="space-y-2 text-sm font-semibold">
-                  Location
-                  <input
-                    className="w-full bg-surface-container-low rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                    value={form.location}
-                    onChange={(event) =>
-                      updateField("location", event.target.value)
-                    }
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-semibold">
-                  Property Type
-                  <select
-                    className="w-full bg-surface-container-low rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20 capitalize"
-                    value={form.propertyType}
-                    onChange={(event) =>
-                      updateField("propertyType", event.target.value)
-                    }
-                  >
-                    {propertyTypeOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-2 text-sm font-semibold">
-                  Completion Stage
-                  <select
-                    className="w-full bg-surface-container-low rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20 capitalize"
-                    value={form.completionStage}
-                    onChange={(event) =>
-                      updateField("completionStage", event.target.value)
-                    }
-                  >
-                    {completionStageOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-2 text-sm font-semibold">
-                  Category
-                  <select
-                    className="w-full bg-surface-container-low rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20 capitalize"
-                    value={form.category}
-                    onChange={(event) =>
-                      updateField("category", event.target.value)
-                    }
-                  >
-                    {categoryOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Button
-                  type="button"
-                  onClick={() => void handleBenchmark()}
-                  disabled={loadingBenchmark}
-                >
-                  {loadingBenchmark
-                    ? "Loading Benchmark..."
-                    : "Load Market Benchmark"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => void handleCalculate()}
-                  disabled={calculating}
-                >
-                  {calculating ? "Calculating..." : "Analyze ROI"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => void handleSaveScenario()}
-                  disabled={saving}
-                >
-                  {saving ? "Saving..." : "Save Scenario"}
-                </Button>
-              </div>
-            </section>
-          </div>
-
-          <aside className="space-y-4">
-            <div className="bg-surface-container-low rounded-xl p-5">
-              <p className="text-xs text-secondary uppercase tracking-widest font-bold mb-2">
-                Annualized ROI
-              </p>
-              <p className="text-4xl font-black text-primary">
-                {formatPercent(activeResult.annualizedROI)}
-              </p>
-              <p className="text-xs text-secondary mt-2">
-                Gross yield: {formatPercent(activeResult.grossYield)}
+      <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-6">
+        <Card className="overflow-hidden">
+          <div className="bg-primary text-on-primary p-6 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-on-primary/70 font-bold">Investment Tool</p>
+              <h1 className="text-3xl font-extrabold tracking-tight mt-2">ROI Calculator</h1>
+              <p className="text-sm text-on-primary/75 mt-2 max-w-2xl">
+                Calculate ROI targets from admin-managed market assumptions and currency expectations.
               </p>
             </div>
-            <div className="bg-surface-container-low rounded-xl p-5 space-y-3 text-sm">
-              <div className="flex justify-between gap-4">
-                <span className="text-secondary">Total Investment</span>
-                <strong>
-                  {formatCurrency(activeResult.totalInvestment, form.currency)}
-                </strong>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-secondary">Net Annual Income</span>
-                <strong>
-                  {formatCurrency(activeResult.netAnnualIncome, form.currency)}
-                </strong>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-secondary">Projected Sale</span>
-                <strong>
-                  {formatCurrency(
-                    activeResult.projectedSalePrice,
-                    form.currency,
-                  )}
-                </strong>
-              </div>
-              <div className="flex justify-between gap-4 pt-3 border-t border-outline-variant/20">
-                <span className="text-secondary">Total Profit</span>
-                <strong>
-                  {formatCurrency(activeResult.totalProfit, form.currency)}
-                </strong>
-              </div>
-            </div>
-            {benchmark ? (
-              <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-xl p-5 space-y-2 text-sm">
-                <p className="text-xs text-secondary uppercase tracking-widest font-bold">
-                  Market Benchmark
-                </p>
-                <p className="font-bold">{benchmark.location}</p>
-                <p className="text-secondary">
-                  Average price:{" "}
-                  {formatCurrency(
-                    benchmark.averagePrice,
-                    benchmark.currency || form.currency,
-                  )}
-                </p>
-                {benchmark.rentalYieldPercent ? (
-                  <p className="text-secondary">
-                    Yield: {formatPercent(benchmark.rentalYieldPercent)}
-                  </p>
-                ) : null}
+            {property ? (
+              <div className="text-sm text-on-primary/80 md:text-right">
+                <p className="font-bold text-on-primary">{property.title}</p>
+                <p>{formatNaira(property.price)}</p>
               </div>
             ) : null}
-            <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-xl p-5 text-xs text-secondary leading-relaxed">
-              Assumptions are loaded from the ROI API. Local math is used only
-              as a fallback when the calculation endpoint is unavailable.
-              {assumptions.inflationRate
-                ? ` Current inflation assumption: ${formatPercent(assumptions.inflationRate)}.`
-                : ""}
+          </div>
+
+          <form className="p-6 space-y-6" onSubmit={(event) => void handleCalculate(event)}>
+            <section>
+              <h2 className="text-xl font-bold mb-4">Core Inputs</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input id="cost" label="Property Cost" type="number" min="0.01" value={inputs.cost} error={errors.cost} onChange={(event) => updateNumber('cost', event.target.value)} />
+                <Input id="targetUsd" label="Target USD" type="number" min="0" value={inputs.targetUsd} error={errors.targetUsd} onChange={(event) => updateNumber('targetUsd', event.target.value)} />
+                <Input id="startDate" label="Start Month" type="month" value={inputs.startDate} error={errors.startDate} onChange={(event) => updateDate('startDate', event.target.value)} />
+                <Input id="endDate" label="End Month" type="month" value={inputs.endDate} error={errors.endDate} onChange={(event) => updateDate('endDate', event.target.value)} />
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-xl font-bold mb-4">Assumption Overrides</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {numericFields.filter((field) => !['cost', 'targetUsd'].includes(field)).map((field) => (
+                  <Input
+                    key={field}
+                    id={field}
+                    label={fieldLabels[field]}
+                    type="number"
+                    step="0.01"
+                    min={['usdNgn', 'entryUsdNgn'].includes(field) ? 0.01 : undefined}
+                    value={Number(inputs[field])}
+                    error={errors[field]}
+                    onChange={(event) => updateNumber(field, event.target.value)}
+                  />
+                ))}
+              </div>
+            </section>
+
+            <div className="flex flex-wrap gap-3">
+              <Button type="submit" disabled={calculating}>
+                {calculating ? 'Calculating...' : hasResults ? 'Recalculate ROI' : 'Calculate ROI'}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => void handleBenchmark()} disabled={loadingBenchmark}>
+                {loadingBenchmark ? 'Loading Benchmark...' : 'Load Benchmark'}
+              </Button>
+              {property ? (
+                <Button type="button" variant="ghost" onClick={() => void handleSaveScenario()} disabled={saving}>
+                  {saving ? 'Saving...' : 'Save ROI Scenario'}
+                </Button>
+              ) : null}
             </div>
-          </aside>
+          </form>
+        </Card>
+
+        <div className="space-y-6">
+          <ROIResultsCard results={results} loading={calculating} />
+          <BenchmarkCard benchmark={benchmark} propertyPrice={property?.price ?? inputs.cost} loading={loadingBenchmark} />
         </div>
-      </Card>
+      </div>
     </div>
   );
 };
