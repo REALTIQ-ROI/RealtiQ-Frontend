@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+﻿import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 import Home from '../pages/public/Home';
 import AboutAndContact from '../pages/public/AboutAndContact';
@@ -60,6 +60,8 @@ import LandlordMyProperties from '../pages/dashboard/Landlord/LandlordMyProperti
 import LandlordPaymentHistory from '../pages/dashboard/Landlord/LandlordPaymentHistory';
 import LandlordPropertyDetails from '../pages/dashboard/Landlord/LandlordPropertyDetails';
 import ProtectedRoute from './ProtectedRoute';
+import ROICalculatorPage from '../pages/dashboard/ROI/ROICalculatorPage';
+import PropertyROICalculatorPage from '../pages/dashboard/ROI/PropertyROICalculatorPage';
 
 const AppRoutes = () => {
   return (
@@ -83,6 +85,9 @@ const AppRoutes = () => {
         <Route path="/payment-success" element={<PaymentSucess />} />
         <Route path="/post-payment-redirect" element={<PostPaymentRedirect />} />
         <Route path="/redirecting" element={<Redirecting />} />
+
+        <Route path="/tools/roi-calculator" element={<ROICalculatorPage />} />
+        <Route path="/properties/:propertyId/roi" element={<PropertyROICalculatorPage />} />
 
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
