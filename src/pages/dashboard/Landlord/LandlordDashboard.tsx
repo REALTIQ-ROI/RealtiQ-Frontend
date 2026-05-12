@@ -1,4 +1,5 @@
 ﻿import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
@@ -37,6 +38,15 @@ const LandlordDashboard = () => {
           <p className="text-[0.65rem] uppercase tracking-[0.2em] font-bold text-secondary mb-2">Architectural Dashboard</p>
           <h2 className="text-4xl font-extrabold text-primary tracking-tighter">Welcome back, {user?.name?.split(' ')[0] ?? 'Landlord'}.</h2>
           {/* <p className="text-secondary mt-2 font-medium">Your portfolio is currently performing at 94% occupancy.</p> */}
+          <div className="mt-5">
+            <Link
+              to="/tools/roi-calculator"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-lg text-sm font-bold hover:opacity-90 transition-opacity"
+            >
+              <span className="material-symbols-outlined text-[18px]">monitoring</span>
+              Analyze Investment ROI
+            </Link>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">

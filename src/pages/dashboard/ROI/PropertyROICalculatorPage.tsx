@@ -1,5 +1,43 @@
-import ROICalculator from "../../../components/roi_calculator/ROICalculator";
+import { useNavigate, useParams } from 'react-router-dom';
+import PublicLayout from '../../../components/layout/PublicLayout';
+import ROICalculator from '../../../components/roi/ROICalculator';
+import Button from '../../../components/ui/Button';
+import LoadingState from '../../../components/ui/LoadingState';
+import { useAsync } from '../../../hooks/useAsync';
+import { propertyService } from '../../../services/propertyService';
 
-export default function PropertyROICalculatorPage() {
-  return <ROICalculator property={property} />;
-}
+const PropertyROICalculatorPage = () => {
+  const { propertyId = '' } = useParams();
+  const navigate = useNavigate();
+  const { data: property, loading, error } = useAsync(() => propertyService.getPropertyById(propertyId), true);
+
+  if (loading) {
+    return (
+      <PublicLayout>
+        <LoadingState label="Loading ROI calculator..." />
+      </PublicLayout>
+    );
+  }
+
+  if (error || !property) {
+    return (
+      <PublicLayout>
+        <div className="max-w-4xl mx-auto px-8 py-16 text-center">
+          <h1 className="text-3xl font-bold mb-4">Property not found</h1>
+          <p className="text-secondary mb-6">We could not load this listing for ROI analysis.</p>
+          <Button onClick={() => navigate('/properties')}>Back to Listings</Button>
+        </div>
+      </PublicLayout>
+    );
+  }
+
+  return (
+    <PublicLayout>
+      <section className="max-w-7xl mx-auto px-8 py-10">
+        <ROICalculator property={property} />
+      </section>
+    </PublicLayout>
+  );
+};
+
+export default PropertyROICalculatorPage;

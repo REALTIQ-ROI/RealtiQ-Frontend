@@ -258,6 +258,14 @@ const PropertyDetails = () => {
                     ? 'Initializing Payment...'
                     : 'Buy Property'}
               </Button>
+              <Button
+                fullWidth
+                variant="secondary"
+                onClick={() => navigate(`/properties/${property._id}/roi`)}
+              >
+                <span className="material-symbols-outlined text-sm mr-1">monitoring</span>
+                Analyze ROI
+              </Button>
               <InquiryForm
                 propertyId={property._id}
                 onSubmitInquiry={async (payload) => {

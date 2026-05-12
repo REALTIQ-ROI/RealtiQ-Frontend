@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
-type LandlordNavKey = 'overview' | 'my-properties' | 'add-property' | 'inquiries' | 'payment-history';
+type LandlordNavKey = 'overview' | 'my-properties' | 'add-property' | 'inquiries' | 'payment-history' | 'roi';
 
 interface LandlordPortalLayoutProps {
   active: LandlordNavKey;
@@ -18,6 +18,7 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
   { key: 'add-property', to: '/dashboard/landlord/add-property', icon: 'add_circle', label: 'Add Property' },
   { key: 'inquiries', to: '/dashboard/landlord/inquiries', icon: 'chat_bubble', label: 'Inquiries' },
   { key: 'payment-history', to: '/dashboard/landlord/payment-history', icon: 'payments', label: 'Payment History' },
+  { key: 'roi', to: '/tools/roi-calculator', icon: 'monitoring', label: 'ROI Calculator' },
 ];
 
 const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: LandlordPortalLayoutProps) => {

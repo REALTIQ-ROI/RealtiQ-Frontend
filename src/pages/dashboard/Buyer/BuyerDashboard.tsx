@@ -49,6 +49,10 @@ const BuyerDashboard = () => {
             <span className="material-symbols-outlined">forum</span>
             <span className="text-[14px] font-headline">Inquiry History</span>
           </Link>
+          <Link className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-3 mx-2 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all" to="/tools/roi-calculator">
+            <span className="material-symbols-outlined">monitoring</span>
+            <span className="text-[14px] font-headline">ROI Calculator</span>
+          </Link>
           <Link className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-3 mx-2 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all" to="/dashboard/buyer/profile-settings">
             <span className="material-symbols-outlined">settings</span>
             <span className="text-[14px] font-headline">Settings</span>
@@ -126,6 +130,10 @@ const BuyerDashboard = () => {
               <Link className="flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-lg text-sm font-headline font-bold hover:opacity-90 transition-opacity" to="/properties">
                 {/* <span className="material-symbols-outlined text-[18px]">add</span> */}
                 View Properties
+              </Link>
+              <Link className="flex items-center gap-2 px-5 py-2.5 bg-surface-container-high text-on-surface rounded-lg text-sm font-headline font-bold hover:bg-surface-dim transition-colors" to="/tools/roi-calculator">
+                <span className="material-symbols-outlined text-[18px]">monitoring</span>
+                ROI Calculator
               </Link>
             </div>
           </section>
