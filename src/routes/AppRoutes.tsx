@@ -31,6 +31,9 @@ import LandlordLogin from '../pages/auth/Landlord/LandlordLogin';
 import LandlordRegistration from '../pages/auth/Landlord/LandlordRegistration';
 
 import Dashboard from '../pages/dashboard/Dashboard';
+import Tours from '../pages/dashboard/Tours';
+import Installments from '../pages/dashboard/Installments';
+import NotificationDigest from '../pages/dashboard/NotificationDigest';
 import AdminDashboard from '../pages/dashboard/Admin/AdminDashboard';
 import AdminPropertyDetails from '../pages/dashboard/Admin/AdminPropertyDetails';
 import AdminInquiryDetails from '../pages/dashboard/Admin/AdminInquiryDetails';
@@ -72,7 +75,6 @@ const AppRoutes = () => {
         <Route path="/" element={<Home />} />
 
         <Route path="/properties" element={<Listings />} />
-        <Route path="/properties/:id" element={<PropertyDetails />} />
 
         <Route path="/about-contact" element={<AboutAndContact />} />
         <Route path="/about" element={<About />} />
@@ -89,7 +91,6 @@ const AppRoutes = () => {
         <Route path="/redirecting" element={<Redirecting />} />
 
         <Route path="/tools/roi-calculator" element={<ROICalculatorPage />} />
-        <Route path="/properties/:propertyId/roi" element={<PropertyROICalculatorPage />} />
 
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -112,12 +113,20 @@ const AppRoutes = () => {
         <Route path="/auth/landlord/register" element={<LandlordRegistration />} />
 
         <Route element={<ProtectedRoute />}>
+          <Route path="/properties/:id" element={<PropertyDetails />} />
+          <Route path="/properties/:propertyId/roi" element={<PropertyROICalculatorPage />} />
+        </Route>
+
+        <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<Dashboard />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['buyer']} />}>
           <Route path="/dashboard/buyer" element={<BuyerDashboard />} />
           <Route path="/dashboard/buyer/my-properties" element={<MyProperties />} />
+          <Route path="/dashboard/buyer/tours" element={<Tours />} />
+          <Route path="/dashboard/buyer/installments" element={<Installments />} />
+          <Route path="/dashboard/buyer/installments/:id" element={<Installments />} />
           <Route path="/dashboard/buyer/property-details" element={<BuyerPropertyDetails />} />
           <Route path="/dashboard/buyer/property-details/:id" element={<BuyerPropertyDetails />} />
           <Route path="/dashboard/buyer/payment-history" element={<PaymentHistory />} />
@@ -133,6 +142,8 @@ const AppRoutes = () => {
         <Route element={<ProtectedRoute allowedRoles={['landlord']} />}>
           <Route path="/dashboard/landlord" element={<LandlordDashboard />} />
           <Route path="/dashboard/landlord/my-properties" element={<LandlordMyProperties />} />
+          <Route path="/dashboard/landlord/tours" element={<Tours />} />
+          <Route path="/dashboard/landlord/installments" element={<Installments />} />
           <Route path="/dashboard/landlord/property-details" element={<LandlordPropertyDetails />} />
           <Route path="/dashboard/landlord/property-details/:id" element={<LandlordPropertyDetails />} />
           <Route path="/dashboard/landlord/payment-history" element={<LandlordPaymentHistory />} />
@@ -146,6 +157,9 @@ const AppRoutes = () => {
 
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route path="/dashboard/admin" element={<AdminDashboard />} />
+          <Route path="/dashboard/admin/tours" element={<Tours />} />
+          <Route path="/dashboard/admin/installments" element={<Installments />} />
+          <Route path="/dashboard/admin/notifications/digest" element={<NotificationDigest />} />
           <Route path="/dashboard/admin/manage-users" element={<ManageUsers />} />
           <Route path="/dashboard/admin/users/:id" element={<UserDetails />} />
           <Route path="/dashboard/admin/manage-properties" element={<ManageProperties />} />

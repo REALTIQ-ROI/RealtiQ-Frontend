@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
-type LandlordNavKey = 'overview' | 'my-properties' | 'add-property' | 'inquiries' | 'payment-history' | 'roi';
+type LandlordNavKey = 'overview' | 'my-properties' | 'add-property' | 'tours' | 'installments' | 'inquiries' | 'payment-history' | 'roi';
 
 interface LandlordPortalLayoutProps {
   active: LandlordNavKey;
@@ -16,6 +16,8 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
   { key: 'overview', to: '/dashboard/landlord', icon: 'dashboard', label: 'Overview' },
   { key: 'my-properties', to: '/dashboard/landlord/my-properties', icon: 'domain', label: 'My Properties' },
   { key: 'add-property', to: '/dashboard/landlord/add-property', icon: 'add_circle', label: 'Add Property' },
+  { key: 'tours', to: '/dashboard/landlord/tours', icon: 'tour', label: 'Tours' },
+  { key: 'installments', to: '/dashboard/landlord/installments', icon: 'payments', label: 'Installments' },
   { key: 'inquiries', to: '/dashboard/landlord/inquiries', icon: 'chat_bubble', label: 'Inquiries' },
   { key: 'payment-history', to: '/dashboard/landlord/payment-history', icon: 'payments', label: 'Payment History' },
   { key: 'roi', to: '/tools/roi-calculator', icon: 'monitoring', label: 'ROI Calculator' },

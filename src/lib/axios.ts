@@ -1,12 +1,7 @@
 import axios, { type AxiosError } from 'axios';
 
-// const api = axios.create({
-//   baseURL: import.meta.env.DEV ? '/api' : 'https://api.realtiq.com.ng/api',
-//   timeout: 10_000,
-// });
-
 const api = axios.create({
-  baseURL: import.meta.env.DEV ? '/api' : 'http://localhost:5000/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
   timeout: 10_000,
 });
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import Swal from 'sweetalert2';
+import MediaPreview from '../../../components/property/MediaPreview';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
@@ -199,20 +200,17 @@ const LandlordMyProperties = () => {
                 </tr>
               ) : myProperties.map((property) => {
                 const cfg = statusConfig[property.status] ?? statusConfig.available;
-                const thumb = property.media?.[0]?.url;
-                return (
+                  return (
                   <tr key={property._id} className="group hover:bg-surface-bright transition-colors">
                     <td className="px-6 py-5">
                       <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-200 flex-shrink-0">
-                          {thumb ? (
-                            <img alt="Property thumbnail" className="w-full h-full object-cover" src={thumb} />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-slate-400">
-                              <span className="material-symbols-outlined">domain</span>
-                            </div>
-                          )}
-                        </div>
+                          <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-200 flex-shrink-0">
+                          <MediaPreview
+                            media={property.media?.[0]}
+                            alt={property.title}
+                            className="w-full h-full object-cover"
+                          />
+                          </div>
                         <div>
                           <h3 className="font-bold text-slate-900 group-hover:text-primary transition-colors">{property.title}</h3>
                           <p className="text-sm text-secondary">{property.location}</p>

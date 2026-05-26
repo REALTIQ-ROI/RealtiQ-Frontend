@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import PublicLayout from '../../../components/layout/PublicLayout';
 import ROICalculator from '../../../components/roi/ROICalculator';
@@ -9,7 +10,16 @@ import { propertyService } from '../../../services/propertyService';
 const PropertyROICalculatorPage = () => {
   const { propertyId = '' } = useParams();
   const navigate = useNavigate();
-  const { data: property, loading, error } = useAsync(() => propertyService.getPropertyById(propertyId), true);
+  const { data: property, loading, error, execute } = useAsync(() => propertyService.getPropertyById(propertyId), true);
+  const hasMounted = useRef(false);
+
+  useEffect(() => {
+    if (hasMounted.current) {
+      void execute();
+    } else {
+      hasMounted.current = true;
+    }
+  }, [execute, propertyId]);
 
   if (loading) {
     return (

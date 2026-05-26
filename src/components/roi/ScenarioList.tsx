@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import MediaPreview from '../property/MediaPreview';
 import Card from '../ui/Card';
 import type { ROIScenario, ScenarioProperty } from '../../services/roiService';
 import { formatDate, formatMonth, formatNaira, formatPercent } from './roiFormatters';
@@ -56,8 +57,12 @@ const ScenarioList = ({ scenarios, loading = false, showProperty = false }: Scen
             <summary className="cursor-pointer list-none">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  {showProperty && property?.media?.[0]?.url ? (
-                    <img className="h-14 w-16 rounded-lg object-cover" src={property.media[0].url} alt={property.title} />
+                  {showProperty && property?.media?.[0] ? (
+                    <MediaPreview
+                      media={property.media[0]}
+                      alt={property.title}
+                      className="h-14 w-16 rounded-lg object-cover"
+                    />
                   ) : null}
                   <div>
                     <p className="font-bold">{showProperty ? property?.title ?? 'Property scenario' : 'Saved scenario'}</p>

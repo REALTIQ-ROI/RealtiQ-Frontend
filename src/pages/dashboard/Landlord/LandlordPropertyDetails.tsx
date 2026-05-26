@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
+import MediaPreview from '../../../components/property/MediaPreview';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { resolveOwnerId } from '../../../types';
@@ -13,7 +14,7 @@ const LandlordPropertyDetails = () => {
     ? (properties.find((item) => item._id === id) ?? null)
     : (properties.find((item) => resolveOwnerId(item.ownerId) === user?._id) ?? null);
 
-  const heroImage = property?.media?.[0]?.url;
+  const heroMedia = property?.media?.[0];
 
   return (
     <LandlordPortalLayout
@@ -123,13 +124,12 @@ const LandlordPropertyDetails = () => {
           <div className="lg:col-span-8">
             {/* Hero Image */}
             <div className="relative rounded-xl overflow-hidden aspect-[16/9] mb-8 bg-slate-100 group">
-              {heroImage ? (
-                <img alt={property?.title} className="w-full h-full object-cover" src={heroImage} />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-300">
-                  <span className="material-symbols-outlined text-6xl">domain</span>
-                </div>
-              )}
+              <MediaPreview
+                media={heroMedia}
+                alt={property?.title ?? 'Property'}
+                className="w-full h-full object-cover"
+                controls
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-8">
                 <button className="bg-white/20 backdrop-blur-md text-white border border-white/30 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest">
                   Manage Gallery ({property?.media?.length ?? 0} Photos)

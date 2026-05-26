@@ -1,72 +1,118 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
-import PublicLayout from '../../components/layout/PublicLayout';
+import InquiryForm from '../../components/forms/InquiryForm';
 import PropertyGallery from '../../components/property/PropertyGallery';
 import PropertyMeta from '../../components/property/PropertyMeta';
-import InquiryForm from '../../components/forms/InquiryForm';
+import PublicLayout from '../../components/layout/PublicLayout';
+import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import LoadingState from '../../components/ui/LoadingState';
-import Button from '../../components/ui/Button';
-import { useAsync } from '../../hooks/useAsync';
-import { propertyService } from '../../services/propertyService';
-import { paymentService } from '../../services/paymentService';
-import { inquiryService } from '../../services/inquiryService';
-import { roiService, type MarketBenchmark, type ROIScenario } from '../../services/roiService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProperties } from '../../contexts/PropertiesContext';
-import BenchmarkCard from '../../components/roi/BenchmarkCard';
-import ScenarioList from '../../components/roi/ScenarioList';
+import { useAsync } from '../../hooks/useAsync';
+import { inquiryService } from '../../services/inquiryService';
+import { installmentService } from '../../services/installmentService';
+import { paymentService } from '../../services/paymentService';
+import { propertyService, type NearbyPropertySummary } from '../../services/propertyService';
+import { tourService } from '../../services/tourService';
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value);
+const formatCurrency = (value: number, currency = 'NGN') =>
+  new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(value);
 
-// const nearbyPlaces = [
-//   { icon: 'school', label: 'Top International School', distance: '0.8 km' },
-//   { icon: 'local_hospital', label: 'Premium Medical Centre', distance: '1.2 km' },
-//   { icon: 'shopping_bag', label: 'Luxury Shopping Mall', distance: '1.5 km' },
-//   { icon: 'restaurant', label: 'Fine Dining District', distance: '0.5 km' },
-//   { icon: 'local_airport', label: 'International Airport', distance: '22 km' },
-// ];
+const PROPERTY_TOUR_TYPES = [
+  { value: 'open_house', label: 'Open House' },
+  { value: 'virtual_paid', label: 'Virtual Paid' },
+  { value: 'staging_view', label: 'Staging View' },
+] as const;
+
+const PROPERTY_TOUR_MODES = [
+  { value: 'physical', label: 'Physical' },
+  { value: 'virtual', label: 'Virtual' },
+] as const;
+
+const INSTALLMENT_FREQUENCIES = [
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Biweekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+] as const;
 
 const PropertyDetails = () => {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { buyProperty, refreshProperties } = useProperties();
-  const { data: property, loading, error } = useAsync(() => propertyService.getPropertyById(id), true);
-  const [isInitializingPayment, setIsInitializingPayment] = useState(false);
-  const [scenarios, setScenarios] = useState<ROIScenario[]>([]);
-  const [loadingScenarios, setLoadingScenarios] = useState(false);
-  const [benchmark, setBenchmark] = useState<MarketBenchmark | null>(null);
-  const [loadingBenchmark, setLoadingBenchmark] = useState(false);
-  const [savingScenario, setSavingScenario] = useState(false);
-
-  const refreshScenarios = useCallback(async (propertyId: string) => {
-    if (!user) return;
-    setLoadingScenarios(true);
-    try {
-      const nextScenarios = await roiService.getPropertyScenarios(propertyId);
-      setScenarios(nextScenarios);
-    } catch {
-      setScenarios([]);
-    } finally {
-      setLoadingScenarios(false);
-    }
-  }, [user]);
+  const { data: property, loading, error, execute } = useAsync(() => propertyService.getPropertyById(id), true);
+  const hasMounted = useRef(false);
+  const [savingProperty, setSavingProperty] = useState(false);
+  const [requestingTour, setRequestingTour] = useState(false);
+  const [creatingInstallment, setCreatingInstallment] = useState(false);
+  const [nearby, setNearby] = useState<NearbyPropertySummary[]>([]);
+  const [loadingNearby, setLoadingNearby] = useState(false);
+  const [tourType, setTourType] = useState<(typeof PROPERTY_TOUR_TYPES)[number]['value']>('open_house');
+  const [tourMode, setTourMode] = useState<(typeof PROPERTY_TOUR_MODES)[number]['value']>('physical');
+  const [tourDate, setTourDate] = useState('');
+  const [tourNotes, setTourNotes] = useState('');
+  const [installmentFrequency, setInstallmentFrequency] = useState<(typeof INSTALLMENT_FREQUENCIES)[number]['value']>('monthly');
+  const [installmentNotes, setInstallmentNotes] = useState('');
 
   useEffect(() => {
     if (!property?._id) return;
 
-    setLoadingBenchmark(true);
-    roiService.getMarketBenchmark({ location: property.location, propertyType: property.propertyType })
-      .then(setBenchmark)
-      .catch(() => setBenchmark(null))
-      .finally(() => setLoadingBenchmark(false));
+    if (isAuthenticated) {
+      void propertyService.incrementView(property._id).catch(() => undefined);
+    }
 
-    void refreshScenarios(property._id);
-  }, [property, refreshScenarios]);
+    if (!property.coordinates) {
+      setNearby([]);
+      return;
+    }
+
+    setLoadingNearby(true);
+    propertyService
+      .getNearbyProperties({ lat: property.coordinates.lat, lng: property.coordinates.lng, radius: 5 })
+      .then(setNearby)
+      .catch(() => setNearby([]))
+      .finally(() => setLoadingNearby(false));
+  }, [isAuthenticated, property]);
+
+  useEffect(() => {
+    if (hasMounted.current) {
+      void execute();
+    } else {
+      hasMounted.current = true;
+    }
+  }, [id, execute]);
+
+  const owner = useMemo(
+    () => (property && typeof property.ownerId !== 'string' ? property.ownerId : null),
+    [property],
+  );
+
+  const handleSaveProperty = async () => {
+    if (!property?._id) return;
+    if (!user) {
+      navigate('/login-required');
+      return;
+    }
+
+    setSavingProperty(true);
+    try {
+      await propertyService.saveProperty(property._id);
+      toast.success('Property saved to your profile.');
+      await refreshProperties();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to save property.');
+    } finally {
+      setSavingProperty(false);
+    }
+  };
 
   const handleBuyProperty = async () => {
     if (!property?._id) {
@@ -79,6 +125,7 @@ const PropertyDetails = () => {
       navigate('/login-to-purchase');
       return;
     }
+
     if (user.role !== 'buyer') {
       toast.error('Only buyers can purchase properties.');
       return;
@@ -96,44 +143,80 @@ const PropertyDetails = () => {
     });
     if (!confirmed.isConfirmed) return;
 
-    setIsInitializingPayment(true);
     try {
       await buyProperty(property._id, user._id);
     } catch {
       toast.error('Unable to initialize payment. Please try again.');
-      setIsInitializingPayment(false);
     }
   };
 
-  const handleSaveROIScenario = async () => {
+  const handleTourRequest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     if (!property?._id) return;
+
     if (!user) {
       navigate('/login');
       return;
     }
+    if (user.role !== 'buyer') {
+      toast.error('Only buyers can request tours.');
+      return;
+    }
 
-    const startDate = new Date().toISOString().slice(0, 7);
-    const end = new Date();
-    end.setFullYear(end.getFullYear() + 3);
-
-    setSavingScenario(true);
+    setRequestingTour(true);
     try {
-      const assumptions = await roiService.getAssumptions();
-      await roiService.savePropertyScenario(property._id, {
-        source: 'property_detail',
-        inputs: {
-          startDate,
-          endDate: end.toISOString().slice(0, 7),
-          alpha: assumptions.defaultAlpha,
-          beta: assumptions.defaultBeta,
+      const response = await tourService.requestTour({
+        propertyId: property._id,
+        type: tourType,
+        mode: tourMode,
+        scheduledAt: tourDate ? new Date(tourDate).toISOString() : undefined,
+        notes: tourNotes.trim() || undefined,
+      });
+
+      if (response.redirectUrl) {
+        window.location.href = response.redirectUrl;
+        return;
+      }
+
+      toast.success('Tour request submitted successfully.');
+      setTourNotes('');
+      setTourDate('');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to request tour.');
+    } finally {
+      setRequestingTour(false);
+    }
+  };
+
+  const handleCreateInstallment = async () => {
+    if (!property?._id) return;
+
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    if (user.role !== 'buyer') {
+      toast.error('Only buyers can create installment plans.');
+      return;
+    }
+
+    setCreatingInstallment(true);
+    try {
+      const plan = await installmentService.createInstallmentPlan({
+        propertyId: property._id,
+        totalAmount: property.price,
+        schedule: {
+          frequency: installmentFrequency,
+          notes: installmentNotes.trim() || undefined,
         },
       });
-      toast.success('ROI scenario saved.');
-      await refreshScenarios(property._id);
-    } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : 'Unable to save ROI scenario.');
+
+      toast.success('Installment plan created successfully.');
+      navigate(`/dashboard/buyer/installments/${plan._id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to create installment plan.');
     } finally {
-      setSavingScenario(false);
+      setCreatingInstallment(false);
     }
   };
 
@@ -157,7 +240,12 @@ const PropertyDetails = () => {
     );
   }
 
-  const pricePerSqft = Math.round(property.price / property.squareFeet);
+  const currency = property.currency ?? 'NGN';
+  const ownerName = owner?.name ?? 'RealtiQ Agent';
+  const ownerEmail = owner?.email ?? 'support@realtiq.com';
+  const mapLink = property.coordinates
+    ? `https://www.google.com/maps?q=${property.coordinates.lat},${property.coordinates.lng}`
+    : `https://www.google.com/maps/search/${encodeURIComponent(property.location)}`;
 
   return (
     <PublicLayout>
@@ -165,64 +253,49 @@ const PropertyDetails = () => {
         <PropertyGallery property={property} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-          {/* LEFT COLUMN */}
           <div className="lg:col-span-2 space-y-10">
-            {/* Title & Meta */}
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <span className="bg-primary/10 text-primary text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest">
                   {property.propertyType}
                 </span>
-                <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest ${
-                  property.status === 'sold' ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700'
-                }`}>
+                <span
+                  className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest ${
+                    property.status === 'sold' ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700'
+                  }`}
+                >
                   {property.status}
                 </span>
+                {property.featured ? (
+                  <span className="bg-amber-400/15 text-amber-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest">
+                    Featured
+                  </span>
+                ) : null}
               </div>
-              <h1 className="text-5xl font-extrabold tracking-tighter text-primary mb-2">{property.title}</h1>
-              <p className="text-xl text-secondary font-body mb-6 flex items-center gap-1">
-                <span className="material-symbols-outlined text-xl">location_on</span>
+              <h1 className="text-4xl md:text-5xl font-extrabold tracking-tighter text-primary mb-2">
+                {property.title}
+              </h1>
+              <p className="text-lg text-secondary font-body mb-6 flex items-center gap-1">
+                <span className="material-symbols-outlined text-lg">location_on</span>
                 {property.location}
               </p>
               <PropertyMeta property={property} />
             </div>
 
-            {/* Description */}
             <div>
-              <h2 className="text-2xl font-bold mb-3">Architectural Narrative</h2>
+              <h2 className="text-2xl font-bold mb-3">Description</h2>
               <p className="text-on-surface-variant leading-relaxed">{property.description}</p>
             </div>
 
-            {/* Key Details */}
-            <div>
-              <h2 className="text-2xl font-bold mb-4">Property Details</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {[
-                  { icon: 'bed', label: 'Bedrooms', value: property.bedrooms },
-                  { icon: 'bathtub', label: 'Bathrooms', value: property.bathrooms },
-                  { icon: 'square_foot', label: 'Total Area', value: `${property.squareFeet.toLocaleString()} sqft` },
-                  { icon: 'home', label: 'Property Type', value: property.propertyType },
-                  { icon: 'payments', label: 'Price / sqft', value: formatCurrency(pricePerSqft) },
-                  { icon: 'inventory_2', label: 'Status', value: property.status.toUpperCase() },
-                ].map((detail) => (
-                  <div key={detail.label} className="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant/10">
-                    <div className="flex items-center gap-2 mb-1 text-secondary">
-                      <span className="material-symbols-outlined text-base">{detail.icon}</span>
-                      <p className="text-xs uppercase tracking-wider">{detail.label}</p>
-                    </div>
-                    <p className="font-bold text-sm">{detail.value}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Amenities */}
             {property.amenities?.length ? (
               <div>
-                <h2 className="text-2xl font-bold mb-4">Curated Amenities</h2>
+                <h2 className="text-2xl font-bold mb-4">Amenities</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {property.amenities.map((amenity) => (
-                    <div key={amenity} className="flex items-center gap-2 text-sm text-on-surface-variant bg-surface-container-lowest rounded-lg px-4 py-3 border border-outline-variant/10">
+                    <div
+                      key={amenity}
+                      className="flex items-center gap-2 text-sm text-on-surface-variant bg-surface-container-lowest rounded-lg px-4 py-3 border border-outline-variant/10"
+                    >
                       <span className="material-symbols-outlined text-sm text-primary">check_circle</span>
                       {amenity}
                     </div>
@@ -231,120 +304,176 @@ const PropertyDetails = () => {
               </div>
             ) : null}
 
-            {/* Virtual Tour CTA */}
-            <div className="bg-primary rounded-2xl p-8 flex flex-col md:flex-row items-center justify-between gap-6">
-              <div>
-                <h3 className="text-xl font-bold text-on-primary mb-1">Take a Virtual Tour</h3>
-                <p className="text-on-primary/70 text-sm">Experience this property from the comfort of your home with our immersive 3D walkthrough.</p>
-              </div>
-              <Button
-                variant="secondary"
-                disabled
-                title="Virtual tours are coming soon"
-                className="disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <span className="material-symbols-outlined text-sm mr-1">360</span>
-                Virtual Tour Coming Soon
-              </Button>
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Nearby Properties</h2>
+              <Card className="p-5 space-y-4">
+                {loadingNearby ? (
+                  <LoadingState label="Loading nearby properties..." />
+                ) : nearby.length > 0 ? (
+                  nearby.map((item) => (
+                    <div key={item._id} className="flex items-center justify-between gap-3 py-2 border-b border-outline-variant/10 last:border-b-0">
+                      <div>
+                        <p className="font-semibold text-sm">{item.title}</p>
+                        <p className="text-xs text-secondary">
+                          {item.coordinates
+                            ? `${item.coordinates.lat.toFixed(2)}, ${item.coordinates.lng.toFixed(2)}`
+                            : 'Coordinates unavailable'}
+                        </p>
+                      </div>
+                      <Link to={`/properties/${item._id}`} className="text-xs font-bold text-primary hover:underline">
+                        View
+                      </Link>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-secondary">
+                    No nearby properties found for this location.
+                  </div>
+                )}
+                {property.coordinates ? (
+                  <a
+                    href={mapLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline"
+                  >
+                    <span className="material-symbols-outlined text-sm">map</span>
+                    Open in Maps
+                  </a>
+                ) : (
+                  <p className="text-xs text-secondary">No coordinates available yet. Search is based on the saved address.</p>
+                )}
+              </Card>
             </div>
 
-            {/* Location & Neighbourhood */}
-            {/* <div>
-              <h2 className="text-2xl font-bold mb-4">Location & Neighbourhood</h2>
-              <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 overflow-hidden">
-                Map placeholder 
-                <div className="h-48 bg-gradient-to-br from-surface-container-low to-surface-container flex items-center justify-center">
-                  <div className="text-center">
-                    <span className="material-symbols-outlined text-4xl text-secondary">map</span>
-                    <p className="text-sm text-secondary mt-2">Interactive map — {property.location}</p>
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Tour Request</h2>
+              <Card className="p-5">
+                <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={(event) => void handleTourRequest(event)}>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Tour Type</label>
+                    <select
+                      className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm"
+                      value={tourType}
+                      onChange={(e) => setTourType(e.target.value as (typeof PROPERTY_TOUR_TYPES)[number]['value'])}
+                    >
+                      {PROPERTY_TOUR_TYPES.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Mode</label>
+                    <select
+                      className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm"
+                      value={tourMode}
+                      onChange={(e) => setTourMode(e.target.value as (typeof PROPERTY_TOUR_MODES)[number]['value'])}
+                    >
+                      {PROPERTY_TOUR_MODES.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Scheduled At</label>
+                    <input
+                      type="datetime-local"
+                      value={tourDate}
+                      onChange={(e) => setTourDate(e.target.value)}
+                      className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Notes</label>
+                    <input
+                      type="text"
+                      value={tourNotes}
+                      onChange={(e) => setTourNotes(e.target.value)}
+                      placeholder="Need a virtual walkthrough"
+                      className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Button type="submit" disabled={requestingTour} className="w-full">
+                      {requestingTour ? 'Submitting...' : 'Request Tour'}
+                    </Button>
+                    <p className="text-xs text-secondary mt-2">
+                      Virtual paid tours will redirect to Paystack when the backend returns a payment URL.
+                    </p>
+                  </div>
+                </form>
+              </Card>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Installment Plan</h2>
+              <Card className="p-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">
+                      Frequency
+                    </label>
+                    <select
+                      className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm"
+                      value={installmentFrequency}
+                      onChange={(e) =>
+                        setInstallmentFrequency(e.target.value as (typeof INSTALLMENT_FREQUENCIES)[number]['value'])
+                      }
+                    >
+                      {INSTALLMENT_FREQUENCIES.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">
+                      Notes
+                    </label>
+                    <input
+                      type="text"
+                      value={installmentNotes}
+                      onChange={(e) => setInstallmentNotes(e.target.value)}
+                      placeholder="12 monthly payments"
+                      className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm"
+                    />
+                  </div>
+                  <div className="md:col-span-2 flex flex-col sm:flex-row gap-3">
+                    <Button type="button" onClick={() => void handleCreateInstallment()} disabled={creatingInstallment}>
+                      {creatingInstallment ? 'Creating...' : `Create Plan for ${formatCurrency(property.price, currency)}`}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => navigate('/dashboard/buyer/installments')}
+                    >
+                      View Installments
+                    </Button>
                   </div>
                 </div>
-                <div className="p-6 divide-y divide-outline-variant/10">
-                  {nearbyPlaces.map((place) => (
-                    <div key={place.label} className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-3 text-sm">
-                        <span className="material-symbols-outlined text-base text-secondary">{place.icon}</span>
-                        <span className="text-on-surface-variant">{place.label}</span>
-                      </div>
-                      <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-1 rounded-full">{place.distance}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div> */}
-
-            {/* Investment Potential */}
-            <div>
-              <h2 className="text-2xl font-bold mb-4">Investment Overview</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-surface-container-lowest rounded-xl p-5 border border-outline-variant/10 text-center">
-                  <span className="material-symbols-outlined text-2xl text-primary mb-2 block">trending_up</span>
-                  <p className="text-2xl font-black text-primary">12.4%</p>
-                  <p className="text-xs text-secondary uppercase tracking-wider mt-1">Avg. Annual Appreciation</p>
-                </div>
-                <div className="bg-surface-container-lowest rounded-xl p-5 border border-outline-variant/10 text-center">
-                  <span className="material-symbols-outlined text-2xl text-primary mb-2 block">currency_exchange</span>
-                  <p className="text-2xl font-black text-primary">8.1%</p>
-                  <p className="text-xs text-secondary uppercase tracking-wider mt-1">Rental Yield Potential</p>
-                </div>
-                <div className="bg-surface-container-lowest rounded-xl p-5 border border-outline-variant/10 text-center">
-                  <span className="material-symbols-outlined text-2xl text-primary mb-2 block">verified</span>
-                  <p className="text-2xl font-black text-primary">C of O</p>
-                  <p className="text-xs text-secondary uppercase tracking-wider mt-1">Title Document</p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h2 className="text-2xl font-bold mb-4">Market Benchmark</h2>
-              <BenchmarkCard benchmark={benchmark} propertyPrice={property.price} loading={loadingBenchmark} />
-            </div>
-
-            <div>
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold">ROI Scenarios</h2>
-                  <p className="text-sm text-secondary">Saved calculations for this property.</p>
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => void handleSaveROIScenario()}
-                  disabled={savingScenario}
-                >
-                  {savingScenario ? 'Saving...' : 'Save ROI Scenario'}
-                </Button>
-              </div>
-              <ScenarioList scenarios={scenarios} loading={loadingScenarios} />
+              </Card>
             </div>
           </div>
 
-          {/* RIGHT COLUMN — Pricing & Actions */}
           <div className="space-y-6">
             <Card className="p-8 h-fit space-y-4 sticky top-24">
               <p className="text-xs text-secondary uppercase tracking-[0.2em] mb-2">List Price</p>
-              <p className="text-4xl font-extrabold tracking-tighter">{formatCurrency(property.price)}</p>
-              <p className="text-xs text-secondary">{formatCurrency(pricePerSqft)} per sqft</p>
+              <p className="text-4xl font-extrabold tracking-tighter">{formatCurrency(property.price, currency)}</p>
+              <p className="text-xs text-secondary">{property.squareFeet.toLocaleString()} sq ft</p>
               <div className="text-sm">
                 Status:{' '}
                 <span className={property.status === 'sold' ? 'text-error font-semibold' : 'text-green-700 font-semibold'}>
                   {property.status.toUpperCase()}
                 </span>
               </div>
-              <Button
-                fullWidth
-                disabled={property.status === 'sold' || isInitializingPayment}
-                onClick={() => void handleBuyProperty()}
-                className="disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isInitializingPayment && (
-                  <span className="material-symbols-outlined text-sm mr-2 animate-spin align-middle">progress_activity</span>
-                )}
-                {property.status === 'sold'
-                  ? 'Already Sold'
-                  : isInitializingPayment
-                    ? 'Initializing Payment...'
-                    : 'Buy Property'}
+
+              <Button fullWidth disabled={property.status === 'sold'} onClick={() => void handleBuyProperty()}>
+                {property.status === 'sold' ? 'Already Sold' : 'Buy Property'}
               </Button>
               <Button
                 fullWidth
@@ -354,6 +483,11 @@ const PropertyDetails = () => {
                 <span className="material-symbols-outlined text-sm mr-1">monitoring</span>
                 Analyze ROI
               </Button>
+              <Button fullWidth variant="ghost" onClick={() => void handleSaveProperty()} disabled={savingProperty}>
+                <span className="material-symbols-outlined text-sm mr-1">bookmark_add</span>
+                {savingProperty ? 'Saving...' : 'Save Property'}
+              </Button>
+
               <InquiryForm
                 propertyId={property._id}
                 onSubmitInquiry={async (payload) => {
@@ -363,7 +497,6 @@ const PropertyDetails = () => {
                 }}
               />
 
-              {/* Agent Card */}
               <div className="pt-4 border-t border-outline-variant/20">
                 <p className="text-xs text-secondary uppercase tracking-widest mb-3">Listed By</p>
                 <div className="flex items-center gap-3">
@@ -371,16 +504,26 @@ const PropertyDetails = () => {
                     <span className="material-symbols-outlined text-primary text-sm">person</span>
                   </div>
                   <div>
-                    <p className="font-bold text-sm">RealtiQ Agent</p>
-                    <p className="text-xs text-secondary">Verified Listing Specialist</p>
+                    <p className="font-bold text-sm">{ownerName}</p>
+                    <p className="text-xs text-secondary">{ownerEmail}</p>
                   </div>
                 </div>
-                <a href="tel:+2341234567890" className="mt-3 flex items-center gap-2 text-sm text-primary font-semibold hover:underline">
-                  <span className="material-symbols-outlined text-sm">call</span>
-                  +234 123 456 7890
-                </a>
               </div>
             </Card>
+
+            {property.coordinates ? (
+              <Card className="p-6">
+                <h3 className="font-bold mb-3">Location</h3>
+                <div className="rounded-xl overflow-hidden bg-surface-container-low h-56 relative">
+                  <iframe
+                    title={`${property.title} map`}
+                    src={`https://www.google.com/maps?q=${property.coordinates.lat},${property.coordinates.lng}&z=14&output=embed`}
+                    className="w-full h-full border-0"
+                    loading="lazy"
+                  />
+                </div>
+              </Card>
+            ) : null}
           </div>
         </div>
       </section>

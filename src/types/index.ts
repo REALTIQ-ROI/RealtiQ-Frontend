@@ -1,4 +1,13 @@
 export type UserRole = 'buyer' | 'landlord' | 'admin';
+export type PropertyType = 'house' | 'apartment' | 'land' | 'commercial' | 'villa' | 'penthouse' | 'estate';
+export type PropertyStatus = 'available' | 'sold';
+export type PropertyCategory = 'residential' | 'commercial' | 'mixed_use' | string;
+export type PropertyCompletionStage = 'off_plan' | 'unfinished' | 'finished' | 'renovation' | string;
+export type PropertyCurrency = 'NGN' | 'USD' | 'GBP' | string;
+export type TourType = 'open_house' | 'virtual_paid' | 'staging_view';
+export type TourMode = 'physical' | 'virtual';
+export type TourStatus = 'pending' | 'approved' | 'rejected' | 'completed';
+export type InstallmentStatus = 'pending' | 'active' | 'completed' | 'defaulted';
 
 export interface MediaItem {
   url: string;
@@ -7,10 +16,17 @@ export interface MediaItem {
   _id?: string;
 }
 
+export interface PropertyCoordinates {
+  lat: number;
+  lng: number;
+}
+
 export interface PropertyOwner {
   _id: string;
   name: string;
   email: string;
+  landlordVerified?: boolean;
+  ratingAverage?: number;
 }
 
 export interface Property {
@@ -18,15 +34,21 @@ export interface Property {
   title: string;
   price: number;
   location: string;
-  propertyType: string;
+  propertyType: PropertyType | string;
   bedrooms: number;
   bathrooms: number;
   description: string;
   squareFeet: number;
+  category?: PropertyCategory;
+  completionStage?: PropertyCompletionStage;
+  currency?: PropertyCurrency;
+  coordinates?: PropertyCoordinates | null;
   media: MediaItem[];
-  status: 'available' | 'sold';
+  status: PropertyStatus;
   featured?: boolean;
   amenities?: string[];
+  views?: number;
+  saves?: number;
   ownerId?: PropertyOwner | string;
   buyerId?: PropertyOwner | string;
   createdAt?: string;
@@ -143,6 +165,14 @@ export interface PropertyFilters {
   maxPrice?: number;
   propertyType?: string;
   bedrooms?: number;
+  ownerId?: string;
+  category?: PropertyCategory;
+  completionStage?: PropertyCompletionStage;
+  currency?: PropertyCurrency;
+  featured?: boolean;
+  status?: PropertyStatus;
+  page?: number;
+  limit?: number;
 }
 
 export interface Inquiry {
@@ -196,3 +226,81 @@ export interface ApiInquiry {
 
 export const resolveInquiryProperty = (property: ApiInquiry['property']): InquiryProperty | null =>
   typeof property === 'string' ? null : property;
+
+export interface TourPropertySummary {
+  _id: string;
+  title?: string;
+  location?: string;
+  propertyType?: PropertyType | string;
+  media?: MediaItem[];
+}
+
+export interface TourParticipant {
+  _id: string;
+  name: string;
+  email?: string;
+  role?: UserRole;
+}
+
+export interface Tour {
+  _id: string;
+  propertyId: string | TourPropertySummary;
+  buyerId?: string | TourParticipant;
+  ownerId?: string | TourParticipant;
+  type: TourType;
+  mode: TourMode;
+  scheduledAt?: string;
+  notes?: string;
+  status: TourStatus;
+  price?: number;
+  requiresPayment?: boolean;
+  reference?: string;
+  redirectUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TourRequestPayload {
+  propertyId: string;
+  type: TourType;
+  mode: TourMode;
+  scheduledAt?: string;
+  notes?: string;
+}
+
+export interface InstallmentSchedule {
+  frequency: 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | string;
+  notes?: string;
+}
+
+export interface InstallmentPaymentRecord {
+  amount: number;
+  status?: string;
+  reference?: string;
+  paidAt?: string;
+  createdAt?: string;
+}
+
+export interface Installment {
+  _id: string;
+  propertyId: string | TourPropertySummary;
+  buyerId?: string | TourParticipant;
+  ownerId?: string | TourParticipant;
+  totalAmount: number;
+  remainingBalance: number;
+  status: InstallmentStatus;
+  schedule?: InstallmentSchedule;
+  paymentHistory?: InstallmentPaymentRecord[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface InstallmentCreatePayload {
+  propertyId: string;
+  totalAmount: number;
+  schedule: InstallmentSchedule;
+}
+
+export interface InstallmentPaymentPayload {
+  amount?: number;
+}

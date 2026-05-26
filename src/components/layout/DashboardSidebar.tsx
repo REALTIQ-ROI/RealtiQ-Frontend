@@ -9,6 +9,8 @@ const roleLinks: Record<UserRole, Array<{ to: string; label: string }>> = {
   buyer: [
     { to: '/dashboard/buyer', label: 'Overview' },
     { to: '/dashboard/buyer/my-properties', label: 'My Properties' },
+    { to: '/dashboard/buyer/tours', label: 'Tours' },
+    { to: '/dashboard/buyer/installments', label: 'Installments' },
     { to: '/dashboard/roi-scenarios', label: 'ROI Scenarios' },
     { to: '/dashboard/buyer/payment-history', label: 'Payments' },
     { to: '/dashboard/buyer/inquiry-history', label: 'Inquiries' },
@@ -18,6 +20,8 @@ const roleLinks: Record<UserRole, Array<{ to: string; label: string }>> = {
     { to: '/dashboard/landlord', label: 'Overview' },
     { to: '/dashboard/landlord/my-properties', label: 'My Properties' },
     { to: '/dashboard/landlord/add-property', label: 'Add Property' },
+    { to: '/dashboard/landlord/tours', label: 'Tours' },
+    { to: '/dashboard/landlord/installments', label: 'Installments' },
     { to: '/dashboard/landlord/inquiries', label: 'Inquiries' },
     { to: '/dashboard/landlord/payment-history', label: 'Payments' },
   ],
@@ -27,7 +31,10 @@ const roleLinks: Record<UserRole, Array<{ to: string; label: string }>> = {
     { to: '/dashboard/admin/manage-properties', label: 'Properties' },
     { to: '/dashboard/admin/manage-payments', label: 'Payments' },
     { to: '/dashboard/admin/manage-inquiries', label: 'Inquiries' },
+    { to: '/dashboard/admin/tours', label: 'Tours' },
+    { to: '/dashboard/admin/installments', label: 'Installments' },
     { to: '/dashboard/admin/roi-assumptions', label: 'ROI Assumptions' },
+    { to: '/dashboard/admin/notifications/digest', label: 'Digest' },
   ],
 };
 

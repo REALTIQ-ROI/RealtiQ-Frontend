@@ -1,6 +1,7 @@
 ﻿import { Link } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
+import MediaPreview from '../../../components/property/MediaPreview';
 import { resolveBuyerId } from '../../../types';
 import { useMemo, useState } from 'react';
 
@@ -44,6 +45,14 @@ const MyProperties = () => {
           <Link className="flex items-center gap-3 px-4 py-3 text-slate-900 bg-slate-100 rounded-md font-bold scale-98 transition-all text-sm" to="/dashboard/buyer/my-properties">
             <span className="material-symbols-outlined">domain</span>
             My Properties
+          </Link>
+          <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 hover:translate-x-1 transition-transform duration-200 text-sm font-semibold" to="/dashboard/buyer/tours">
+            <span className="material-symbols-outlined">tour</span>
+            Tours
+          </Link>
+          <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 hover:translate-x-1 transition-transform duration-200 text-sm font-semibold" to="/dashboard/buyer/installments">
+            <span className="material-symbols-outlined">schedule</span>
+            Installments
           </Link>
           <Link className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 hover:translate-x-1 transition-transform duration-200 text-sm font-semibold" to="/dashboard/buyer/payment-history">
             <span className="material-symbols-outlined">payments</span>
@@ -138,7 +147,11 @@ const MyProperties = () => {
           {paginated.map((property) => (
             <div key={property._id} className="group flex flex-col bg-surface-container-lowest rounded-xl overflow-hidden hover:translate-y-[-4px] transition-all duration-300">
               <div className="relative h-64 overflow-hidden">
-                <img alt={property.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" src={property.media[0]?.url} />
+                <MediaPreview
+                  media={property.media[0]}
+                  alt={property.title}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                />
                 <div className="absolute top-4 right-4">
                   <span className="px-3 py-1 bg-primary text-on-primary text-[10px] font-bold tracking-widest uppercase rounded-full">Owned</span>
                 </div>

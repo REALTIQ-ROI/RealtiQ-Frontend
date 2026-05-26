@@ -3,6 +3,8 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
+import MediaPreview from '../../../components/property/MediaPreview';
+import { resolveBuyerId } from '../../../types';
 // import { paymentService } from '../../../services/paymentService';
 
 const BuyerDashboard = () => {
@@ -11,7 +13,7 @@ const BuyerDashboard = () => {
   const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
   // const { data: payments } = useAsync(() => paymentService.getPayments(), true);
 
-  const myProperties = properties.filter((item) => item.buyerId === user?._id);
+  const myProperties = properties.filter((item) => resolveBuyerId(item.buyerId) === user?._id);
   const myInquiries = (inquiries ?? []).filter((item) => item.userId === user?._id);
   // const myPayments = (payments ?? []).filter((item) => item.user?._id === user?._id);
 
@@ -40,6 +42,14 @@ const BuyerDashboard = () => {
           <Link className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-3 mx-2 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all" to="/dashboard/buyer/my-properties">
             <span className="material-symbols-outlined">home_work</span>
             <span className="text-[14px] font-headline">My Properties</span>
+          </Link>
+          <Link className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-3 mx-2 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all" to="/dashboard/buyer/tours">
+            <span className="material-symbols-outlined">tour</span>
+            <span className="text-[14px] font-headline">Tours</span>
+          </Link>
+          <Link className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-3 mx-2 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all" to="/dashboard/buyer/installments">
+            <span className="material-symbols-outlined">schedule</span>
+            <span className="text-[14px] font-headline">Installments</span>
           </Link>
           <Link className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-3 mx-2 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all" to="/dashboard/buyer/payment-history">
             <span className="material-symbols-outlined">payments</span>
@@ -207,7 +217,11 @@ const BuyerDashboard = () => {
                 {myProperties.slice(0, 1).map((property) => (
                   <div key={property._id} className="group flex items-center gap-6 p-5 hover:bg-surface-container-low transition-colors rounded-xl border border-transparent hover:border-outline-variant/10">
                     <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
-                      <img className="w-full h-full object-cover" alt={property.title} src={property.media[0]?.url} />
+                      <MediaPreview
+                        media={property.media[0]}
+                        alt={property.title}
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start">
@@ -246,11 +260,12 @@ const BuyerDashboard = () => {
             <div className="col-span-12 md:col-span-7">
               <h3 className="font-headline font-extrabold text-2xl tracking-tight mb-6">High-Yield Assets</h3>
               <div className="bg-surface-container-lowest rounded-xl overflow-hidden">
-                <div className="relative h-64">
-                  <img
+              <div className="relative h-64">
+                  <MediaPreview
+                    media={featuredProperty?.media?.[0]}
                     alt={featuredProperty?.title ?? 'Luxury Villa'}
                     className="w-full h-full object-cover"
-                    src={featuredProperty?.media[0]?.url ?? 'https://lh3.googleusercontent.com/aida-public/AB6AXuDg6rgKjon3g5M9QlnJvvi5u129U-vEk-G6BvOBy8TwbTZ06a1To-Winbb7PSeYTLB30oJd2BiYLLNaQ4HPb3MLek8uTuuO-5skeDxwgQbMcwgnswPmLjBYarbctgD78Z6ZFgUPHUWOZK9yrcYxxPLy-KYY0ZazIBUpgQOtGQODopAu0ArMTnToCuf8m-OM11LzDkidhrh9Y77jEUJbHDZAvr4rZUyN7Yn0-PXO0SBuoWrqjcJLehz6qXB825aD6ihECUVT9Dcgag'}
+                    controls
                   />
                   <div className="absolute top-4 left-4">
                     <span className="bg-primary/90 text-white text-[10px] font-bold px-3 py-1 uppercase tracking-widest backdrop-blur-md">Portfolio Leader</span>

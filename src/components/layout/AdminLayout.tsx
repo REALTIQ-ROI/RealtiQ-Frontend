@@ -13,8 +13,11 @@ const navLinks = [
   { to: '/dashboard/admin/manage-users', label: 'Manage Users', icon: 'group' },
   { to: '/dashboard/admin/manage-inquiries', label: 'Inquiries', icon: 'mail' },
   { to: '/dashboard/admin/manage-payments', label: 'Payments', icon: 'payments' },
+  { to: '/dashboard/admin/tours', label: 'Tours', icon: 'tour' },
+  { to: '/dashboard/admin/installments', label: 'Installments', icon: 'schedule' },
   { to: '/dashboard/admin/roi-assumptions', label: 'ROI Assumptions', icon: 'monitoring' },
   { to: '/dashboard/admin/featured', label: 'Featured Listings', icon: 'star' },
+  { to: '/dashboard/admin/notifications/digest', label: 'Digest', icon: 'campaign' },
 ];
 
 const AdminLayout = ({ children }: AdminLayoutProps) => {

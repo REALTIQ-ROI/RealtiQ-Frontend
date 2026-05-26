@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import AdminLayout from '../../../components/layout/AdminLayout';
+import MediaPreview from '../../../components/property/MediaPreview';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useProperties } from '../../../contexts/PropertiesContext';
@@ -91,17 +92,11 @@ const FeaturedListings = () => {
             ) : (
               <div className="divide-y divide-surface-container">
                 {candidates.map((property) => {
-                  const image = property.media?.[0]?.url;
+                  const image = property.media?.[0];
                   return (
                     <article key={property._id} className="p-5 flex flex-col md:flex-row md:items-center gap-5 bg-surface-container-lowest">
                       <div className="w-full md:w-36 h-28 rounded-lg overflow-hidden bg-surface-container-high flex-shrink-0">
-                        {image ? (
-                          <img className="w-full h-full object-cover" src={image} alt={property.title} />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-secondary/40">
-                            <span className="material-symbols-outlined text-4xl">home_work</span>
-                          </div>
-                        )}
+                        <MediaPreview media={image} alt={property.title} className="w-full h-full object-cover" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-1">

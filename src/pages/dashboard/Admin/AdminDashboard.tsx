@@ -1,4 +1,5 @@
 ﻿import AdminLayout from '../../../components/layout/AdminLayout';
+import MediaPreview from '../../../components/property/MediaPreview';
 import ErrorState from '../../../components/ui/ErrorState';
 import { useAsync } from '../../../hooks/useAsync';
 import { useProperties } from '../../../contexts/PropertiesContext';
@@ -47,21 +48,15 @@ const StatSkeleton = () => (
 );
 
 const PropertyCard = ({ property }: { property: Property }) => {
-  const imageUrl = property.media?.[0]?.url;
+  const image = property.media?.[0];
   return (
     <div className="group bg-surface-container-lowest rounded-xl overflow-hidden">
       <div className="relative h-48 bg-surface-container-high">
-        {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={property.title}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span className="material-symbols-outlined text-4xl text-secondary/30">home_work</span>
-          </div>
-        )}
+        <MediaPreview
+          media={image}
+          alt={property.title}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+        />
         <div className="absolute top-4 left-4">
           <span className="bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest text-on-surface">
             {property.featured ? 'Featured' : property.status}
