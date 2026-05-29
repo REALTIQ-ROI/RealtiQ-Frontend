@@ -461,7 +461,7 @@ const PropertyDetails = () => {
           </div>
 
           <div className="space-y-6">
-            <Card className="p-8 h-fit space-y-4 sticky top-24">
+            <Card className="p-8 h-fit space-y-4">
               <p className="text-xs text-secondary uppercase tracking-[0.2em] mb-2">List Price</p>
               <p className="text-4xl font-extrabold tracking-tighter">{formatCurrency(property.price, currency)}</p>
               <p className="text-xs text-secondary">{property.squareFeet.toLocaleString()} sq ft</p>
@@ -487,7 +487,10 @@ const PropertyDetails = () => {
                 <span className="material-symbols-outlined text-sm mr-1">bookmark_add</span>
                 {savingProperty ? 'Saving...' : 'Save Property'}
               </Button>
+            </Card>
 
+            <Card className="p-6 space-y-4">
+              <h3 className="font-bold text-lg">Send an Inquiry</h3>
               <InquiryForm
                 propertyId={property._id}
                 onSubmitInquiry={async (payload) => {
@@ -496,8 +499,10 @@ const PropertyDetails = () => {
                   await refreshProperties();
                 }}
               />
+            </Card>
 
-              <div className="pt-4 border-t border-outline-variant/20">
+            <Card className="p-6">
+              <div className="pt-0">
                 <p className="text-xs text-secondary uppercase tracking-widest mb-3">Listed By</p>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
@@ -511,21 +516,29 @@ const PropertyDetails = () => {
               </div>
             </Card>
 
-            {property.coordinates ? (
-              <Card className="p-6">
-                <h3 className="font-bold mb-3">Location</h3>
-                <div className="rounded-xl overflow-hidden bg-surface-container-low h-56 relative">
-                  <iframe
-                    title={`${property.title} map`}
-                    src={`https://www.google.com/maps?q=${property.coordinates.lat},${property.coordinates.lng}&z=14&output=embed`}
-                    className="w-full h-full border-0"
-                    loading="lazy"
-                  />
-                </div>
-              </Card>
-            ) : null}
           </div>
         </div>
+
+        {property.coordinates ? (
+          <section className="w-full mt-12">
+            <Card className="w-full overflow-hidden rounded-none md:rounded-2xl border-x-0 md:border-x border-t border-b border-outline-variant/10 bg-surface-container-lowest">
+              <div className="px-8 md:px-12 py-6">
+                <h3 className="text-2xl font-bold">Location</h3>
+                <p className="text-sm text-secondary mt-1">
+                  Explore the property location on the map below.
+                </p>
+              </div>
+              <div className="w-full h-[420px]">
+                <iframe
+                  title={`${property.title} map`}
+                  src={`https://www.google.com/maps?q=${property.coordinates.lat},${property.coordinates.lng}&z=14&output=embed`}
+                  className="w-full h-full border-0"
+                  loading="lazy"
+                />
+              </div>
+            </Card>
+          </section>
+        ) : null}
       </section>
     </PublicLayout>
   );

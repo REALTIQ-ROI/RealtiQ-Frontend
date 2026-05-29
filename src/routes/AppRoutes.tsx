@@ -112,10 +112,9 @@ const AppRoutes = () => {
         <Route path="/auth/landlord/login" element={<LandlordLogin />} />
         <Route path="/auth/landlord/register" element={<LandlordRegistration />} />
 
-        <Route element={<ProtectedRoute />}>
-          <Route path="/properties/:id" element={<PropertyDetails />} />
-          <Route path="/properties/:propertyId/roi" element={<PropertyROICalculatorPage />} />
-        </Route>
+        <Route path="/properties/:id" element={<PropertyDetails />} />
+
+        <Route path="/properties/:propertyId/roi" element={<PropertyROICalculatorPage />} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<Dashboard />} />

@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
 import type { Property } from '../../types';
 
 const formatCurrency = (value: number) =>
@@ -18,7 +17,6 @@ const PropertyCard = ({
   showSaveAction?: boolean;
   onSave?: (property: Property) => void;
 }) => {
-  const { isAuthenticated } = useAuth();
   const cover = property.media[0];
   const coverUrl = cover?.url;
   const isVideo = cover?.type === 'video';
@@ -146,10 +144,7 @@ const PropertyCard = ({
           </span>
         </div>
 
-        <Link
-          to={isAuthenticated ? `/properties/${property._id}` : '/login-required'}
-          className="inline-flex items-center gap-1 text-primary font-bold text-sm hover:underline underline-offset-4"
-        >
+        <Link to={`/properties/${property._id}`} className="inline-flex items-center gap-1 text-primary font-bold text-sm hover:underline underline-offset-4">
           View details
           <span className="material-symbols-outlined text-base">arrow_forward</span>
         </Link>

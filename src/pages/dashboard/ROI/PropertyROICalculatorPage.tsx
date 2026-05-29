@@ -1,15 +1,18 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import PageNotice from '../../../components/ui/PageNotice';
 import PublicLayout from '../../../components/layout/PublicLayout';
 import ROICalculator from '../../../components/roi/ROICalculator';
 import Button from '../../../components/ui/Button';
 import LoadingState from '../../../components/ui/LoadingState';
+import { useAuth } from '../../../contexts/AuthContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { propertyService } from '../../../services/propertyService';
 
 const PropertyROICalculatorPage = () => {
   const { propertyId = '' } = useParams();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const { data: property, loading, error, execute } = useAsync(() => propertyService.getPropertyById(propertyId), true);
   const hasMounted = useRef(false);
 
@@ -20,6 +23,19 @@ const PropertyROICalculatorPage = () => {
       hasMounted.current = true;
     }
   }, [execute, propertyId]);
+
+  if (!isAuthenticated) {
+    return (
+      <PublicLayout>
+        <PageNotice
+          title="Login Required"
+          description="Please login first to calculate ROI for this property."
+          actionLabel="Go to Login"
+          actionTo="/login"
+        />
+      </PublicLayout>
+    );
+  }
 
   if (loading) {
     return (
