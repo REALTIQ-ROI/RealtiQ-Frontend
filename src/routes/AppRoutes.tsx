@@ -62,11 +62,13 @@ import LandlordInquiryDetails from '../pages/dashboard/Landlord/LandlordInquiryD
 import LandlordMyProperties from '../pages/dashboard/Landlord/LandlordMyProperties';
 import LandlordPaymentHistory from '../pages/dashboard/Landlord/LandlordPaymentHistory';
 import LandlordPropertyDetails from '../pages/dashboard/Landlord/LandlordPropertyDetails';
+import LandlordSettings from '../pages/dashboard/Landlord/LandlordSettings';
 import ProtectedRoute from './ProtectedRoute';
 import ROICalculatorPage from '../pages/dashboard/ROI/ROICalculatorPage';
 import PropertyROICalculatorPage from '../pages/dashboard/ROI/PropertyROICalculatorPage';
 import MyROIScenarios from '../pages/dashboard/ROI/MyROIScenarios';
 import ROIAssumptions from '../pages/dashboard/Admin/ROIAssumptions';
+import AdminSettings from '../pages/dashboard/Admin/AdminSettings';
 
 const AppRoutes = () => {
   return (
@@ -152,6 +154,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/landlord/add-property" element={<AddProperty />} />
           <Route path="/dashboard/landlord/edit-property" element={<Editproperty />} />
           <Route path="/dashboard/landlord/edit-property/:id" element={<Editproperty />} />
+          <Route path="/dashboard/landlord/settings" element={<LandlordSettings />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
@@ -173,6 +176,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/landlord-details/:id" element={<LandlordDetails />} />
           <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />
           <Route path="/dashboard/admin/roi-assumptions" element={<ROIAssumptions />} />
+          <Route path="/dashboard/admin/settings" element={<AdminSettings />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface AdminLayoutProps {
@@ -18,6 +18,7 @@ const navLinks = [
   { to: '/dashboard/admin/roi-assumptions', label: 'ROI Assumptions', icon: 'monitoring' },
   { to: '/dashboard/admin/featured', label: 'Featured Listings', icon: 'star' },
   { to: '/dashboard/admin/notifications/digest', label: 'Digest', icon: 'campaign' },
+  { to: '/dashboard/admin/settings', label: 'Settings', icon: 'settings' },
 ];
 
 const AdminLayout = ({ children }: AdminLayoutProps) => {
@@ -39,7 +40,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   return (
     <div className="antialiased text-on-surface">
       {/* Fixed Sidebar */}
-      <aside className="h-screen w-64 fixed left-0 top-0 bg-slate-50 flex flex-col p-4 z-50">
+      <aside className="h-screen w-64 fixed left-0 top-0 bg-slate-50 flex flex-col p-4 z-50 overflow-y-auto overscroll-contain">
         <div className="mb-10 px-4">
           <h1 className="text-2xl font-bold tracking-tighter text-slate-900 font-headline">RealtiQ</h1>
           <p className="text-xs text-secondary font-medium uppercase tracking-widest mt-1">Admin Console</p>
@@ -71,14 +72,13 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             <span className="material-symbols-outlined">add</span>
             <span>New Listing</span>
           </NavLink>
-          {/* <button
-            className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 cursor-not-allowed transition-colors"
-            disabled
-            title="Admin settings are coming soon"
+          <NavLink
+            to="/dashboard/admin/settings"
+            className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 transition-colors"
           >
             <span className="material-symbols-outlined">settings</span>
             <span>Settings</span>
-          </button> */}
+          </NavLink>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 transition-colors"
@@ -90,30 +90,29 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       </aside>
 
       {/* Fixed Top Nav */}
-      <header className="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 z-40 bg-white/80 backdrop-blur-xl flex items-center justify-between px-8 border-b border-slate-100">
-        <div className="flex items-center flex-1 max-w-xl">
-          {/* <div className="relative w-full">
+      <header className="fixed top-0 right-0 left-64 w-[calc(100%-16rem)] min-h-16 z-40 bg-white/80 backdrop-blur-xl flex flex-wrap gap-4 items-center justify-between px-4 sm:px-6 lg:px-8 py-3 border-b border-slate-100">
+        <div className="flex items-center flex-1 max-w-xl min-w-0">
+          <div className="relative w-full">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
             <input
-              className="w-full bg-surface-container-low border-none rounded-full py-2 pl-10 pr-4 text-sm transition-all placeholder:text-slate-400 disabled:cursor-not-allowed"
-              placeholder="Global search coming soon"
-              type="text"
-              disabled
+              className="w-full bg-surface-container-low border-none rounded-full py-2 pl-10 pr-4 text-sm transition-all placeholder:text-slate-400 outline-none"
+              placeholder="Search admin records..."
+              type="search"
             />
-          </div> */}
+          </div>
         </div>
 
-        <div className="flex items-center gap-6 text-sm font-medium">
+        <div className="flex items-center gap-4 sm:gap-6 text-sm font-medium flex-wrap justify-end">
           <button className="text-primary font-bold hover:underline" onClick={() => void navigate('/contact')}>
             Support
           </button>
-          <div className="flex items-center gap-4 text-slate-500">
-            <button className="hover:text-slate-900 transition-opacity duration-150">
+          <div className="flex items-center gap-3 text-slate-500">
+            <Link to="/dashboard/admin/notifications/digest" className="hover:text-slate-900 transition-opacity duration-150">
               <span className="material-symbols-outlined">notifications</span>
-            </button>
-            <button className="hover:text-slate-900 transition-opacity duration-150">
+            </Link>
+            <Link to="/dashboard/admin/manage-inquiries" className="hover:text-slate-900 transition-opacity duration-150">
               <span className="material-symbols-outlined">help_outline</span>
-            </button>
+            </Link>
           </div>
           <div className="flex items-center gap-3 border-l border-slate-200 pl-6">
             <div className="text-right">

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface BuyerPortalLayoutProps {
@@ -32,7 +32,7 @@ const BuyerPortalLayout = ({
 
   return (
     <div className="bg-surface text-on-background antialiased min-h-screen">
-      <aside className="relative lg:fixed left-0 top-0 h-auto lg:h-screen w-full lg:w-64 z-50 bg-white dark:bg-slate-950 flex flex-col p-6 gap-y-2 shadow-2xl shadow-slate-200/50 dark:shadow-none">
+      <aside className="relative lg:fixed left-0 top-0 h-auto lg:h-screen w-full lg:w-64 z-50 bg-white dark:bg-slate-950 flex flex-col p-6 gap-y-2 shadow-2xl shadow-slate-200/50 dark:shadow-none overflow-y-auto overscroll-contain">
         <div className="mb-8">
           <h1 className="text-2xl font-black text-slate-900 dark:text-white leading-none">Curator</h1>
           <p className="text-xs tracking-widest font-semibold text-slate-500 uppercase mt-1">Premium Real Estate</p>
@@ -56,10 +56,10 @@ const BuyerPortalLayout = ({
           ))}
         </nav>
         <div className="mt-auto pt-6 border-t border-slate-100 space-y-1">
-          <button className="w-full text-left flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 transition-colors text-sm font-semibold">
+          <Link className="w-full text-left flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 transition-colors text-sm font-semibold" to="/contact">
             <span className="material-symbols-outlined">help</span>
             <span>Help Center</span>
-          </button>
+          </Link>
           <button
             className="w-full text-left flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 transition-colors text-sm font-semibold"
             onClick={logout}
@@ -70,23 +70,23 @@ const BuyerPortalLayout = ({
         </div>
       </aside>
 
-      <header className="relative lg:fixed top-0 w-full z-40 bg-slate-50/80 backdrop-blur-xl flex justify-between items-center px-8 h-16 lg:ml-64 lg:max-w-[calc(100%-16rem)]">
+      <header className="relative lg:fixed top-0 left-0 lg:left-64 right-0 w-full lg:w-[calc(100%-16rem)] z-40 bg-slate-50/80 backdrop-blur-xl flex flex-wrap gap-4 justify-between items-center px-4 sm:px-6 lg:px-8 h-auto lg:h-16 py-3 lg:py-0">
         <div className="flex items-center gap-4 flex-1">
           <div>
             <span className="text-xl font-bold tracking-tighter text-slate-900 font-headline">Architectural Curator</span>
             <div className="text-[10px] uppercase tracking-[0.2em] text-secondary font-bold mt-1">{pageEyebrow}</div>
           </div>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 sm:gap-6 flex-wrap justify-end">
           {topbarRight}
-          <div className="flex gap-4">
-            <button className="text-slate-500 hover:text-slate-900 transition-colors relative">
+          <div className="flex gap-3">
+            <Link to="/dashboard/buyer/payment-history" className="text-slate-500 hover:text-slate-900 transition-colors relative" aria-label="Payment history">
               <span className="material-symbols-outlined">notifications</span>
               <span className="absolute top-0 right-0 w-2 h-2 bg-error rounded-full border-2 border-white" />
-            </button>
-            <button className="text-slate-500 hover:text-slate-900 transition-colors">
+            </Link>
+            <Link to="/dashboard/buyer/inquiry-history" className="text-slate-500 hover:text-slate-900 transition-colors" aria-label="Inquiry history">
               <span className="material-symbols-outlined">mail</span>
-            </button>
+            </Link>
           </div>
           <div className="h-8 w-px bg-slate-200" />
           <div className="flex items-center gap-3 cursor-pointer">

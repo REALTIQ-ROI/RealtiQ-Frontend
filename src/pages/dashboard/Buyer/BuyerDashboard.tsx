@@ -1,308 +1,284 @@
-﻿import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
+import MediaPreview from '../../../components/property/MediaPreview';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
-import MediaPreview from '../../../components/property/MediaPreview';
 import { resolveBuyerId } from '../../../types';
-// import { paymentService } from '../../../services/paymentService';
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    maximumFractionDigits: 0,
+  }).format(value);
+
+const formatRelativeDate = (date?: string) => {
+  if (!date) return 'Recently';
+  const current = new Date(date).getTime();
+  const delta = Date.now() - current;
+  const hours = Math.max(1, Math.round(delta / (1000 * 60 * 60)));
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+  const days = Math.max(1, Math.round(hours / 24));
+  return `${days}d ago`;
+};
 
 const BuyerDashboard = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { properties } = useProperties();
   const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
-  // const { data: payments } = useAsync(() => paymentService.getPayments(), true);
+  const [query, setQuery] = useState('');
 
-  const myProperties = properties.filter((item) => resolveBuyerId(item.buyerId) === user?._id);
-  const myInquiries = (inquiries ?? []).filter((item) => item.userId === user?._id);
-  // const myPayments = (payments ?? []).filter((item) => item.user?._id === user?._id);
+  const buyerProperties = useMemo(
+    () => properties.filter((property) => resolveBuyerId(property.buyerId) === user?._id),
+    [properties, user?._id],
+  );
+  const buyerInquiries = useMemo(
+    () =>
+      (inquiries ?? []).filter(
+        (item) => item.userId === user?._id || item.email.toLowerCase() === (user?.email ?? '').toLowerCase(),
+      ),
+    [inquiries, user?._id, user?.email],
+  );
 
-  const featuredProperty = myProperties[0] ?? properties[0];
+  const searchResults = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return [];
+    return properties.filter((property) =>
+      `${property.title} ${property.location} ${property.propertyType}`.toLowerCase().includes(needle),
+    );
+  }, [properties, query]);
+
+  const featuredProperty =
+    buyerProperties[0] ??
+    searchResults[0] ??
+    properties.find((property) => property.featured) ??
+    properties[0] ??
+    null;
+
+  const recentInquiry = [...buyerInquiries].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+  const recentProperty = [...buyerProperties].sort(
+    (a, b) => new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() - new Date(a.updatedAt ?? a.createdAt ?? 0).getTime(),
+  )[0] ?? null;
+  const openInquiries = buyerInquiries.filter((item) => item.status === 'open').length;
+
+  const topbarSearch = (
+    <div className="relative w-full max-w-md">
+      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+      <input
+        className="w-full bg-surface-container-low border-none rounded-full pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-surface-tint/20 transition-all outline-none"
+        placeholder="Search listings, locations, property types..."
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+      />
+    </div>
+  );
 
   return (
-    <div className="bg-background text-on-background min-h-screen flex">
-      <aside className="fixed left-0 top-0 h-full w-64 z-50 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none flex flex-col py-6 gap-y-2">
-        <div className="px-6 mb-10 flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary-container rounded-lg flex items-center justify-center text-white">
-            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
-              architecture
+    <BuyerPortalLayout
+      pageEyebrow="Buyer Portal"
+      pageTitle="Dashboard"
+      pageSubtitle="Track your portfolio, review inquiries, and jump back into live listings."
+      topbarRight={topbarSearch}
+    >
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-surface-container-lowest p-6 rounded-xl">
+          <p className="text-xs font-bold uppercase tracking-widest text-secondary">Owned Properties</p>
+          <p className="mt-3 text-4xl font-black tracking-tighter text-primary">{buyerProperties.length}</p>
+          <p className="text-sm text-secondary mt-2">Live properties currently tied to your account.</p>
+        </div>
+        <div className="bg-surface-container-lowest p-6 rounded-xl">
+          <p className="text-xs font-bold uppercase tracking-widest text-secondary">Open Inquiries</p>
+          <p className="mt-3 text-4xl font-black tracking-tighter text-primary">{openInquiries}</p>
+          <p className="text-sm text-secondary mt-2">Messages waiting for a response.</p>
+        </div>
+        <div className="bg-primary-container p-6 rounded-xl text-white">
+          <p className="text-xs font-bold uppercase tracking-widest text-on-primary-container">Portfolio Value</p>
+          <p className="mt-3 text-4xl font-black tracking-tighter">{formatCurrency(buyerProperties.reduce((sum, item) => sum + item.price, 0))}</p>
+          <p className="text-sm text-white/80 mt-2">Based on the live property data returned by the API.</p>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-8">
+        <div className="lg:col-span-8 bg-surface-container-lowest rounded-xl overflow-hidden">
+          <div className="p-6 flex items-center justify-between gap-4 border-b border-outline-variant/10">
+            <div>
+              <h3 className="text-2xl font-extrabold tracking-tight">Recent Activity</h3>
+              <p className="text-sm text-secondary">Derived from your portfolio and inquiry history.</p>
+            </div>
+            <Link className="text-sm font-bold text-primary hover:underline" to="/dashboard/buyer/inquiry-history">
+              View all
+            </Link>
+          </div>
+
+          <div className="p-6 space-y-4">
+            {recentInquiry ? (
+              <Link
+                className="flex items-center gap-4 p-4 rounded-xl border border-transparent hover:border-outline-variant/10 hover:bg-surface-container-low transition-colors"
+                to={`/dashboard/buyer/inquiry-details/${recentInquiry._id}`}
+              >
+                <div className="w-12 h-12 rounded-full bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed">
+                  <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
+                    forum
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <h4 className="font-bold truncate">{recentInquiry.fullName}</h4>
+                    <span className="text-xs text-secondary">{formatRelativeDate(recentInquiry.createdAt)}</span>
+                  </div>
+                  <p className="text-sm text-secondary truncate">{recentInquiry.inquiryType}</p>
+                </div>
+                <span className="text-xs font-bold uppercase tracking-widest text-secondary">{recentInquiry.status}</span>
+              </Link>
+            ) : null}
+
+            {recentProperty ? (
+              <Link
+                className="flex items-center gap-4 p-4 rounded-xl border border-transparent hover:border-outline-variant/10 hover:bg-surface-container-low transition-colors"
+                to={`/dashboard/buyer/property-details/${recentProperty._id}`}
+              >
+                <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high">
+                  <MediaPreview media={recentProperty.media?.[0]} alt={recentProperty.title} className="w-full h-full object-cover" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <h4 className="font-bold truncate">{recentProperty.title}</h4>
+                    <span className="text-xs text-secondary">{formatRelativeDate(recentProperty.updatedAt ?? recentProperty.createdAt)}</span>
+                  </div>
+                  <p className="text-sm text-secondary truncate">{recentProperty.location}</p>
+                </div>
+                <span className="font-bold text-primary">{formatCurrency(recentProperty.price)}</span>
+              </Link>
+            ) : null}
+
+            {!recentInquiry && !recentProperty ? (
+              <p className="text-sm text-secondary">No portfolio activity yet.</p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="lg:col-span-4 bg-surface-container-lowest rounded-xl overflow-hidden">
+          <div className="p-6 border-b border-outline-variant/10">
+            <h3 className="text-2xl font-extrabold tracking-tight">Quick Actions</h3>
+            <p className="text-sm text-secondary">Jump to the core buyer workflows.</p>
+          </div>
+          <div className="p-6 space-y-3">
+            <Link className="block px-4 py-3 rounded-lg bg-primary text-on-primary font-bold" to="/properties">
+              Browse properties
+            </Link>
+            <Link className="block px-4 py-3 rounded-lg bg-surface-container-low text-on-surface font-bold" to="/dashboard/buyer/tours">
+              Manage tours
+            </Link>
+            <Link className="block px-4 py-3 rounded-lg bg-surface-container-low text-on-surface font-bold" to="/dashboard/buyer/installments">
+              Review installments
+            </Link>
+            <Link className="block px-4 py-3 rounded-lg bg-surface-container-low text-on-surface font-bold" to="/dashboard/buyer/profile-settings">
+              Settings
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-7">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-2xl font-extrabold tracking-tight">Search Results</h3>
+            <span className="text-xs font-bold uppercase tracking-widest text-secondary">
+              {query.trim() ? `${searchResults.length} matches` : 'Live data'}
             </span>
           </div>
-          <div>
-            <h1 className="text-xl font-black tracking-tight text-slate-900 dark:text-white">RealtiQ</h1>
-            <p className="font-body text-[10px] text-slate-500 uppercase tracking-widest">Premium Real Estate</p>
-          </div>
-        </div>
-
-        <nav className="flex-1 space-y-1">
-          <Link className="text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800 rounded-lg mx-2 px-4 py-3 font-bold flex items-center gap-3 transition-all translate-x-1 duration-150" to="/dashboard/buyer">
-            <span className="material-symbols-outlined">dashboard</span>
-            <span className="text-[14px] font-headline">Dashboard</span>
-          </Link>
-          <Link className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-3 mx-2 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all" to="/dashboard/buyer/my-properties">
-            <span className="material-symbols-outlined">home_work</span>
-            <span className="text-[14px] font-headline">My Properties</span>
-          </Link>
-          <Link className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-3 mx-2 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all" to="/dashboard/buyer/tours">
-            <span className="material-symbols-outlined">tour</span>
-            <span className="text-[14px] font-headline">Tours</span>
-          </Link>
-          <Link className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-3 mx-2 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all" to="/dashboard/buyer/installments">
-            <span className="material-symbols-outlined">schedule</span>
-            <span className="text-[14px] font-headline">Installments</span>
-          </Link>
-          <Link className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-3 mx-2 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all" to="/dashboard/buyer/payment-history">
-            <span className="material-symbols-outlined">payments</span>
-            <span className="text-[14px] font-headline">Payment History</span>
-          </Link>
-          <Link className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-3 mx-2 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all" to="/dashboard/buyer/inquiry-history">
-            <span className="material-symbols-outlined">forum</span>
-            <span className="text-[14px] font-headline">Inquiry History</span>
-          </Link>
-          <Link className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-3 mx-2 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all" to="/tools/roi-calculator">
-            <span className="material-symbols-outlined">monitoring</span>
-            <span className="text-[14px] font-headline">ROI Calculator</span>
-          </Link>
-          <Link className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-4 py-3 mx-2 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all" to="/dashboard/buyer/profile-settings">
-            <span className="material-symbols-outlined">settings</span>
-            <span className="text-[14px] font-headline">Settings</span>
-          </Link>
-        </nav>
-
-        <div className="mt-auto px-4 space-y-4">
-          <button className="w-full bg-primary text-on-primary py-3 rounded-md font-headline text-sm font-bold tracking-tight hover:opacity-90 transition-opacity">
-            Schedule Viewing
-          </button>
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-            <button className="w-full text-left text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-2 py-2 flex items-center gap-3 text-[14px] font-headline">
-              <span className="material-symbols-outlined">help</span>
-              Help Center
-            </button>
-            <button className="w-full text-left text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-2 py-2 flex items-center gap-3 text-[14px] font-headline" onClick={logout}>
-              <span className="material-symbols-outlined">logout</span>
-              Logout
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      <main className="ml-64 flex-1 flex flex-col min-h-screen">
-        <header className="fixed top-0 right-0 left-64 h-20 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-xl z-40 flex justify-between items-center px-8">
-          <div className="flex items-center flex-1 max-w-md">
-            <div className="relative w-full">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">search</span>
-              <input className="w-full bg-surface-container-low border-none rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-surface-tint/20 transition-all" placeholder="Search portfolio, locations..." type="text" />
-            </div>
-          </div>
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <button className="p-2 text-slate-500 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-full transition-colors relative">
-                <span className="material-symbols-outlined">notifications</span>
-                <span className="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border-2 border-white"></span>
-              </button>
-              <button className="p-2 text-slate-500 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 rounded-full transition-colors">
-                <span className="material-symbols-outlined">mail</span>
-              </button>
-            </div>
-            <div className="h-8 w-px bg-outline-variant/20"></div>
-            <button className="text-sm font-label font-medium text-slate-900 dark:text-white hover:underline">Support</button>
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <p className="text-xs font-bold text-slate-900 dark:text-white leading-none">{user?.name ?? 'Alexander Pierce'}</p>
-                <p className="text-[10px] text-slate-500 uppercase tracking-tighter">Gold Tier Member</p>
-              </div>
-              <img
-                alt="User profile"
-                className="w-10 h-10 rounded-full object-cover ring-2 ring-primary/5"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBNTBoqa15z9iRsuvpyNcemQ4445huNchZPKGpEAlUMmm2zg3bQ8jkuAsD2GHR4dDjc-ui528DZ5E5HrqKttwOvwI-sOYwLWk5M0Yb0CBXYs5u8HTyw-SsMzT98MGqhS1rJeJSG5FL10HyxJSzzPkn0etgKxQs45VCsyhyWvGvSLhyq7W8fzvjQI9baH1eFZMBIdjo2wdk8OUn2Lzwhpg628zMzoj21-pIBPal7L3YxVGjrlRntwfgWF2kp4DTouCZdT4y18JOP0A"
-              />
-            </div>
-          </div>
-        </header>
-
-        <div className="mt-20 p-8 flex flex-col gap-8">
-          <section className="flex flex-col md:flex-row justify-between items-end gap-6">
-            <div>
-              <span className="text-xs font-label uppercase tracking-[0.2em] text-secondary font-bold mb-2 block">Executive Overview</span>
-              <h2 className="text-4xl font-headline font-extrabold tracking-tighter text-on-surface">Welcome back, {user?.name?.split(' ')[0] ?? 'Alexander'}.</h2>
-              {/* <p className="text-on-surface-variant max-w-xl mt-2 font-body text-sm leading-relaxed">
-                Your portfolio has appreciated by <span className="text-primary font-bold">1.2%</span> this month. You have <span className="font-bold">{myInquiries.filter((item) => item.status === 'open').length} active inquiries</span> awaiting your review.
-              </p> */}
-              <p className="text-on-surface-variant max-w-xl mt-2 font-body text-sm leading-relaxed">
-                You have <span className="font-bold">{myInquiries.filter((item) => item.status === 'open').length} active inquiries</span> awaiting your review.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              {/* <button className="flex items-center gap-2 px-5 py-2.5 bg-surface-container-high rounded-lg text-sm font-headline font-bold text-on-surface hover:bg-surface-dim transition-colors">
-                <span className="material-symbols-outlined text-[18px]">receipt_long</span>
-                Tax Reports
-              </button> */}
-              <Link className="flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-lg text-sm font-headline font-bold hover:opacity-90 transition-opacity" to="/properties">
-                {/* <span className="material-symbols-outlined text-[18px]">add</span> */}
-                View Properties
-              </Link>
-              <Link className="flex items-center gap-2 px-5 py-2.5 bg-surface-container-high text-on-surface rounded-lg text-sm font-headline font-bold hover:bg-surface-dim transition-colors" to="/tools/roi-calculator">
-                <span className="material-symbols-outlined text-[18px]">monitoring</span>
-                ROI Calculator
-              </Link>
-            </div>
-          </section>
-
-          <div className="grid grid-cols-12 gap-6">
-            <div className="col-span-12 md:col-span-4 bg-surface-container-lowest p-8 rounded-xl flex flex-col justify-between min-h-[180px]">
-              <div className="flex justify-between items-start">
-                <p className="text-xs font-label uppercase tracking-widest text-secondary font-bold">Properties Owned</p>
-                <span className="material-symbols-outlined text-primary-container">apartment</span>
-              </div>
-              <div>
-                <div className="flex items-baseline gap-3">
-                  <span className="text-5xl font-headline font-black tracking-tighter text-primary">{myProperties.length}</span>
-                  <span className="text-xs font-bold text-on-secondary-container bg-secondary-fixed px-2 py-1 rounded-full">+{Math.min(myProperties.length, 2)} New</span>
-                </div>
-              </div>
-            </div>
-
-            {/* <div className="col-span-12 md:col-span-4 bg-primary-container p-8 rounded-xl flex flex-col justify-between min-h-[180px] text-white">
-              <div className="flex justify-between items-start">
-                <p className="text-xs font-label uppercase tracking-widest text-on-primary-container font-bold">Total Investment</p>
-                <span className="material-symbols-outlined text-secondary-fixed-dim">account_balance_wallet</span>
-              </div>
-              <div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-headline font-black tracking-tighter">${myPayments.reduce((sum, item) => sum + item.amount, 0).toLocaleString()}</span>
-                </div>
-                <p className="text-[10px] text-on-primary-container uppercase mt-2 tracking-widest">+12.4% Annual Growth</p>
-              </div>
-            </div> */}
-
-            {/* <div className="col-span-12 md:col-span-4 row-span-2 bg-surface-container-low p-8 rounded-xl flex flex-col gap-6">
-              <div>
-                <h3 className="font-headline font-extrabold text-xl tracking-tight mb-1">Market Insights</h3>
-                <p className="text-xs text-secondary font-body">Minimalist Brutalism in 2024</p>
-              </div>
-              <div className="h-32 w-full flex items-end gap-1.5 pt-4">
-                <div className="flex-1 bg-primary/10 h-[40%] rounded-t-sm"></div>
-                <div className="flex-1 bg-primary/10 h-[60%] rounded-t-sm"></div>
-                <div className="flex-1 bg-primary/10 h-[50%] rounded-t-sm"></div>
-                <div className="flex-1 bg-primary/10 h-[80%] rounded-t-sm"></div>
-                <div className="flex-1 bg-primary h-[95%] rounded-t-sm"></div>
-                <div className="flex-1 bg-primary/20 h-[70%] rounded-t-sm"></div>
-              </div>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center py-2 border-b border-outline-variant/10">
-                  <span className="text-sm font-medium text-on-surface-variant">Interest Rates</span>
-                  <span className="text-sm font-black font-headline">4.2%</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-outline-variant/10">
-                  <span className="text-sm font-medium text-on-surface-variant">Market Velocity</span>
-                  <span className="text-xs font-bold text-white bg-primary px-3 py-1 rounded-full uppercase tracking-tighter">High</span>
-                </div>
-                <div className="flex justify-between items-center py-2">
-                  <span className="text-sm font-medium text-on-surface-variant">Investor Sentiment</span>
-                  <span className="text-sm font-black font-headline">Bullish</span>
-                </div>
-              </div>
-              <div className="mt-auto bg-white/50 p-4 rounded-lg border border-white">
-                <p className="text-[11px] leading-relaxed italic text-secondary">"The shift toward utilitarian luxury in Zurich is driving yields up by 150bps." Portfolio AI</p>
-              </div>
-            </div> */}
-
-            <div className="col-span-12 md:col-span-8 bg-surface-container-lowest p-8 rounded-xl flex flex-col gap-6">
-              <div className="flex justify-between items-center">
-                <h3 className="font-headline font-extrabold text-2xl tracking-tight">Recent Activity</h3>
-                <button className="text-xs font-bold text-primary hover:underline">View All History</button>
-              </div>
-
-              <div className="space-y-2">
-                {myProperties.slice(0, 1).map((property) => (
-                  <div key={property._id} className="group flex items-center gap-6 p-5 hover:bg-surface-container-low transition-colors rounded-xl border border-transparent hover:border-outline-variant/10">
-                    <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
-                      <MediaPreview
-                        media={property.media[0]}
-                        alt={property.title}
-                        className="w-full h-full object-cover"
-                      />
+          {query.trim() ? (
+            searchResults.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {searchResults.slice(0, 4).map((property) => (
+                  <Link
+                    key={property._id}
+                    className="group bg-surface-container-lowest rounded-xl overflow-hidden border border-transparent hover:border-outline-variant/10 transition-colors"
+                    to={`/dashboard/buyer/property-details/${property._id}`}
+                  >
+                    <div className="h-44 bg-surface-container-high">
+                      <MediaPreview media={property.media?.[0]} alt={property.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start">
-                        <h4 className="font-headline font-bold text-lg text-on-surface truncate">{property.title}</h4>
-                        <span className="text-xs font-medium text-secondary">2 hours ago</span>
+                    <div className="p-4">
+                      <h4 className="font-bold text-lg truncate">{property.title}</h4>
+                      <p className="text-sm text-secondary truncate">{property.location}</p>
+                      <div className="mt-3 flex items-center justify-between text-sm">
+                        <span className="font-bold text-primary">{formatCurrency(property.price)}</span>
+                        <span className="text-xs uppercase tracking-widest text-secondary">{property.propertyType}</span>
                       </div>
-                      <p className="text-sm text-on-surface-variant mt-1">Acquisition finalized</p>
                     </div>
-                    <div className="text-right">
-                      <p className="font-headline font-black text-lg text-primary">${property.price.toLocaleString()}</p>
-                      <span className="text-[10px] font-bold text-white bg-on-tertiary-fixed-variant px-2 py-0.5 rounded-sm uppercase tracking-tighter">Completed</span>
-                    </div>
-                  </div>
+                  </Link>
                 ))}
-
-                <div className="group flex items-center gap-6 p-5 hover:bg-surface-container-low transition-colors rounded-xl border border-transparent hover:border-outline-variant/10">
-                  <div className="w-12 h-12 bg-secondary-fixed rounded-full flex items-center justify-center flex-shrink-0 text-on-secondary-fixed">
-                    <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>update</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start">
-                      <h4 className="font-headline font-bold text-lg text-on-surface truncate">Inquiry Activity</h4>
-                      <span className="text-xs font-medium text-secondary">5 hours ago</span>
-                    </div>
-                    <p className="text-sm text-on-surface-variant mt-1">{myInquiries.length} inquiry records in history</p>
+              </div>
+            ) : (
+              <div className="bg-surface-container-lowest rounded-xl p-8 text-secondary text-sm">
+                No properties matched your search.
+              </div>
+            )
+          ) : featuredProperty ? (
+            <div className="bg-surface-container-lowest rounded-xl overflow-hidden">
+              <div className="relative h-72 bg-surface-container-high">
+                <MediaPreview media={featuredProperty.media?.[0]} alt={featuredProperty.title} className="w-full h-full object-cover" />
+                <div className="absolute top-4 left-4">
+                  <span className="bg-primary/90 text-white text-[10px] font-bold px-3 py-1 uppercase tracking-widest backdrop-blur-md">
+                    Featured Property
+                  </span>
+                </div>
+              </div>
+              <div className="p-6">
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold text-secondary uppercase tracking-[0.2em] mb-1">{featuredProperty.location}</p>
+                    <h4 className="text-2xl font-black tracking-tight">{featuredProperty.title}</h4>
+                    <p className="text-sm text-secondary mt-2">{featuredProperty.description}</p>
                   </div>
                   <div className="text-right">
-                    <span className="material-symbols-outlined text-outline">arrow_forward_ios</span>
+                    <p className="text-xs uppercase tracking-widest text-secondary">Listing Value</p>
+                    <p className="text-3xl font-black text-primary">{formatCurrency(featuredProperty.price)}</p>
                   </div>
                 </div>
               </div>
+            </div>
+          ) : (
+            <div className="bg-surface-container-lowest rounded-xl p-8 text-secondary text-sm">No live properties are available right now.</div>
+          )}
+        </div>
+
+        <div className="lg:col-span-5">
+          <div className="bg-surface-container-lowest rounded-xl p-6">
+            <h3 className="text-2xl font-extrabold tracking-tight mb-4">Portfolio Snapshot</h3>
+            <div className="space-y-4">
+              {buyerProperties.slice(0, 3).map((property) => (
+                <Link
+                  key={property._id}
+                  to={`/dashboard/buyer/property-details/${property._id}`}
+                  className="flex items-center gap-4 p-3 rounded-xl hover:bg-surface-container-low transition-colors"
+                >
+                  <div className="w-14 h-14 rounded-lg overflow-hidden bg-surface-container-high flex-shrink-0">
+                    <MediaPreview media={property.media?.[0]} alt={property.title} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-bold truncate">{property.title}</h4>
+                    <p className="text-sm text-secondary truncate">{property.location}</p>
+                  </div>
+                  <span className="text-sm font-bold text-primary">{formatCurrency(property.price)}</span>
+                </Link>
+              ))}
+
+              {buyerProperties.length === 0 ? (
+                <p className="text-sm text-secondary">You do not have any purchased properties yet.</p>
+              ) : null}
             </div>
           </div>
-
-          <section className="grid grid-cols-12 gap-8 items-start">
-            <div className="col-span-12 md:col-span-7">
-              <h3 className="font-headline font-extrabold text-2xl tracking-tight mb-6">High-Yield Assets</h3>
-              <div className="bg-surface-container-lowest rounded-xl overflow-hidden">
-              <div className="relative h-64">
-                  <MediaPreview
-                    media={featuredProperty?.media?.[0]}
-                    alt={featuredProperty?.title ?? 'Luxury Villa'}
-                    className="w-full h-full object-cover"
-                    controls
-                  />
-                  <div className="absolute top-4 left-4">
-                    <span className="bg-primary/90 text-white text-[10px] font-bold px-3 py-1 uppercase tracking-widest backdrop-blur-md">Portfolio Leader</span>
-                  </div>
-                </div>
-                <div className="p-8">
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <p className="text-xs font-bold text-secondary uppercase tracking-[0.2em] mb-1">{featuredProperty?.location ?? 'Copenhagen, Denmark'}</p>
-                      <h4 className="font-headline font-black text-2xl tracking-tight">{featuredProperty?.title ?? 'The Nordic Glass Pavilion'}</h4>
-                    </div>
-                    {/* <div className="text-right">
-                      <p className="text-xs text-on-surface-variant">Annual Yield</p>
-                      <p className="font-headline font-black text-2xl text-primary">6.8%</p>
-                    </div> */}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* <div className="col-span-12 md:col-span-5 pt-0 md:pt-16">
-              <div className="bg-secondary-container p-10 rounded-xl relative overflow-hidden group">
-                <div className="relative z-10">
-                  <h3 className="font-headline font-black text-3xl text-on-secondary-fixed leading-tight mb-4">Expanding to <br />Lake Como?</h3>
-                  <p className="text-on-secondary-fixed-variant mb-8 text-sm leading-relaxed max-w-xs">We have identified three off-market villas matching your preference for Italian Rationalism.</p>
-                  <button className="bg-on-secondary-fixed text-white px-6 py-3 rounded-md text-sm font-headline font-bold flex items-center gap-2">
-                    Review Matching Assets
-                    <span className="material-symbols-outlined">trending_flat</span>
-                  </button>
-                </div>
-                <span className="material-symbols-outlined absolute -bottom-8 -right-8 text-[200px] text-on-secondary-fixed-variant/5 group-hover:scale-110 transition-transform duration-700">water</span>
-              </div>
-            </div> */}
-          </section>
         </div>
-      </main>
-    </div>
+      </section>
+    </BuyerPortalLayout>
   );
 };
 
