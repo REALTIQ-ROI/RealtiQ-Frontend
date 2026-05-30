@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import useHasScrolled from '../../hooks/useHasScrolled';
 
 interface BuyerPortalLayoutProps {
   children: ReactNode;
@@ -29,6 +30,7 @@ const BuyerPortalLayout = ({
   topbarRight,
 }: BuyerPortalLayoutProps) => {
   const { user, logout } = useAuth();
+  const hasScrolled = useHasScrolled(8);
 
   return (
     <div className="bg-surface text-on-background antialiased min-h-screen">
@@ -70,7 +72,11 @@ const BuyerPortalLayout = ({
         </div>
       </aside>
 
-      <header className="relative lg:fixed top-0 left-0 lg:left-64 right-0 w-full lg:w-[calc(100%-16rem)] z-40 bg-slate-50/80 backdrop-blur-xl flex flex-wrap gap-4 justify-between items-center px-4 sm:px-6 lg:px-8 h-auto lg:h-16 py-3 lg:py-0">
+      <header
+        className={`relative lg:fixed top-0 left-0 lg:left-64 right-0 w-full lg:w-[calc(100%-16rem)] z-40 backdrop-blur-xl flex flex-wrap gap-4 justify-between items-center px-4 sm:px-6 lg:px-8 h-auto lg:h-16 py-3 lg:py-0 transition-all duration-200 ${
+          hasScrolled ? 'bg-slate-50/95 border-b border-slate-200/70 shadow-lg shadow-slate-200/30' : 'bg-slate-50/75 border-b border-transparent'
+        }`}
+      >
         <div className="flex items-center gap-4 flex-1">
           <div>
             <span className="text-xl font-bold tracking-tighter text-slate-900 font-headline">Architectural Curator</span>

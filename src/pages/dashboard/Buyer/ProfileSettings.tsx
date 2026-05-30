@@ -6,6 +6,7 @@ import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAsync } from '../../../hooks/useAsync';
+import useHasScrolled from '../../../hooks/useHasScrolled';
 import { userService } from '../../../services/userService';
 
 const phoneRegex = /^(\+234|234|0)[789][01]\d{8}$/;
@@ -22,6 +23,7 @@ const formatLabel = (value?: string) =>
 
 const ProfileSettings = () => {
   const { user, logout } = useAuth();
+  const hasScrolled = useHasScrolled(8);
   const { data: profile, loading, error, execute } = useAsync(
     () => (user?._id ? userService.fetchUserById(user._id) : Promise.reject(new Error('Missing user id'))),
     Boolean(user?._id),
@@ -86,7 +88,11 @@ const ProfileSettings = () => {
         </div>
       </aside>
 
-      <header className="fixed top-0 w-full z-40 bg-slate-50/80 backdrop-blur-xl flex justify-between items-center px-8 h-16 ml-64 max-w-[calc(100%-16rem)]">
+      <header
+        className={`fixed top-0 w-full z-40 backdrop-blur-xl flex justify-between items-center px-8 h-16 ml-64 max-w-[calc(100%-16rem)] transition-all duration-200 ${
+          hasScrolled ? 'bg-slate-50/95 border-b border-slate-200 shadow-lg shadow-slate-200/30' : 'bg-slate-50/75 border-b border-transparent'
+        }`}
+      >
         <div className="flex items-center gap-4"><span className="text-xl font-bold tracking-tighter text-slate-900 font-headline">Architectural Curator</span></div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-4 text-slate-500"><button className="hover:text-slate-900 transition-colors"><span className="material-symbols-outlined">notifications</span></button><button className="hover:text-slate-900 transition-colors"><span className="material-symbols-outlined">mail</span></button></div>

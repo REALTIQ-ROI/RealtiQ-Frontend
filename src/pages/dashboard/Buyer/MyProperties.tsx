@@ -4,10 +4,12 @@ import { useProperties } from '../../../contexts/PropertiesContext';
 import MediaPreview from '../../../components/property/MediaPreview';
 import { resolveBuyerId } from '../../../types';
 import { useMemo, useState } from 'react';
+import useHasScrolled from '../../../hooks/useHasScrolled';
 
 const MyProperties = () => {
   const { user, logout } = useAuth();
   const { properties } = useProperties();
+  const hasScrolled = useHasScrolled(8);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<'all' | 'residential' | 'commercial'>('all');
   const [page, setPage] = useState(1);
@@ -79,7 +81,11 @@ const MyProperties = () => {
         </div>
       </aside>
 
-      <header className="fixed top-0 w-full z-40 bg-slate-50/80 backdrop-blur-xl h-16 ml-64 flex justify-between items-center px-8">
+      <header
+        className={`fixed top-0 w-full z-40 backdrop-blur-xl h-16 ml-64 flex justify-between items-center px-8 transition-all duration-200 ${
+          hasScrolled ? 'bg-slate-50/95 border-b border-slate-200 shadow-lg shadow-slate-200/30' : 'bg-slate-50/75 border-b border-transparent'
+        }`}
+      >
         <div className="flex items-center gap-8">
           <span className="text-xl font-bold tracking-tighter text-slate-900">Architectural Curator</span>
           <div className="hidden md:flex items-center bg-surface-container-low px-4 py-1.5 rounded-full border border-outline-variant/20">

@@ -4,6 +4,7 @@ import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAsync } from '../../../hooks/useAsync';
+import useHasScrolled from '../../../hooks/useHasScrolled';
 import { paymentService } from '../../../services/paymentService';
 import type { ApiPayment } from '../../../types';
 
@@ -34,6 +35,7 @@ const PaymentHistory = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { data, loading, error, execute } = useAsync(() => paymentService.getPayments(), true);
+  const hasScrolled = useHasScrolled(8);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [query, setQuery] = useState('');
   const [verifying, setVerifying] = useState<string | null>(null);
@@ -116,7 +118,11 @@ const PaymentHistory = () => {
         </div>
       </aside>
 
-      <header className="fixed top-0 w-full z-40 bg-slate-50/80 backdrop-blur-xl flex justify-between items-center px-8 h-16 ml-64 max-w-[calc(100%-16rem)]">
+      <header
+        className={`fixed top-0 w-full z-40 backdrop-blur-xl flex justify-between items-center px-8 h-16 ml-64 max-w-[calc(100%-16rem)] transition-all duration-200 ${
+          hasScrolled ? 'bg-slate-50/95 border-b border-slate-200 shadow-lg shadow-slate-200/30' : 'bg-slate-50/75 border-b border-transparent'
+        }`}
+      >
         <div className="flex items-center gap-4 flex-1">
           <div className="relative w-full max-w-md">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>

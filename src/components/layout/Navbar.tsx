@@ -1,5 +1,6 @@
 ﻿import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import useHasScrolled from '../../hooks/useHasScrolled';
 import Button from '../ui/Button';
 
 const navItems = [
@@ -11,9 +12,14 @@ const navItems = [
 
 const Navbar = () => {
   const { isAuthenticated, logout } = useAuth();
+  const hasScrolled = useHasScrolled(8);
 
   return (
-    <nav className="fixed top-0 w-full z-50 bg-surface/85 backdrop-blur-xl border-b border-outline-variant/20">
+    <nav
+      className={`fixed top-0 w-full z-50 backdrop-blur-xl border-b transition-all duration-200 ${
+        hasScrolled ? 'bg-surface/95 border-outline-variant/20 shadow-md shadow-black/5' : 'bg-surface/80 border-transparent'
+      }`}
+    >
       <div className="flex justify-between items-center px-6 py-4 max-w-7xl mx-auto gap-6">
         <Link to="/" className="text-xl font-black text-on-surface tracking-tighter font-headline">
           RealtiQ

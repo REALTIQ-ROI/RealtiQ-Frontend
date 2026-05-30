@@ -441,115 +441,116 @@ const Installments = () => {
     </form>
   );
 
-  const detailPanel = currentInstallment ? (
-    null
-    // <section className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 p-6 space-y-6 mb-8">
-    //   <div className="flex items-center justify-between gap-3 flex-wrap">
-    //     <div>
-    //       <span className="text-xs uppercase tracking-[0.2em] text-secondary font-bold">Installment Detail</span>
-    //       <h2 className="text-2xl font-extrabold tracking-tighter mt-1">{currentInstallment._id}</h2>
-    //       <p className="text-sm text-secondary mt-1">{resolveInstallmentPropertyLabel(currentInstallment)}</p>
-    //     </div>
-    //     <Button type="button" variant="secondary" onClick={() => void execute()}>
-    //       Refresh
-    //     </Button>
-    //   </div>
+  const detailPanel = currentInstallment || id ? (
+    <section className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 p-6 space-y-6 mb-8">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <span className="text-xs uppercase tracking-[0.2em] text-secondary font-bold">Installment Detail</span>
+          <h2 className="text-2xl font-extrabold tracking-tighter mt-1">{currentInstallment?._id ?? 'Loading...'}</h2>
+          <p className="text-sm text-secondary mt-1">
+            {currentInstallment ? resolveInstallmentPropertyLabel(currentInstallment) : 'Fetching installment details...'}
+          </p>
+        </div>
+        <Button type="button" variant="secondary" onClick={() => void execute()}>
+          Refresh
+        </Button>
+      </div>
 
-    //   {selectedLoading && id ? (
-    //     <LoadingState label="Loading installment details..." />
-    //   ) : selectedError ? (
-    //     <ErrorState message={selectedError} onRetry={() => void refreshSelected()} />
-    //   ) : (
-    //     <div className="space-y-6">
-    //       <div className="flex flex-wrap gap-2">
-    //         <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold uppercase ${statusClasses[currentInstallment.status]}`}>
-    //           {currentInstallment.status}
-    //         </span>
-    //         {isCompleted(currentInstallment) ? (
-    //           <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold uppercase bg-emerald-100 text-emerald-700">
-    //             Installment Plan Completed
-    //           </span>
-    //         ) : null}
-    //       </div>
+      {selectedLoading && id ? (
+        <LoadingState label="Loading installment details..." />
+      ) : selectedError ? (
+        <ErrorState message={selectedError} onRetry={() => void refreshSelected()} />
+      ) : currentInstallment ? (
+        <div className="space-y-6">
+          <div className="flex flex-wrap gap-2">
+            <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold uppercase ${statusClasses[currentInstallment.status]}`}>
+              {currentInstallment.status}
+            </span>
+            {isCompleted(currentInstallment) ? (
+              <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold uppercase bg-emerald-100 text-emerald-700">
+                Installment Plan Completed
+              </span>
+            ) : null}
+          </div>
 
-    //       <InstallmentProgress installment={currentInstallment} />
+          <InstallmentProgress installment={currentInstallment} />
 
-    //       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-    //         <div>
-    //           <p className="text-[10px] uppercase tracking-widest text-secondary">Property</p>
-    //           <p className="font-semibold">{resolveInstallmentPropertyLabel(currentInstallment)}</p>
-    //         </div>
-    //         <div>
-    //           <p className="text-[10px] uppercase tracking-widest text-secondary">Remaining Balance</p>
-    //           <p className="font-semibold">{formatCurrency(currentInstallment.remainingBalance)}</p>
-    //         </div>
-    //         <div>
-    //           <p className="text-[10px] uppercase tracking-widest text-secondary">Property Price</p>
-    //           <p className="font-semibold">
-    //             {resolveInstallmentProperty(currentInstallment)
-    //               ? formatCurrency(resolveInstallmentProperty(currentInstallment)!.price)
-    //               : formatCurrency(currentInstallment.totalAmount)}
-    //           </p>
-    //         </div>
-    //       </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-secondary">Property</p>
+              <p className="font-semibold">{resolveInstallmentPropertyLabel(currentInstallment)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-secondary">Remaining Balance</p>
+              <p className="font-semibold">{formatCurrency(currentInstallment.remainingBalance)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-secondary">Property Price</p>
+              <p className="font-semibold">
+                {resolveInstallmentProperty(currentInstallment)
+                  ? formatCurrency(resolveInstallmentProperty(currentInstallment)!.price)
+                  : formatCurrency(currentInstallment.totalAmount)}
+              </p>
+            </div>
+          </div>
 
-    //       {!isCompleted(currentInstallment) ? (
-    //               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-    //                 <div>
-    //                   <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">
-    //                     Next Installment Amount
-    //                   </label>
-    //                   <input
-    //                     readOnly
-    //                     value={
-    //                       getInstallmentSummary(currentInstallment).installmentAmount > 0
-    //                         ? formatCurrency(getInstallmentSummary(currentInstallment).installmentAmount)
-    //                         : 'Not available'
-    //                     }
-    //                     className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm outline-none cursor-not-allowed"
-    //                   />
-    //                 </div>
-    //               <div className="flex items-end">
-    //                 <Button type="button" variant="secondary" onClick={() => void handleInitializePayment(currentInstallment)} className="w-full">
-    //               Pay with Paystack
-    //             </Button>
-    //           </div>
-    //         </div>
-    //       ) : (
-    //         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-    //           Installment Plan Completed. Payment actions are disabled.
-    //         </div>
-    //       )}
+          {!isCompleted(currentInstallment) ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">
+                  Next Installment Amount
+                </label>
+                <input
+                  readOnly
+                  value={
+                    getInstallmentSummary(currentInstallment).installmentAmount > 0
+                      ? formatCurrency(getInstallmentSummary(currentInstallment).installmentAmount)
+                      : 'Not available'
+                  }
+                  className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm outline-none cursor-not-allowed"
+                />
+              </div>
+              <div className="flex items-end">
+                <Button type="button" variant="secondary" onClick={() => void handleInitializePayment(currentInstallment)} className="w-full">
+                  Pay with Paystack
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+              Installment Plan Completed. Payment actions are disabled.
+            </div>
+          )}
 
-    //       {currentInstallment.paymentHistory?.length ? (
-    //         <div className="text-sm text-secondary">Payment history entries: {currentInstallment.paymentHistory.length}</div>
-    //       ) : null}
+          {currentInstallment.paymentHistory?.length ? (
+            <div className="text-sm text-secondary">Payment history entries: {currentInstallment.paymentHistory.length}</div>
+          ) : null}
 
-    //       {user?.role !== 'buyer' ? (
-    //         <div className="flex flex-col sm:flex-row gap-3">
-    //           <select
-    //             className="bg-surface-container-low rounded-lg px-4 py-3 text-sm"
-    //             value={statusUpdates[currentInstallment._id] ?? currentInstallment.status}
-    //             onChange={(e) =>
-    //               setStatusUpdates((current) => ({
-    //                 ...current,
-    //                 [currentInstallment._id]: e.target.value as InstallmentStatus,
-    //               }))
-    //             }
-    //           >
-    //             <option value="pending">Pending</option>
-    //             <option value="active">Active</option>
-    //             <option value="completed">Completed</option>
-    //             <option value="defaulted">Defaulted</option>
-    //           </select>
-    //           <Button type="button" variant="secondary" onClick={() => void updateStatus(currentInstallment)}>
-    //             Update Status
-    //           </Button>
-    //         </div>
-    //       ) : null}
-    //     </div>
-    //   )}
-    // </section>
+          {user?.role !== 'buyer' ? (
+            <div className="flex flex-col sm:flex-row gap-3">
+              <select
+                className="bg-surface-container-low rounded-lg px-4 py-3 text-sm"
+                value={statusUpdates[currentInstallment._id] ?? currentInstallment.status}
+                onChange={(e) =>
+                  setStatusUpdates((current) => ({
+                    ...current,
+                    [currentInstallment._id]: e.target.value as InstallmentStatus,
+                  }))
+                }
+              >
+                <option value="pending">Pending</option>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="defaulted">Defaulted</option>
+              </select>
+              <Button type="button" variant="secondary" onClick={() => void updateStatus(currentInstallment)}>
+                Update Status
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
   ) : null;
 
   const body = (

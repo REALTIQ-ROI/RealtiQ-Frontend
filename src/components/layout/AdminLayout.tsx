@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import useHasScrolled from '../../hooks/useHasScrolled';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -25,6 +26,7 @@ const navLinks = [
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const hasScrolled = useHasScrolled(8);
 
   const handleLogout = () => {
     logout();
@@ -91,7 +93,11 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       </aside>
 
       {/* Fixed Top Nav */}
-      <header className="fixed top-0 right-0 left-64 w-[calc(100%-16rem)] min-h-16 z-40 bg-white/80 backdrop-blur-xl flex flex-wrap gap-4 items-center justify-between px-4 sm:px-6 lg:px-8 py-3 border-b border-slate-100">
+      <header
+        className={`fixed top-0 right-0 left-64 w-[calc(100%-16rem)] min-h-16 z-40 backdrop-blur-xl flex flex-wrap gap-4 items-center justify-between px-4 sm:px-6 lg:px-8 py-3 transition-all duration-200 ${
+          hasScrolled ? 'bg-white/95 border-b border-slate-100 shadow-lg shadow-slate-200/40' : 'bg-white/75 border-b border-transparent'
+        }`}
+      >
         <div className="flex items-center flex-1 max-w-xl min-w-0">
           <div className="relative w-full">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>

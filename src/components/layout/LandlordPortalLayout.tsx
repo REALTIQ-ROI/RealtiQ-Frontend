@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import useHasScrolled from '../../hooks/useHasScrolled';
 
 type LandlordNavKey =
   | 'overview'
@@ -37,6 +38,7 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
 
 const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: LandlordPortalLayoutProps) => {
   const { logout } = useAuth();
+  const hasScrolled = useHasScrolled(8);
 
   return (
     <div className="bg-surface text-on-surface min-h-screen">
@@ -82,7 +84,11 @@ const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: La
       </aside>
 
       <main className="ml-64 min-h-screen">
-        <header className="w-full sticky top-0 z-40 bg-white/80 backdrop-blur-xl flex flex-wrap gap-4 justify-between items-center px-4 sm:px-6 lg:px-8 h-auto min-h-16 py-3 shadow-sm">
+        <header
+          className={`w-full sticky top-0 z-40 backdrop-blur-xl flex flex-wrap gap-4 justify-between items-center px-4 sm:px-6 lg:px-8 h-auto min-h-16 py-3 transition-all duration-200 ${
+            hasScrolled ? 'bg-white/95 border-b border-slate-200 shadow-lg shadow-slate-200/30' : 'bg-white/75 border-b border-transparent shadow-none'
+          }`}
+        >
           <div className="flex items-center gap-4">{topLeft ?? <h2 className="text-xl font-bold tracking-tight text-slate-900">{title}</h2>}</div>
           <div className="flex items-center gap-4 sm:gap-6 flex-wrap justify-end">
             {topRight ?? (

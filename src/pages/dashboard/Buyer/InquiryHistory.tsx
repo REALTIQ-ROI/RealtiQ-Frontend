@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAsync } from '../../../hooks/useAsync';
+import useHasScrolled from '../../../hooks/useHasScrolled';
 import { inquiryService } from '../../../services/inquiryService';
 import { resolveInquiryProperty, type ApiInquiry } from '../../../types';
 
@@ -27,6 +28,7 @@ const InquiryHistory = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const { data, loading, error, execute } = useAsync(() => inquiryService.getInquiries(), true);
+  const hasScrolled = useHasScrolled(8);
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
   const [query, setQuery] = useState('');
 
@@ -84,7 +86,11 @@ const InquiryHistory = () => {
         </div>
       </aside>
 
-      <header className="fixed top-0 w-full z-40 bg-slate-50/80 backdrop-blur-xl flex justify-between items-center px-8 h-16 ml-64 overflow-hidden">
+      <header
+        className={`fixed top-0 w-full z-40 backdrop-blur-xl flex justify-between items-center px-8 h-16 ml-64 overflow-hidden transition-all duration-200 ${
+          hasScrolled ? 'bg-slate-50/95 border-b border-slate-200 shadow-lg shadow-slate-200/30' : 'bg-slate-50/75 border-b border-transparent'
+        }`}
+      >
         <div className="flex items-center gap-6">
           <div className="relative group">
             <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-on-surface-variant">

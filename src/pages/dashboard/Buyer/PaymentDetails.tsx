@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
+import useHasScrolled from '../../../hooks/useHasScrolled';
 import { paymentService } from '../../../services/paymentService';
 import type { ApiPayment } from '../../../types';
 
@@ -31,6 +32,7 @@ const PaymentDetails = () => {
   const { id } = useParams<{ id: string }>();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const hasScrolled = useHasScrolled(8);
 
   const [payment, setPayment] = useState<ApiPayment | null>(null);
   const [loading, setLoading] = useState(true);
@@ -155,7 +157,11 @@ const PaymentDetails = () => {
     <div className="text-on-surface bg-[#f7f9fb] min-h-screen">
       {sidebar}
 
-      <header className="fixed top-0 w-full z-40 bg-slate-50/80 backdrop-blur-xl flex justify-between items-center px-8 h-16 ml-64">
+      <header
+        className={`fixed top-0 w-full z-40 backdrop-blur-xl flex justify-between items-center px-8 h-16 ml-64 transition-all duration-200 ${
+          hasScrolled ? 'bg-slate-50/95 border-b border-slate-200 shadow-lg shadow-slate-200/30' : 'bg-slate-50/75 border-b border-transparent'
+        }`}
+      >
         <div className="flex items-center gap-4">
           <span className="text-xl font-bold tracking-tighter text-slate-900">RealtiQ</span>
         </div>
