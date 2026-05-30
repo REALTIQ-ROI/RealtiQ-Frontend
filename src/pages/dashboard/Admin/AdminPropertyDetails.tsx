@@ -196,7 +196,7 @@ const AdminPropertyDetails = () => {
             <div className="bg-primary-container p-8 rounded-xl text-white">
               <span className="text-[10px] uppercase tracking-widest opacity-60 font-bold mb-2 block">Listing Price</span>
               <h2 className="text-4xl font-extrabold tracking-tighter mb-8 font-headline">
-                ${property.price.toLocaleString()}
+                ₦{property.price.toLocaleString()}
               </h2>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white/10 p-4 rounded-lg">

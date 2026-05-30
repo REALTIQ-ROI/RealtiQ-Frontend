@@ -63,12 +63,14 @@ import LandlordMyProperties from '../pages/dashboard/Landlord/LandlordMyProperti
 import LandlordPaymentHistory from '../pages/dashboard/Landlord/LandlordPaymentHistory';
 import LandlordPropertyDetails from '../pages/dashboard/Landlord/LandlordPropertyDetails';
 import LandlordSettings from '../pages/dashboard/Landlord/LandlordSettings';
+import LandlordVerification from '../pages/dashboard/Landlord/LandlordVerification';
 import ProtectedRoute from './ProtectedRoute';
 import ROICalculatorPage from '../pages/dashboard/ROI/ROICalculatorPage';
 import PropertyROICalculatorPage from '../pages/dashboard/ROI/PropertyROICalculatorPage';
 import MyROIScenarios from '../pages/dashboard/ROI/MyROIScenarios';
 import ROIAssumptions from '../pages/dashboard/Admin/ROIAssumptions';
 import AdminSettings from '../pages/dashboard/Admin/AdminSettings';
+import KycManagement from '../pages/dashboard/Admin/KycManagement';
 
 const AppRoutes = () => {
   return (
@@ -115,7 +117,6 @@ const AppRoutes = () => {
         <Route path="/auth/landlord/register" element={<LandlordRegistration />} />
 
         <Route path="/properties/:id" element={<PropertyDetails />} />
-
         <Route path="/properties/:propertyId/roi" element={<PropertyROICalculatorPage />} />
 
         <Route element={<ProtectedRoute />}>
@@ -152,9 +153,12 @@ const AppRoutes = () => {
           <Route path="/dashboard/landlord/inquiry-details" element={<LandlordInquiryDetails />} />
           <Route path="/dashboard/landlord/inquiry-details/:id" element={<LandlordInquiryDetails />} />
           <Route path="/dashboard/landlord/add-property" element={<AddProperty />} />
+          <Route path="/properties/create" element={<AddProperty />} />
           <Route path="/dashboard/landlord/edit-property" element={<Editproperty />} />
           <Route path="/dashboard/landlord/edit-property/:id" element={<Editproperty />} />
           <Route path="/dashboard/landlord/settings" element={<LandlordSettings />} />
+          <Route path="/dashboard/landlord/settings/verification" element={<LandlordVerification />} />
+          <Route path="/settings/verification" element={<LandlordVerification />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
@@ -174,6 +178,8 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/manage-landlords" element={<ManageLandlords />} />
           <Route path="/dashboard/admin/landlord-details" element={<LandlordDetails />} />
           <Route path="/dashboard/admin/landlord-details/:id" element={<LandlordDetails />} />
+          <Route path="/dashboard/admin/kyc" element={<KycManagement />} />
+          <Route path="/admin/kyc" element={<KycManagement />} />
           <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />
           <Route path="/dashboard/admin/roi-assumptions" element={<ROIAssumptions />} />
           <Route path="/dashboard/admin/settings" element={<AdminSettings />} />

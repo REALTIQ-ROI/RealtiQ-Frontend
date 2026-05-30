@@ -15,19 +15,30 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<{ message?: string }>) => {
+  (error: AxiosError<unknown>) => {
     if (error.code === 'ECONNABORTED') {
       return Promise.reject(new Error('Request timed out. Please try again.'));
     }
     if (!error.response) {
       return Promise.reject(new Error('Unable to connect. Check your internet connection.'));
     }
+
     const status = error.response.status;
     if (status >= 500) {
       return Promise.reject(new Error('Something went wrong. Please try again later.'));
     }
-    const message = error.response.data?.message ?? 'Something went wrong. Please try again later.';
-    return Promise.reject(new Error(message));
+
+    const responseData = error.response.data;
+    const message =
+      typeof responseData === 'object' && responseData !== null && 'message' in responseData
+        ? String((responseData as { message?: unknown }).message ?? '')
+        : '';
+
+    if (message.trim()) {
+      return Promise.reject(new Error(message));
+    }
+
+    return Promise.reject(new Error('Something went wrong. Please try again later.'));
   },
 );
 

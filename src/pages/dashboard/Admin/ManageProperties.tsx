@@ -196,7 +196,7 @@ const ManageProperties = () => {
                         <span className="text-sm text-on-surface-variant">{property.location}</span>
                       </td>
                       <td className="px-6 py-5">
-                        <span className="text-sm font-bold">${property.price.toLocaleString()}</span>
+                        <span className="text-sm font-bold">₦{property.price.toLocaleString()}</span>
                       </td>
                       <td className="px-6 py-5">{statusBadge(property.status)}</td>
                       <td className="px-6 py-5 text-right">

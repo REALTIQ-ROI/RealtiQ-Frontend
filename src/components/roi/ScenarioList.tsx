@@ -86,7 +86,7 @@ const ScenarioList = ({ scenarios, loading = false, showProperty = false }: Scen
 
             <div className="mt-5 pt-4 border-t border-outline-variant/10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
               <p><span className="text-secondary">Cost:</span> <strong>{formatNaira(scenario.inputs.cost)}</strong></p>
-              <p><span className="text-secondary">Target USD:</span> <strong>${Number(scenario.inputs.targetUsd ?? 0).toLocaleString()}</strong></p>
+              <p><span className="text-secondary">Target USD:</span> <strong>₦{Number(scenario.inputs.targetUsd ?? 0).toLocaleString()}</strong></p>
               <p><span className="text-secondary">USD/NGN:</span> <strong>{Number(scenario.inputs.usdNgn ?? 0).toLocaleString()}</strong></p>
               <p><span className="text-secondary">Entry FX:</span> <strong>{Number(scenario.inputs.entryUsdNgn ?? 0).toLocaleString()}</strong></p>
               <p><span className="text-secondary">Inflation:</span> <strong>{formatPercent(scenario.inputs.inflation, 2)}</strong></p>

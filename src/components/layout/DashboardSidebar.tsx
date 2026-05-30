@@ -29,6 +29,7 @@ const roleLinks: Record<UserRole, Array<{ to: string; label: string }>> = {
     { to: '/dashboard/admin', label: 'Overview' },
     { to: '/dashboard/admin/manage-users', label: 'Users' },
     { to: '/dashboard/admin/manage-properties', label: 'Properties' },
+    { to: '/dashboard/admin/kyc', label: 'KYC Review' },
     { to: '/dashboard/admin/manage-payments', label: 'Payments' },
     { to: '/dashboard/admin/manage-inquiries', label: 'Inquiries' },
     { to: '/dashboard/admin/tours', label: 'Tours' },

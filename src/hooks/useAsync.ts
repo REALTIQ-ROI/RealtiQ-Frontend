@@ -25,8 +25,9 @@ export const useAsync = <T,>(asyncFn: () => Promise<T>, immediate = true) => {
       const data = await asyncFnRef.current();
       setState({ data, loading: false, error: null });
       return data;
-    } catch {
-      setState({ data: null, loading: false, error: 'Something went wrong. Please try again.' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+      setState({ data: null, loading: false, error: message });
       return null;
     }
   }, []);

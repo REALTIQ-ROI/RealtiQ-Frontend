@@ -1,4 +1,4 @@
-export type UserRole = 'buyer' | 'landlord' | 'admin';
+﻿export type UserRole = 'buyer' | 'landlord' | 'admin';
 export type PropertyType = 'house' | 'apartment' | 'land' | 'commercial' | 'villa' | 'penthouse' | 'estate';
 export type PropertyStatus = 'available' | 'sold';
 export type PropertyCategory = 'residential' | 'commercial' | 'mixed_use' | string;
@@ -27,6 +27,20 @@ export interface PropertyOwner {
   email: string;
   landlordVerified?: boolean;
   ratingAverage?: number;
+}
+
+export type KycStatus = 'pending' | 'approved' | 'rejected' | string;
+
+export interface UserKyc {
+  _id?: string;
+  fullLegalName?: string;
+  nationalId?: string;
+  address?: string;
+  idDocumentUrl?: string;
+  selfieUrl?: string;
+  status: KycStatus;
+  submittedAt?: string;
+  reviewedAt?: string;
 }
 
 export interface Property {
@@ -71,8 +85,17 @@ export interface User {
   email: string;
   role: UserRole;
   phone?: string;
-  isVerified?: boolean;
+  emailVerified?: boolean;
+  landlordVerified?: boolean;
+  trustBadge?: string;
+  favourites?: string[];
+  ratingAverage?: number;
+  ratingCount?: number;
+  kyc?: UserKyc | null;
+  recentlyViewed?: string[];
+  savedSearches?: string[];
   propertyCount?: number;
+  isVerified?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -283,14 +306,26 @@ export interface InstallmentPaymentRecord {
 
 export interface Installment {
   _id: string;
-  propertyId: string | TourPropertySummary;
+  property?: TourPropertySummary | string;
+  propertyId?: string | TourPropertySummary;
+  user?: TourParticipant | string;
   buyerId?: string | TourParticipant;
   ownerId?: string | TourParticipant;
   totalAmount: number;
   remainingBalance: number;
+  paidAmount?: number;
+  paymentCount?: number;
   status: InstallmentStatus;
   schedule?: InstallmentSchedule;
   paymentHistory?: InstallmentPaymentRecord[];
+  amountPaid?: number;
+  totalInstallments?: number;
+  installmentsPaid?: number;
+  installmentsRemaining?: number;
+  nextDueAmount?: number;
+  nextDueDate?: string;
+  nextPaymentAmount?: number;
+  nextPaymentDueDate?: string;
   createdAt?: string;
   updatedAt?: string;
 }

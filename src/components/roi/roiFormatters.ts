@@ -6,9 +6,9 @@ export const formatNaira = (value?: number) =>
   }).format(Number.isFinite(value) ? Number(value) : 0);
 
 export const formatUsd = (value?: number) =>
-  new Intl.NumberFormat('en-US', {
+  new Intl.NumberFormat('en-NG', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'NGN',
     maximumFractionDigits: 0,
   }).format(Number.isFinite(value) ? Number(value) : 0);
 

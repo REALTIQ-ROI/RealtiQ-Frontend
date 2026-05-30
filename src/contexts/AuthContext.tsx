@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { authService } from '../services/authService';
+import { userService } from '../services/userService';
 import type { LoginPayload, RegisterPayload, User } from '../types';
 
 interface AuthContextValue {
@@ -10,6 +11,8 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (payload: LoginPayload) => Promise<User>;
   register: (payload: RegisterPayload) => Promise<void>;
+  updateUser: (nextUser: User) => void;
+  refreshUser: () => Promise<User | null>;
   logout: () => void;
 }
 
@@ -36,7 +39,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(nextToken);
   };
 
-  const login = async (payload: LoginPayload): Promise<User> => {
+  const updateUser = useCallback((nextUser: User) => {
+    localStorage.setItem('user', JSON.stringify(nextUser));
+    setUser(nextUser);
+  }, []);
+
+  const refreshUser = useCallback(async (): Promise<User | null> => {
+    if (!user?._id) {
+      return null;
+    }
+
+    const refreshed = await userService.fetchUserById(user._id);
+    updateUser(refreshed);
+    return refreshed;
+  }, [updateUser, user?._id]);
+
+  const login = useCallback(async (payload: LoginPayload): Promise<User> => {
     setIsLoading(true);
     try {
       const response = await authService.login(payload);
@@ -48,9 +66,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const register = async (payload: RegisterPayload): Promise<void> => {
+  const register = useCallback(async (payload: RegisterPayload): Promise<void> => {
     setIsLoading(true);
     try {
       const response = await authService.register(payload);
@@ -63,7 +81,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   const logout = () => {
     localStorage.removeItem('token');
@@ -80,10 +98,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       isLoading,
       login,
       register,
+      updateUser,
+      refreshUser,
       logout,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [user, token, isLoading],
+    [user, token, isLoading, login, register, updateUser, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -73,7 +73,7 @@ const PropertyCard = ({ property }: { property: Property }) => {
             </p>
           </div>
           <p className="font-extrabold text-primary">
-            ${property.price.toLocaleString()}
+            ₦{property.price.toLocaleString()}
             <span className="text-[10px] text-secondary font-normal">/mo</span>
           </p>
         </div>

@@ -6,6 +6,7 @@ type LandlordNavKey =
   | 'overview'
   | 'my-properties'
   | 'add-property'
+  | 'verification'
   | 'tours'
   | 'installments'
   | 'inquiries'
@@ -25,6 +26,7 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
   { key: 'overview', to: '/dashboard/landlord', icon: 'dashboard', label: 'Overview' },
   { key: 'my-properties', to: '/dashboard/landlord/my-properties', icon: 'domain', label: 'My Properties' },
   { key: 'add-property', to: '/dashboard/landlord/add-property', icon: 'add_circle', label: 'Add Property' },
+  { key: 'verification', to: '/dashboard/landlord/settings/verification', icon: 'verified_user', label: 'Verification' },
   { key: 'tours', to: '/dashboard/landlord/tours', icon: 'tour', label: 'Tours' },
   { key: 'installments', to: '/dashboard/landlord/installments', icon: 'payments', label: 'Installments' },
   { key: 'inquiries', to: '/dashboard/landlord/inquiries', icon: 'chat_bubble', label: 'Inquiries' },

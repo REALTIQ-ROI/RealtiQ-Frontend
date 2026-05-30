@@ -167,11 +167,23 @@ const MyProperties = () => {
                 <div className="pt-4 border-t border-outline-variant/10 flex items-end justify-between">
                   <div className="flex flex-col">
                     <span className="text-[10px] text-secondary font-bold uppercase tracking-wider">Purchase Value</span>
-                    <span className="text-2xl font-black text-primary">${(property.price / 1000000).toFixed(1)}M</span>
+                    <span className="text-2xl font-black text-primary">₦{(property.price / 1000000).toFixed(1)}M</span>
                   </div>
-                  <div className="flex gap-3 text-secondary">
-                    <span className="flex items-center gap-1 text-[11px] font-semibold"><span className="material-symbols-outlined text-sm">bed</span> {property.bedrooms}</span>
-                    <span className="flex items-center gap-1 text-[11px] font-semibold"><span className="material-symbols-outlined text-sm">bathtub</span> {property.bathrooms}</span>
+                  <div className="flex flex-col items-end gap-3 text-secondary">
+                    <div className="flex gap-3">
+                      <span className="flex items-center gap-1 text-[11px] font-semibold">
+                        <span className="material-symbols-outlined text-sm">bed</span> {property.bedrooms}
+                      </span>
+                      <span className="flex items-center gap-1 text-[11px] font-semibold">
+                        <span className="material-symbols-outlined text-sm">bathtub</span> {property.bathrooms}
+                      </span>
+                    </div>
+                    <Link
+                      className="text-xs font-bold text-primary hover:underline"
+                      to={`/dashboard/buyer/property-details/${property._id}`}
+                    >
+                      View Details
+                    </Link>
                   </div>
                 </div>
               </div>

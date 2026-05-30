@@ -46,7 +46,7 @@ const LandlordMyProperties = () => {
 
   const totalValue = myProperties.reduce((sum, p) => sum + p.price, 0);
   const portfolioValue =
-    totalValue >= 1_000_000 ? `$${(totalValue / 1_000_000).toFixed(1)}M` : `$${totalValue.toLocaleString()}`;
+    totalValue >= 1_000_000 ? `₦${(totalValue / 1_000_000).toFixed(1)}M` : `₦${totalValue.toLocaleString()}`;
   const occupancyRate = myProperties.length > 0
     ? Math.round((myProperties.filter((property) => property.status === 'sold').length / myProperties.length) * 100)
     : 0;
@@ -233,7 +233,7 @@ const LandlordMyProperties = () => {
                           </span>
                         </td>
                         <td className="px-6 py-5">
-                          <span className="font-black text-slate-900">${property.price.toLocaleString()}</span>
+                          <span className="font-black text-slate-900">₦{property.price.toLocaleString()}</span>
                           <p className="text-[10px] text-secondary font-medium uppercase mt-0.5">NGN / Month</p>
                         </td>
                         <td className="px-6 py-5">
@@ -303,7 +303,7 @@ const LandlordMyProperties = () => {
                         <div className="flex items-center justify-between text-sm text-secondary">
                           <span>{property.bedrooms} Beds</span>
                           <span>{property.bathrooms} Baths</span>
-                          <span>${property.price.toLocaleString()}</span>
+                          <span>₦{property.price.toLocaleString()}</span>
                         </div>
                         <div className="flex items-center justify-end gap-2 pt-2">
                           <Link

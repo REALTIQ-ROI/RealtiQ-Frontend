@@ -43,6 +43,7 @@ export interface PropertiesResponse {
 
 export interface MediaUploadResponse {
   media: MediaItem[];
+  url?: string;
 }
 
 export interface BuyPropertyResponse {
@@ -135,7 +136,26 @@ export const propertyService = {
         }
       },
     });
-    return data;
+
+    if ('media' in data && Array.isArray(data.media)) {
+      return data;
+    }
+
+    if (typeof data.url === 'string') {
+      const file = files[0];
+      return {
+        url: data.url,
+        media: [
+          {
+            url: data.url,
+            public_id: `upload-${Date.now()}`,
+            type: file?.type.startsWith('video/') ? 'video' : 'image',
+          },
+        ],
+      };
+    }
+
+    return { media: [] };
   },
 
   // Legacy shim kept so existing callers continue to compile while they are migrated.

@@ -17,6 +17,14 @@ import { installmentService } from '../../services/installmentService';
 import { paymentService } from '../../services/paymentService';
 import { propertyService, type NearbyPropertySummary } from '../../services/propertyService';
 import { tourService } from '../../services/tourService';
+import {
+  calculateInstallmentAmount,
+  frequencyToInstallmentCount,
+  getInstallmentSummary,
+  isInstallmentActive,
+  resolveInstallmentPropertyId,
+  resolveInstallmentProperty,
+} from '../../utils/installment';
 
 const formatCurrency = (value: number, currency = 'NGN') =>
   new Intl.NumberFormat('en-NG', {
@@ -37,10 +45,10 @@ const PROPERTY_TOUR_MODES = [
 ] as const;
 
 const INSTALLMENT_FREQUENCIES = [
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'biweekly', label: 'Biweekly' },
   { value: 'monthly', label: 'Monthly' },
   { value: 'quarterly', label: 'Quarterly' },
+  { value: 'biannually', label: 'Biannually' },
+  { value: 'annually', label: 'Annually' },
 ] as const;
 
 const PropertyDetails = () => {
@@ -49,6 +57,11 @@ const PropertyDetails = () => {
   const { user, isAuthenticated } = useAuth();
   const { buyProperty, refreshProperties } = useProperties();
   const { data: property, loading, error, execute } = useAsync(() => propertyService.getPropertyById(id), true);
+  const {
+    data: installmentData,
+    loading: installmentLoading,
+    error: installmentError,
+  } = useAsync(() => installmentService.getInstallments(), Boolean(isAuthenticated && user?.role === 'buyer'));
   const hasMounted = useRef(false);
   const [savingProperty, setSavingProperty] = useState(false);
   const [requestingTour, setRequestingTour] = useState(false);
@@ -60,7 +73,6 @@ const PropertyDetails = () => {
   const [tourDate, setTourDate] = useState('');
   const [tourNotes, setTourNotes] = useState('');
   const [installmentFrequency, setInstallmentFrequency] = useState<(typeof INSTALLMENT_FREQUENCIES)[number]['value']>('monthly');
-  const [installmentNotes, setInstallmentNotes] = useState('');
 
   useEffect(() => {
     if (!property?._id) return;
@@ -95,6 +107,16 @@ const PropertyDetails = () => {
     [property],
   );
 
+  const installments = useMemo(() => (Array.isArray(installmentData) ? installmentData : []), [installmentData]);
+  const propertyInstallment = useMemo(() => {
+    const propertyInstallments = installments.filter((installment) => resolveInstallmentPropertyId(installment) === property?._id);
+    return propertyInstallments.find(isInstallmentActive) ?? propertyInstallments[0] ?? null;
+  }, [installments, property?._id]);
+  const installmentSummary = propertyInstallment ? getInstallmentSummary(propertyInstallment) : null;
+  const installmentProperty = propertyInstallment ? resolveInstallmentProperty(propertyInstallment) : null;
+  const hasActiveInstallment = Boolean(propertyInstallment && installmentSummary && !installmentSummary.completed);
+  const hasInstallmentHistory = Boolean(propertyInstallment);
+
   const handleSaveProperty = async () => {
     if (!property?._id) return;
     if (!user) {
@@ -126,6 +148,11 @@ const PropertyDetails = () => {
       return;
     }
 
+    if (hasActiveInstallment && propertyInstallment) {
+      navigate(`/dashboard/buyer/installments/${propertyInstallment._id}?propertyId=${property._id}`);
+      return;
+    }
+
     if (user.role !== 'buyer') {
       toast.error('Only buyers can purchase properties.');
       return;
@@ -148,6 +175,16 @@ const PropertyDetails = () => {
     } catch {
       toast.error('Unable to initialize payment. Please try again.');
     }
+  };
+
+  const handleContinueInstallment = () => {
+    if (!property?._id) return;
+    if (!hasActiveInstallment || !propertyInstallment) {
+      navigate('/dashboard/buyer/installments');
+      return;
+    }
+
+    navigate(`/dashboard/buyer/installments/${propertyInstallment._id}?propertyId=${property._id}`);
   };
 
   const handleTourRequest = async (event: FormEvent<HTMLFormElement>) => {
@@ -200,6 +237,24 @@ const PropertyDetails = () => {
       return;
     }
 
+    if (property.status === 'sold') {
+      toast.error('This property has already been purchased in full.');
+      return;
+    }
+
+    if (hasActiveInstallment && propertyInstallment) {
+      toast.error('An installment plan already exists for this property.');
+      navigate(`/dashboard/buyer/installments/${propertyInstallment._id}?propertyId=${property._id}`);
+      return;
+    }
+
+    const installmentCount = frequencyToInstallmentCount(installmentFrequency);
+    const calculatedInstallmentAmount = calculateInstallmentAmount(property.price, installmentFrequency);
+    if (property.price <= 0 || installmentCount <= 0 || calculatedInstallmentAmount <= 0) {
+      toast.error('Unable to calculate installment amount for this property.');
+      return;
+    }
+
     setCreatingInstallment(true);
     try {
       const plan = await installmentService.createInstallmentPlan({
@@ -207,12 +262,12 @@ const PropertyDetails = () => {
         totalAmount: property.price,
         schedule: {
           frequency: installmentFrequency,
-          notes: installmentNotes.trim() || undefined,
+          notes: String(calculatedInstallmentAmount),
         },
       });
 
       toast.success('Installment plan created successfully.');
-      navigate(`/dashboard/buyer/installments/${plan._id}`);
+      navigate(`/dashboard/buyer/installments/${plan._id}?propertyId=${property._id}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to create installment plan.');
     } finally {
@@ -412,50 +467,98 @@ const PropertyDetails = () => {
             <div>
               <h2 className="text-2xl font-bold mb-4">Installment Plan</h2>
               <Card className="p-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">
-                      Frequency
-                    </label>
-                    <select
-                      className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm"
-                      value={installmentFrequency}
-                      onChange={(e) =>
-                        setInstallmentFrequency(e.target.value as (typeof INSTALLMENT_FREQUENCIES)[number]['value'])
-                      }
-                    >
-                      {INSTALLMENT_FREQUENCIES.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                {installmentLoading ? (
+                  <LoadingState label="Checking installment plans..." />
+                ) : installmentError ? (
+                  <p className="text-sm text-error">{installmentError}</p>
+                ) : hasActiveInstallment && propertyInstallment ? (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-outline-variant/10 bg-surface-container-lowest p-4">
+                      <p className="text-xs uppercase tracking-widest text-secondary font-bold">Current Plan</p>
+                      <p className="mt-2 text-lg font-bold text-primary">Installment Plan Active</p>
+                      <p className="text-sm text-secondary mt-1">
+                        A plan already exists for this property. Continue from the installments page.
+                      </p>
+                      <p className="text-sm text-on-surface mt-3">
+                        Property Price:{' '}
+                        <span className="font-semibold">
+                          {installmentProperty ? formatCurrency(installmentProperty.price, currency) : formatCurrency(property.price, currency)}
+                        </span>
+                      </p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <Button type="button" onClick={handleContinueInstallment}>
+                        Continue Installment
+                      </Button>
+                      <Button type="button" variant="secondary" onClick={() => navigate('/dashboard/buyer/installments')}>
+                        View Installments
+                      </Button>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">
-                      Notes
-                    </label>
-                    <input
-                      type="text"
-                      value={installmentNotes}
-                      onChange={(e) => setInstallmentNotes(e.target.value)}
-                      placeholder="12 monthly payments"
-                      className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm"
-                    />
+                ) : hasInstallmentHistory && installmentSummary?.completed ? (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-outline-variant/10 bg-surface-container-lowest p-4">
+                      <p className="text-xs uppercase tracking-widest text-secondary font-bold">Current Plan</p>
+                      <p className="mt-2 text-lg font-bold text-primary">Installment Plan Completed</p>
+                      <p className="text-sm text-secondary mt-1">This property already has a completed installment plan.</p>
+                      <p className="text-sm text-on-surface mt-3">
+                        Property Price:{' '}
+                        <span className="font-semibold">
+                          {installmentProperty ? formatCurrency(installmentProperty.price, currency) : formatCurrency(property.price, currency)}
+                        </span>
+                      </p>
+                    </div>
                   </div>
-                  <div className="md:col-span-2 flex flex-col sm:flex-row gap-3">
-                    <Button type="button" onClick={() => void handleCreateInstallment()} disabled={creatingInstallment}>
-                      {creatingInstallment ? 'Creating...' : `Create Plan for ${formatCurrency(property.price, currency)}`}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => navigate('/dashboard/buyer/installments')}
-                    >
-                      View Installments
-                    </Button>
+                ) : property.status === 'sold' ? (
+                  <div className="rounded-xl border border-dashed border-outline-variant/20 bg-surface-container-lowest p-6 text-sm text-secondary">
+                    This property has already been purchased in full. Installment creation is unavailable.
                   </div>
-                </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">
+                        Frequency
+                      </label>
+                      <select
+                        className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm"
+                        value={installmentFrequency}
+                        onChange={(e) =>
+                          setInstallmentFrequency(e.target.value as (typeof INSTALLMENT_FREQUENCIES)[number]['value'])
+                        }
+                      >
+                        {INSTALLMENT_FREQUENCIES.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="md:col-span-2 flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1">
+                        <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">
+                          Installment Amount
+                        </label>
+                        <input
+                          readOnly
+                          value={
+                            property.price > 0 ? formatCurrency(calculateInstallmentAmount(property.price, installmentFrequency)) : 'Not available'
+                          }
+                          className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm outline-none cursor-not-allowed"
+                        />
+                      </div>
+                      <Button type="button" onClick={() => void handleCreateInstallment()} disabled={creatingInstallment}>
+                        {creatingInstallment ? 'Creating...' : `Create Plan for ${formatCurrency(property.price, currency)}`}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => navigate('/dashboard/buyer/installments')}
+                      >
+                        View Installments
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </Card>
             </div>
           </div>
@@ -472,9 +575,23 @@ const PropertyDetails = () => {
                 </span>
               </div>
 
-              <Button fullWidth disabled={property.status === 'sold'} onClick={() => void handleBuyProperty()}>
-                {property.status === 'sold' ? 'Already Sold' : 'Buy Property'}
-              </Button>
+              {hasActiveInstallment && propertyInstallment ? (
+                <Button fullWidth onClick={handleContinueInstallment} disabled={installmentLoading}>
+                  Continue Installment
+                </Button>
+              ) : hasInstallmentHistory && installmentSummary?.completed ? (
+                <Button fullWidth disabled>
+                  Installment Plan Completed
+                </Button>
+              ) : (
+                <Button
+                  fullWidth
+                  disabled={property.status === 'sold' || installmentLoading}
+                  onClick={() => void handleBuyProperty()}
+                >
+                  {installmentLoading ? 'Checking installment status...' : property.status === 'sold' ? 'Already Sold' : 'Buy Property'}
+                </Button>
+              )}
               <Button
                 fullWidth
                 variant="secondary"
