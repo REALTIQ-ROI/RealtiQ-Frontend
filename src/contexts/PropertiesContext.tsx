@@ -27,7 +27,11 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
     try {
       const res = await propertyService.getProperties({ limit: limitOverride });
-      setProperties(res.properties);
+      setProperties(Array.isArray((res as { properties?: Property[] } | Property[]).properties)
+        ? (res as { properties?: Property[] }).properties ?? []
+        : Array.isArray(res)
+          ? res
+          : []);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch properties.';
       setError(message);
