@@ -1,7 +1,9 @@
 import axios, { type AxiosError } from 'axios';
 
+const defaultBaseURL = import.meta.env.DEV ? '/api' : 'https://api.realtiq.com.ng/api';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? defaultBaseURL,
   timeout: 10_000,
 });
 
