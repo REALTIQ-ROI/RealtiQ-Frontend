@@ -8,9 +8,9 @@ interface PropertiesContextValue {
   properties: Property[];
   loading: boolean;
   error: string | null;
-  refreshProperties: () => Promise<void>;
+  refreshProperties: (limitOverride?: number) => Promise<void>;
   addProperty: (ownerId: string, payload: CreatePropertyPayload) => Promise<Property>;
-  updateProperty: (propertyId: string, payload: Partial<Property>) => Promise<Partial<Property>>;
+  updateProperty: (propertyId: string, payload: Partial<Property>) => Promise<Property>;
   deleteProperty: (propertyId: string) => Promise<void>;
   buyProperty: (propertyId: string, buyerId: string) => Promise<void>;
 }
@@ -22,11 +22,11 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshProperties = useCallback(async () => {
+  const refreshProperties = useCallback(async (limitOverride = 500) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await propertyService.getProperties();
+      const res = await propertyService.getProperties({ limit: limitOverride });
       setProperties(res.properties);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch properties.';
@@ -46,7 +46,7 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
     return created;
   };
 
-  const updateProperty = async (propertyId: string, payload: Partial<Property>): Promise<Partial<Property>> => {
+  const updateProperty = async (propertyId: string, payload: Partial<Property>): Promise<Property> => {
     const updated = await propertyService.updateProperty(propertyId, payload);
     await refreshProperties();
     return updated;

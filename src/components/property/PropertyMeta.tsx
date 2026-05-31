@@ -19,6 +19,26 @@ const PropertyMeta = ({ property }: { property: Property }) => {
         <p className="text-xs uppercase tracking-wider text-secondary">Type</p>
         <p className="font-bold">{property.propertyType}</p>
       </div>
+      <div>
+        <p className="text-xs uppercase tracking-wider text-secondary">Category</p>
+        <p className="font-bold">{property.category ?? 'Residential'}</p>
+      </div>
+      <div>
+        <p className="text-xs uppercase tracking-wider text-secondary">Stage</p>
+        <p className="font-bold">{property.completionStage ?? 'Finished'}</p>
+      </div>
+      <div>
+        <p className="text-xs uppercase tracking-wider text-secondary">Currency</p>
+        <p className="font-bold">{property.currency ?? 'NGN'}</p>
+      </div>
+      <div>
+        <p className="text-xs uppercase tracking-wider text-secondary">Views</p>
+        <p className="font-bold">{property.views ?? 0}</p>
+      </div>
+      <div>
+        <p className="text-xs uppercase tracking-wider text-secondary">Saves</p>
+        <p className="font-bold">{property.saves ?? 0}</p>
+      </div>
     </div>
   );
 };

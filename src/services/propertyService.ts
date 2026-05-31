@@ -1,17 +1,37 @@
 import api from '../lib/axios';
-import type { MediaItem, Property, PropertyFilters } from '../types';
+import type {
+  MediaItem,
+  Property,
+  PropertyCategory,
+  PropertyCompletionStage,
+  PropertyCoordinates,
+  PropertyCurrency,
+  PropertyFilters,
+  PropertyStatus,
+  PropertyType,
+} from '../types';
 
 export interface CreatePropertyPayload {
   title: string;
   price: number;
   location: string;
-  propertyType: string;
+  propertyType: PropertyType | string;
   bedrooms: number;
   bathrooms: number;
   squareFeet: number;
   description: string;
   amenities?: string[];
   media: MediaItem[];
+  category?: PropertyCategory;
+  completionStage?: PropertyCompletionStage;
+  currency?: PropertyCurrency;
+  coordinates?: PropertyCoordinates | null;
+  status?: PropertyStatus;
+}
+
+export interface UpdatePropertyPayload extends Partial<CreatePropertyPayload> {
+  status?: PropertyStatus;
+  featured?: boolean;
 }
 
 export interface PropertiesResponse {
@@ -23,6 +43,7 @@ export interface PropertiesResponse {
 
 export interface MediaUploadResponse {
   media: MediaItem[];
+  url?: string;
 }
 
 export interface BuyPropertyResponse {
@@ -30,10 +51,23 @@ export interface BuyPropertyResponse {
   reference: string;
 }
 
-export interface PropertyFiltersQuery extends PropertyFilters {
-  ownerId?: string;
-  page?: number;
-  limit?: number;
+export type PropertyFiltersQuery = PropertyFilters;
+
+export interface NearbyPropertySummary {
+  _id: string;
+  title: string;
+  coordinates?: PropertyCoordinates | null;
+}
+
+export interface PropertySaveResponse {
+  message?: string;
+  saves?: number;
+  saved?: boolean;
+}
+
+export interface PropertyViewResponse {
+  message?: string;
+  views?: number;
 }
 
 export const propertyService = {
@@ -52,8 +86,8 @@ export const propertyService = {
     return data;
   },
 
-  async updateProperty(id: string, payload: Partial<CreatePropertyPayload & { status: string }>): Promise<Partial<Property>> {
-    const { data } = await api.patch<Partial<Property>>(`/properties/${id}`, payload);
+  async updateProperty(id: string, payload: UpdatePropertyPayload): Promise<Property> {
+    const { data } = await api.patch<Property>(`/properties/${id}`, payload);
     return data;
   },
 
@@ -68,14 +102,30 @@ export const propertyService = {
   },
 
   async toggleFeatured(id: string, featured: boolean): Promise<{ _id: string; featured: boolean }> {
-    const { data } = await api.patch<{ _id: string; featured: boolean }>(`/properties/${id}/featured`, { featured });
+    const { data } = await api.patch<{ _id: string; featured: boolean }>(`/properties/${id}/featured`, {
+      featured,
+    });
     return data;
   },
 
-  async uploadMedia(
-    files: File[],
-    onProgress?: (percent: number) => void,
-  ): Promise<MediaUploadResponse> {
+  async incrementView(id: string): Promise<PropertyViewResponse> {
+    const { data } = await api.post<PropertyViewResponse>(`/properties/${id}/view`);
+    return data;
+  },
+
+  async saveProperty(id: string): Promise<PropertySaveResponse> {
+    const { data } = await api.post<PropertySaveResponse>(`/properties/${id}/save`);
+    return data;
+  },
+
+  async getNearbyProperties(
+    params: Required<Pick<PropertyCoordinates, 'lat' | 'lng'>> & { radius: number },
+  ): Promise<NearbyPropertySummary[]> {
+    const { data } = await api.get<NearbyPropertySummary[]>('/properties/map/nearby', { params });
+    return data;
+  },
+
+  async uploadMedia(files: File[], onProgress?: (percent: number) => void): Promise<MediaUploadResponse> {
     const formData = new FormData();
     files.forEach((file) => formData.append('files', file));
     const { data } = await api.post<MediaUploadResponse>('/media/upload', formData, {
@@ -86,10 +136,29 @@ export const propertyService = {
         }
       },
     });
-    return data;
+
+    if ('media' in data && Array.isArray(data.media)) {
+      return data;
+    }
+
+    if (typeof data.url === 'string') {
+      const file = files[0];
+      return {
+        url: data.url,
+        media: [
+          {
+            url: data.url,
+            public_id: `upload-${Date.now()}`,
+            type: file?.type.startsWith('video/') ? 'video' : 'image',
+          },
+        ],
+      };
+    }
+
+    return { media: [] };
   },
 
-  // Legacy shim — kept so PropertiesContext callers don't break during migration
+  // Legacy shim kept so existing callers continue to compile while they are migrated.
   async addProperty(_ownerId: string, payload: CreatePropertyPayload): Promise<Property> {
     return propertyService.createProperty(payload);
   },

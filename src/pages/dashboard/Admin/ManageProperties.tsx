@@ -2,6 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import AdminLayout from '../../../components/layout/AdminLayout';
+import MediaPreview from '../../../components/property/MediaPreview';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import type { Property } from '../../../types';
 import { resolveOwnerId } from '../../../types';
@@ -159,7 +160,7 @@ const ManageProperties = () => {
                 </tr>
               ) : (
                 paginated.map((property) => {
-                  const imageUrl = property.media?.[0]?.url;
+                  const image = property.media?.[0];
                   const ownerInitials = property.ownerId
                     ? resolveOwnerId(property.ownerId).slice(0, 2).toUpperCase()
                     : '??';
@@ -168,13 +169,7 @@ const ManageProperties = () => {
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-4">
                           <div className="h-14 w-14 rounded-lg overflow-hidden flex-shrink-0 bg-slate-200">
-                            {imageUrl ? (
-                              <img className="h-full w-full object-cover" src={imageUrl} alt={property.title} />
-                            ) : (
-                              <div className="h-full w-full flex items-center justify-center">
-                                <span className="material-symbols-outlined text-secondary/40">home_work</span>
-                              </div>
-                            )}
+                            <MediaPreview media={image} alt={property.title} className="h-full w-full object-cover" />
                           </div>
                           <div>
                             <h4
@@ -201,7 +196,7 @@ const ManageProperties = () => {
                         <span className="text-sm text-on-surface-variant">{property.location}</span>
                       </td>
                       <td className="px-6 py-5">
-                        <span className="text-sm font-bold">${property.price.toLocaleString()}</span>
+                        <span className="text-sm font-bold">₦{property.price.toLocaleString()}</span>
                       </td>
                       <td className="px-6 py-5">{statusBadge(property.status)}</td>
                       <td className="px-6 py-5 text-right">

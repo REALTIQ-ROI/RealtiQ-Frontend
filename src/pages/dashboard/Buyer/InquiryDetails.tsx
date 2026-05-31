@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
-import DashboardLayout from '../../../components/layout/DashboardLayout';
+import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
 import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
@@ -25,7 +25,11 @@ const InquiryDetails = () => {
   const property = inquiry ? resolveInquiryProperty(inquiry.property) : null;
 
   return (
-    <DashboardLayout>
+    <BuyerPortalLayout
+      pageEyebrow="Inquiry History"
+      pageTitle="Inquiry Details"
+      pageSubtitle="Review the full message and related property information."
+    >
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <h1 className="text-3xl font-extrabold">Inquiry Details</h1>
@@ -75,7 +79,7 @@ const InquiryDetails = () => {
           </div>
         )}
       </section>
-    </DashboardLayout>
+    </BuyerPortalLayout>
   );
 };
 

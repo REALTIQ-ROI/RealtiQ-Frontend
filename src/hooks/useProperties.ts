@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import Swal from 'sweetalert2';
-import { propertyService, type CreatePropertyPayload, type PropertyFiltersQuery } from '../services/propertyService';
+import {
+  propertyService,
+  type CreatePropertyPayload,
+  type PropertyFiltersQuery,
+  type UpdatePropertyPayload,
+} from '../services/propertyService';
 import { paymentService } from '../services/paymentService';
 import type { Property } from '../types';
 
@@ -39,16 +44,14 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
         setLoading(false);
       }
     },
-    // intentionally broad — callers pass explicit args when they need to
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [filters, page, limit],
   );
 
   useEffect(() => {
     if (autoFetch) void fetchProperties(initialFilters, 1);
-    // only on mount
+    // run only on mount for the initial catalog load
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoFetch]);
+  }, []);
 
   const applyFilters = useCallback(
     (newFilters: PropertyFiltersQuery) => {
@@ -60,9 +63,9 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
   );
 
   const goToPage = useCallback(
-    (p: number) => {
-      setPage(p);
-      void fetchProperties(filters, p);
+    (nextPage: number) => {
+      setPage(nextPage);
+      void fetchProperties(filters, nextPage);
     },
     [fetchProperties, filters],
   );
@@ -78,10 +81,7 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
     }
   };
 
-  const updateProperty = async (
-    id: string,
-    payload: Partial<CreatePropertyPayload & { status: string }>,
-  ): Promise<boolean> => {
+  const updateProperty = async (id: string, payload: UpdatePropertyPayload): Promise<boolean> => {
     const result = await Swal.fire({
       title: 'Update Property?',
       text: 'This will save your changes',
@@ -94,6 +94,7 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
       reverseButtons: true,
     });
     if (!result.isConfirmed) return false;
+
     try {
       await propertyService.updateProperty(id, payload);
       toast.success('Property updated successfully');
@@ -117,6 +118,7 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
       reverseButtons: true,
     });
     if (!result.isConfirmed) return false;
+
     try {
       await propertyService.deleteProperty(id);
       setProperties((prev) => prev.filter((p) => p._id !== id));
@@ -130,20 +132,13 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
 
   const toggleFeatured = async (id: string, currentFeatured: boolean): Promise<void> => {
     const nextFeatured = !currentFeatured;
-    // Optimistic update
-    setProperties((prev) =>
-      prev.map((p) => (p._id === id ? { ...p, featured: nextFeatured } : p)),
-    );
+    setProperties((prev) => prev.map((p) => (p._id === id ? { ...p, featured: nextFeatured } : p)));
+
     try {
       await propertyService.toggleFeatured(id, nextFeatured);
-      toast.success(
-        nextFeatured ? 'Property marked as featured' : 'Property removed from featured',
-      );
+      toast.success(nextFeatured ? 'Property marked as featured' : 'Property removed from featured');
     } catch (err) {
-      // Rollback
-      setProperties((prev) =>
-        prev.map((p) => (p._id === id ? { ...p, featured: currentFeatured } : p)),
-      );
+      setProperties((prev) => prev.map((p) => (p._id === id ? { ...p, featured: currentFeatured } : p)));
       toast.error(err instanceof Error ? err.message : 'Failed to update featured status.');
     }
   };
@@ -165,6 +160,7 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
       cancelButtonColor: '#6b7280',
     });
     if (!result.isConfirmed) return;
+
     try {
       const checkout = await propertyService.buyProperty(id);
       paymentService.redirectToCheckout(checkout, id);

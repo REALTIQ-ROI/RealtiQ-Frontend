@@ -1,6 +1,7 @@
 ﻿import { Link } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
 import PropertyCard from '../../components/property/PropertyCard';
+import MediaPreview from '../../components/property/MediaPreview';
 import Button from '../../components/ui/Button';
 import { useProperties } from '../../contexts/PropertiesContext';
 import LoadingState from '../../components/ui/LoadingState';
@@ -33,10 +34,11 @@ const Home = () => {
 
           <div className="lg:col-span-5 relative">
             <div className="aspect-[4/5] rounded-xl overflow-hidden shadow-2xl">
-              <img
-                className="w-full h-full object-cover"
-                src={properties[0]?.media[0]?.url}
+              <MediaPreview
+                media={properties[0]?.media[0]}
                 alt={properties[0]?.title ?? 'featured property'}
+                className="w-full h-full object-cover"
+                controls
               />
             </div>
           </div>

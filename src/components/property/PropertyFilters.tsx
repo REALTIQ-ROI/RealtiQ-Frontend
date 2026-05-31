@@ -8,17 +8,13 @@ interface PropertyFiltersProps {
 
 const PROPERTY_TYPES = [
   { value: '', label: 'All Types' },
+  { value: 'house', label: 'House' },
   { value: 'apartment', label: 'Apartment' },
-  { value: 'duplex', label: 'Duplex' },
   { value: 'land', label: 'Land' },
-];
-
-const BEDROOM_OPTIONS = [
-  { value: '', label: 'Any' },
-  { value: '1', label: '1' },
-  { value: '2', label: '2' },
-  { value: '3', label: '3' },
-  { value: '4', label: '4+' },
+  { value: 'commercial', label: 'Commercial' },
+  { value: 'villa', label: 'Villa' },
+  { value: 'penthouse', label: 'Penthouse' },
+  { value: 'estate', label: 'Estate' },
 ];
 
 const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps) => {
@@ -27,6 +23,11 @@ const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps)
   const [maxPrice, setMaxPrice] = useState(initialFilters.maxPrice?.toString() ?? '');
   const [propertyType, setPropertyType] = useState(initialFilters.propertyType ?? '');
   const [bedrooms, setBedrooms] = useState(initialFilters.bedrooms?.toString() ?? '');
+  const [category, setCategory] = useState(initialFilters.category ?? '');
+  const [completionStage, setCompletionStage] = useState(initialFilters.completionStage ?? '');
+  const [currency, setCurrency] = useState(initialFilters.currency ?? '');
+  const [featured, setFeatured] = useState(initialFilters.featured === true ? 'true' : '');
+  const [status, setStatus] = useState(initialFilters.status ?? '');
 
   const handleApply = () => {
     onApply({
@@ -35,6 +36,11 @@ const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps)
       maxPrice: maxPrice ? Number(maxPrice) : undefined,
       propertyType: propertyType || undefined,
       bedrooms: bedrooms ? Number(bedrooms) : undefined,
+      category: category || undefined,
+      completionStage: completionStage || undefined,
+      currency: currency || undefined,
+      featured: featured === '' ? undefined : featured === 'true',
+      status: (status as PropertyFiltersQuery['status']) || undefined,
     });
   };
 
@@ -44,6 +50,11 @@ const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps)
     setMaxPrice('');
     setPropertyType('');
     setBedrooms('');
+    setCategory('');
+    setCompletionStage('');
+    setCurrency('');
+    setFeatured('');
+    setStatus('');
     onApply({});
   };
 
@@ -59,73 +70,21 @@ const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps)
         Filters
       </h3>
 
-      {/* Search */}
       <div className="space-y-1.5">
-        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">
-          Search
-        </label>
-        <div className="relative">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-base">
-            search
-          </span>
-          <input
-            type="text"
-            placeholder="Title, location…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleApply()}
-            className={`${inputClass} pl-9`}
-          />
-        </div>
-      </div>
-
-      {/* Property Type */}
-      <div className="space-y-1.5">
-        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">
-          Property Type
-        </label>
-        <select
-          value={propertyType}
-          onChange={(e) => setPropertyType(e.target.value)}
+        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Search</label>
+        <input
+          type="text"
+          placeholder="Title, location..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleApply()}
           className={inputClass}
-        >
-          {PROPERTY_TYPES.map(({ value, label }) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
+        />
       </div>
 
-      {/* Bedrooms */}
-      <div className="space-y-1.5">
-        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">
-          Bedrooms
-        </label>
-        <div className="flex gap-2 flex-wrap">
-          {BEDROOM_OPTIONS.map(({ value, label }) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setBedrooms(value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
-                bedrooms === value
-                  ? 'bg-primary text-on-primary'
-                  : 'bg-surface-container-low text-on-surface hover:bg-surface-container'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Price Range */}
-      <div className="space-y-1.5">
-        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">
-          Price Range (NGN)
-        </label>
-        <div className="flex gap-2">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Min Price</label>
           <input
             type="number"
             placeholder="Min"
@@ -134,6 +93,9 @@ const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps)
             className={inputClass}
             min={0}
           />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Max Price</label>
           <input
             type="number"
             placeholder="Max"
@@ -145,7 +107,75 @@ const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps)
         </div>
       </div>
 
-      {/* Actions */}
+      <div className="space-y-1.5">
+        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Property Type</label>
+        <select value={propertyType} onChange={(e) => setPropertyType(e.target.value)} className={inputClass}>
+          {PROPERTY_TYPES.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Bedrooms</label>
+        <input
+          type="number"
+          value={bedrooms}
+          onChange={(e) => setBedrooms(e.target.value)}
+          className={inputClass}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Category</label>
+        <input
+          type="text"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          placeholder="residential"
+          className={inputClass}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Completion Stage</label>
+        <input
+          type="text"
+          value={completionStage}
+          onChange={(e) => setCompletionStage(e.target.value)}
+          placeholder="finished"
+          className={inputClass}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Currency</label>
+        <input
+          type="text"
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value)}
+          placeholder="NGN"
+          className={inputClass}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Status</label>
+          <input value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass} />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Featured</label>
+          <select value={featured} onChange={(e) => setFeatured(e.target.value)} className={inputClass}>
+            <option value="">Any</option>
+            <option value="true">Featured</option>
+            <option value="false">Not Featured</option>
+          </select>
+        </div>
+      </div>
+
       <div className="flex flex-col gap-2 pt-2">
         <button
           type="button"

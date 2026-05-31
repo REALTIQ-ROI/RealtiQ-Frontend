@@ -1,6 +1,7 @@
 ﻿import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import AdminLayout from '../../../components/layout/AdminLayout';
+import MediaPreview from '../../../components/property/MediaPreview';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { resolveOwnerId } from '../../../types';
 
@@ -27,9 +28,6 @@ const AdminPropertyDetails = () => {
   }
 
   const images = property.media?.filter((m) => m.type === 'image') ?? [];
-  const mainImage = images[0]?.url;
-  const secondImage = images[1]?.url;
-  const thirdImage = images[2]?.url;
 
   const ownerInitials = property.ownerId ? resolveOwnerId(property.ownerId).slice(0, 2).toUpperCase() : 'NA';
 
@@ -89,17 +87,12 @@ const AdminPropertyDetails = () => {
             <div className="grid grid-cols-3 grid-rows-2 gap-4 h-[500px]">
               {/* Main image */}
               <div className="col-span-2 row-span-2 overflow-hidden rounded-xl bg-surface-container-low relative group">
-                {mainImage ? (
-                  <img
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    src={mainImage}
-                    alt={property.title}
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <span className="material-symbols-outlined text-6xl text-secondary/30">home_work</span>
-                  </div>
-                )}
+                <MediaPreview
+                  media={images[0]}
+                  alt={property.title}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  controls
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                 <div className="absolute bottom-6 left-6 text-white">
                   <span className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">
@@ -109,31 +102,19 @@ const AdminPropertyDetails = () => {
               </div>
               {/* Second image */}
               <div className="overflow-hidden rounded-xl bg-surface-container-low relative group">
-                {secondImage ? (
-                  <img
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    src={secondImage}
-                    alt={`${property.title} interior`}
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <span className="material-symbols-outlined text-3xl text-secondary/30">living</span>
-                  </div>
-                )}
+                <MediaPreview
+                  media={images[1]}
+                  alt={`${property.title} interior`}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
               </div>
               {/* Third image */}
               <div className="overflow-hidden rounded-xl bg-surface-container-low relative group">
-                {thirdImage ? (
-                  <img
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    src={thirdImage}
-                    alt={`${property.title} detail`}
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <span className="material-symbols-outlined text-3xl text-secondary/30">kitchen</span>
-                  </div>
-                )}
+                <MediaPreview
+                  media={images[2]}
+                  alt={`${property.title} detail`}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
               </div>
             </div>
 
@@ -215,7 +196,7 @@ const AdminPropertyDetails = () => {
             <div className="bg-primary-container p-8 rounded-xl text-white">
               <span className="text-[10px] uppercase tracking-widest opacity-60 font-bold mb-2 block">Listing Price</span>
               <h2 className="text-4xl font-extrabold tracking-tighter mb-8 font-headline">
-                ${property.price.toLocaleString()}
+                ₦{property.price.toLocaleString()}
               </h2>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white/10 p-4 rounded-lg">

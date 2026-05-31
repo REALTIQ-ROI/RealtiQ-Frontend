@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+﻿import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 import Home from '../pages/public/Home';
 import AboutAndContact from '../pages/public/AboutAndContact';
@@ -31,6 +31,9 @@ import LandlordLogin from '../pages/auth/Landlord/LandlordLogin';
 import LandlordRegistration from '../pages/auth/Landlord/LandlordRegistration';
 
 import Dashboard from '../pages/dashboard/Dashboard';
+import Tours from '../pages/dashboard/Tours';
+import Installments from '../pages/dashboard/Installments';
+import NotificationDigest from '../pages/dashboard/NotificationDigest';
 import AdminDashboard from '../pages/dashboard/Admin/AdminDashboard';
 import AdminPropertyDetails from '../pages/dashboard/Admin/AdminPropertyDetails';
 import AdminInquiryDetails from '../pages/dashboard/Admin/AdminInquiryDetails';
@@ -59,7 +62,15 @@ import LandlordInquiryDetails from '../pages/dashboard/Landlord/LandlordInquiryD
 import LandlordMyProperties from '../pages/dashboard/Landlord/LandlordMyProperties';
 import LandlordPaymentHistory from '../pages/dashboard/Landlord/LandlordPaymentHistory';
 import LandlordPropertyDetails from '../pages/dashboard/Landlord/LandlordPropertyDetails';
+import LandlordSettings from '../pages/dashboard/Landlord/LandlordSettings';
+import LandlordVerification from '../pages/dashboard/Landlord/LandlordVerification';
 import ProtectedRoute from './ProtectedRoute';
+import ROICalculatorPage from '../pages/dashboard/ROI/ROICalculatorPage';
+import PropertyROICalculatorPage from '../pages/dashboard/ROI/PropertyROICalculatorPage';
+import MyROIScenarios from '../pages/dashboard/ROI/MyROIScenarios';
+import ROIAssumptions from '../pages/dashboard/Admin/ROIAssumptions';
+import AdminSettings from '../pages/dashboard/Admin/AdminSettings';
+import KycManagement from '../pages/dashboard/Admin/KycManagement';
 
 const AppRoutes = () => {
   return (
@@ -68,7 +79,6 @@ const AppRoutes = () => {
         <Route path="/" element={<Home />} />
 
         <Route path="/properties" element={<Listings />} />
-        <Route path="/properties/:id" element={<PropertyDetails />} />
 
         <Route path="/about-contact" element={<AboutAndContact />} />
         <Route path="/about" element={<About />} />
@@ -83,6 +93,8 @@ const AppRoutes = () => {
         <Route path="/payment-success" element={<PaymentSucess />} />
         <Route path="/post-payment-redirect" element={<PostPaymentRedirect />} />
         <Route path="/redirecting" element={<Redirecting />} />
+
+        <Route path="/tools/roi-calculator" element={<ROICalculatorPage />} />
 
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -104,6 +116,9 @@ const AppRoutes = () => {
         <Route path="/auth/landlord/login" element={<LandlordLogin />} />
         <Route path="/auth/landlord/register" element={<LandlordRegistration />} />
 
+        <Route path="/properties/:id" element={<PropertyDetails />} />
+        <Route path="/properties/:propertyId/roi" element={<PropertyROICalculatorPage />} />
+
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<Dashboard />} />
         </Route>
@@ -111,6 +126,9 @@ const AppRoutes = () => {
         <Route element={<ProtectedRoute allowedRoles={['buyer']} />}>
           <Route path="/dashboard/buyer" element={<BuyerDashboard />} />
           <Route path="/dashboard/buyer/my-properties" element={<MyProperties />} />
+          <Route path="/dashboard/buyer/tours" element={<Tours />} />
+          <Route path="/dashboard/buyer/installments" element={<Installments />} />
+          <Route path="/dashboard/buyer/installments/:id" element={<Installments />} />
           <Route path="/dashboard/buyer/property-details" element={<BuyerPropertyDetails />} />
           <Route path="/dashboard/buyer/property-details/:id" element={<BuyerPropertyDetails />} />
           <Route path="/dashboard/buyer/payment-history" element={<PaymentHistory />} />
@@ -120,11 +138,14 @@ const AppRoutes = () => {
           <Route path="/dashboard/buyer/inquiry-details" element={<InquiryDetails />} />
           <Route path="/dashboard/buyer/inquiry-details/:id" element={<InquiryDetails />} />
           <Route path="/dashboard/buyer/profile-settings" element={<ProfileSettings />} />
+          <Route path="/dashboard/roi-scenarios" element={<MyROIScenarios />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['landlord']} />}>
           <Route path="/dashboard/landlord" element={<LandlordDashboard />} />
           <Route path="/dashboard/landlord/my-properties" element={<LandlordMyProperties />} />
+          <Route path="/dashboard/landlord/tours" element={<Tours />} />
+          <Route path="/dashboard/landlord/installments" element={<Installments />} />
           <Route path="/dashboard/landlord/property-details" element={<LandlordPropertyDetails />} />
           <Route path="/dashboard/landlord/property-details/:id" element={<LandlordPropertyDetails />} />
           <Route path="/dashboard/landlord/payment-history" element={<LandlordPaymentHistory />} />
@@ -132,12 +153,19 @@ const AppRoutes = () => {
           <Route path="/dashboard/landlord/inquiry-details" element={<LandlordInquiryDetails />} />
           <Route path="/dashboard/landlord/inquiry-details/:id" element={<LandlordInquiryDetails />} />
           <Route path="/dashboard/landlord/add-property" element={<AddProperty />} />
+          <Route path="/properties/create" element={<AddProperty />} />
           <Route path="/dashboard/landlord/edit-property" element={<Editproperty />} />
           <Route path="/dashboard/landlord/edit-property/:id" element={<Editproperty />} />
+          <Route path="/dashboard/landlord/settings" element={<LandlordSettings />} />
+          <Route path="/dashboard/landlord/settings/verification" element={<LandlordVerification />} />
+          <Route path="/settings/verification" element={<LandlordVerification />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route path="/dashboard/admin" element={<AdminDashboard />} />
+          <Route path="/dashboard/admin/tours" element={<Tours />} />
+          <Route path="/dashboard/admin/installments" element={<Installments />} />
+          <Route path="/dashboard/admin/notifications/digest" element={<NotificationDigest />} />
           <Route path="/dashboard/admin/manage-users" element={<ManageUsers />} />
           <Route path="/dashboard/admin/users/:id" element={<UserDetails />} />
           <Route path="/dashboard/admin/manage-properties" element={<ManageProperties />} />
@@ -150,7 +178,11 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/manage-landlords" element={<ManageLandlords />} />
           <Route path="/dashboard/admin/landlord-details" element={<LandlordDetails />} />
           <Route path="/dashboard/admin/landlord-details/:id" element={<LandlordDetails />} />
+          <Route path="/dashboard/admin/kyc" element={<KycManagement />} />
+          <Route path="/admin/kyc" element={<KycManagement />} />
           <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />
+          <Route path="/dashboard/admin/roi-assumptions" element={<ROIAssumptions />} />
+          <Route path="/dashboard/admin/settings" element={<AdminSettings />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

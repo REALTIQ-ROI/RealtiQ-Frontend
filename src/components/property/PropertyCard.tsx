@@ -8,19 +8,39 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-const PropertyCard = ({ property }: { property: Property }) => {
-  const coverUrl = property.media[0]?.url;
+const PropertyCard = ({
+  property,
+  showSaveAction = false,
+  onSave,
+}: {
+  property: Property;
+  showSaveAction?: boolean;
+  onSave?: (property: Property) => void;
+}) => {
+  const cover = property.media[0];
+  const coverUrl = cover?.url;
+  const isVideo = cover?.type === 'video';
 
   return (
     <article className="group bg-surface-container-lowest rounded-xl overflow-hidden border border-outline-variant/10 hover:shadow-lg transition-shadow duration-300">
       {/* Image */}
       <div className="aspect-[4/3] overflow-hidden bg-surface-container-low relative">
         {coverUrl ? (
-          <img
-            src={coverUrl}
-            alt={property.title}
-            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-          />
+          isVideo ? (
+            <video
+              src={coverUrl}
+              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+              muted
+              playsInline
+              preload="metadata"
+            />
+          ) : (
+            <img
+              src={coverUrl}
+              alt={property.title}
+              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+            />
+          )
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <span className="material-symbols-outlined text-4xl text-on-surface-variant/30">
@@ -46,7 +66,22 @@ const PropertyCard = ({ property }: { property: Property }) => {
           >
             {property.status}
           </span>
+          {property.currency ? (
+            <span className="px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wide shadow bg-surface-container-lowest text-on-surface">
+              {property.currency}
+            </span>
+          ) : null}
         </div>
+        {showSaveAction && onSave ? (
+          <button
+            type="button"
+            onClick={() => onSave(property)}
+            className="absolute top-3 right-3 z-10 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/55 text-white text-[10px] font-black uppercase tracking-wide backdrop-blur-sm hover:bg-black/70 transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">bookmark_add</span>
+            Save
+          </button>
+        ) : null}
       </div>
 
       {/* Body */}
@@ -72,6 +107,24 @@ const PropertyCard = ({ property }: { property: Property }) => {
           </span>
         </div>
 
+        <div className="flex flex-wrap gap-2">
+          {property.featured ? (
+            <span className="px-2 py-1 rounded-full bg-amber-400/15 text-amber-700 text-[10px] font-black uppercase tracking-wide">
+              Featured
+            </span>
+          ) : null}
+          {property.category ? (
+            <span className="px-2 py-1 rounded-full bg-surface-container-low text-on-surface text-[10px] font-black uppercase tracking-wide">
+              {property.category}
+            </span>
+          ) : null}
+          {property.completionStage ? (
+            <span className="px-2 py-1 rounded-full bg-surface-container-low text-on-surface text-[10px] font-black uppercase tracking-wide">
+              {property.completionStage}
+            </span>
+          ) : null}
+        </div>
+
         <div className="flex items-center gap-3 text-xs text-on-surface-variant pt-3 border-t border-outline-variant/20">
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-xs">bed</span>
@@ -85,12 +138,13 @@ const PropertyCard = ({ property }: { property: Property }) => {
             <span className="material-symbols-outlined text-xs">square_foot</span>
             {property.squareFeet.toLocaleString()} sqft
           </span>
+          <span className="flex items-center gap-1">
+            <span className="material-symbols-outlined text-xs">visibility</span>
+            {property.views ?? 0}
+          </span>
         </div>
 
-        <Link
-          to={`/properties/${property._id}`}
-          className="inline-flex items-center gap-1 text-primary font-bold text-sm hover:underline underline-offset-4"
-        >
+        <Link to={`/properties/${property._id}`} className="inline-flex items-center gap-1 text-primary font-bold text-sm hover:underline underline-offset-4">
           View details
           <span className="material-symbols-outlined text-base">arrow_forward</span>
         </Link>
