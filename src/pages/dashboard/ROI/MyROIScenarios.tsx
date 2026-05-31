@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import DashboardLayout from '../../../components/layout/DashboardLayout';
+import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import ScenarioList from '../../../components/roi/ScenarioList';
@@ -35,7 +35,11 @@ const MyROIScenarios = () => {
   }, [data, query, sort]);
 
   return (
-    <DashboardLayout>
+    <BuyerPortalLayout
+      pageEyebrow="Investment Analysis"
+      pageTitle="My ROI Scenarios"
+      pageSubtitle="Saved ROI calculations across your properties."
+    >
       <section className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div>
@@ -77,7 +81,7 @@ const MyROIScenarios = () => {
 
         <ScenarioList scenarios={scenarios} loading={loading} showProperty />
       </section>
-    </DashboardLayout>
+    </BuyerPortalLayout>
   );
 };
 
