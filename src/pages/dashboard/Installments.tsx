@@ -328,7 +328,7 @@ const Installments = () => {
     const summary = getInstallmentSummary(installment);
     return (
       summary.completed ||
-      installment.totalAmount <= summary.amountPaid
+      installment.totalAmount <= summary.paidAmount
     );
   };
 
