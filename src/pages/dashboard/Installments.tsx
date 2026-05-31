@@ -124,8 +124,8 @@ const Installments = () => {
   const { data, loading, error, execute } = useAsync(() => installmentService.getInstallments(), true);
   const {
     data: selectedInstallment,
-    loading: selectedLoading,
-    error: selectedError,
+    // loading: selectedLoading,
+    // error: selectedError,
     execute: refreshSelected,
   } = useAsync(() => installmentService.getInstallmentById(id ?? ''), Boolean(id));
   const {

@@ -1,4 +1,4 @@
-import type { Installment, InstallmentSchedule, Property } from '../types';
+import type { Installment, InstallmentSchedule, Property, TourPropertySummary } from '../types';
 
 export const installmentCounts = {
   monthly: 12,
@@ -26,12 +26,14 @@ export const calculateInstallmentAmount = (propertyPrice: number, frequency?: st
   return Math.round(propertyPrice / count);
 };
 
-export const getInstallmentProperty = (installment: Installment): Property | string | null =>
+type InstallmentPropertyRef = Property | TourPropertySummary | string | null;
+
+export const getInstallmentProperty = (installment: Installment): InstallmentPropertyRef =>
   installment.property ?? installment.propertyId ?? null;
 
 export const resolveInstallmentProperty = (installment: Installment): Property | null => {
   const property = getInstallmentProperty(installment);
-  return property && typeof property !== 'string' ? property : null;
+  return property && typeof property !== 'string' && 'price' in property ? property : null;
 };
 
 export const resolveInstallmentPropertyId = (installment: Installment): string => {
