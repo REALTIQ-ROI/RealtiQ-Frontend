@@ -117,7 +117,7 @@ const PropertyDetails = () => {
   const installmentProperty = propertyInstallment ? resolveInstallmentProperty(propertyInstallment) : null;
   const hasActiveInstallment = Boolean(propertyInstallment && installmentSummary && !installmentSummary.completed);
   const hasInstallmentHistory = Boolean(propertyInstallment);
-  const installmentOnly = requiresInstallments(property.price);
+  const installmentOnly = property ? requiresInstallments(property.price) : false;
 
   const handleSaveProperty = async () => {
     if (!property?._id) return;
