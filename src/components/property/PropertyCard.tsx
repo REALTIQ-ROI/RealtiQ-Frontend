@@ -17,7 +17,7 @@ const PropertyCard = ({
   showSaveAction?: boolean;
   onSave?: (property: Property) => void;
 }) => {
-  const cover = property.media[0];
+  const cover = property.media?.[0];
   const coverUrl = cover?.url;
   const isVideo = cover?.type === 'video';
 

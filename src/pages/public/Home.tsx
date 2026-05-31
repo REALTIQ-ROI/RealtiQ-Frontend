@@ -9,6 +9,7 @@ import ErrorState from '../../components/ui/ErrorState';
 
 const Home = () => {
   const { properties, loading, error, refreshProperties } = useProperties();
+  const featuredProperty = properties[0] ?? null;
 
   return (
     <PublicLayout>
@@ -35,8 +36,8 @@ const Home = () => {
           <div className="lg:col-span-5 relative">
             <div className="aspect-[4/5] rounded-xl overflow-hidden shadow-2xl">
               <MediaPreview
-                media={properties[0]?.media[0]}
-                alt={properties[0]?.title ?? 'featured property'}
+                media={featuredProperty?.media?.[0]}
+                alt={featuredProperty?.title ?? 'featured property'}
                 className="w-full h-full object-cover"
                 controls
               />
