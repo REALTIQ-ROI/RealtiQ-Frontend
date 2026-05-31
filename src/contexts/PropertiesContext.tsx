@@ -27,11 +27,12 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
     try {
       const res = await propertyService.getProperties({ limit: limitOverride });
-      setProperties(Array.isArray((res as { properties?: Property[] } | Property[]).properties)
-        ? (res as { properties?: Property[] }).properties ?? []
-        : Array.isArray(res)
-          ? res
-          : []);
+      const nextProperties = Array.isArray(res)
+        ? res
+        : 'properties' in res && Array.isArray(res.properties)
+          ? res.properties
+          : [];
+      setProperties(nextProperties);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch properties.';
       setError(message);
