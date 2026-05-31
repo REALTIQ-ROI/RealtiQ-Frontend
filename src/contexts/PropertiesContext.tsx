@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { propertyService, type CreatePropertyPayload } from '../services/propertyService';
 import { paymentService } from '../services/paymentService';
 import type { Property } from '../types';
+import { requiresInstallments } from '../utils/installment';
 
 interface PropertiesContextValue {
   properties: Property[];
@@ -65,6 +66,11 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
   const buyProperty = async (propertyId: string): Promise<void> => {
     if (!propertyId) {
       throw new Error('Missing property ID.');
+    }
+
+    const property = await propertyService.getPropertyById(propertyId);
+    if (requiresInstallments(property.price)) {
+      throw new Error('This property is available through installments only.');
     }
 
     try {

@@ -9,6 +9,7 @@ import {
 } from '../services/propertyService';
 import { paymentService } from '../services/paymentService';
 import type { Property } from '../types';
+import { requiresInstallments } from '../utils/installment';
 
 interface UsePropertiesOptions {
   autoFetch?: boolean;
@@ -162,6 +163,12 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
     if (!result.isConfirmed) return;
 
     try {
+      const property = await propertyService.getPropertyById(id);
+      if (requiresInstallments(property.price)) {
+        toast.error('This property is available through installments only.');
+        return;
+      }
+
       const checkout = await propertyService.buyProperty(id);
       paymentService.redirectToCheckout(checkout, id);
     } catch {

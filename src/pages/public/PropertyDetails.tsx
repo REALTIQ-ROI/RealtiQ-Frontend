@@ -24,6 +24,7 @@ import {
   isInstallmentActive,
   resolveInstallmentPropertyId,
   resolveInstallmentProperty,
+  requiresInstallments,
 } from '../../utils/installment';
 
 const formatCurrency = (value: number, currency = 'NGN') =>
@@ -116,6 +117,7 @@ const PropertyDetails = () => {
   const installmentProperty = propertyInstallment ? resolveInstallmentProperty(propertyInstallment) : null;
   const hasActiveInstallment = Boolean(propertyInstallment && installmentSummary && !installmentSummary.completed);
   const hasInstallmentHistory = Boolean(propertyInstallment);
+  const installmentOnly = requiresInstallments(property.price);
 
   const handleSaveProperty = async () => {
     if (!property?._id) return;
@@ -155,6 +157,12 @@ const PropertyDetails = () => {
 
     if (user.role !== 'buyer') {
       toast.error('Only buyers can purchase properties.');
+      return;
+    }
+
+    if (installmentOnly) {
+      toast.error('This property is available through installments only.');
+      await handleCreateInstallment();
       return;
     }
 
@@ -514,7 +522,13 @@ const PropertyDetails = () => {
                     This property has already been purchased in full. Installment creation is unavailable.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                  <div className="space-y-4">
+                    {installmentOnly ? (
+                      <div className="rounded-xl border border-amber-400/30 bg-amber-50 p-4 text-sm text-amber-900">
+                        This property exceeds the one-time payment limit. Installment plans are required.
+                      </div>
+                    ) : null}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">
                         Frequency
@@ -558,6 +572,7 @@ const PropertyDetails = () => {
                       </Button>
                     </div>
                   </div>
+                  </div>
                 )}
               </Card>
             </div>
@@ -583,13 +598,21 @@ const PropertyDetails = () => {
                 <Button fullWidth disabled>
                   Installment Plan Completed
                 </Button>
+              ) : installmentOnly ? (
+                <Button fullWidth onClick={() => void handleCreateInstallment()} disabled={creatingInstallment}>
+                  {creatingInstallment ? 'Creating...' : 'Create Installment Plan'}
+                </Button>
               ) : (
                 <Button
                   fullWidth
                   disabled={property.status === 'sold' || installmentLoading}
                   onClick={() => void handleBuyProperty()}
                 >
-                  {installmentLoading ? 'Checking installment status...' : property.status === 'sold' ? 'Already Sold' : 'Buy Property'}
+                  {installmentLoading
+                    ? 'Checking installment status...'
+                    : property.status === 'sold'
+                      ? 'Already Sold'
+                      : 'Buy Property'}
                 </Button>
               )}
               <Button

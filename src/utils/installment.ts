@@ -1,5 +1,7 @@
 import type { Installment, InstallmentSchedule, Property, TourPropertySummary } from '../types';
 
+export const INSTALLMENT_ONLY_THRESHOLD = 50_000_000;
+
 export const installmentCounts = {
   monthly: 12,
   quarterly: 4,
@@ -25,6 +27,8 @@ export const calculateInstallmentAmount = (propertyPrice: number, frequency?: st
   if (propertyPrice <= 0 || count <= 0) return 0;
   return Math.round(propertyPrice / count);
 };
+
+export const requiresInstallments = (propertyPrice: number): boolean => propertyPrice > INSTALLMENT_ONLY_THRESHOLD;
 
 type InstallmentPropertyRef = Property | TourPropertySummary | string | null;
 
