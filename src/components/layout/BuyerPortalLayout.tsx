@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
@@ -31,10 +31,12 @@ const BuyerPortalLayout = ({
 }: BuyerPortalLayoutProps) => {
   const { user, logout } = useAuth();
   const hasScrolled = useHasScrolled(8);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div className="bg-surface text-on-background antialiased min-h-screen">
-      <aside className="relative lg:fixed left-0 top-0 h-auto lg:h-screen w-full lg:w-64 z-50 bg-white dark:bg-slate-950 flex flex-col p-6 gap-y-2 shadow-2xl shadow-slate-200/50 dark:shadow-none overflow-y-auto overscroll-contain">
+      {menuOpen ? <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMenuOpen(false)} /> : null}
+      <aside className={`fixed left-0 top-0 h-screen w-64 z-50 bg-white dark:bg-slate-950 flex flex-col p-6 gap-y-2 shadow-2xl shadow-slate-200/50 dark:shadow-none overflow-y-auto overscroll-contain transition-transform lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="mb-8">
           <h1 className="text-2xl font-black text-slate-900 dark:text-white leading-none">Curator</h1>
           <p className="text-xs tracking-widest font-semibold text-slate-500 uppercase mt-1">Premium Real Estate</p>
@@ -51,6 +53,7 @@ const BuyerPortalLayout = ({
                 }`
               }
               to={item.to}
+              onClick={() => setMenuOpen(false)}
             >
               <span className="material-symbols-outlined">{item.icon}</span>
               <span>{item.label}</span>
@@ -73,18 +76,19 @@ const BuyerPortalLayout = ({
       </aside>
 
       <header
-        className={`relative lg:fixed top-0 left-0 lg:left-64 right-0 w-full lg:w-[calc(100%-16rem)] z-40 backdrop-blur-xl flex flex-wrap gap-4 justify-between items-center px-4 sm:px-6 lg:px-8 h-auto lg:h-16 py-3 lg:py-0 transition-all duration-200 ${
+        className={`fixed top-0 left-0 lg:left-64 right-0 w-full lg:w-[calc(100%-16rem)] z-40 backdrop-blur-xl flex gap-3 justify-between items-center px-3 sm:px-6 lg:px-8 min-h-16 py-3 lg:py-0 transition-all duration-200 ${
           hasScrolled ? 'bg-slate-50/95 border-b border-slate-200/70 shadow-lg shadow-slate-200/30' : 'bg-slate-50/75 border-b border-transparent'
         }`}
       >
-        <div className="flex items-center gap-4 flex-1">
-          <div>
-            <span className="text-xl font-bold tracking-tighter text-slate-900 font-headline">Architectural Curator</span>
+        <div className="flex min-w-0 items-center gap-3 flex-1">
+          <button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-container-low lg:hidden" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><span className="material-symbols-outlined">menu</span></button>
+          <div className="min-w-0">
+            <span className="block truncate text-base font-bold tracking-tighter text-slate-900 font-headline sm:text-xl">Architectural Curator</span>
             <div className="text-[10px] uppercase tracking-[0.2em] text-secondary font-bold mt-1">{pageEyebrow}</div>
           </div>
         </div>
-        <div className="flex items-center gap-4 sm:gap-6 flex-wrap justify-end">
-          {topbarRight}
+        <div className="flex items-center gap-3 sm:gap-6 justify-end">
+          <div className="hidden md:block">{topbarRight}</div>
           <div className="flex gap-3">
             <Link to="/dashboard/buyer/payment-history" className="text-slate-500 hover:text-slate-900 transition-colors relative" aria-label="Payment history">
               <span className="material-symbols-outlined">notifications</span>
@@ -94,22 +98,22 @@ const BuyerPortalLayout = ({
               <span className="material-symbols-outlined">mail</span>
             </Link>
           </div>
-          <div className="h-8 w-px bg-slate-200" />
+          <div className="hidden h-8 w-px bg-slate-200 sm:block" />
           <div className="flex items-center gap-3 cursor-pointer">
             <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary text-sm">
               {user?.name?.charAt(0) ?? 'U'}
             </div>
-            <span className="text-sm font-bold text-slate-900">{user?.name ?? 'Buyer'}</span>
+            <span className="hidden text-sm font-bold text-slate-900 sm:block">{user?.name ?? 'Buyer'}</span>
           </div>
         </div>
       </header>
 
-      <main className="lg:ml-64 pt-8 lg:pt-24 pb-12 px-4 sm:px-6 lg:px-12 min-h-screen">
-        <div className="max-w-6xl mx-auto">
-          <section className="mb-12">
+      <main className="lg:ml-64 pt-24 pb-12 px-4 sm:px-6 lg:px-12 min-h-screen">
+        <div className="max-w-screen-2xl mx-auto">
+          <section className="mb-8 sm:mb-12">
             <div className="flex flex-col gap-1">
               <span className="text-secondary font-bold tracking-widest text-[0.65rem] uppercase">{pageEyebrow}</span>
-              <h2 className="text-4xl font-extrabold text-primary tracking-tight">{pageTitle}</h2>
+              <h2 className="text-3xl font-extrabold text-primary tracking-tight sm:text-4xl">{pageTitle}</h2>
             </div>
             {pageSubtitle ? <p className="text-on-surface-variant max-w-2xl mt-3 text-sm leading-relaxed">{pageSubtitle}</p> : null}
           </section>

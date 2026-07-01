@@ -34,8 +34,8 @@ const Footer = () => {
   };
 
   return (
-    <footer className="w-full py-16 px-8 mt-20 bg-slate-900 text-slate-100">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-12 max-w-7xl mx-auto">
+    <footer className="mt-12 w-full bg-slate-900 px-4 py-10 text-slate-100 sm:mt-20 sm:px-8 sm:py-16">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 sm:grid-cols-2 md:grid-cols-4 md:gap-12">
         <div>
           <div className="font-manrope font-black text-2xl mb-4">RealtiQ</div>
           <p className="text-slate-400 text-sm leading-relaxed">
@@ -61,7 +61,7 @@ const Footer = () => {
         <div className="space-y-3 text-sm text-slate-400">
           <h4 className="text-slate-50 uppercase tracking-wide text-xs font-bold">Newsletter</h4>
           <p>Join our list for exclusive off-market opportunities.</p>
-          <form className="flex gap-2 mt-2" onSubmit={(event) => void onSubmit(event)}>
+          <form className="mt-2 flex flex-col gap-2 sm:flex-row" onSubmit={(event) => void onSubmit(event)}>
             <input
               type="email"
               value={email}
@@ -90,7 +90,7 @@ const Footer = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto mt-12 pt-6 border-t border-slate-800 flex justify-between items-center text-xs uppercase tracking-wide">
+      <div className="mx-auto mt-10 flex max-w-7xl flex-col items-start justify-between gap-3 border-t border-slate-800 pt-6 text-xs uppercase tracking-wide sm:flex-row sm:items-center">
         <p className="text-slate-400">© 2026 RealtiQ. All rights reserved.</p>
         <p className="text-slate-200 font-bold">Design of Excellence</p>
       </div>

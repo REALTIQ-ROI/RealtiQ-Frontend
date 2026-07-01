@@ -33,7 +33,7 @@ const AdminPropertyDetails = () => {
 
   return (
     <AdminLayout>
-      <div className="pt-8 pb-20 px-12 min-h-screen">
+      <div className="min-h-screen px-4 pb-12 pt-6 sm:px-8 lg:px-12 lg:pb-20 lg:pt-8">
         {/* Header Actions */}
         <div className="flex items-start justify-between mb-12">
           <div>
@@ -84,9 +84,9 @@ const AdminPropertyDetails = () => {
           {/* Gallery & Description – Left */}
           <div className="col-span-12 lg:col-span-8 space-y-8">
             {/* Gallery */}
-            <div className="grid grid-cols-3 grid-rows-2 gap-4 h-[500px]">
+            <div className="grid h-[300px] grid-cols-1 gap-4 sm:h-[420px] sm:grid-cols-3 sm:grid-rows-2 lg:h-[500px]">
               {/* Main image */}
-              <div className="col-span-2 row-span-2 overflow-hidden rounded-xl bg-surface-container-low relative group">
+              <div className="overflow-hidden rounded-xl bg-surface-container-low relative group sm:col-span-2 sm:row-span-2">
                 <MediaPreview
                   media={images[0]}
                   alt={property.title}
@@ -101,7 +101,7 @@ const AdminPropertyDetails = () => {
                 </div>
               </div>
               {/* Second image */}
-              <div className="overflow-hidden rounded-xl bg-surface-container-low relative group">
+              <div className="hidden overflow-hidden rounded-xl bg-surface-container-low relative group sm:block">
                 <MediaPreview
                   media={images[1]}
                   alt={`${property.title} interior`}
@@ -109,7 +109,7 @@ const AdminPropertyDetails = () => {
                 />
               </div>
               {/* Third image */}
-              <div className="overflow-hidden rounded-xl bg-surface-container-low relative group">
+              <div className="hidden overflow-hidden rounded-xl bg-surface-container-low relative group sm:block">
                 <MediaPreview
                   media={images[2]}
                   alt={`${property.title} detail`}
@@ -124,7 +124,7 @@ const AdminPropertyDetails = () => {
               <p className="text-secondary leading-relaxed mb-6 text-sm">
                 {property.description || 'No description provided for this listing.'}
               </p>
-              <div className="grid grid-cols-4 gap-6 pt-6 border-t border-surface-container-high/50">
+              <div className="grid grid-cols-2 gap-4 border-t border-surface-container-high/50 pt-6 sm:grid-cols-4 sm:gap-6">
                 <div>
                   <span className="block text-[10px] uppercase tracking-widest text-secondary font-bold mb-1">Status</span>
                   <span

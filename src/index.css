@@ -4,6 +4,8 @@
 
 body {
   margin: 0;
+  min-width: 320px;
+  overflow-x: hidden;
   font-family: 'Inter', sans-serif;
   background: #f7f9fb;
   color: #191c1e;
@@ -23,3 +25,21 @@ a {
 .realtiq-map-marker span { display: block; position: relative; width: max-content; min-width: 64px; transform: translateX(-50%); border-radius: 999px; background: var(--color-primary, #173d32); color: white; padding: 7px 10px; text-align: center; font-size: 11px; font-weight: 800; box-shadow: 0 4px 12px rgb(0 0 0 / .25); }
 .realtiq-map-marker span::after { content: ''; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--color-primary, #173d32); border-bottom: 0; }
 .leaflet-container { font-family: inherit; z-index: 0; }
+
+img, video, canvas, svg {
+  max-width: 100%;
+}
+
+input, select, textarea, button {
+  max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  .px-8, .px-10, .px-12 { padding-left: 1rem !important; padding-right: 1rem !important; }
+  .py-16, .py-20 { padding-top: 2.5rem !important; padding-bottom: 2.5rem !important; }
+  .text-4xl { font-size: 1.875rem !important; line-height: 2.25rem !important; }
+  .text-5xl, .text-6xl, .text-7xl { font-size: 2.25rem !important; line-height: 2.5rem !important; }
+  table { display: block; width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+  th, td { white-space: nowrap; }
+  .leaflet-control-attribution { max-width: 75vw; font-size: 8px; }
+}

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
@@ -27,6 +27,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const hasScrolled = useHasScrolled(8);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -43,7 +44,8 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   return (
     <div className="antialiased text-on-surface">
       {/* Fixed Sidebar */}
-      <aside className="h-screen w-64 fixed left-0 top-0 bg-slate-50 flex flex-col p-4 z-50 overflow-y-auto overscroll-contain">
+      {menuOpen ? <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMenuOpen(false)} /> : null}
+      <aside className={`h-screen w-64 fixed left-0 top-0 bg-slate-50 flex flex-col p-4 z-50 overflow-y-auto overscroll-contain transition-transform lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="mb-10 px-4">
           <h1 className="text-2xl font-bold tracking-tighter text-slate-900 font-headline">RealtiQ</h1>
           <p className="text-xs text-secondary font-medium uppercase tracking-widest mt-1">Admin Console</p>
@@ -54,6 +56,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             <NavLink
               key={link.to}
               to={link.to}
+              onClick={() => setMenuOpen(false)}
               end={link.end}
               className={({ isActive }) =>
                 isActive
@@ -94,11 +97,12 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
       {/* Fixed Top Nav */}
       <header
-        className={`fixed top-0 right-0 left-64 w-[calc(100%-16rem)] min-h-16 z-40 backdrop-blur-xl flex flex-wrap gap-4 items-center justify-between px-4 sm:px-6 lg:px-8 py-3 transition-all duration-200 ${
+        className={`fixed top-0 right-0 left-0 lg:left-64 w-full lg:w-[calc(100%-16rem)] min-h-16 z-40 backdrop-blur-xl flex gap-3 items-center justify-between px-3 sm:px-6 lg:px-8 py-3 transition-all duration-200 ${
           hasScrolled ? 'bg-white/95 border-b border-slate-100 shadow-lg shadow-slate-200/40' : 'bg-white/75 border-b border-transparent'
         }`}
       >
-        <div className="flex items-center flex-1 max-w-xl min-w-0">
+        <button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-container-low lg:hidden" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><span className="material-symbols-outlined">menu</span></button>
+        <div className="hidden sm:flex items-center flex-1 max-w-xl min-w-0">
           <div className="relative w-full">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
             <input
@@ -109,8 +113,8 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-4 sm:gap-6 text-sm font-medium flex-wrap justify-end">
-          <button className="text-primary font-bold hover:underline" onClick={() => void navigate('/contact')}>
+        <div className="flex items-center gap-3 sm:gap-6 text-sm font-medium justify-end">
+          <button className="hidden text-primary font-bold hover:underline sm:block" onClick={() => void navigate('/contact')}>
             Support
           </button>
           <div className="flex items-center gap-3 text-slate-500">
@@ -121,8 +125,8 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
               <span className="material-symbols-outlined">help_outline</span>
             </Link>
           </div>
-          <div className="flex items-center gap-3 border-l border-slate-200 pl-6">
-            <div className="text-right">
+          <div className="flex items-center gap-3 border-l border-slate-200 pl-3 sm:pl-6">
+            <div className="hidden text-right sm:block">
               <p className="text-xs font-bold text-on-surface">{user?.name ?? 'Admin'}</p>
               <p className="text-[10px] text-secondary">Super Admin</p>
             </div>
@@ -134,7 +138,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       </header>
 
       {/* Main Content */}
-      <main className="ml-64 pt-16 min-h-screen bg-surface">
+      <main className="pt-16 min-h-screen bg-surface lg:ml-64">
         {children}
       </main>
     </div>

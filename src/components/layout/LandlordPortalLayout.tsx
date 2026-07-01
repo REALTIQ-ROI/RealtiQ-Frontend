@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
@@ -39,10 +39,12 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
 const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: LandlordPortalLayoutProps) => {
   const { logout } = useAuth();
   const hasScrolled = useHasScrolled(8);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div className="bg-surface text-on-surface min-h-screen">
-      <aside className="h-screen w-64 fixed left-0 top-0 flex flex-col bg-slate-50 border-r border-slate-200 z-50 overflow-y-auto overscroll-contain">
+      {menuOpen ? <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMenuOpen(false)} /> : null}
+      <aside className={`h-screen w-64 fixed left-0 top-0 flex flex-col bg-slate-50 border-r border-slate-200 z-50 overflow-y-auto overscroll-contain transition-transform lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6">
           <h1 className="text-xl font-black text-slate-900 tracking-tight">RealtiQ</h1>
           <p className="text-xs text-secondary font-medium uppercase tracking-widest mt-1">Landlord Portal</p>
@@ -53,6 +55,7 @@ const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: La
             <Link
               key={item.key}
               to={item.to}
+              onClick={() => setMenuOpen(false)}
               className={
                 item.key === active
                   ? 'bg-white text-slate-900 font-bold rounded-lg shadow-sm px-4 py-3 flex items-center gap-3'
@@ -83,13 +86,13 @@ const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: La
         </div>
       </aside>
 
-      <main className="ml-64 min-h-screen">
+      <main className="min-h-screen lg:ml-64">
         <header
           className={`w-full sticky top-0 z-40 backdrop-blur-xl flex flex-wrap gap-4 justify-between items-center px-4 sm:px-6 lg:px-8 h-auto min-h-16 py-3 transition-all duration-200 ${
             hasScrolled ? 'bg-white/95 border-b border-slate-200 shadow-lg shadow-slate-200/30' : 'bg-white/75 border-b border-transparent shadow-none'
           }`}
         >
-          <div className="flex items-center gap-4">{topLeft ?? <h2 className="text-xl font-bold tracking-tight text-slate-900">{title}</h2>}</div>
+          <div className="flex min-w-0 items-center gap-3"><button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-container-low lg:hidden" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><span className="material-symbols-outlined">menu</span></button>{topLeft ?? <h2 className="truncate text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{title}</h2>}</div>
           <div className="flex items-center gap-4 sm:gap-6 flex-wrap justify-end">
             {topRight ?? (
               <>

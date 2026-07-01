@@ -134,7 +134,7 @@ const LandlordPropertyDetails = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-6 mb-12">
+            <div className="mb-12 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
               <div className="bg-surface-container-low p-6 rounded-xl">
                 <span className="material-symbols-outlined text-slate-400 mb-2">bed</span>
                 <p className="text-slate-900 font-bold">{property?.bedrooms ?? 0} Bedrooms</p>

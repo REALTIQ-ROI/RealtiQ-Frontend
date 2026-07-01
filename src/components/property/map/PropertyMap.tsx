@@ -81,7 +81,7 @@ const PropertyMap = ({ properties, detailsPath, actions, className = '' }: Props
   }, [mappable]);
 
   return (
-    <section className={`relative min-h-[420px] overflow-hidden rounded-xl bg-surface-container-low ${className}`} aria-label="Property map">
+    <section className={`relative min-h-[55vh] overflow-hidden rounded-xl bg-surface-container-low sm:min-h-[420px] ${className}`} aria-label="Property map">
       <div ref={containerRef} className="absolute inset-0" />
       {mappable.length === 0 && !mapError ? (
         <div className="absolute inset-0 z-[500] flex items-center justify-center bg-surface-container-low/90 p-8 text-center">

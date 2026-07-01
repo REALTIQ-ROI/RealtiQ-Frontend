@@ -40,7 +40,7 @@ const PropertyGallery = ({ property }: { property: Property }) => {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-12 gap-3 h-[400px] md:h-[560px]">
+      <div className="grid h-[280px] grid-cols-12 gap-3 sm:h-[400px] md:h-[560px]">
         <div
           role="button"
           tabIndex={0}
