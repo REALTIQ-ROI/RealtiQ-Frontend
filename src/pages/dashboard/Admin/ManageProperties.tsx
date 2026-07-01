@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
+import MapListLayout from '../../../components/property/map/MapListLayout';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import type { Property } from '../../../types';
 import { resolveOwnerId } from '../../../types';
@@ -31,12 +32,15 @@ const ManageProperties = () => {
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'price-desc' | 'price-asc'>('recent');
+  const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
 
-  const filtered = properties
+  const filtered = [...properties]
     .filter((p) => {
-      if (activeFilter === 'all') return true;
-      return p.status === activeFilter;
+      const matchesStatus = activeFilter === 'all' || p.status === activeFilter;
+      const needle = query.trim().toLowerCase();
+      const matchesQuery = !needle || `${p.title} ${p.location} ${p.propertyType}`.toLowerCase().includes(needle);
+      return matchesStatus && matchesQuery;
     })
     .sort((a, b) => {
       if (sortBy === 'price-desc') return b.price - a.price;
@@ -108,6 +112,16 @@ const ManageProperties = () => {
 
         {/* Filter Bar */}
         <div className="flex flex-wrap items-center gap-3 mb-8">
+          <label className="flex min-w-[240px] items-center gap-2 rounded-full bg-surface-container-low px-4 py-2">
+            <span className="material-symbols-outlined text-lg text-secondary">search</span>
+            <input
+              className="w-full border-0 bg-transparent text-sm outline-none"
+              type="search"
+              placeholder="Search title, location, or type"
+              value={query}
+              onChange={(event) => { setQuery(event.target.value); setPage(1); }}
+            />
+          </label>
           {filters.map((f) => (
             <button
               key={f.value}
@@ -138,8 +152,20 @@ const ManageProperties = () => {
           </div>
         </div>
 
+        <MapListLayout
+          properties={filtered}
+          detailsPath={(property) => `/dashboard/admin/property-details/${property._id}`}
+          actions={(property) => (
+            <>
+              <button type="button" className="rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold text-primary" onClick={() => void updateProperty(property._id, { featured: !property.featured })}>
+                {property.featured ? 'Unfeature' : 'Feature'}
+              </button>
+              <button type="button" className="rounded-lg bg-error-container px-3 py-2 text-xs font-bold text-error" onClick={() => void handleDelete(property)}>Delete</button>
+            </>
+          )}
+        >
         {/* Table */}
-        <div className="bg-surface-container-low rounded-xl overflow-hidden">
+        <div className="bg-surface-container-low rounded-xl overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-container-high/50">
@@ -292,6 +318,7 @@ const ManageProperties = () => {
             </div>
           </div>
         </div>
+        </MapListLayout>
 
         {/* Bento Info Cards */}
         {/* <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">

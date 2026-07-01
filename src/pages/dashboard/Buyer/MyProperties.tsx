@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
+import MapListLayout from '../../../components/property/map/MapListLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { resolveBuyerId } from '../../../types';
@@ -91,7 +92,8 @@ const MyProperties = () => {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <MapListLayout properties={myProperties} detailsPath={(property) => `/dashboard/buyer/property-details/${property._id}`}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {paginated.map((property) => (
           <div key={property._id} className="group flex flex-col bg-surface-container-lowest rounded-xl overflow-hidden hover:translate-y-[-4px] transition-all duration-300">
             <div className="relative h-64 overflow-hidden">
@@ -155,6 +157,7 @@ const MyProperties = () => {
           <span className="mt-6 text-xs font-bold text-primary underline underline-offset-4 tracking-wider uppercase">Explore New Listings</span>
         </Link>
       </div>
+      </MapListLayout>
 
       <footer className="mt-20 flex flex-col md:flex-row items-center justify-between border-t border-outline-variant/20 pt-10">
         <div className="flex gap-12">

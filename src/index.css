@@ -18,3 +18,8 @@ a {
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   vertical-align: middle;
 }
+/* Leaflet price pins follow RealtiQ's primary palette. */
+.realtiq-map-marker { background: transparent; border: 0; }
+.realtiq-map-marker span { display: block; position: relative; width: max-content; min-width: 64px; transform: translateX(-50%); border-radius: 999px; background: var(--color-primary, #173d32); color: white; padding: 7px 10px; text-align: center; font-size: 11px; font-weight: 800; box-shadow: 0 4px 12px rgb(0 0 0 / .25); }
+.realtiq-map-marker span::after { content: ''; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--color-primary, #173d32); border-bottom: 0; }
+.leaflet-container { font-family: inherit; z-index: 0; }

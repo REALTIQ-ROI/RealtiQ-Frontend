@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
+import MapListLayout from '../../../components/property/map/MapListLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { resolveOwnerId } from '../../../types';
@@ -192,7 +193,17 @@ const LandlordMyProperties = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl overflow-hidden">
+        <MapListLayout
+          properties={myProperties}
+          detailsPath={(property) => `/dashboard/landlord/property-details/${property._id}`}
+          actions={(property) => (
+            <>
+              <Link className="rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold text-primary" to={`/dashboard/landlord/edit-property/${property._id}`}>Edit</Link>
+              <button type="button" className="rounded-lg bg-error-container px-3 py-2 text-xs font-bold text-error" onClick={() => void handleDelete(property._id)}>Delete</button>
+            </>
+          )}
+        >
+        <div className="bg-white rounded-xl overflow-x-auto">
           {viewMode === 'list' ? (
             <table className="w-full text-left border-collapse">
               <thead>
@@ -360,6 +371,7 @@ const LandlordMyProperties = () => {
             </div>
           </div>
         </div>
+        </MapListLayout>
       </main>
 
       <footer className="mt-auto p-8 text-center">

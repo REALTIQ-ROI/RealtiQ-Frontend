@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import PublicLayout from '../../components/layout/PublicLayout';
 import PropertyCard from '../../components/property/PropertyCard';
 import PropertyFiltersPanel from '../../components/property/PropertyFiltersPanel';
+import MapListLayout from '../../components/property/map/MapListLayout';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
@@ -92,7 +93,7 @@ const Listings = () => {
             ) : null}
 
             {!loading && !error && properties.length > 0 ? (
-              <>
+              <MapListLayout properties={properties} detailsPath={(property) => `/properties/${property._id}`}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {properties.map((property) => (
                     <PropertyCard key={property._id} property={property} showSaveAction onSave={handleSave} />
@@ -123,7 +124,7 @@ const Listings = () => {
                     </button>
                   </div>
                 </div>
-              </>
+              </MapListLayout>
             ) : null}
           </section>
         </div>

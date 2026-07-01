@@ -2,6 +2,13 @@
 
 RealtiQ is a React + TypeScript frontend for a real estate platform with public property discovery, authentication, and role-based dashboards for buyers, landlords, and admins.
 
+## Property Maps
+
+Property discovery uses Leaflet with OpenStreetMap tiles and clustered price markers. No map API key is required.
+Only properties whose existing API response contains valid `coordinates.lat` and `coordinates.lng` values appear
+on the map; all properties continue to appear in list results. Address geocoding is intentionally not performed in
+the browser, so no coordinates are inferred or invented.
+
 ## Features
 
 - Public pages: home, listings, property details, about/contact, inquiry flow, checkout, and payment result routes
