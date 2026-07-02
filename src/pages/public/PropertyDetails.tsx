@@ -17,6 +17,7 @@ import { installmentService } from '../../services/installmentService';
 import { paymentService } from '../../services/paymentService';
 import { propertyService, type NearbyPropertySummary } from '../../services/propertyService';
 import { tourService } from '../../services/tourService';
+import { resolveOwnerId } from '../../types';
 import {
   calculateInstallmentAmount,
   frequencyToInstallmentCount,
@@ -107,6 +108,7 @@ const PropertyDetails = () => {
     () => (property && typeof property.ownerId !== 'string' ? property.ownerId : null),
     [property],
   );
+  const canPurchase = Boolean(property && property.status !== 'sold' && (!user || (user.role === 'buyer' && resolveOwnerId(property.ownerId) !== user._id)));
 
   const installments = useMemo(() => (Array.isArray(installmentData) ? installmentData : []), [installmentData]);
   const propertyInstallment = useMemo(() => {
@@ -590,7 +592,11 @@ const PropertyDetails = () => {
                 </span>
               </div>
 
-              {hasActiveInstallment && propertyInstallment ? (
+              {!canPurchase ? (
+                <p className="rounded-lg bg-surface-container-low p-3 text-center text-sm text-secondary">
+                  {property.status === 'sold' ? 'This property has already been sold.' : 'Purchase options are available to eligible buyers only.'}
+                </p>
+              ) : hasActiveInstallment && propertyInstallment ? (
                 <Button fullWidth onClick={handleContinueInstallment} disabled={installmentLoading}>
                   Continue Installment
                 </Button>
@@ -615,6 +621,15 @@ const PropertyDetails = () => {
                       : 'Buy Property'}
                 </Button>
               )}
+              {user?.role === 'buyer' && property.status === 'available' && resolveOwnerId(property.ownerId) !== user._id && !hasActiveInstallment ? (
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                  <p className="text-sm font-bold text-primary">Prefer protected release conditions?</p>
+                  <p className="mt-1 text-xs text-secondary">Pay through escrow. Funds remain locked until agreed conditions are completed and an administrator approves release.</p>
+                  <Button fullWidth variant="secondary" className="mt-3" onClick={() => navigate(`/dashboard/buyer/escrows/create/${property._id}`)}>
+                    Create Escrow Payment
+                  </Button>
+                </div>
+              ) : null}
               <Button
                 fullWidth
                 variant="secondary"

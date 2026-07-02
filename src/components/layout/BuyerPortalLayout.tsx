@@ -17,6 +17,7 @@ const navItems = [
   { to: '/dashboard/buyer/tours', icon: 'tour', label: 'Tours' },
   { to: '/dashboard/buyer/installments', icon: 'schedule', label: 'Installments' },
   { to: '/dashboard/buyer/payment-history', icon: 'payments', label: 'Payment History' },
+  { to: '/dashboard/buyer/escrows', icon: 'shield_lock', label: 'My Escrows' },
   { to: '/dashboard/buyer/inquiry-history', icon: 'chat_bubble', label: 'Inquiry History' },
   { to: '/dashboard/roi-scenarios', icon: 'monitoring', label: 'ROI Scenarios' },
   { to: '/dashboard/buyer/profile-settings', icon: 'settings', label: 'Settings' },

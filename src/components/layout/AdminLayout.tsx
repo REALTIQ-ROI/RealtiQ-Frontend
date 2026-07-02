@@ -14,6 +14,7 @@ const navLinks = [
   { to: '/dashboard/admin/manage-users', label: 'Manage Users', icon: 'group' },
   { to: '/dashboard/admin/manage-inquiries', label: 'Inquiries', icon: 'mail' },
   { to: '/dashboard/admin/manage-payments', label: 'Payments', icon: 'payments' },
+  { to: '/dashboard/admin/escrows', label: 'Escrow Management', icon: 'shield_lock' },
   { to: '/dashboard/admin/tours', label: 'Tours', icon: 'tour' },
   { to: '/dashboard/admin/installments', label: 'Installments', icon: 'schedule' },
   { to: '/dashboard/admin/kyc', label: 'KYC Review', icon: 'verified_user' },

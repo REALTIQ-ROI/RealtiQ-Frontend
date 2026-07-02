@@ -12,6 +12,7 @@ type LandlordNavKey =
   | 'installments'
   | 'inquiries'
   | 'payment-history'
+  | 'escrows'
   | 'roi'
   | 'settings';
 
@@ -32,6 +33,7 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
   { key: 'installments', to: '/dashboard/landlord/installments', icon: 'payments', label: 'Installments' },
   { key: 'inquiries', to: '/dashboard/landlord/inquiries', icon: 'chat_bubble', label: 'Inquiries' },
   { key: 'payment-history', to: '/dashboard/landlord/payment-history', icon: 'payments', label: 'Payment History' },
+  { key: 'escrows', to: '/dashboard/landlord/escrows', icon: 'shield_lock', label: 'Property Escrows' },
   { key: 'roi', to: '/tools/roi-calculator', icon: 'monitoring', label: 'ROI Calculator' },
   { key: 'settings', to: '/dashboard/landlord/settings', icon: 'settings', label: 'Settings' },
 ];

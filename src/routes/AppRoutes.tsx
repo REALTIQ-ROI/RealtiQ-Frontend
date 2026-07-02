@@ -71,6 +71,9 @@ import MyROIScenarios from '../pages/dashboard/ROI/MyROIScenarios';
 import ROIAssumptions from '../pages/dashboard/Admin/ROIAssumptions';
 import AdminSettings from '../pages/dashboard/Admin/AdminSettings';
 import KycManagement from '../pages/dashboard/Admin/KycManagement';
+import EscrowList from '../pages/dashboard/Escrow/EscrowList';
+import EscrowDetails from '../pages/dashboard/Escrow/EscrowDetails';
+import CreateEscrow from '../pages/dashboard/Escrow/CreateEscrow';
 
 const AppRoutes = () => {
   return (
@@ -138,6 +141,9 @@ const AppRoutes = () => {
           <Route path="/dashboard/buyer/inquiry-details" element={<InquiryDetails />} />
           <Route path="/dashboard/buyer/inquiry-details/:id" element={<InquiryDetails />} />
           <Route path="/dashboard/buyer/profile-settings" element={<ProfileSettings />} />
+          <Route path="/dashboard/buyer/escrows" element={<EscrowList />} />
+          <Route path="/dashboard/buyer/escrows/create/:propertyId" element={<CreateEscrow />} />
+          <Route path="/dashboard/buyer/escrows/:id" element={<EscrowDetails />} />
           <Route path="/dashboard/roi-scenarios" element={<MyROIScenarios />} />
         </Route>
 
@@ -157,6 +163,8 @@ const AppRoutes = () => {
           <Route path="/dashboard/landlord/edit-property" element={<Editproperty />} />
           <Route path="/dashboard/landlord/edit-property/:id" element={<Editproperty />} />
           <Route path="/dashboard/landlord/settings" element={<LandlordSettings />} />
+          <Route path="/dashboard/landlord/escrows" element={<EscrowList />} />
+          <Route path="/dashboard/landlord/escrows/:id" element={<EscrowDetails />} />
           <Route path="/dashboard/landlord/settings/verification" element={<LandlordVerification />} />
           <Route path="/settings/verification" element={<LandlordVerification />} />
         </Route>
@@ -183,6 +191,8 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />
           <Route path="/dashboard/admin/roi-assumptions" element={<ROIAssumptions />} />
           <Route path="/dashboard/admin/settings" element={<AdminSettings />} />
+          <Route path="/dashboard/admin/escrows" element={<EscrowList />} />
+          <Route path="/dashboard/admin/escrows/:id" element={<EscrowDetails />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
