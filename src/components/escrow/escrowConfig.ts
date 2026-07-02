@@ -9,7 +9,10 @@ export const ESCROW_STATUS: Record<EscrowStatus, { label: string; description: s
   released: { label: 'Released', description: 'Funds released and ownership completed.', classes: 'bg-emerald-100 text-emerald-800' },
   disputed: { label: 'Disputed', description: 'Release is paused while the dispute is resolved.', classes: 'bg-red-100 text-red-800' },
   cancelled: { label: 'Cancelled', description: 'Escrow cancelled.', classes: 'bg-slate-200 text-slate-700' },
+  refund_pending: { label: 'Refund required', description: 'The property was sold and this secured payment now requires a refund.', classes: 'bg-orange-100 text-orange-800' },
+  refund_processing: { label: 'Refund processing', description: 'The refund was submitted to Paystack and is awaiting confirmation.', classes: 'bg-blue-100 text-blue-800' },
   refunded: { label: 'Refunded', description: 'Payment refunded.', classes: 'bg-cyan-100 text-cyan-800' },
+  refund_failed: { label: 'Refund failed', description: 'Refund processing failed and requires administrator review.', classes: 'bg-red-100 text-red-800' },
 };
 
 export const RULE_LABELS: Record<EscrowRuleType, string> = {
@@ -30,7 +33,7 @@ export const canSatisfyRule = (role: UserRole, escrow: Escrow, rule: EscrowRule)
   ['locked', 'release_pending'].includes(escrow.status) && !isRuleSatisfied(rule) && permissions[role].includes(rule.type) &&
   !(rule.type === 'release_after_days' && typeof rule.metadata?.eligibleAt === 'string' && new Date(rule.metadata.eligibleAt).getTime() > Date.now());
 export const requiredProgress = (escrow: Escrow) => {
-  const required = escrow.rules.filter((rule) => rule.required);
+  const required = (escrow.rules ?? []).filter((rule) => rule.required);
   const complete = required.filter(isRuleSatisfied).length;
   return { complete, total: required.length, percent: required.length ? Math.round((complete / required.length) * 100) : 100, allComplete: complete === required.length };
 };

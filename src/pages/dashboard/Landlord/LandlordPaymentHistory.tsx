@@ -44,7 +44,7 @@ const LandlordPaymentHistory = () => {
 
           {loading ? (
             <div className="flex items-center justify-center py-16 gap-3 text-secondary">
-              <span className="material-symbols-outlined animate-spin">progress_activity</span>
+              <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
               <span className="text-sm">Loading transactions…</span>
             </div>
           ) : error ? (
@@ -116,3 +116,4 @@ const LandlordPaymentHistory = () => {
 };
 
 export default LandlordPaymentHistory;
+import { LoaderCircle } from 'lucide-react';

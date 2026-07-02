@@ -1,6 +1,7 @@
 import type { ApiPayment, MediaItem, Property, User } from './index';
 
-export type EscrowStatus = 'pending_payment' | 'locked' | 'release_pending' | 'released' | 'disputed' | 'cancelled' | 'refunded';
+export type EscrowStatus = 'pending_payment' | 'locked' | 'release_pending' | 'released' | 'disputed' | 'cancelled' | 'refund_pending' | 'refund_processing' | 'refunded' | 'refund_failed';
+export type RefundStatus = 'none' | 'pending' | 'processing' | 'completed' | 'failed';
 export type EscrowRuleType =
   | 'buyer_confirmation_required' | 'seller_confirmation_required' | 'admin_approval_required'
   | 'inspection_completed' | 'document_verified' | 'title_document_uploaded'
@@ -36,6 +37,36 @@ export interface EscrowLog {
   createdAt: string;
 }
 
+export interface RefundDetails {
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  bankCode: string;
+  recipientCode?: string | null;
+  submittedBy?: EscrowParty | string;
+  submittedAt?: string;
+}
+
+export interface RefundConversation {
+  _id: string;
+  escrow: Escrow | string;
+  buyer: EscrowParty | string;
+  admin?: EscrowParty | string | null;
+  status: 'open' | 'closed';
+  closedAt?: string | null;
+}
+
+export interface RefundMessage {
+  _id: string;
+  sender: EscrowParty | string;
+  message: string;
+  createdAt: string;
+}
+
+export interface RefundChatResponse { conversation: RefundConversation | null; messages: RefundMessage[] }
+export interface RefundDetailsPayload { accountName: string; accountNumber: string; bankName: string; bankCode: string }
+export interface ProcessRefundResponse { escrow?: Escrow; message?: string }
+
 export interface Escrow {
   _id: string;
   property?: EscrowProperty | string;
@@ -49,8 +80,17 @@ export interface Escrow {
   amount: number;
   currency?: string;
   status: EscrowStatus;
-  rules: EscrowRule[];
-  logs: EscrowLog[];
+  refundStatus?: RefundStatus;
+  refundDetails?: RefundDetails | null;
+  refundReference?: string | null;
+  refundProvider?: string | null;
+  refundProviderResponse?: Record<string, unknown>;
+  refundFailureReason?: string | null;
+  refundRequestedAt?: string | null;
+  refundProcessingAt?: string | null;
+  refundedAt?: string | null;
+  rules?: EscrowRule[];
+  logs?: EscrowLog[];
   metadata?: EscrowMetadata;
   paymentReference?: string;
   createdAt: string;

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { LoaderCircle } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
@@ -81,7 +82,7 @@ const AdminPaymentDetails = () => {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center py-32 gap-3 text-secondary">
-          <span className="material-symbols-outlined animate-spin text-3xl">progress_activity</span>
+          <LoaderCircle className="h-8 w-8 animate-spin" aria-hidden="true" />
           <span className="font-medium">Loading payment details…</span>
         </div>
       </AdminLayout>

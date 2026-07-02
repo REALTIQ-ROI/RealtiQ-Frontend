@@ -39,4 +39,17 @@ describe('escrowService', () => {
     await escrowService.list(); await escrowService.get('e1');
     expect(mockedApi.get).toHaveBeenNthCalledWith(1, '/escrow'); expect(mockedApi.get).toHaveBeenNthCalledWith(2, '/escrow/e1');
   });
+  it('uses all refund endpoints and preserves account numbers as strings', async () => {
+    mockedApi.get.mockResolvedValue({ data: { conversation: null, messages: [] } });
+    mockedApi.post.mockResolvedValue({ data: {}, status: 202 }); mockedApi.patch.mockResolvedValue({ data: {} });
+    await escrowService.requestRefundDetails('e1', ' Please send details ');
+    await escrowService.getRefundChat('e1'); await escrowService.sendRefundMessage('e1', ' Hello ');
+    await escrowService.saveRefundDetails('e1', { accountName: 'Ada', accountNumber: '0123456789', bankName: 'Bank', bankCode: '001' });
+    const result = await escrowService.processRefund('e1');
+    expect(mockedApi.post).toHaveBeenCalledWith('/escrow/e1/refund-chat/request-details', { message: 'Please send details' });
+    expect(mockedApi.get).toHaveBeenCalledWith('/escrow/e1/refund-chat');
+    expect(mockedApi.post).toHaveBeenCalledWith('/escrow/e1/refund-chat/messages', { message: 'Hello' });
+    expect(mockedApi.patch).toHaveBeenCalledWith('/escrow/e1/refund-details', { accountName: 'Ada', accountNumber: '0123456789', bankName: 'Bank', bankCode: '001' });
+    expect(mockedApi.post).toHaveBeenCalledWith('/escrow/e1/process-refund', {}); expect(result.status).toBe(202);
+  });
 });

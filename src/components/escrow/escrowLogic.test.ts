@@ -12,8 +12,13 @@ describe('escrow rule validation and permissions', () => {
     expect(validateRules(rules)).toEqual({});
   });
   it('calculates progress from required rules only', () => {
-    const value = escrow('locked', true); value.rules.push({ _id: 'r2', type: 'inspection_completed', description: 'Optional', required: false, satisfied: false });
+    const value = escrow('locked', true); value.rules!.push({ _id: 'r2', type: 'inspection_completed', description: 'Optional', required: false, satisfied: false });
     expect(requiredProgress(value)).toMatchObject({ complete: 1, total: 1, percent: 100, allComplete: true });
+  });
+  it('handles legacy escrows without rules', () => {
+    const value = escrow('pending_payment');
+    delete value.rules;
+    expect(requiredProgress(value)).toEqual({ complete: 0, total: 0, percent: 100, allComplete: true });
   });
   it('never exposes release to buyers and gates role actions by status', () => {
     expect(escrowActions('buyer', escrow('pending_payment'))).toMatchObject({ initializePayment: true, cancel: true, requestRelease: false, approveRelease: false });
@@ -24,9 +29,9 @@ describe('escrow rule validation and permissions', () => {
   });
   it('allows only each role’s rule types while locked', () => {
     const value = escrow('locked');
-    expect(canSatisfyRule('buyer', value, value.rules[0])).toBe(true);
-    expect(canSatisfyRule('landlord', value, value.rules[0])).toBe(false);
-    value.rules[0].type = 'admin_approval_required';
-    expect(canSatisfyRule('admin', value, value.rules[0])).toBe(true);
+    expect(canSatisfyRule('buyer', value, value.rules![0])).toBe(true);
+    expect(canSatisfyRule('landlord', value, value.rules![0])).toBe(false);
+    value.rules![0].type = 'admin_approval_required';
+    expect(canSatisfyRule('admin', value, value.rules![0])).toBe(true);
   });
 });

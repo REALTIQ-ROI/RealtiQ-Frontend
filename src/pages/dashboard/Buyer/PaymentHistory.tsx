@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LoaderCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
@@ -166,7 +167,7 @@ const PaymentHistory = () => {
 
         {loading ? (
           <div className="flex items-center justify-center py-20 gap-3 text-secondary">
-            <span className="material-symbols-outlined animate-spin">progress_activity</span>
+            <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
             <span className="text-sm font-medium">Loading payments…</span>
           </div>
         ) : error ? (
