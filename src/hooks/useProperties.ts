@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import Swal from 'sweetalert2';
 import {
@@ -25,9 +25,11 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<PropertyFiltersQuery>(initialFilters);
+  const requestSequence = useRef(0);
 
   const fetchProperties = useCallback(
     async (currentFilters: PropertyFiltersQuery = filters, currentPage = page) => {
+      const requestId = ++requestSequence.current;
       setLoading(true);
       setError(null);
       try {
@@ -36,13 +38,17 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
           page: currentPage,
           limit,
         });
-        setProperties(res.properties);
-        setTotal(res.total);
+        if (requestId === requestSequence.current) {
+          setProperties(res.properties);
+          setTotal(res.total);
+        }
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load properties.';
-        setError(message);
+        if (requestId === requestSequence.current) {
+          const message = err instanceof Error ? err.message : 'Failed to load properties.';
+          setError(message);
+        }
       } finally {
-        setLoading(false);
+        if (requestId === requestSequence.current) setLoading(false);
       }
     },
     [filters, page, limit],

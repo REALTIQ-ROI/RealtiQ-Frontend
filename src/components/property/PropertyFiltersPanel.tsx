@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PropertyFilters } from '../../types';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -58,6 +58,31 @@ const PropertyFiltersPanel = ({ initialFilters = {}, onApply }: PropertyFiltersP
   const [currency, setCurrency] = useState(initialFilters.currency ?? '');
   const [status, setStatus] = useState(initialFilters.status ?? '');
   const [featured, setFeatured] = useState(initialFilters.featured === true ? 'true' : '');
+  const initialSearchRender = useRef(true);
+
+  useEffect(() => {
+    if (initialSearchRender.current) {
+      initialSearchRender.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      onApply({
+        search: search.trim() || undefined,
+        minPrice: minPrice ? Number(minPrice) : undefined,
+        maxPrice: maxPrice ? Number(maxPrice) : undefined,
+        propertyType: propertyType || undefined,
+        bedrooms: bedrooms ? Number(bedrooms) : undefined,
+        category: category || undefined,
+        completionStage: completionStage || undefined,
+        currency: currency || undefined,
+        status: (status as PropertyFilters['status']) || undefined,
+        featured: featured === '' ? undefined : featured === 'true',
+      });
+    }, 400);
+    return () => window.clearTimeout(timer);
+    // Search is intentionally the only live API trigger; other filters retain Apply behavior.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const apply = () => {
     onApply({
