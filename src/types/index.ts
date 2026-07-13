@@ -7,7 +7,7 @@ export type PropertyCurrency = 'NGN' | 'USD' | 'GBP' | string;
 export type TourType = 'open_house' | 'virtual_paid' | 'staging_view';
 export type TourMode = 'physical' | 'virtual';
 export type TourStatus = 'pending' | 'approved' | 'rejected' | 'completed';
-export type InstallmentStatus = 'pending' | 'active' | 'completed' | 'defaulted';
+export type InstallmentStatus = 'pending' | 'active' | 'overdue' | 'defaulted' | 'completed' | 'cancelled';
 
 export interface MediaItem {
   url: string;
@@ -291,32 +291,152 @@ export interface TourRequestPayload {
   notes?: string;
 }
 
-export interface InstallmentSchedule {
-  frequency: 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | string;
+export type InstallmentFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'custom';
+export type InstallmentScheduleItemStatus =
+  | 'pending'
+  | 'due'
+  | 'partially_paid'
+  | 'paid'
+  | 'overdue'
+  | 'waived'
+  | 'cancelled';
+export type InstallmentMilestoneType =
+  | 'initial_deposit'
+  | 'scheduled_payment'
+  | 'inspection_completed'
+  | 'document_verified'
+  | 'construction_stage'
+  | 'handover'
+  | 'final_payment'
+  | 'custom';
+export type InstallmentConditionType =
+  | 'buyer_confirmation'
+  | 'seller_confirmation'
+  | 'inspection_completed'
+  | 'document_verified'
+  | 'construction_stage'
+  | 'handover'
+  | 'admin_approval'
+  | 'custom';
+
+export interface InstallmentNotificationHistory {
+  type: string;
+  notificationKey?: string;
+  status?: 'attempted' | 'sent' | 'failed' | string;
+  attemptedAt?: string;
+  sentAt?: string;
+  failedAt?: string;
+  failureReason?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface InstallmentCondition {
+  _id?: string;
+  type: InstallmentConditionType;
+  description?: string;
+  required?: boolean;
+  satisfied?: boolean;
+  satisfiedBy?: string | TourParticipant;
+  satisfiedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface InstallmentScheduleItem {
+  _id?: string;
+  sequence: number;
+  title: string;
+  description?: string;
+  dueDate?: string;
+  expectedAmount: number;
+  paidAmount?: number;
+  remainingAmount?: number;
+  outstandingPenaltyAmount?: number;
+  status?: InstallmentScheduleItemStatus;
+  milestoneType?: InstallmentMilestoneType;
+  conditions?: InstallmentCondition[];
+  paymentIds?: Array<string | ApiPayment>;
+  notificationHistory?: InstallmentNotificationHistory[];
+  paidAt?: string;
+  dueAt?: string;
+  overdueAt?: string;
+  completedAt?: string;
+  waivedAt?: string;
+  cancelledAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LegacyInstallmentSchedule {
+  frequency?: InstallmentFrequency | string;
   notes?: string;
 }
 
 export interface InstallmentPaymentRecord {
+  _id?: string;
   amount: number;
   status?: string;
   reference?: string;
   paidAt?: string;
   createdAt?: string;
+  paymentPurpose?: string;
+  purpose?: string;
+  installment?: string;
+  scheduleItem?: string;
+}
+
+export type InstallmentPenaltyStatus = 'outstanding' | 'partially_paid' | 'paid' | 'waived' | string;
+
+export interface InstallmentPenaltyRecord {
+  _id: string;
+  installment: string | Installment;
+  scheduleItem?: string;
+  intervalNumber?: number;
+  penaltyType?: 'percentage' | string;
+  percentageValue?: number;
+  calculatedAgainstAmount?: number;
+  penaltyAmount?: number;
+  outstandingAmount?: number;
+  paidAmount?: number;
+  status?: InstallmentPenaltyStatus;
+  reason?: string;
+  appliedAt?: string;
+  paidAt?: string;
+  waivedAt?: string;
+  waivedBy?: string | TourParticipant;
+  waiverReason?: string;
+  paymentIds?: Array<string | ApiPayment>;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Installment {
   _id: string;
-  property?: TourPropertySummary | string;
-  propertyId?: string | TourPropertySummary;
+  property?: Property | TourPropertySummary | string;
+  propertyId?: string | Property | TourPropertySummary;
   user?: TourParticipant | string;
+  buyer?: TourParticipant | string;
   buyerId?: string | TourParticipant;
   ownerId?: string | TourParticipant;
   totalAmount: number;
   remainingBalance: number;
   paidAmount?: number;
+  principalAmount?: number;
+  principalPaidAmount?: number;
+  principalRemainingBalance?: number;
+  totalPenaltyAmount?: number;
+  paidPenaltyAmount?: number;
+  outstandingPenaltyAmount?: number;
+  totalOutstandingBalance?: number;
+  frequency?: InstallmentFrequency | string;
+  startDate?: string;
+  endDate?: string;
+  gracePeriodHours?: number;
+  defaultAfterDays?: number;
+  maximumMissedPayments?: number;
   paymentCount?: number;
   status: InstallmentStatus;
-  schedule?: InstallmentSchedule;
+  schedule?: InstallmentScheduleItem[] | LegacyInstallmentSchedule;
   paymentHistory?: InstallmentPaymentRecord[];
   amountPaid?: number;
   totalInstallments?: number;
@@ -326,16 +446,60 @@ export interface Installment {
   nextDueDate?: string;
   nextPaymentAmount?: number;
   nextPaymentDueDate?: string;
+  completedAt?: string;
+  overdueAt?: string;
+  defaultedAt?: string;
+  cancelledAt?: string;
+  lastPaymentAt?: string;
+  notificationHistory?: InstallmentNotificationHistory[];
   createdAt?: string;
   updatedAt?: string;
 }
 
-export interface InstallmentCreatePayload {
+export interface AutomaticInstallmentCreatePayload {
   propertyId: string;
-  totalAmount: number;
-  schedule: InstallmentSchedule;
+  frequency: Exclude<InstallmentFrequency, 'custom'>;
+  numberOfInstallments: number;
+  initialDeposit?: number;
+  startDate: string;
+  gracePeriodHours?: number;
 }
 
+export interface CustomInstallmentCreatePayload {
+  propertyId: string;
+  totalAmount: number;
+  gracePeriodHours?: number;
+  schedule: Array<{
+    sequence: number;
+    title: string;
+    milestoneType: InstallmentMilestoneType;
+    expectedAmount: number;
+    dueDate: string;
+    conditions?: Array<{
+      type: InstallmentConditionType;
+      description?: string;
+      required?: boolean;
+    }>;
+  }>;
+}
+
+export type InstallmentCreatePayload = AutomaticInstallmentCreatePayload | CustomInstallmentCreatePayload;
+
 export interface InstallmentPaymentPayload {
-  amount?: number;
+  amount: number;
+  scheduleItemId?: string;
+}
+
+export interface InstallmentPaymentResponse {
+  installment: Installment;
+  redirectUrl: string;
+  reference: string;
+  amount: number;
+  paymentId?: string;
+}
+
+export interface InstallmentScheduleResponse {
+  installmentId: string;
+  nextPaymentDueDate?: string;
+  schedule: InstallmentScheduleItem[];
 }

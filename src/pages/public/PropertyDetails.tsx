@@ -20,7 +20,6 @@ import { tourService } from '../../services/tourService';
 import { resolveOwnerId } from '../../types';
 import {
   calculateInstallmentAmount,
-  frequencyToInstallmentCount,
   getInstallmentSummary,
   isInstallmentActive,
   resolveInstallmentPropertyId,
@@ -47,10 +46,10 @@ const PROPERTY_TOUR_MODES = [
 ] as const;
 
 const INSTALLMENT_FREQUENCIES = [
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Biweekly' },
   { value: 'monthly', label: 'Monthly' },
   { value: 'quarterly', label: 'Quarterly' },
-  { value: 'biannually', label: 'Biannually' },
-  { value: 'annually', label: 'Annually' },
 ] as const;
 
 const PropertyDetails = () => {
@@ -258,31 +257,9 @@ const PropertyDetails = () => {
       return;
     }
 
-    const installmentCount = frequencyToInstallmentCount(installmentFrequency);
-    const calculatedInstallmentAmount = calculateInstallmentAmount(property.price, installmentFrequency);
-    if (property.price <= 0 || installmentCount <= 0 || calculatedInstallmentAmount <= 0) {
-      toast.error('Unable to calculate installment amount for this property.');
-      return;
-    }
-
     setCreatingInstallment(true);
-    try {
-      const plan = await installmentService.createInstallmentPlan({
-        propertyId: property._id,
-        totalAmount: property.price,
-        schedule: {
-          frequency: installmentFrequency,
-          notes: String(calculatedInstallmentAmount),
-        },
-      });
-
-      toast.success('Installment plan created successfully.');
-      navigate(`/dashboard/buyer/installments/${plan._id}?propertyId=${property._id}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Unable to create installment plan.');
-    } finally {
-      setCreatingInstallment(false);
-    }
+    navigate(`/dashboard/buyer/installments?propertyId=${property._id}&frequency=${installmentFrequency}`);
+    setCreatingInstallment(false);
   };
 
   if (loading) {

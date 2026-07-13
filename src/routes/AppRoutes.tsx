@@ -152,6 +152,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/landlord/my-properties" element={<LandlordMyProperties />} />
           <Route path="/dashboard/landlord/tours" element={<Tours />} />
           <Route path="/dashboard/landlord/installments" element={<Installments />} />
+          <Route path="/dashboard/landlord/installments/:id" element={<Installments />} />
           <Route path="/dashboard/landlord/property-details" element={<LandlordPropertyDetails />} />
           <Route path="/dashboard/landlord/property-details/:id" element={<LandlordPropertyDetails />} />
           <Route path="/dashboard/landlord/payment-history" element={<LandlordPaymentHistory />} />
@@ -173,6 +174,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin" element={<AdminDashboard />} />
           <Route path="/dashboard/admin/tours" element={<Tours />} />
           <Route path="/dashboard/admin/installments" element={<Installments />} />
+          <Route path="/dashboard/admin/installments/:id" element={<Installments />} />
           <Route path="/dashboard/admin/notifications/digest" element={<NotificationDigest />} />
           <Route path="/dashboard/admin/manage-users" element={<ManageUsers />} />
           <Route path="/dashboard/admin/users/:id" element={<UserDetails />} />
