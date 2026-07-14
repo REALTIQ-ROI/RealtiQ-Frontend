@@ -31,6 +31,7 @@ import {
   canCancelInstallment,
   canPayInstallment,
   canRoleSatisfyCondition,
+  frequencyToInstallmentCount,
   getNextPayableScheduleItem,
   getOutstandingPenaltyAmount,
   getPrincipalAmount,
@@ -47,6 +48,7 @@ import {
 } from '../../utils/installment';
 
 const frequencies: Array<Exclude<InstallmentFrequency, 'custom'>> = ['weekly', 'biweekly', 'monthly', 'quarterly'];
+const DEFAULT_GRACE_PERIOD_HOURS = 72;
 const milestoneTypes: InstallmentMilestoneType[] = [
   'initial_deposit',
   'scheduled_payment',
@@ -122,9 +124,9 @@ const conflictToast = async (error: unknown, refresh: () => Promise<void>) => {
 };
 
 const Stat = ({ label, value, tone = '' }: { label: string; value: string; tone?: string }) => (
-  <div className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4">
+  <div className="min-w-0 rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-3 sm:p-4">
     <p className="text-[10px] font-bold uppercase tracking-widest text-secondary">{label}</p>
-    <p className={`mt-1 text-sm font-bold text-on-surface ${tone}`}>{value}</p>
+    <p className={`mt-1 break-words text-sm font-bold text-on-surface ${tone}`}>{value}</p>
   </div>
 );
 
@@ -181,10 +183,8 @@ const InstallmentCreateForm = ({
   const [mode, setMode] = useState<'automatic' | 'custom'>('automatic');
   const [propertyId, setPropertyId] = useState('');
   const [frequency, setFrequency] = useState<Exclude<InstallmentFrequency, 'custom'>>('monthly');
-  const [numberOfInstallments, setNumberOfInstallments] = useState('12');
   const [initialDeposit, setInitialDeposit] = useState('');
   const [startDate, setStartDate] = useState(toLocalInputValue());
-  const [gracePeriodHours, setGracePeriodHours] = useState('120');
   const [rows, setRows] = useState<CustomRow[]>([defaultCustomRow(1), defaultCustomRow(2)]);
   const [creating, setCreating] = useState(false);
 
@@ -203,9 +203,8 @@ const InstallmentCreateForm = ({
   );
   const selectedProperty = eligibleProperties.find((property) => property._id === propertyId) ?? null;
   const price = selectedProperty?.price ?? 0;
+  const numberOfInstallments = frequencyToInstallmentCount(frequency);
   const scheduled = rows.reduce((sum, row) => sum + Number(row.expectedAmount || 0), 0);
-  const sequences = rows.map((row) => Number(row.sequence));
-  const duplicateSequences = new Set(sequences).size !== sequences.length;
   const unorderedDates = rows.some((row, index) => index > 0 && new Date(row.dueDate) <= new Date(rows[index - 1].dueDate));
   const invalidRows = rows.some(
     (row) => !row.title.trim() || !row.dueDate || !Number.isFinite(Number(row.expectedAmount)) || Number(row.expectedAmount) <= 0,
@@ -213,12 +212,11 @@ const InstallmentCreateForm = ({
   const automaticInvalid =
     !selectedProperty ||
     !startDate ||
-    Number(numberOfInstallments) <= 0 ||
-    Number(gracePeriodHours) < 0 ||
+    numberOfInstallments <= 0 ||
     Number(initialDeposit || 0) < 0 ||
     Number(initialDeposit || 0) >= price;
   const customInvalid =
-    !selectedProperty || invalidRows || duplicateSequences || unorderedDates || Number(gracePeriodHours) < 0 || scheduled !== price;
+    !selectedProperty || invalidRows || unorderedDates || scheduled !== price;
   const formInvalid = mode === 'automatic' ? automaticInvalid : customInvalid;
 
   useEffect(() => {
@@ -285,17 +283,17 @@ const InstallmentCreateForm = ({
           ? {
               propertyId: selectedProperty._id,
               frequency,
-              numberOfInstallments: Number(numberOfInstallments),
+              numberOfInstallments,
               initialDeposit: Number(initialDeposit || 0),
               startDate: fromLocalInputValue(startDate),
-              gracePeriodHours: Number(gracePeriodHours || 0),
+              gracePeriodHours: DEFAULT_GRACE_PERIOD_HOURS,
             }
           : ({
               propertyId: selectedProperty._id,
               totalAmount: selectedProperty.price,
-              gracePeriodHours: Number(gracePeriodHours || 0),
-              schedule: rows.map((row) => ({
-                sequence: Number(row.sequence),
+              gracePeriodHours: DEFAULT_GRACE_PERIOD_HOURS,
+              schedule: rows.map((row, index) => ({
+                sequence: index + 1,
                 title: row.title.trim(),
                 milestoneType: row.milestoneType,
                 expectedAmount: Number(row.expectedAmount),
@@ -322,18 +320,18 @@ const InstallmentCreateForm = ({
   };
 
   return (
-    <section className="mb-8 rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-5">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
+    <section className="mb-6 rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4 sm:mb-8 sm:p-5">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-xl font-extrabold text-on-surface">Create installment plan</h2>
           <p className="text-sm text-secondary">Choose automatic dates or define milestone rows.</p>
         </div>
-        <div className="inline-flex rounded-lg bg-surface-container-low p-1">
+        <div className="inline-flex w-full rounded-lg bg-surface-container-low p-1 sm:w-auto">
           {(['automatic', 'custom'] as const).map((item) => (
             <button
               key={item}
               type="button"
-              className={`rounded-md px-4 py-2 text-sm font-bold capitalize ${mode === item ? 'bg-primary text-on-primary' : 'text-secondary'}`}
+              className={`min-w-0 flex-1 rounded-md px-3 py-2 text-sm font-bold capitalize sm:flex-none sm:px-4 ${mode === item ? 'bg-primary text-on-primary' : 'text-secondary'}`}
               onClick={() => setMode(item)}
             >
               {item}
@@ -355,30 +353,30 @@ const InstallmentCreateForm = ({
               helperText="Only available properties without an active installment plan are shown."
             />
           ) : (
-            <div className="rounded-lg border border-dashed border-outline-variant/30 p-5 text-sm text-secondary">
+            <div className="rounded-lg border border-dashed border-outline-variant/30 p-4 text-sm text-secondary sm:p-5">
               No eligible properties available.
             </div>
           )}
 
           {mode === 'automatic' ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
               <label className="space-y-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-secondary">Frequency</span>
                 <select className="w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm" value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)}>
                   {frequencies.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
                 </select>
               </label>
-              <Input label="Number of installments" type="number" min="1" value={numberOfInstallments} onChange={(event) => setNumberOfInstallments(event.target.value)} />
+              <Input label="Number of installments" type="number" min="1" value={numberOfInstallments} readOnly className="cursor-not-allowed opacity-75" />
               <Input label="Initial deposit" type="number" min="0" value={initialDeposit} onChange={(event) => setInitialDeposit(event.target.value)} />
               <Input label="Start date and time" type="datetime-local" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-              <Input label="Grace period hours" type="number" min="0" value={gracePeriodHours} onChange={(event) => setGracePeriodHours(event.target.value)} />
+              <Input label="Grace period hours" type="number" min="0" value={DEFAULT_GRACE_PERIOD_HOURS} readOnly className="cursor-not-allowed opacity-75" />
             </div>
           ) : (
             <div className="space-y-4">
               {rows.map((row, index) => (
-                <div key={row.id} className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-4">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
-                    <Input label="Sequence" type="number" min="1" value={row.sequence} onChange={(event) => updateRow(row.id, { sequence: Number(event.target.value) })} />
+                <div key={row.id} className="min-w-0 rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 sm:p-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-6">
+                    <Input label="Sequence" type="number" min="1" value={index + 1} readOnly className="cursor-not-allowed opacity-75" />
                     <Input label="Title" value={row.title} onChange={(event) => updateRow(row.id, { title: event.target.value })} className="md:col-span-2" />
                     <label className="space-y-2">
                       <span className="text-xs font-bold uppercase tracking-wider text-secondary">Milestone type</span>
@@ -391,7 +389,7 @@ const InstallmentCreateForm = ({
                   </div>
                   <div className="mt-3 space-y-2">
                     {row.conditions.map((condition) => (
-                      <div key={condition.id} className="grid grid-cols-1 gap-2 md:grid-cols-4">
+                      <div key={condition.id} className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-4">
                         <select className="rounded-lg bg-surface-container-lowest px-3 py-2 text-sm" value={condition.type} onChange={(event) => updateCondition(row.id, condition.id, { type: event.target.value as InstallmentConditionType })}>
                           {conditionTypes.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
                         </select>
@@ -413,15 +411,14 @@ const InstallmentCreateForm = ({
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
             <Stat label="Property price" value={selectedProperty ? formatCurrency(price) : 'Select property'} />
             <Stat label="Principal total" value={selectedProperty ? formatCurrency(price) : 'Select property'} />
             <Stat label="Principal scheduled" value={mode === 'custom' ? formatCurrency(scheduled) : 'Backend generated'} />
             <Stat label="Difference" value={mode === 'custom' ? formatCurrency(scheduled - price) : formatCurrency(0)} tone={mode === 'custom' && scheduled !== price ? 'text-error' : ''} />
-            <Stat label="Grace period" value={`${Number(gracePeriodHours || 0)} hours`} />
+            <Stat label="Grace period" value={`${DEFAULT_GRACE_PERIOD_HOURS} hours`} />
           </div>
           <div className="text-xs text-secondary">
-            {duplicateSequences ? 'Duplicate sequence values are not allowed. ' : ''}
             {unorderedDates ? 'Milestone due dates must be ordered. ' : ''}
             {mode === 'custom' && scheduled !== price ? 'Scheduled principal must equal the property price. ' : ''}
             Estimated first due date: {mode === 'custom' ? formatDateTime(fromLocalInputValue(rows[0]?.dueDate)) : formatDateTime(fromLocalInputValue(startDate))}
@@ -465,16 +462,16 @@ const InstallmentList = ({
         <Link
           key={installment._id}
           to={`/dashboard/${role === 'admin' ? 'admin' : role === 'landlord' ? 'landlord' : 'buyer'}/installments/${installment._id}`}
-          className={`block rounded-lg border p-4 transition hover:border-primary ${selectedId === installment._id ? 'border-primary bg-surface-container-low' : 'border-outline-variant/20 bg-surface-container-lowest'}`}
+          className={`block min-w-0 rounded-lg border p-3 transition hover:border-primary sm:p-4 ${selectedId === installment._id ? 'border-primary bg-surface-container-low' : 'border-outline-variant/20 bg-surface-container-lowest'}`}
         >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3 className="font-bold text-on-surface">{resolveInstallmentPropertyLabel(installment)}</h3>
-              <p className="text-sm text-secondary">Buyer: {resolveInstallmentBuyerLabel(installment)}</p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h3 className="break-words font-bold text-on-surface">{resolveInstallmentPropertyLabel(installment)}</h3>
+              <p className="break-words text-sm text-secondary">Buyer: {resolveInstallmentBuyerLabel(installment)}</p>
             </div>
             <StatusBadge status={installment.status} />
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
+          <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <Stat label="Principal paid" value={formatCurrency(getPrincipalPaidAmount(installment))} />
             <Stat label="Principal remaining" value={formatCurrency(getPrincipalRemainingBalance(installment))} />
             <Stat label="Penalties outstanding" value={formatCurrency(getOutstandingPenaltyAmount(installment))} />
@@ -495,10 +492,10 @@ const PaymentPanel = ({
   onRefresh: () => Promise<void>;
 }) => {
   const [amount, setAmount] = useState(String(getNextPayableScheduleItem(installment)?.remainingAmount || getTotalOutstandingBalance(installment)));
-  const [scheduleItemId, setScheduleItemId] = useState(getNextPayableScheduleItem(installment)?._id ?? '');
   const [paying, setPaying] = useState(false);
-  const schedule = getScheduleItems(installment);
-  const selectedItem = schedule.find((item) => item._id === scheduleItemId) ?? null;
+  const selectedItem = getNextPayableScheduleItem(installment);
+  const scheduleItemId = selectedItem?._id ?? '';
+  const targetMilestoneLabel = selectedItem ? `${selectedItem.sequence}. ${selectedItem.title}` : 'No specific milestone';
   const maxPayable = getTotalOutstandingBalance(installment);
   const numericAmount = Number(amount);
   const blockedByConditions = hasUnsatisfiedRequiredConditions(selectedItem);
@@ -506,7 +503,6 @@ const PaymentPanel = ({
 
   useEffect(() => {
     setAmount(String(getNextPayableScheduleItem(installment)?.remainingAmount || getTotalOutstandingBalance(installment)));
-    setScheduleItemId(getNextPayableScheduleItem(installment)?._id ?? '');
   }, [installment]);
 
   const initialize = async () => {
@@ -530,25 +526,19 @@ const PaymentPanel = ({
 
   if (!canPayInstallment(installment)) {
     return (
-      <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-4 text-sm text-secondary">
+      <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 text-sm text-secondary sm:p-4">
         Payments are unavailable because this plan is {installment.status}. Partial payments do not transfer ownership.
       </div>
     );
   }
 
   return (
-    <section className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-5">
+    <section className="min-w-0 rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4 sm:p-5">
       <h3 className="text-lg font-bold">Installment payment</h3>
       <p className="mt-1 text-sm text-secondary">Allocation order: unpaid penalties, overdue principal, due principal, then future eligible principal. Ownership transfers only after valid completion.</p>
-      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
         <Input label="Amount" type="number" min="1" max={maxPayable} value={amount} onChange={(event) => setAmount(event.target.value)} error={invalidAmount ? `Enter an amount up to ${formatCurrency(maxPayable)}.` : undefined} />
-        <label className="space-y-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-secondary">Target milestone</span>
-          <select className="w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm" value={scheduleItemId} onChange={(event) => setScheduleItemId(event.target.value)}>
-            <option value="">No specific milestone</option>
-            {schedule.map((item) => <option key={item._id ?? item.sequence} value={item._id ?? ''}>{item.sequence}. {item.title}</option>)}
-          </select>
-        </label>
+        <Input label="Target milestone" value={targetMilestoneLabel} readOnly className="cursor-not-allowed opacity-75" />
         <div className="flex items-end">
           <Button type="button" fullWidth disabled={paying || invalidAmount || blockedByConditions} onClick={() => void initialize()}>
             {paying ? 'Initializing...' : 'Pay with Paystack'}
@@ -572,13 +562,13 @@ const ScheduleTable = ({
 }) => {
   const schedule = getScheduleItems(installment);
   if (!schedule.length) {
-    return <div className="rounded-lg border border-outline-variant/20 p-5 text-sm text-secondary">This legacy plan has no structured schedule yet.</div>;
+    return <div className="rounded-lg border border-outline-variant/20 p-4 text-sm text-secondary sm:p-5">This legacy plan has no structured schedule yet.</div>;
   }
   return (
-    <section className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-5">
+    <section className="min-w-0 rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4 sm:p-5">
       <h3 className="text-lg font-bold">Schedule and milestones</h3>
-      <div className="mt-4 overflow-x-auto">
-        <table className="min-w-full text-left text-sm">
+      <div className="-mx-4 mt-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <table className="min-w-[760px] text-left text-sm">
           <thead className="text-xs uppercase tracking-wider text-secondary">
             <tr>
               <th className="py-2 pr-4">Milestone</th>
@@ -655,8 +645,8 @@ const HistoryPanel = ({
   role?: string;
   onWaive: (penalty: InstallmentPenaltyRecord) => Promise<void>;
 }) => (
-  <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-    <section className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-5">
+  <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
+    <section className="min-w-0 rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4 sm:p-5">
       <h3 className="text-lg font-bold">Payment history</h3>
       {payments.length ? (
         <div className="mt-3 space-y-3">
@@ -669,13 +659,13 @@ const HistoryPanel = ({
         </div>
       ) : <p className="mt-3 text-sm text-secondary">No payment records yet.</p>}
     </section>
-    <section className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-5">
+    <section className="min-w-0 rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4 sm:p-5">
       <h3 className="text-lg font-bold">Penalty history</h3>
       <p className="mt-1 text-xs text-secondary">0.5% every completed 24-hour interval after due date plus grace period, non-compounding, calculated on unpaid schedule-item principal, rounded to whole naira.</p>
       {penalties.length ? (
         <div className="mt-3 space-y-3">
           {penalties.map((penalty) => (
-            <div key={penalty._id} className="rounded-lg bg-surface-container-low p-3 text-sm">
+            <div key={penalty._id} className="min-w-0 rounded-lg bg-surface-container-low p-3 text-sm">
               <div className="flex flex-wrap justify-between gap-2">
                 <p className="font-bold">Interval {penalty.intervalNumber ?? 'n/a'} - {penalty.status ?? 'outstanding'}</p>
                 {role === 'admin' && penalty.status !== 'waived' && Number(penalty.outstandingAmount || 0) > 0 ? (
@@ -775,25 +765,25 @@ const InstallmentDetail = ({
   };
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-5">
-        <div className="flex flex-wrap justify-between gap-4">
-          <div>
+    <div className="min-w-0 space-y-5">
+      <section className="min-w-0 rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4 sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:justify-between">
+          <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-widest text-secondary">Installment detail</p>
-            <h2 className="mt-1 text-2xl font-extrabold">{resolveInstallmentPropertyLabel(installment)}</h2>
-            <p className="text-sm text-secondary">Buyer: {resolveInstallmentBuyerLabel(installment)}</p>
-            {property ? <p className="text-sm text-secondary">Location: {property.location}</p> : null}
+            <h2 className="mt-1 break-words text-xl font-extrabold sm:text-2xl">{resolveInstallmentPropertyLabel(installment)}</h2>
+            <p className="break-words text-sm text-secondary">Buyer: {resolveInstallmentBuyerLabel(installment)}</p>
+            {property ? <p className="break-words text-sm text-secondary">Location: {property.location}</p> : null}
           </div>
           <StatusBadge status={installment.status} />
         </div>
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
           <Stat label="Property principal" value={formatCurrency(getPrincipalAmount(installment))} />
           <Stat label="Principal paid" value={formatCurrency(getPrincipalPaidAmount(installment))} />
           <Stat label="Principal remaining" value={formatCurrency(getPrincipalRemainingBalance(installment))} />
           <Stat label="Outstanding penalties" value={formatCurrency(getOutstandingPenaltyAmount(installment))} />
           <Stat label="Total outstanding" value={formatCurrency(getTotalOutstandingBalance(installment))} />
           <Stat label="Next due" value={formatDateTime(installment.nextPaymentDueDate)} />
-          <Stat label="Grace period" value={`${installment.gracePeriodHours ?? 120} hours`} />
+          <Stat label="Grace period" value={`${installment.gracePeriodHours ?? DEFAULT_GRACE_PERIOD_HOURS} hours`} />
           <Stat label="Default thresholds" value={`${installment.defaultAfterDays ?? 30} days / ${installment.maximumMissedPayments ?? 3} missed`} />
         </div>
         <p className="mt-4 text-sm text-secondary">Due begins at the exact due datetime. Overdue begins after due date plus grace period. Default is handled by backend thresholds, not by one missed due date.</p>
@@ -803,7 +793,7 @@ const InstallmentDetail = ({
       <ScheduleTable installment={installment} role={role} onSatisfy={satisfy} />
       <HistoryPanel payments={payments} penalties={penalties} role={role} onWaive={waive} />
 
-      <section className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-5">
+      <section className="min-w-0 rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4 sm:p-5">
         <h3 className="text-lg font-bold">Actions</h3>
         <div className="mt-4 flex flex-wrap gap-3">
           <Button type="button" variant="secondary" onClick={() => void onRefresh()} disabled={mutating}>Refresh</Button>
@@ -812,7 +802,7 @@ const InstallmentDetail = ({
         {role === 'admin' ? (
           <div className="mt-5 rounded-lg bg-surface-container-low p-4">
             <p className="text-sm font-bold">Exceptional manual status management</p>
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
               <select className="rounded-lg bg-surface-container-lowest px-4 py-3 text-sm" value={adminStatus} onChange={(event) => setAdminStatus(event.target.value as InstallmentStatus)}>
                 {adminStatuses.map((status) => <option key={status} value={status}>{labelize(status)}</option>)}
               </select>
@@ -919,22 +909,22 @@ const Installments = () => {
   }, [id, installments, loadDetail, searchParams]);
 
   const searchInput = (
-    <div className="relative w-full max-w-md">
+    <div className="relative w-full max-w-md min-w-0">
       <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">search</span>
       <input className="w-full rounded-lg bg-surface-container-low py-2 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-surface-tint/20" placeholder="Search installments..." type="search" value={query} onChange={(event) => setQuery(event.target.value)} />
     </div>
   );
 
   const body = (
-    <div className="mx-auto max-w-7xl p-6 lg:p-8">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold text-primary">Installments</h1>
+    <div className="mx-auto max-w-7xl min-w-0 px-3 py-4 sm:px-5 sm:py-6 lg:p-8">
+      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-extrabold text-primary sm:text-3xl">Installments</h1>
           <p className="text-sm text-secondary">
             {role === 'admin' ? 'All milestone-based installment plans.' : role === 'landlord' ? 'Plans on your properties.' : 'Create, track, and pay your plans.'}
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">{searchInput}</div>
+        <div className="flex w-full min-w-0 flex-wrap gap-3 sm:w-auto">{searchInput}</div>
       </header>
 
       {role === 'buyer' ? (
@@ -957,7 +947,7 @@ const Installments = () => {
       {listError ? <ErrorState message={listError} onRetry={() => void loadList()} /> : null}
 
       {!loadingList && !listError ? (
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.4fr)]">
+        <div className="grid min-w-0 grid-cols-1 gap-5 2xl:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.45fr)] 2xl:gap-6">
           <InstallmentList installments={installments} selectedId={selected?._id ?? id} role={role} query={query} />
           <InstallmentDetail
             installment={selected}

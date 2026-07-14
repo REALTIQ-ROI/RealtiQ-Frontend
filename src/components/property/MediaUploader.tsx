@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { propertyService } from '../../services/propertyService';
 import type { MediaItem } from '../../types';
@@ -9,28 +9,78 @@ interface MediaUploaderProps {
   error?: string;
 }
 
+interface PendingUploadFile {
+  id: string;
+  file: File;
+  previewUrl: string;
+  type: 'image' | 'video';
+}
+
+const createPendingUploadFile = (file: File): PendingUploadFile => ({
+  id: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`,
+  file,
+  previewUrl: URL.createObjectURL(file),
+  type: file.type.startsWith('video/') ? 'video' : 'image',
+});
+
 const MediaUploader = ({ value, onChange, error }: MediaUploaderProps) => {
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [pendingFiles, setPendingFiles] = useState<PendingUploadFile[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pendingFilesRef = useRef<PendingUploadFile[]>([]);
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const fileArray = Array.from(files);
+  useEffect(() => {
+    pendingFilesRef.current = pendingFiles;
+  }, [pendingFiles]);
+
+  useEffect(() => {
+    return () => {
+      pendingFilesRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    };
+  }, []);
+
+  const clearPendingFiles = () => {
+    setPendingFiles((current) => {
+      current.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      return [];
+    });
+  };
+
+  const savePendingFiles = (files: File[]) => {
+    setPendingFiles((current) => {
+      current.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      return files.map(createPendingUploadFile);
+    });
+  };
+
+  const uploadFiles = async (fileArray: File[]) => {
+    if (fileArray.length === 0) return;
     setUploading(true);
     setProgress(0);
     try {
       const result = await propertyService.uploadMedia(fileArray, setProgress);
       onChange([...value, ...result.media]);
+      clearPendingFiles();
       toast.success('Media uploaded successfully');
     } catch (err) {
+      savePendingFiles(fileArray);
       toast.error(err instanceof Error ? err.message : 'Media upload failed');
     } finally {
       setUploading(false);
       setProgress(0);
       if (inputRef.current) inputRef.current.value = '';
     }
+  };
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    await uploadFiles(Array.from(files));
+  };
+
+  const retryPendingUpload = async () => {
+    await uploadFiles(pendingFiles.map((item) => item.file));
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -41,6 +91,14 @@ const MediaUploader = ({ value, onChange, error }: MediaUploaderProps) => {
 
   const handleRemove = (index: number) => {
     onChange(value.filter((_, i) => i !== index));
+  };
+
+  const handleRemovePending = (id: string) => {
+    setPendingFiles((current) => {
+      const removed = current.find((item) => item.id === id);
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      return current.filter((item) => item.id !== id);
+    });
   };
 
   return (
@@ -97,6 +155,72 @@ const MediaUploader = ({ value, onChange, error }: MediaUploaderProps) => {
       </div>
 
       {error && <p className="text-error text-xs">{error}</p>}
+
+      {pendingFiles.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-bold text-amber-900">Upload did not complete</p>
+              <p className="text-xs text-amber-800">
+                {pendingFiles.length} selected {pendingFiles.length === 1 ? 'file is' : 'files are'} saved temporarily on this form.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void retryPendingUpload()}
+                disabled={uploading}
+                className="rounded-lg bg-amber-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
+              >
+                Retry upload
+              </button>
+              <button
+                type="button"
+                onClick={clearPendingFiles}
+                disabled={uploading}
+                className="rounded-lg bg-white px-4 py-2 text-xs font-bold text-amber-900 disabled:opacity-60"
+              >
+                Remove saved files
+              </button>
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                disabled={uploading}
+                className="rounded-lg bg-white px-4 py-2 text-xs font-bold text-amber-900 disabled:opacity-60"
+              >
+                Reselect
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {pendingFiles.map((item) => (
+              <div key={item.id} className="group relative aspect-square overflow-hidden rounded-lg bg-white">
+                {item.type === 'image' ? (
+                  <img src={item.previewUrl} alt={item.file.name} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-1">
+                    <span className="material-symbols-outlined text-2xl text-on-surface-variant/60">videocam</span>
+                    <span className="text-[10px] uppercase tracking-wider text-secondary">Video</span>
+                  </div>
+                )}
+                <div className="absolute inset-x-0 bottom-0 bg-black/65 p-1 text-[10px] text-white">
+                  <p className="truncate">{item.file.name}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemovePending(item.id)}
+                  disabled={uploading}
+                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white opacity-100 shadow-md transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
+                  aria-label={`Remove ${item.file.name}`}
+                >
+                  <span className="material-symbols-outlined text-xs">close</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Previews */}
       {value.length > 0 && (

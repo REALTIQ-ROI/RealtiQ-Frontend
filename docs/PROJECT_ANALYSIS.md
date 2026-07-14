@@ -300,7 +300,7 @@ realtiq-frontend/
 ### Axios Instance (`src/services/api.ts`)
 - Base URL: `VITE_API_BASE_URL` env var, defaults to `http://localhost:5000/api`
 - Request interceptor auto-attaches Bearer token from localStorage
-- 10-second timeout
+- 60-second timeout
 
 ### Service Modules
 
