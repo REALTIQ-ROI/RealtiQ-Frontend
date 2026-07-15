@@ -5,16 +5,17 @@ export class ApiRequestError extends Error {
   missingRules?: unknown;
   eligibleAt?: string;
   existingPayment?: unknown;
+  details?: unknown;
 
-  constructor(message: string, details?: { status?: number; missingRules?: unknown; eligibleAt?: string; existingPayment?: unknown }) {
+  constructor(message: string, details?: { status?: number; missingRules?: unknown; eligibleAt?: string; existingPayment?: unknown; details?: unknown }) {
     super(message);
     this.name = 'ApiRequestError';
     Object.assign(this, details);
   }
 }
 
-const defaultBaseURL = import.meta.env.DEV ? '/api' : 'https://api.realtiq.com.ng/api';
-// const defaultBaseURL = import.meta.env.DEV ? '/api' : 'http://localhost:5000/api';
+// const defaultBaseURL = import.meta.env.DEV ? '/api' : 'https://api.realtiq.com.ng/api';
+const defaultBaseURL = import.meta.env.DEV ? '/api' : 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? defaultBaseURL,
@@ -51,12 +52,13 @@ api.interceptors.response.use(
         : '';
 
     if (message.trim()) {
-      const details = responseData as { missingRules?: unknown; eligibleAt?: string; payment?: unknown };
+      const details = responseData as { missingRules?: unknown; eligibleAt?: string; payment?: unknown; details?: unknown };
       return Promise.reject(new ApiRequestError(message, {
         status,
         missingRules: details.missingRules,
         eligibleAt: details.eligibleAt,
         existingPayment: details.payment,
+        details: details.details,
       }));
     }
 

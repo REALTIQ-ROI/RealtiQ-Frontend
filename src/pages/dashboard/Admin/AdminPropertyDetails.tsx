@@ -2,6 +2,7 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
+import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { resolveOwnerId } from '../../../types';
 
@@ -49,6 +50,7 @@ const AdminPropertyDetails = () => {
               <span className="material-symbols-outlined text-sm">location_on</span>
               {property.location}
             </p>
+            <div className="mt-3"><TitleVerificationBadge summary={property.titleVerification} context="admin" /></div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -72,6 +74,13 @@ const AdminPropertyDetails = () => {
             >
               <span className="material-symbols-outlined text-sm">arrow_back</span>
               Back to Listings
+            </button>
+            <button
+              onClick={() => void navigate('/dashboard/admin/title-verifications')}
+              className="bg-surface-container-high text-on-surface px-6 py-3 rounded-md font-bold text-sm tracking-tight flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-sm">verified</span>
+              Title Review
             </button>
             <button className="p-3 bg-surface-container-low text-secondary rounded-md hover:bg-surface-container-high transition-colors">
               <span className="material-symbols-outlined">more_vert</span>

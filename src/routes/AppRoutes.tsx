@@ -16,6 +16,8 @@ import PostPaymentRedirect from '../pages/public/PostPaymentRedirect';
 import Redirecting from '../pages/public/Redirecting';
 import Listings from '../pages/public/Listings';
 import PropertyDetails from '../pages/public/PropertyDetails';
+import TitleVerificationRegistry from '../pages/public/TitleVerificationRegistry';
+import TitleRegistrySnapshots from '../pages/public/TitleRegistrySnapshots';
 
 import Login from '../pages/auth/Login';
 import Register from '../pages/auth/Register';
@@ -46,6 +48,7 @@ import ManageProperties from '../pages/dashboard/Admin/ManageProperties';
 import ManageUsers from '../pages/dashboard/Admin/ManageUsers';
 import FeaturedListings from '../pages/dashboard/Admin/FeaturedListings';
 import AdminPaymentDetails from '../pages/dashboard/Admin/AdminPaymentDetails';
+import TitleVerificationReview from '../pages/dashboard/Admin/TitleVerificationReview';
 import BuyerDashboard from '../pages/dashboard/Buyer/BuyerDashboard';
 import InquiryDetails from '../pages/dashboard/Buyer/InquiryDetails';
 import InquiryHistory from '../pages/dashboard/Buyer/InquiryHistory';
@@ -64,6 +67,7 @@ import LandlordPaymentHistory from '../pages/dashboard/Landlord/LandlordPaymentH
 import LandlordPropertyDetails from '../pages/dashboard/Landlord/LandlordPropertyDetails';
 import LandlordSettings from '../pages/dashboard/Landlord/LandlordSettings';
 import LandlordVerification from '../pages/dashboard/Landlord/LandlordVerification';
+import LandlordTitleVerifications from '../pages/dashboard/Landlord/LandlordTitleVerifications';
 import ProtectedRoute from './ProtectedRoute';
 import ROICalculatorPage from '../pages/dashboard/ROI/ROICalculatorPage';
 import PropertyROICalculatorPage from '../pages/dashboard/ROI/PropertyROICalculatorPage';
@@ -120,6 +124,8 @@ const AppRoutes = () => {
         <Route path="/auth/landlord/register" element={<LandlordRegistration />} />
 
         <Route path="/properties/:id" element={<PropertyDetails />} />
+        <Route path="/title-verification/:publicVerificationId" element={<TitleVerificationRegistry />} />
+        <Route path="/title-registry/snapshots" element={<TitleRegistrySnapshots />} />
         <Route path="/properties/:propertyId/roi" element={<PropertyROICalculatorPage />} />
 
         <Route element={<ProtectedRoute />}>
@@ -167,6 +173,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/landlord/escrows" element={<EscrowList />} />
           <Route path="/dashboard/landlord/escrows/:id" element={<EscrowDetails />} />
           <Route path="/dashboard/landlord/settings/verification" element={<LandlordVerification />} />
+          <Route path="/dashboard/landlord/title-verifications" element={<LandlordTitleVerifications />} />
           <Route path="/settings/verification" element={<LandlordVerification />} />
         </Route>
 
@@ -189,6 +196,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/landlord-details" element={<LandlordDetails />} />
           <Route path="/dashboard/admin/landlord-details/:id" element={<LandlordDetails />} />
           <Route path="/dashboard/admin/kyc" element={<KycManagement />} />
+          <Route path="/dashboard/admin/title-verifications" element={<TitleVerificationReview />} />
           <Route path="/admin/kyc" element={<KycManagement />} />
           <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />
           <Route path="/dashboard/admin/roi-assumptions" element={<ROIAssumptions />} />

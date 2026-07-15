@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { Property } from '../../types';
+import TitleVerificationBadge from '../title/TitleVerificationBadge';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-NG', {
@@ -108,6 +109,7 @@ const PropertyCard = ({
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <TitleVerificationBadge summary={property.titleVerification} context="public" />
           {property.featured ? (
             <span className="px-2 py-1 rounded-full bg-amber-400/15 text-amber-700 text-[10px] font-black uppercase tracking-wide">
               Featured

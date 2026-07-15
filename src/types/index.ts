@@ -67,6 +67,7 @@ export interface Property {
   buyerId?: PropertyOwner | string;
   createdAt?: string;
   updatedAt?: string;
+  titleVerification?: PropertyTitleVerificationSummary;
 }
 
 export const resolveOwnerId = (ownerId?: PropertyOwner | string): string => {
@@ -340,6 +341,216 @@ export interface InstallmentCondition {
   satisfiedAt?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export type TitleVerificationStatus =
+  | 'pending'
+  | 'under_review'
+  | 'approved'
+  | 'published'
+  | 'rejected'
+  | 'revoked'
+  | 'superseded';
+
+export type ExternalAnchorStatus =
+  | 'not_configured'
+  | 'not_requested'
+  | 'pending'
+  | 'anchoring'
+  | 'anchored'
+  | 'failed';
+
+export type PropertyTitleVerificationStatus =
+  | 'not_submitted'
+  | 'pending'
+  | 'under_review'
+  | 'approved'
+  | 'published'
+  | 'rejected'
+  | 'revoked';
+
+export type TitleDocumentType =
+  | 'certificate_of_occupancy'
+  | 'deed_of_assignment'
+  | 'survey_plan'
+  | 'governors_consent'
+  | 'land_purchase_agreement'
+  | 'allocation_letter'
+  | 'other';
+
+export type TitleRiskSeverity = 'low' | 'medium' | 'high' | 'critical' | string;
+
+export interface TitleRiskFlag {
+  _id?: string;
+  type: string;
+  severity: TitleRiskSeverity;
+  message: string;
+  relatedProperty?: string | Property;
+  relatedVerification?: string;
+  detectedAt?: string;
+  resolved?: boolean;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
+  resolutionNotes?: string | null;
+}
+
+export interface TitleVerificationPropertyRef {
+  _id?: string;
+  id?: string;
+  title?: string;
+  location?: string;
+  status?: string;
+}
+
+export interface TitleVerification {
+  verificationId: string;
+  propertyId?: string | TitleVerificationPropertyRef;
+  property?: string | TitleVerificationPropertyRef;
+  owner?: string | User;
+  document?: string;
+  documentType?: TitleDocumentType;
+  status: TitleVerificationStatus;
+  badgeLabel?: string;
+  hashAlgorithm?: string;
+  submissionHash?: string | null;
+  verifiedDocumentHash?: string | null;
+  publicVerificationId?: string | null;
+  publicVerificationUrl?: string | null;
+  publishedAt?: string | null;
+  registryRecordId?: string | null;
+  externalAnchorStatus?: ExternalAnchorStatus;
+  externalAnchor?: TitleExternalAnchor;
+  ledgerTransactionId?: string | null;
+  ledgerTransactionUrl?: string | null;
+  ledgerNetwork?: string | null;
+  fileSizeBytes?: number;
+  mimeType?: string;
+  originalFileName?: string;
+  submittedBy?: string | User;
+  submittedAt?: string;
+  reviewedAt?: string | null;
+  approvedAt?: string | null;
+  rejectionReason?: string | null;
+  revocationReason?: string | null;
+  revokedAt?: string | null;
+  verificationVersion?: number;
+  riskFlags?: TitleRiskFlag[];
+  previousVerification?: string | null;
+}
+
+export interface TitleVerificationLog {
+  _id: string;
+  action: string;
+  previousStatus?: string;
+  newStatus?: string;
+  note?: string;
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface PropertyTitleVerificationSummary {
+  status: PropertyTitleVerificationStatus;
+  badgeLabel?: string;
+  verificationId?: string | null;
+  registryRecordId?: string | null;
+  publicVerificationId?: string | null;
+  verifiedAt?: string | null;
+  publishedAt?: string | null;
+  externalAnchorStatus?: ExternalAnchorStatus;
+  documentHash?: string | null;
+  verifiedDocumentHash?: string | null;
+}
+
+export interface TitleExternalAnchor {
+  enabled?: boolean;
+  status: ExternalAnchorStatus;
+  provider?: string | null;
+  network?: string | null;
+  transactionId?: string | null;
+  transactionUrl?: string | null;
+  anchoredAt?: string | null;
+  failureReason?: string | null;
+}
+
+export interface PublicRegistryRecord {
+  publicVerificationId: string;
+  publicVerificationUrl?: string;
+  registry?: string;
+  property?: { id?: string; title?: string; location?: string };
+  documentType?: TitleDocumentType;
+  documentHash?: string;
+  hashAlgorithm?: string;
+  legalReviewStatus?: string;
+  registryStatus: 'active' | 'revoked' | 'superseded' | string;
+  verificationVersion?: number;
+  sequenceNumber?: number;
+  previousRecordHash?: string | null;
+  recordHash?: string;
+  signature?: string;
+  signatureAlgorithm?: string;
+  signingKeyId?: string;
+  signatureStatus?: 'signed' | 'not_configured' | string;
+  approvedAt?: string;
+  publishedAt?: string;
+  revokedAt?: string | null;
+  revocationReason?: string | null;
+  supersededBy?: string | null;
+  externalAnchor?: TitleExternalAnchor;
+  disclaimer?: string;
+}
+
+export interface RegistryIntegrity {
+  publicVerificationId: string;
+  recordHashValid?: boolean;
+  signatureValid?: boolean;
+  previousRecordLinkValid?: boolean;
+  registryStatus?: string;
+  externalAnchorStatus?: ExternalAnchorStatus;
+}
+
+export interface RegistryDocumentMatchResult {
+  matches: boolean;
+  publicVerificationId?: string;
+  hashAlgorithm?: string;
+  uploadedDocumentHash?: string;
+  registeredDocumentHash?: string;
+  documentHash?: string;
+  verificationStatus?: string;
+  registryStatus?: string;
+  ledgerTransactionId?: string | null;
+  message?: string;
+}
+
+export interface RegistryPublicKey {
+  keyId?: string;
+  algorithm?: string;
+  publicKey?: string;
+  configured: boolean;
+}
+
+export interface RegistrySnapshot {
+  snapshotDate: string;
+  firstSequenceNumber?: number | null;
+  lastSequenceNumber?: number | null;
+  recordCount?: number;
+  snapshotHash?: string;
+  previousSnapshotHash?: string | null;
+  signature?: string;
+  signatureAlgorithm?: string;
+  signingKeyId?: string;
+  signatureStatus?: string;
+  generatedAt?: string;
+  externalAnchor?: TitleExternalAnchor & { failureReason?: string | null };
+}
+
+export interface RegistrySnapshotManifest {
+  snapshotDate: string;
+  snapshotHash?: string;
+  records: Array<{
+    publicVerificationId: string;
+    sequenceNumber: number;
+    recordHash: string;
+  }>;
 }
 
 export interface InstallmentScheduleItem {

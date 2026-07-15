@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import InquiryForm from '../../components/forms/InquiryForm';
 import PropertyGallery from '../../components/property/PropertyGallery';
 import PropertyMeta from '../../components/property/PropertyMeta';
+import TitleVerificationBadge from '../../components/title/TitleVerificationBadge';
 import PublicLayout from '../../components/layout/PublicLayout';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
@@ -17,7 +18,8 @@ import { installmentService } from '../../services/installmentService';
 import { paymentService } from '../../services/paymentService';
 import { propertyService, type NearbyPropertySummary } from '../../services/propertyService';
 import { tourService } from '../../services/tourService';
-import { resolveOwnerId } from '../../types';
+import { titleVerificationService } from '../../services/titleVerificationService';
+import { resolveOwnerId, type PropertyTitleVerificationSummary } from '../../types';
 import {
   calculateInstallmentAmount,
   getInstallmentSummary,
@@ -74,6 +76,7 @@ const PropertyDetails = () => {
   const [tourDate, setTourDate] = useState('');
   const [tourNotes, setTourNotes] = useState('');
   const [installmentFrequency, setInstallmentFrequency] = useState<(typeof INSTALLMENT_FREQUENCIES)[number]['value']>('monthly');
+  const [titleSummary, setTitleSummary] = useState<PropertyTitleVerificationSummary | null>(null);
 
   useEffect(() => {
     if (!property?._id) return;
@@ -94,6 +97,18 @@ const PropertyDetails = () => {
       .catch(() => setNearby([]))
       .finally(() => setLoadingNearby(false));
   }, [isAuthenticated, property]);
+
+  useEffect(() => {
+    if (!property?._id) return;
+    if (property.titleVerification) {
+      setTitleSummary(property.titleVerification);
+      return;
+    }
+    titleVerificationService
+      .getPropertyTitleVerification(property._id)
+      .then((response) => setTitleSummary(response.titleVerification))
+      .catch(() => setTitleSummary(null));
+  }, [property]);
 
   useEffect(() => {
     if (hasMounted.current) {
@@ -313,6 +328,7 @@ const PropertyDetails = () => {
                     Featured
                   </span>
                 ) : null}
+                <TitleVerificationBadge summary={titleSummary} context="public" />
               </div>
               <h1 className="text-4xl md:text-5xl font-extrabold tracking-tighter text-primary mb-2">
                 {property.title}

@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
+import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
@@ -60,6 +61,7 @@ const LandlordPropertyDetails = () => {
                 {property?.status === 'available' ? 'Active' : property?.status ?? 'Not Found'}
               </span>
               <span className="text-secondary text-sm font-medium">Live API data</span>
+              <TitleVerificationBadge summary={property?.titleVerification} context="owner" />
             </div>
             <h1 className="text-4xl font-extrabold tracking-tighter text-slate-900 mb-2">
               {property?.title ?? 'Property not found'}
@@ -83,6 +85,13 @@ const LandlordPropertyDetails = () => {
             >
               <span className="material-symbols-outlined text-lg">edit</span>
               Quick Edit
+            </Link>
+            <Link
+              to={property ? `/dashboard/landlord/title-verifications?propertyId=${property._id}` : '/dashboard/landlord/title-verifications'}
+              className="px-6 py-3 bg-surface-container-high text-slate-900 font-bold rounded-lg hover:bg-slate-200 transition-all flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-lg">verified</span>
+              Verify Title
             </Link>
           </div>
         </div>
