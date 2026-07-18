@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { paymentService } from '../../../services/paymentService';
+import { propertyPublicReference } from '../../../types';
 import type { ApiPayment } from '../../../types';
 
 const formatNGN = (amount: number) =>
@@ -127,6 +128,7 @@ const PaymentDetails = () => {
   }
 
   const canVerify = payment.status === 'pending' && (user?.role === 'buyer' || user?.role === 'admin');
+  const propertyReference = propertyPublicReference(payment.property);
 
   return (
     <BuyerPortalLayout
@@ -200,12 +202,14 @@ const PaymentDetails = () => {
             <h3 className="font-bold text-green-800">Payment Successful</h3>
             <p className="text-green-700 text-sm">Your property purchase has been confirmed</p>
           </div>
-          <button
-            onClick={() => void navigate(`/properties/${payment.property._id}`)}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 transition-colors"
-          >
-            View Property
-          </button>
+          {propertyReference ? (
+            <button
+              onClick={() => void navigate(`/properties/${propertyReference}`)}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 transition-colors"
+            >
+              View Property
+            </button>
+          ) : null}
         </div>
       )}
 

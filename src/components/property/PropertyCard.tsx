@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import type { Property } from '../../types';
+import { propertyPublicReference, type Property } from '../../types';
 import TitleVerificationBadge from '../title/TitleVerificationBadge';
 
 const formatCurrency = (value: number) =>
@@ -21,6 +21,7 @@ const PropertyCard = ({
   const cover = property.media?.[0];
   const coverUrl = cover?.url;
   const isVideo = cover?.type === 'video';
+  const routeReference = propertyPublicReference(property);
 
   return (
     <article className="group bg-surface-container-lowest rounded-xl overflow-hidden border border-outline-variant/10 hover:shadow-lg transition-shadow duration-300">
@@ -146,10 +147,14 @@ const PropertyCard = ({
           </span>
         </div>
 
-        <Link to={`/properties/${property._id}`} className="inline-flex items-center gap-1 text-primary font-bold text-sm hover:underline underline-offset-4">
-          View details
-          <span className="material-symbols-outlined text-base">arrow_forward</span>
-        </Link>
+        {routeReference ? (
+          <Link to={`/properties/${routeReference}`} className="inline-flex items-center gap-1 text-primary font-bold text-sm hover:underline underline-offset-4">
+            View details
+            <span className="material-symbols-outlined text-base">arrow_forward</span>
+          </Link>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-sm font-bold text-secondary">Reference pending</span>
+        )}
       </div>
     </article>
   );

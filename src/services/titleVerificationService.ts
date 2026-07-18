@@ -68,8 +68,11 @@ export const titleVerificationService = {
     return data;
   },
 
-  async reviewTitleVerification(id: string, input: ReviewTitleVerificationInput): Promise<{ verification: TitleVerification }> {
-    const { data } = await api.patch<{ verification: TitleVerification }>(`/title-verifications/${id}/review`, input);
+  async reviewTitleVerification(id: string, input: ReviewTitleVerificationInput, authToken?: string | null): Promise<{ verification: TitleVerification }> {
+    const url = `/title-verifications/${id}/review`;
+    const { data } = authToken
+      ? await api.patch<{ verification: TitleVerification }>(url, input, { headers: { Authorization: `Bearer ${authToken}` } })
+      : await api.patch<{ verification: TitleVerification }>(url, input);
     return data;
   },
 

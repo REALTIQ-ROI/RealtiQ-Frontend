@@ -3,6 +3,7 @@ import MediaPreview from '../property/MediaPreview';
 import Card from '../ui/Card';
 import type { ROIScenario, ScenarioProperty } from '../../services/roiService';
 import { formatDate, formatMonth, formatNaira, formatPercent } from './roiFormatters';
+import { propertyPublicReference } from '../../types';
 
 interface ScenarioListProps {
   scenarios: ROIScenario[];
@@ -45,6 +46,7 @@ const ScenarioList = ({ scenarios, loading = false, showProperty = false }: Scen
       {scenarios.map((scenario) => {
         const results = resolveResults(scenario);
         const property = resolveProperty(scenario);
+        const propertyReference = propertyPublicReference(property);
         const roi = scenario.inputs.cost && results?.finalProfit
           ? (results.finalProfit / scenario.inputs.cost) * 100
           : null;
@@ -75,8 +77,10 @@ const ScenarioList = ({ scenarios, loading = false, showProperty = false }: Scen
                   <span><span className="text-secondary">Sale:</span> <strong>{formatNaira(results?.finalSellingPrice)}</strong></span>
                   <span><span className="text-secondary">Profit:</span> <strong>{formatNaira(results?.finalProfit)}</strong></span>
                   <span><span className="text-secondary">ROI:</span> <strong>{roi === null ? 'N/A' : formatPercent(roi, 1)}</strong></span>
-                  {showProperty && property?._id ? (
-                    <Link className="text-primary font-bold hover:underline" to={`/properties/${property._id}`}>Open property</Link>
+                  {showProperty && propertyReference ? (
+                    <Link className="text-primary font-bold hover:underline" to={`/properties/${propertyReference}`}>Open property</Link>
+                  ) : showProperty && property ? (
+                    <span className="text-secondary font-bold">Reference pending</span>
                   ) : (
                     <span><span className="text-secondary">Alpha:</span> <strong>{scenario.inputs.alpha ?? 'N/A'}</strong></span>
                   )}

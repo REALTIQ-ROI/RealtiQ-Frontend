@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
 import MapListLayout from '../../../components/property/map/MapListLayout';
-import { useAuth } from '../../../contexts/AuthContext';
-import { useProperties } from '../../../contexts/PropertiesContext';
-import { resolveBuyerId } from '../../../types';
+import { useAsync } from '../../../hooks/useAsync';
+import { ownershipService } from '../../../services/ownershipService';
+import { propertyRouteReference } from '../../../types';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-NG', {
@@ -15,8 +15,7 @@ const formatCurrency = (value: number) =>
   }).format(value);
 
 const MyProperties = () => {
-  const { user } = useAuth();
-  const { properties } = useProperties();
+  const { data: ownedProperties } = useAsync(() => ownershipService.getMyOwnedProperties(), true);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<'all' | 'residential' | 'commercial'>('all');
   const [page, setPage] = useState(1);
@@ -24,15 +23,14 @@ const MyProperties = () => {
 
   const myProperties = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return properties.filter((item) => {
-      const matchesBuyer = resolveBuyerId(item.buyerId) === user?._id;
+    return (ownedProperties ?? []).filter((item) => {
       const matchesQuery = !needle || `${item.title} ${item.location} ${item.propertyType}`.toLowerCase().includes(needle);
       const matchesCategory =
         category === 'all' ||
         (category === 'commercial' ? item.propertyType === 'commercial' : item.propertyType !== 'commercial');
-      return matchesBuyer && matchesQuery && matchesCategory;
+      return matchesQuery && matchesCategory;
     });
-  }, [category, properties, query, user?._id]);
+  }, [category, ownedProperties, query]);
 
   const paginated = myProperties.slice((page - 1) * itemsPerPage, page * itemsPerPage);
   const totalValue = myProperties.reduce((sum, item) => sum + item.price, 0);
@@ -92,7 +90,7 @@ const MyProperties = () => {
         </div>
       </section>
 
-      <MapListLayout properties={myProperties} detailsPath={(property) => `/dashboard/buyer/property-details/${property._id}`}>
+      <MapListLayout properties={myProperties} detailsPath={(property) => `/dashboard/buyer/property-details/${propertyRouteReference(property)}`}>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {paginated.map((property) => (
           <div key={property._id} className="group flex flex-col bg-surface-container-lowest rounded-xl overflow-hidden hover:translate-y-[-4px] transition-all duration-300">
@@ -128,7 +126,7 @@ const MyProperties = () => {
                       <span className="material-symbols-outlined text-sm">bathtub</span> {property.bathrooms}
                     </span>
                   </div>
-                  <Link className="text-xs font-bold text-primary hover:underline" to={`/dashboard/buyer/property-details/${property._id}`}>
+                  <Link className="text-xs font-bold text-primary hover:underline" to={`/dashboard/buyer/property-details/${propertyRouteReference(property)}`}>
                     View Details
                   </Link>
                 </div>

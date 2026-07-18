@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import L from 'leaflet';
 import 'leaflet.markercluster';
-import type { Property } from '../../../types';
+import { propertyRouteReference, type Property } from '../../../types';
 import PropertyMapPreviewCard from './PropertyMapPreviewCard';
 
 interface Props {
@@ -32,7 +32,7 @@ const PropertyMap = ({ properties, detailsPath, actions, className = '' }: Props
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mapError, setMapError] = useState(false);
   const mappable = useMemo(() => properties.filter(isMappable), [properties]);
-  const selected = useMemo(() => mappable.find((property) => property._id === selectedId) ?? null, [mappable, selectedId]);
+  const selected = useMemo(() => mappable.find((property) => propertyRouteReference(property) === selectedId) ?? null, [mappable, selectedId]);
   const missingCount = properties.length - mappable.length;
 
   useEffect(() => {
@@ -73,7 +73,7 @@ const PropertyMap = ({ properties, detailsPath, actions, className = '' }: Props
         }),
         title: property.title,
       });
-      marker.on('click', () => setSelectedId(property._id));
+      marker.on('click', () => setSelectedId(propertyRouteReference(property)));
       cluster.addLayer(marker);
       bounds.extend([lat, lng]);
     });

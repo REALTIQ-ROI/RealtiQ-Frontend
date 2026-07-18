@@ -9,7 +9,7 @@ export type EscrowRuleType =
 
 export type EscrowMetadata = Record<string, unknown>;
 export type EscrowParty = Pick<User, '_id' | 'name' | 'email' | 'role'>;
-export type EscrowProperty = Pick<Property, '_id' | 'title' | 'price' | 'location' | 'currency' | 'propertyType' | 'media' | 'status'> & { media: MediaItem[] };
+export type EscrowProperty = Pick<Property, '_id' | 'publicReference' | 'title' | 'price' | 'location' | 'currency' | 'propertyType' | 'media' | 'status'> & { media: MediaItem[] };
 
 export interface EscrowRule {
   _id: string;

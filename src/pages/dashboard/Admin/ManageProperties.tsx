@@ -6,7 +6,7 @@ import MediaPreview from '../../../components/property/MediaPreview';
 import MapListLayout from '../../../components/property/map/MapListLayout';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import type { Property } from '../../../types';
-import { resolveOwnerId } from '../../../types';
+import { propertyDisplayReference, propertyRouteReference } from '../../../types';
 
 type FilterType = 'all' | 'available' | 'sold';
 
@@ -26,6 +26,29 @@ const statusBadge = (status: Property['status']) => {
 };
 
 const ITEMS_PER_PAGE = 10;
+
+const ownerDisplay = (property: Property) => {
+  const owner = property.owner ?? property.ownerId;
+  if (!owner) return { initials: 'NA', label: 'Owner unavailable' };
+
+  if (typeof owner === 'string') {
+    return owner.trim()
+      ? { initials: owner.slice(0, 2).toUpperCase(), label: `...${owner.slice(-8)}` }
+      : { initials: 'NA', label: 'Owner unavailable' };
+  }
+
+  const ownerId = owner._id || owner.id || '';
+  const name = owner.name || owner.email || ownerId;
+  return {
+    initials: name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('') || 'NA',
+    label: owner.name || owner.email || (ownerId ? `...${ownerId.slice(-8)}` : 'Owner unavailable'),
+  };
+};
 
 const ManageProperties = () => {
   const { properties, updateProperty, deleteProperty } = useProperties();
@@ -57,7 +80,8 @@ const ManageProperties = () => {
   };
 
   const handleViewDetails = (property: Property) => {
-    void navigate(`/dashboard/admin/property-details/${property._id}`);
+    const reference = propertyRouteReference(property);
+    if (reference) void navigate(`/dashboard/admin/property-details/${reference}`);
   };
 
   const handleDelete = async (property: Property) => {
@@ -73,7 +97,7 @@ const ManageProperties = () => {
       reverseButtons: true,
     });
     if (confirmed.isConfirmed) {
-      await deleteProperty(property._id);
+      await deleteProperty(propertyRouteReference(property));
     }
   };
 
@@ -154,10 +178,13 @@ const ManageProperties = () => {
 
         <MapListLayout
           properties={filtered}
-          detailsPath={(property) => `/dashboard/admin/property-details/${property._id}`}
+          detailsPath={(property) => {
+            const reference = propertyRouteReference(property);
+            return reference ? `/dashboard/admin/property-details/${reference}` : '';
+          }}
           actions={(property) => (
             <>
-              <button type="button" className="rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold text-primary" onClick={() => void updateProperty(property._id, { featured: !property.featured })}>
+              <button type="button" className="rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold text-primary" onClick={() => void updateProperty(propertyRouteReference(property), { featured: !property.featured })} disabled={!propertyRouteReference(property)}>
                 {property.featured ? 'Unfeature' : 'Feature'}
               </button>
               <button type="button" className="rounded-lg bg-error-container px-3 py-2 text-xs font-bold text-error" onClick={() => void handleDelete(property)}>Delete</button>
@@ -186,12 +213,14 @@ const ManageProperties = () => {
                 </tr>
               ) : (
                 paginated.map((property) => {
+                  const propertyReference = propertyRouteReference(property);
+                  const displayReference = property._id
+                    ? `ID: ${property._id.slice(-6).toUpperCase()}`
+                    : propertyDisplayReference(property);
                   const image = property.media?.[0];
-                  const ownerInitials = property.ownerId
-                    ? resolveOwnerId(property.ownerId).slice(0, 2).toUpperCase()
-                    : '??';
+                  const owner = ownerDisplay(property);
                   return (
-                    <tr key={property._id} className="group hover:bg-surface-container-lowest transition-colors">
+                    <tr key={propertyReference || `${property.title}-${property.location}`} className="group hover:bg-surface-container-lowest transition-colors">
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-4">
                           <div className="h-14 w-14 rounded-lg overflow-hidden flex-shrink-0 bg-slate-200">
@@ -204,17 +233,17 @@ const ManageProperties = () => {
                             >
                               {property.title}
                             </h4>
-                            <p className="text-xs text-secondary">ID: {property._id.slice(-6).toUpperCase()}</p>
+                            <p className="text-xs text-secondary">{displayReference}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-2">
                           <div className="h-6 w-6 rounded-full bg-secondary-container flex items-center justify-center text-[10px] font-bold text-on-secondary-fixed">
-                            {ownerInitials}
+                            {owner.initials}
                           </div>
                           <span className="text-sm font-medium text-secondary">
-                            {property.ownerId ? `…${resolveOwnerId(property.ownerId).slice(-8)}` : 'N/A'}
+                            {owner.label}
                           </span>
                         </div>
                       </td>
@@ -241,7 +270,8 @@ const ManageProperties = () => {
                                 : 'text-secondary hover:text-primary hover:bg-slate-100'
                             }`}
                             title={property.featured ? 'Unfeature' : 'Feature Listing'}
-                            onClick={() => void updateProperty(property._id, { featured: !property.featured })}
+                            disabled={!propertyReference}
+                            onClick={() => void updateProperty(propertyReference, { featured: !property.featured })}
                           >
                             <span
                               className="material-symbols-outlined text-lg"

@@ -27,9 +27,12 @@ const AddProperty = () => {
       return;
     }
 
-    const created = await addProperty(user._id, payload);
-    if (created) {
-      toast.success('Property listed successfully');
+    const response = await addProperty(user._id, payload);
+    if (response.property) {
+      toast.success(response.message || 'Property submitted for admin approval before public listing.');
+      if (response.riskDetected) {
+        toast.warning('Title document risk signals were detected. Legal review is required before title verification can be published.');
+      }
       navigate('/dashboard/landlord/my-properties');
     }
   };
@@ -50,7 +53,7 @@ const AddProperty = () => {
         ) : error ? (
           <ErrorState message={error} onRetry={() => void execute()} />
         ) : isVerified ? (
-          <PropertyForm onSubmit={handleSubmit} submitLabel="Publish Property" />
+          <PropertyForm onSubmit={handleSubmit} submitLabel="Submit for Approval" />
         ) : (
           <section className="rounded-2xl border border-dashed border-outline-variant/20 bg-surface-container-lowest p-8 lg:p-12 text-center">
             <div className="mx-auto max-w-2xl space-y-4">

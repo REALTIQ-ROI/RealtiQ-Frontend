@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Property } from '../../types';
+import { propertyRouteReference, type Property } from '../../types';
 
 interface PropertySearchSelectProps {
   label: string;
@@ -28,7 +28,7 @@ const PropertySearchSelect = ({
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  const selectedProperty = useMemo(() => properties.find((property) => property._id === value) ?? null, [properties, value]);
+  const selectedProperty = useMemo(() => properties.find((property) => propertyRouteReference(property) === value) ?? null, [properties, value]);
 
   const filteredProperties = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -99,7 +99,7 @@ const PropertySearchSelect = ({
             ) : filteredProperties.length > 0 ? (
               filteredProperties.map((property) => (
                 <button
-                  key={property._id}
+                  key={propertyRouteReference(property)}
                   type="button"
                   onClick={() => {
                     onChange(property);
@@ -107,7 +107,7 @@ const PropertySearchSelect = ({
                     setOpen(false);
                   }}
                   className={`w-full px-4 py-3 text-left hover:bg-surface-container-low transition-colors border-b border-outline-variant/10 last:border-b-0 ${
-                    property._id === value ? 'bg-primary/5' : ''
+                    propertyRouteReference(property) === value ? 'bg-primary/5' : ''
                   }`}
                 >
                   <span className="block font-semibold text-sm text-on-surface">{property.title}</span>

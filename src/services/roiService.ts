@@ -54,6 +54,7 @@ export interface SavePropertyScenarioPayload {
 
 export interface ScenarioProperty {
   _id: string;
+  publicReference?: string | null;
   title: string;
   price?: number;
   location?: string;
@@ -75,6 +76,7 @@ export interface ROIScenario {
 
 export interface MarketBenchmarkProperty {
   _id: string;
+  publicReference?: string | null;
   title: string;
   price: number;
   location?: string;

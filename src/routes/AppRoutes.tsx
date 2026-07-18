@@ -49,6 +49,7 @@ import ManageUsers from '../pages/dashboard/Admin/ManageUsers';
 import FeaturedListings from '../pages/dashboard/Admin/FeaturedListings';
 import AdminPaymentDetails from '../pages/dashboard/Admin/AdminPaymentDetails';
 import TitleVerificationReview from '../pages/dashboard/Admin/TitleVerificationReview';
+import PropertyApprovalReview from '../pages/dashboard/Admin/PropertyApprovalReview';
 import BuyerDashboard from '../pages/dashboard/Buyer/BuyerDashboard';
 import InquiryDetails from '../pages/dashboard/Buyer/InquiryDetails';
 import InquiryHistory from '../pages/dashboard/Buyer/InquiryHistory';
@@ -185,6 +186,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/notifications/digest" element={<NotificationDigest />} />
           <Route path="/dashboard/admin/manage-users" element={<ManageUsers />} />
           <Route path="/dashboard/admin/users/:id" element={<UserDetails />} />
+          <Route path="/dashboard/admin/property-approvals" element={<PropertyApprovalReview />} />
           <Route path="/dashboard/admin/manage-properties" element={<ManageProperties />} />
           <Route path="/dashboard/admin/property-details" element={<AdminPropertyDetails />} />
           <Route path="/dashboard/admin/property-details/:id" element={<AdminPropertyDetails />} />

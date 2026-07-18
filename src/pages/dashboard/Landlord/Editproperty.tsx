@@ -7,7 +7,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import type { UpdatePropertyPayload } from '../../../services/propertyService';
-import { resolveOwnerId } from '../../../types';
+import { resolvePropertyOwnerId } from '../../../types';
 
 const Editproperty = () => {
   const { user } = useAuth();
@@ -17,7 +17,7 @@ const Editproperty = () => {
 
   const property = useMemo(() => {
     if (id) return properties.find((item) => item._id === id) ?? null;
-    return properties.find((item) => resolveOwnerId(item.ownerId) === user?._id) ?? null;
+    return properties.find((item) => resolvePropertyOwnerId(item) === user?._id) ?? null;
   }, [properties, user, id]);
 
   const handleSubmit = async (payload: UpdatePropertyPayload & { status?: string }) => {

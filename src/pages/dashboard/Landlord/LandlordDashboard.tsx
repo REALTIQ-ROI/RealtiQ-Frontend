@@ -7,7 +7,7 @@ import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
 import { paymentService } from '../../../services/paymentService';
-import { resolveOwnerId } from '../../../types';
+import { resolvePropertyOwnerId } from '../../../types';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-NG', {
@@ -32,7 +32,7 @@ const LandlordDashboard = () => {
   const [query, setQuery] = useState('');
 
   const myProperties = useMemo(
-    () => properties.filter((item) => resolveOwnerId(item.ownerId) === user?._id),
+    () => properties.filter((item) => resolvePropertyOwnerId(item) === user?._id),
     [properties, user?._id],
   );
   const myInquiries = useMemo(

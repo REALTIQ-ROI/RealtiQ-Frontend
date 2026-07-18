@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { propertyService, type CreatePropertyPayload } from '../services/propertyService';
+import { propertyService, type CreatePropertyPayload, type CreatePropertyResponse } from '../services/propertyService';
 import { paymentService } from '../services/paymentService';
-import type { Property } from '../types';
+import type { Property, User } from '../types';
 import { requiresInstallments } from '../utils/installment';
 
 interface PropertiesContextValue {
@@ -10,7 +10,7 @@ interface PropertiesContextValue {
   loading: boolean;
   error: string | null;
   refreshProperties: (limitOverride?: number) => Promise<void>;
-  addProperty: (ownerId: string, payload: CreatePropertyPayload) => Promise<Property>;
+  addProperty: (ownerId: string, payload: CreatePropertyPayload) => Promise<CreatePropertyResponse>;
   updateProperty: (propertyId: string, payload: Partial<Property>) => Promise<Property>;
   deleteProperty: (propertyId: string) => Promise<void>;
   buyProperty: (propertyId: string, buyerId: string) => Promise<void>;
@@ -27,7 +27,11 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await propertyService.getProperties({ limit: limitOverride });
+      const storedUser = localStorage.getItem('user');
+      const user = storedUser ? (JSON.parse(storedUser) as User) : null;
+      const res = user?.role === 'landlord'
+        ? await propertyService.getMyProperties()
+        : await propertyService.getProperties({ limit: limitOverride });
       const nextProperties = Array.isArray(res)
         ? res
         : 'properties' in res && Array.isArray(res.properties)
@@ -46,8 +50,8 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
     void refreshProperties();
   }, [refreshProperties]);
 
-  const addProperty = async (_ownerId: string, payload: CreatePropertyPayload): Promise<Property> => {
-    const created = await propertyService.createProperty(payload);
+  const addProperty = async (_ownerId: string, payload: CreatePropertyPayload): Promise<CreatePropertyResponse> => {
+    const created = await propertyService.createPropertyWithResponse(payload);
     await refreshProperties();
     return created;
   };

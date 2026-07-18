@@ -6,6 +6,7 @@ import Button from '../../components/ui/Button';
 import { useProperties } from '../../contexts/PropertiesContext';
 import LoadingState from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
+import { propertyRouteReference } from '../../types';
 
 const Home = () => {
   const { properties, loading, error, refreshProperties } = useProperties();
@@ -64,7 +65,7 @@ const Home = () => {
         {!loading && !error ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {properties.slice(0, 3).map((property) => (
-              <PropertyCard key={property._id} property={property} />
+              <PropertyCard key={propertyRouteReference(property)} property={property} />
             ))}
           </div>
         ) : null}

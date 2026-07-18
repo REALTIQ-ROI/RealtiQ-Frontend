@@ -4,7 +4,7 @@ import AdminLayout from '../../../components/layout/AdminLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
 import { useProperties } from '../../../contexts/PropertiesContext';
-import { resolveOwnerId } from '../../../types';
+import { propertyDisplayReference, propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
 
 // const sparkHeights = ['50%', '66%', '100%', '75%', '66%', '80%', '83%'];
 
@@ -17,7 +17,7 @@ const AdminPropertyDetails = () => {
 
   const propertyId = id ?? (location.state as { propertyId?: string } | null)?.propertyId;
   const property = propertyId
-    ? properties.find((p) => p._id === propertyId) ?? null
+    ? properties.find((p) => p._id === propertyId || propertyRouteReference(p) === propertyId) ?? null
     : properties[0];
 
   if (!property) {
@@ -29,8 +29,16 @@ const AdminPropertyDetails = () => {
   }
 
   const images = property.media?.filter((m) => m.type === 'image') ?? [];
-
-  const ownerInitials = property.ownerId ? resolveOwnerId(property.ownerId).slice(0, 2).toUpperCase() : 'NA';
+  const propertyReference = propertyRouteReference(property);
+  const owner = property.owner ?? (typeof property.ownerId !== 'string' ? property.ownerId : null);
+  const ownerId = resolvePropertyOwnerId(property);
+  const ownerName = owner?.name || 'Owner unavailable';
+  const ownerInitials = (owner?.name || owner?.email || ownerId || 'NA')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'NA';
 
   return (
     <AdminLayout>
@@ -56,7 +64,8 @@ const AdminPropertyDetails = () => {
           <div className="flex items-center gap-4">
             <div className="flex items-center bg-surface-container-low p-1 rounded-lg">
               <button
-                onClick={() => void updateProperty(property._id, { featured: !property.featured })}
+                onClick={() => void updateProperty(propertyReference, { featured: !property.featured })}
+                disabled={!propertyReference}
                 className="px-4 py-2 text-sm font-semibold rounded-md transition-all bg-white text-primary shadow-sm flex items-center gap-2"
               >
                 <span
@@ -159,7 +168,7 @@ const AdminPropertyDetails = () => {
                 <div>
                   <span className="block text-[10px] uppercase tracking-widest text-secondary font-bold mb-1">Listing ID</span>
                   <span className="text-primary font-bold text-sm">
-                    RTQ-{property._id.slice(-6).toUpperCase()}
+                    {property._id ? `RTQ-${property._id.slice(-6).toUpperCase()}` : propertyDisplayReference(property)}
                   </span>
                 </div>
               </div>
@@ -289,11 +298,12 @@ const AdminPropertyDetails = () => {
                 </div>
                 <div>
                   <span className="block font-bold text-primary">
-                    Owner ID
+                    {ownerName}
                   </span>
                   <span className="text-xs text-secondary">
-                    {property.ownerId ? `…${resolveOwnerId(property.ownerId).slice(-10)}` : 'Unknown'}
+                    {owner?.email || (ownerId ? `...${ownerId.slice(-10)}` : 'Unknown')}
                   </span>
+                  {owner?.phone ? <span className="mt-1 block text-xs text-secondary">{owner.phone}</span> : null}
                 </div>
               </div>
               <div className="space-y-3">

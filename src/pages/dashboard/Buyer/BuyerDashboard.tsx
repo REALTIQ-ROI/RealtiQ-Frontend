@@ -6,7 +6,8 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
-import { resolveBuyerId } from '../../../types';
+import { ownershipService } from '../../../services/ownershipService';
+import { propertyRouteReference } from '../../../types';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-NG', {
@@ -30,13 +31,15 @@ const formatRelativeDate = (date?: string) => {
 const BuyerDashboard = () => {
   const { user } = useAuth();
   const { properties } = useProperties();
-  const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
+  const { data: inquiries } = useAsync(async () => {
+    const response = await inquiryService.getInquiries();
+    console.log('[BuyerDashboard] GET /api/inquiries response:', response);
+    return response;
+  }, true);
+  const { data: ownedProperties } = useAsync(() => ownershipService.getMyOwnedProperties(), true);
   const [query, setQuery] = useState('');
 
-  const buyerProperties = useMemo(
-    () => properties.filter((property) => resolveBuyerId(property.buyerId) === user?._id),
-    [properties, user?._id],
-  );
+  const buyerProperties = useMemo(() => ownedProperties ?? [], [ownedProperties]);
   const buyerInquiries = useMemo(
     () =>
       (inquiries ?? []).filter(
@@ -141,7 +144,7 @@ const BuyerDashboard = () => {
             {recentProperty ? (
               <Link
                 className="flex items-center gap-4 p-4 rounded-xl border border-transparent hover:border-outline-variant/10 hover:bg-surface-container-low transition-colors"
-                to={`/dashboard/buyer/property-details/${recentProperty._id}`}
+                to={`/dashboard/buyer/property-details/${propertyRouteReference(recentProperty)}`}
               >
                 <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-high">
                   <MediaPreview media={recentProperty.media?.[0]} alt={recentProperty.title} className="w-full h-full object-cover" />
@@ -200,7 +203,7 @@ const BuyerDashboard = () => {
                   <Link
                     key={property._id}
                     className="group bg-surface-container-lowest rounded-xl overflow-hidden border border-transparent hover:border-outline-variant/10 transition-colors"
-                    to={`/dashboard/buyer/property-details/${property._id}`}
+                    to={`/properties/${propertyRouteReference(property)}`}
                   >
                     <div className="h-44 bg-surface-container-high">
                       <MediaPreview media={property.media?.[0]} alt={property.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -257,7 +260,7 @@ const BuyerDashboard = () => {
               {buyerProperties.slice(0, 3).map((property) => (
                 <Link
                   key={property._id}
-                  to={`/dashboard/buyer/property-details/${property._id}`}
+                  to={`/dashboard/buyer/property-details/${propertyRouteReference(property)}`}
                   className="flex items-center gap-4 p-3 rounded-xl hover:bg-surface-container-low transition-colors"
                 >
                   <div className="w-14 h-14 rounded-lg overflow-hidden bg-surface-container-high flex-shrink-0">

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import type { Property } from '../../../types';
+import { propertyRouteReference, type Property } from '../../../types';
 import MediaPreview from '../MediaPreview';
 import MobileMapListToggle, { type MapListView } from './MobileMapListToggle';
 import PropertyMap from './PropertyMap';
@@ -62,13 +62,17 @@ const MapListLayout = ({ properties, detailsPath, actions, children, mapClassNam
   const resultCards = (
     <div className="space-y-3 p-3">
       {fullscreenProperties.length ? fullscreenProperties.map((property) => (
-        <article key={property._id} className="flex gap-3 rounded-xl bg-white p-3 shadow-sm">
+        <article key={propertyRouteReference(property)} className="flex gap-3 rounded-xl bg-white p-3 shadow-sm">
           <div className="h-20 w-24 shrink-0 overflow-hidden rounded-lg bg-surface-container-low"><MediaPreview media={property.media?.[0]} alt={property.title} className="h-full w-full object-cover" /></div>
           <div className="min-w-0 flex-1">
             <h3 className="truncate text-sm font-bold text-on-surface">{property.title}</h3>
             <p className="truncate text-xs text-secondary">{property.location}</p>
             <p className="mt-1 text-sm font-black text-primary">{new Intl.NumberFormat('en-NG', { style: 'currency', currency: property.currency || 'NGN', maximumFractionDigits: 0 }).format(property.price)}</p>
-            <Link to={detailsPath(property)} className="mt-1 inline-block text-xs font-bold text-primary hover:underline">View Details</Link>
+            {detailsPath(property) ? (
+              <Link to={detailsPath(property)} className="mt-1 inline-block text-xs font-bold text-primary hover:underline">View Details</Link>
+            ) : (
+              <span className="mt-1 inline-block text-xs font-bold text-secondary">Reference pending</span>
+            )}
           </div>
         </article>
       )) : <div className="p-8 text-center text-sm text-secondary">No properties match your search.</div>}

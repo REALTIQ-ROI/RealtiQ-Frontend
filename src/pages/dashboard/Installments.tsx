@@ -14,6 +14,7 @@ import { ApiRequestError } from '../../lib/axios';
 import { installmentService } from '../../services/installmentService';
 import { paymentService } from '../../services/paymentService';
 import { propertyService } from '../../services/propertyService';
+import { propertyRouteReference } from '../../types';
 import type {
   CustomInstallmentCreatePayload,
   Installment,
@@ -198,10 +199,14 @@ const InstallmentCreateForm = ({
   }, [installments]);
 
   const eligibleProperties = useMemo(
-    () => properties.filter((property) => property.status === 'available' && !activePropertyIds.has(property._id)),
+    () => properties.filter((property) => {
+      const refs = [property._id, propertyRouteReference(property)].filter(Boolean);
+      return property.status === 'available' && refs.every((ref) => !activePropertyIds.has(ref));
+    }),
     [activePropertyIds, properties],
   );
-  const selectedProperty = eligibleProperties.find((property) => property._id === propertyId) ?? null;
+  const selectedProperty = eligibleProperties.find((property) => propertyRouteReference(property) === propertyId) ?? null;
+  const selectedPropertyReference = selectedProperty ? propertyRouteReference(selectedProperty) : '';
   const price = selectedProperty?.price ?? 0;
   const numberOfInstallments = frequencyToInstallmentCount(frequency);
   const scheduled = rows.reduce((sum, row) => sum + Number(row.expectedAmount || 0), 0);
@@ -220,12 +225,13 @@ const InstallmentCreateForm = ({
   const formInvalid = mode === 'automatic' ? automaticInvalid : customInvalid;
 
   useEffect(() => {
-    const focused = initialPropertyId ? eligibleProperties.find((property) => property._id === initialPropertyId) : null;
-    if (focused && focused._id !== propertyId) {
-      setPropertyId(focused._id);
+    const focused = initialPropertyId ? eligibleProperties.find((property) => [property._id, propertyRouteReference(property)].includes(initialPropertyId)) : null;
+    const focusedReference = focused ? propertyRouteReference(focused) : '';
+    if (focusedReference && focusedReference !== propertyId) {
+      setPropertyId(focusedReference);
       return;
     }
-    if (!propertyId && eligibleProperties[0]) setPropertyId(eligibleProperties[0]._id);
+    if (!propertyId && eligibleProperties[0]) setPropertyId(propertyRouteReference(eligibleProperties[0]));
   }, [eligibleProperties, initialPropertyId, propertyId]);
 
   useEffect(() => {
@@ -281,7 +287,7 @@ const InstallmentCreateForm = ({
       const payload =
         mode === 'automatic'
           ? {
-              propertyId: selectedProperty._id,
+              propertyId: selectedPropertyReference,
               frequency,
               numberOfInstallments,
               initialDeposit: Number(initialDeposit || 0),
@@ -289,7 +295,7 @@ const InstallmentCreateForm = ({
               gracePeriodHours: DEFAULT_GRACE_PERIOD_HOURS,
             }
           : ({
-              propertyId: selectedProperty._id,
+              propertyId: selectedPropertyReference,
               totalAmount: selectedProperty.price,
               gracePeriodHours: DEFAULT_GRACE_PERIOD_HOURS,
               schedule: rows.map((row, index) => ({
@@ -348,7 +354,7 @@ const InstallmentCreateForm = ({
               label="Property"
               properties={eligibleProperties}
               value={propertyId}
-              onChange={(property) => setPropertyId(property?._id ?? '')}
+              onChange={(property) => setPropertyId(property ? propertyRouteReference(property) : '')}
               emptyMessage="No eligible properties available."
               helperText="Only available properties without an active installment plan are shown."
             />

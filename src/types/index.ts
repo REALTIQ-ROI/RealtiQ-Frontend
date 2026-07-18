@@ -8,11 +8,14 @@ export type TourType = 'open_house' | 'virtual_paid' | 'staging_view';
 export type TourMode = 'physical' | 'virtual';
 export type TourStatus = 'pending' | 'approved' | 'rejected' | 'completed';
 export type InstallmentStatus = 'pending' | 'active' | 'overdue' | 'defaulted' | 'completed' | 'cancelled';
+export type PropertyApprovalStatus = 'pending_review' | 'approved' | 'rejected';
 
 export interface MediaItem {
   url: string;
   public_id: string;
-  type: 'image' | 'video';
+  publicId?: string;
+  resourceType?: 'image' | 'video' | 'raw' | string;
+  type: 'image' | 'video' | 'raw';
   _id?: string;
 }
 
@@ -22,9 +25,12 @@ export interface PropertyCoordinates {
 }
 
 export interface PropertyOwner {
-  _id: string;
+  _id?: string;
+  id?: string;
   name: string;
-  email: string;
+  email?: string;
+  phone?: string;
+  selfieUrl?: string;
   landlordVerified?: boolean;
   ratingAverage?: number;
 }
@@ -45,6 +51,7 @@ export interface UserKyc {
 
 export interface Property {
   _id: string;
+  publicReference?: string | null;
   title: string;
   price: number;
   location: string;
@@ -59,6 +66,10 @@ export interface Property {
   coordinates?: PropertyCoordinates | null;
   media: MediaItem[];
   status: PropertyStatus;
+  approvalStatus?: PropertyApprovalStatus;
+  rejectionReason?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
   featured?: boolean;
   amenities?: string[];
   views?: number;
@@ -68,16 +79,32 @@ export interface Property {
   createdAt?: string;
   updatedAt?: string;
   titleVerification?: PropertyTitleVerificationSummary;
+  titleDocumentStatus?: PropertyTitleVerificationStatus | 'not_uploaded' | 'not_submitted';
+  titleVerificationLookupId?: string | null;
+  titleDocumentReferences?: TitleDocumentReference[];
+  owner?: PropertyOwner;
 }
+
+export const propertyPublicReference = (property?: Pick<Property, 'publicReference' | '_id'> | null): string =>
+  property?.publicReference || '';
+
+export const propertyRouteReference = (property?: Pick<Property, 'publicReference' | '_id'> | null): string =>
+  property?.publicReference || property?._id || '';
+
+export const propertyDisplayReference = (property?: Pick<Property, 'publicReference'> | null): string =>
+  property?.publicReference || 'Reference pending';
 
 export const resolveOwnerId = (ownerId?: PropertyOwner | string): string => {
   if (!ownerId) return '';
-  return typeof ownerId === 'string' ? ownerId : ownerId._id;
+  return typeof ownerId === 'string' ? ownerId : ownerId._id || ownerId.id || '';
 };
+
+export const resolvePropertyOwnerId = (property?: Pick<Property, 'owner' | 'ownerId'> | null): string =>
+  resolveOwnerId(property?.owner) || resolveOwnerId(property?.ownerId);
 
 export const resolveBuyerId = (buyerId?: PropertyOwner | string): string => {
   if (!buyerId) return '';
-  return typeof buyerId === 'string' ? buyerId : buyerId._id;
+  return typeof buyerId === 'string' ? buyerId : buyerId._id || buyerId.id || '';
 };
 
 export interface User {
@@ -132,6 +159,7 @@ export interface PaymentUser {
 
 export interface PaymentProperty {
   _id: string;
+  publicReference?: string | null;
   title: string;
   price: number;
   location: string;
@@ -461,6 +489,32 @@ export interface PropertyTitleVerificationSummary {
   verifiedDocumentHash?: string | null;
 }
 
+export interface TitleDocumentRecord {
+  _id?: string;
+  publicReference?: string | null;
+  property?: string;
+  owner?: string;
+  title?: string;
+  documentType?: TitleDocumentType;
+  category?: 'title_document' | 'property_document' | 'general' | string;
+  mimeType?: string;
+  originalFileName?: string;
+  fileSizeBytes?: number;
+  fileUrl?: string;
+  titleVerificationFrozen?: boolean;
+  titleVerificationId?: string;
+  contentHash?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TitleDocumentReference {
+  publicReference?: string | null;
+  documentType?: TitleDocumentType;
+  verificationStatus?: PropertyTitleVerificationStatus | 'not_submitted';
+  publicVerificationId?: string | null;
+}
+
 export interface TitleExternalAnchor {
   enabled?: boolean;
   status: ExternalAnchorStatus;
@@ -476,7 +530,7 @@ export interface PublicRegistryRecord {
   publicVerificationId: string;
   publicVerificationUrl?: string;
   registry?: string;
-  property?: { id?: string; title?: string; location?: string };
+  property?: { id?: string; publicReference?: string; title?: string; location?: string };
   documentType?: TitleDocumentType;
   documentHash?: string;
   hashAlgorithm?: string;

@@ -2,6 +2,7 @@ import api from '../lib/axios';
 import type {
   MediaItem,
   Property,
+  PropertyApprovalStatus,
   PropertyCategory,
   PropertyCompletionStage,
   PropertyCoordinates,
@@ -9,15 +10,29 @@ import type {
   PropertyFilters,
   PropertyStatus,
   PropertyType,
+  TitleDocumentRecord,
+  TitleDocumentType,
+  TitleVerification,
 } from '../types';
+
+export interface TitleDocumentUploadMetadata {
+  title: string;
+  documentType: TitleDocumentType;
+  fileUrl: string;
+  publicId: string;
+  resourceType?: string;
+  mimeType?: string;
+  originalFileName?: string;
+  fileSizeBytes?: number;
+}
 
 export interface CreatePropertyPayload {
   title: string;
   price: number;
   location: string;
   propertyType: PropertyType | string;
-  bedrooms: number;
-  bathrooms: number;
+  bedrooms?: number;
+  bathrooms?: number;
   squareFeet: number;
   description: string;
   amenities?: string[];
@@ -27,6 +42,7 @@ export interface CreatePropertyPayload {
   currency?: PropertyCurrency;
   coordinates?: PropertyCoordinates | null;
   status?: PropertyStatus;
+  titleDocuments?: TitleDocumentUploadMetadata[];
 }
 
 export interface UpdatePropertyPayload extends Partial<CreatePropertyPayload> {
@@ -46,6 +62,14 @@ export interface MediaUploadResponse {
   url?: string;
 }
 
+export interface CreatePropertyResponse {
+  property: Property;
+  titleDocuments?: TitleDocumentRecord[];
+  titleVerifications?: TitleVerification[];
+  riskDetected?: boolean;
+  message?: string;
+}
+
 export interface BuyPropertyResponse {
   redirectUrl: string;
   reference: string;
@@ -54,7 +78,8 @@ export interface BuyPropertyResponse {
 export type PropertyFiltersQuery = PropertyFilters;
 
 export interface NearbyPropertySummary {
-  _id: string;
+  _id?: string;
+  publicReference?: string | null;
   title: string;
   coordinates?: PropertyCoordinates | null;
 }
@@ -70,10 +95,32 @@ export interface PropertyViewResponse {
   views?: number;
 }
 
+export interface PropertyOwnerDetailResponse {
+  property: Property;
+  titleDocuments?: TitleDocumentRecord[];
+  titleDocumentEditPolicy?: string;
+}
+
+export interface PropertyApprovalDetailResponse {
+  property: Property;
+  titleDocumentStatus?: string;
+  canApproveWithoutTitleDocument?: boolean;
+  titleDocuments?: TitleDocumentRecord[];
+}
+
+export interface PropertyApprovalInput {
+  decision: 'approve' | 'reject';
+  rejectionReason?: string;
+}
+
 export const propertyService = {
   async getProperties(filters?: PropertyFiltersQuery): Promise<PropertiesResponse> {
     const { data } = await api.get<PropertiesResponse>('/properties', { params: filters });
     return data;
+  },
+
+  async listPublicProperties(filters?: PropertyFiltersQuery): Promise<PropertiesResponse> {
+    return propertyService.getProperties(filters);
   },
 
   async getPropertyById(id: string): Promise<Property> {
@@ -81,9 +128,25 @@ export const propertyService = {
     return data;
   },
 
+  async getPublicProperty(publicReference: string): Promise<Property> {
+    return propertyService.getPropertyById(publicReference);
+  },
+
   async createProperty(payload: CreatePropertyPayload): Promise<Property> {
-    const { data } = await api.post<Property>('/properties', payload);
-    return data;
+    const { data } = await api.post<Property | CreatePropertyResponse>('/properties', payload);
+    return 'property' in data ? data.property : data;
+  },
+
+  async createPropertyWithResponse(payload: CreatePropertyPayload): Promise<CreatePropertyResponse> {
+    const { data } = await api.post<Property | CreatePropertyResponse>('/properties', payload);
+    return 'property' in data ? data : { property: data };
+  },
+
+  async getMyProperties(): Promise<PropertiesResponse> {
+    const { data } = await api.get<PropertiesResponse | Property[]>('/properties/mine');
+    return Array.isArray(data)
+      ? { properties: data, total: data.length, page: 1, limit: data.length }
+      : data;
   },
 
   async updateProperty(id: string, payload: UpdatePropertyPayload): Promise<Property> {
@@ -93,6 +156,34 @@ export const propertyService = {
 
   async deleteProperty(id: string): Promise<{ message: string }> {
     const { data } = await api.delete<{ message: string }>(`/properties/${id}`);
+    return data;
+  },
+
+  async getPropertyOwnerDetail(id: string): Promise<PropertyOwnerDetailResponse> {
+    const { data } = await api.get<PropertyOwnerDetailResponse>(`/properties/${id}/owner-detail`);
+    return data;
+  },
+
+  async listPendingApprovalProperties(): Promise<PropertiesResponse> {
+    const { data } = await api.get<PropertiesResponse | Property[]>('/properties/admin/pending-approval');
+    return Array.isArray(data)
+      ? { properties: data, total: data.length, page: 1, limit: data.length }
+      : data;
+  },
+
+  async getPropertyApprovalDetail(id: string): Promise<PropertyApprovalDetailResponse> {
+    const { data } = await api.get<PropertyApprovalDetailResponse>(`/properties/${id}/admin-review`);
+    return data;
+  },
+
+  async updatePropertyApproval(
+    id: string,
+    input: PropertyApprovalInput,
+  ): Promise<{ property: Property; approvalStatus?: PropertyApprovalStatus; message?: string }> {
+    const { data } = await api.patch<{ property: Property; approvalStatus?: PropertyApprovalStatus; message?: string }>(
+      `/properties/${id}/approval`,
+      input,
+    );
     return data;
   },
 

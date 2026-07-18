@@ -9,7 +9,7 @@ import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProperties as usePropertyCatalog } from '../../hooks/useProperties';
 import { propertyService } from '../../services/propertyService';
-import type { Property } from '../../types';
+import { propertyPublicReference, propertyRouteReference, type Property } from '../../types';
 
 const formatRange = (page: number, limit: number, total: number) => {
   if (total === 0) return '0 results';
@@ -40,7 +40,12 @@ const Listings = () => {
     }
 
     try {
-      await propertyService.saveProperty(property._id);
+      const reference = propertyPublicReference(property);
+      if (!reference) {
+        toast.error('This listing is missing its public reference.');
+        return;
+      }
+      await propertyService.saveProperty(reference);
       toast.success('Property saved to your profile.');
       void fetchProperties(filters, page);
     } catch (err) {
@@ -93,10 +98,13 @@ const Listings = () => {
             ) : null}
 
             {!loading && !error && properties.length > 0 ? (
-              <MapListLayout properties={properties} detailsPath={(property) => `/properties/${property._id}`}>
+              <MapListLayout properties={properties} detailsPath={(property) => {
+                const reference = propertyPublicReference(property);
+                return reference ? `/properties/${reference}` : '';
+              }}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {properties.map((property) => (
-                    <PropertyCard key={property._id} property={property} showSaveAction onSave={handleSave} />
+                    <PropertyCard key={propertyRouteReference(property)} property={property} showSaveAction onSave={handleSave} />
                   ))}
                 </div>
 

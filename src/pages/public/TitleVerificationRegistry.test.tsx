@@ -69,27 +69,28 @@ describe('TitleVerificationRegistry', () => {
     });
   });
 
-  it('renders public-safe registry fields and integrity warnings', async () => {
+  it('renders buyer-facing registry fields and hides technical audit details', async () => {
     renderPage();
 
     expect(await screen.findAllByText('RTQ-TV-2026-000001')).not.toHaveLength(0);
     expect(screen.getByText('3 Bedroom Flat in Lekki')).toBeInTheDocument();
-    expect(screen.getByText('document_hash')).toBeInTheDocument();
-    expect(screen.getAllByText('record_hash').length).toBeGreaterThan(0);
-    expect(screen.getByRole('alert')).toHaveTextContent(/signature validation failed/i);
+    expect(screen.getByText('Certificate of Occupancy')).toBeInTheDocument();
+    expect(screen.getByText('https://realtiq.com.ng/title-verification/RTQ-TV-2026-000001')).toBeInTheDocument();
+    expect(screen.queryByText('document_hash')).not.toBeInTheDocument();
+    expect(screen.queryByText('record_hash')).not.toBeInTheDocument();
+    expect(screen.queryByText(/previous link/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/signature validation failed/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/cloudinary/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/kyc/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/private key/i)).not.toBeInTheDocument();
   });
 
-  it('displays and copies the public signing key', async () => {
+  it('copies the public verification ID', async () => {
     renderPage();
 
     await screen.findAllByText('RTQ-TV-2026-000001');
-    await userEvent.click(screen.getByRole('button', { name: /show/i }));
-    expect(screen.getByText(/begin public key/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /copy public key/i }));
+    await userEvent.click(screen.getAllByRole('button', { name: /copy/i })[0]);
 
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('BEGIN PUBLIC KEY')));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith('RTQ-TV-2026-000001'));
   });
 });

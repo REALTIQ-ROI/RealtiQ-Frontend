@@ -9,12 +9,12 @@ interface TitleVerificationBadgeProps {
 
 const TitleVerificationBadge = ({ summary, context = 'public' }: TitleVerificationBadgeProps) => {
   const status = summary?.status ?? 'not_submitted';
-  const shouldShow = context !== 'public' || status === 'published';
-  if (!shouldShow) return null;
-
-  const label = summary?.badgeLabel || titleStatusLabel(status);
+  const displayStatus = context === 'public' && status !== 'published' ? 'not_submitted' : status;
+  const label = context === 'public' && status !== 'published'
+    ? 'Title Document Not Verified'
+    : summary?.badgeLabel || titleStatusLabel(status);
   const content = (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-wide ${titleStatusClasses(status)}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-wide ${titleStatusClasses(displayStatus)}`}>
       <span className="material-symbols-outlined text-sm">verified</span>
       {label}
     </span>

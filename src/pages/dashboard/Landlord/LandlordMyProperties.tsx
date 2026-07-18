@@ -6,11 +6,18 @@ import MediaPreview from '../../../components/property/MediaPreview';
 import MapListLayout from '../../../components/property/map/MapListLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
-import { resolveOwnerId } from '../../../types';
+import { propertyDisplayReference, resolvePropertyOwnerId } from '../../../types';
 
 const statusConfig = {
   available: { label: 'Active', className: 'bg-emerald-100 text-emerald-800' },
   sold: { label: 'Sold', className: 'bg-slate-100 text-slate-800' },
+};
+
+const approvalLabel = (status?: string) => {
+  if (!status || status === 'approved') return 'Approved';
+  if (status === 'pending_review') return 'Pending admin approval';
+  if (status === 'rejected') return 'Listing rejected';
+  return status.replace('_', ' ');
 };
 
 const LandlordMyProperties = () => {
@@ -23,7 +30,7 @@ const LandlordMyProperties = () => {
   const myProperties = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return properties.filter((item) => {
-      const matchesOwner = resolveOwnerId(item.ownerId) === user?._id;
+      const matchesOwner = resolvePropertyOwnerId(item) === user?._id;
       const matchesStatus = activeFilter === 'all' || item.status === activeFilter;
       const matchesQuery = !needle || `${item.title} ${item.location} ${item.propertyType}`.toLowerCase().includes(needle);
       return matchesOwner && matchesStatus && matchesQuery;
@@ -235,13 +242,17 @@ const LandlordMyProperties = () => {
                             <div>
                               <h3 className="font-bold text-slate-900 group-hover:text-primary transition-colors">{property.title}</h3>
                               <p className="text-sm text-secondary">{property.location}</p>
+                              <p className="mt-1 text-xs font-semibold text-secondary">{propertyDisplayReference(property)}</p>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-5">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${cfg.className}`}>
-                            {cfg.label}
-                          </span>
+                          <div className="space-y-2">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${cfg.className}`}>
+                              {cfg.label}
+                            </span>
+                            <span className="block text-xs font-semibold text-secondary">{approvalLabel(property.approvalStatus)}</span>
+                          </div>
                         </td>
                         <td className="px-6 py-5">
                           <span className="font-black text-slate-900">₦{property.price.toLocaleString()}</span>
@@ -306,11 +317,13 @@ const LandlordMyProperties = () => {
                           <div>
                             <h3 className="font-bold text-slate-900 group-hover:text-primary transition-colors">{property.title}</h3>
                             <p className="text-sm text-secondary">{property.location}</p>
+                            <p className="mt-1 text-xs font-semibold text-secondary">{propertyDisplayReference(property)}</p>
                           </div>
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${cfg.className}`}>
                             {cfg.label}
                           </span>
                         </div>
+                        <p className="text-xs font-semibold text-secondary">{approvalLabel(property.approvalStatus)}</p>
                         <div className="flex items-center justify-between text-sm text-secondary">
                           <span>{property.bedrooms} Beds</span>
                           <span>{property.bathrooms} Baths</span>

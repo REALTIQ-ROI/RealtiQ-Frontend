@@ -13,7 +13,7 @@ import {
   type ROICalculationInputs,
   type ROICalculationResults,
 } from '../../services/roiService';
-import type { Property } from '../../types';
+import { propertyRouteReference, type Property } from '../../types';
 import { formatNaira } from './roiFormatters';
 
 interface ROICalculatorProps {
@@ -189,7 +189,8 @@ const ROICalculator = ({ property, onScenarioSaved }: ROICalculatorProps) => {
   };
 
   const handleSaveScenario = async () => {
-    if (!property?._id) {
+    const propertyReference = propertyRouteReference(property);
+    if (!propertyReference) {
       toast.error('Open a property ROI calculator to save this scenario.');
       return;
     }
@@ -197,7 +198,7 @@ const ROICalculator = ({ property, onScenarioSaved }: ROICalculatorProps) => {
 
     setSaving(true);
     try {
-      await roiService.savePropertyScenario(property._id, {
+      await roiService.savePropertyScenario(propertyReference, {
         source: 'property_detail',
         inputs: {
           startDate: inputs.startDate,

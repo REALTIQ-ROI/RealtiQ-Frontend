@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import TitleRegistrySnapshots from './TitleRegistrySnapshots';
@@ -37,8 +37,7 @@ describe('TitleRegistrySnapshots', () => {
     render(<TitleRegistrySnapshots />);
 
     const input = screen.getByLabelText(/snapshot date/i);
-    await userEvent.clear(input);
-    await userEvent.type(input, '2026-07-15');
+    fireEvent.change(input, { target: { value: '2026-07-15' } });
     await userEvent.click(screen.getByRole('button', { name: /load snapshot/i }));
 
     expect(await screen.findByText('snapshot_hash')).toBeInTheDocument();

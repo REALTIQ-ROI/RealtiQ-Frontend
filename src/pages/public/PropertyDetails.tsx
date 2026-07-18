@@ -19,7 +19,7 @@ import { paymentService } from '../../services/paymentService';
 import { propertyService, type NearbyPropertySummary } from '../../services/propertyService';
 import { tourService } from '../../services/tourService';
 import { titleVerificationService } from '../../services/titleVerificationService';
-import { resolveOwnerId, type PropertyTitleVerificationSummary } from '../../types';
+import { propertyRouteReference, resolvePropertyOwnerId, type PropertyTitleVerificationSummary } from '../../types';
 import {
   calculateInstallmentAmount,
   getInstallmentSummary,
@@ -77,12 +77,15 @@ const PropertyDetails = () => {
   const [tourNotes, setTourNotes] = useState('');
   const [installmentFrequency, setInstallmentFrequency] = useState<(typeof INSTALLMENT_FREQUENCIES)[number]['value']>('monthly');
   const [titleSummary, setTitleSummary] = useState<PropertyTitleVerificationSummary | null>(null);
+  const propertyReference = property ? propertyRouteReference(property) : '';
 
   useEffect(() => {
-    if (!property?._id) return;
+    if (!property) return;
+    const reference = propertyRouteReference(property);
+    if (!reference) return;
 
     if (isAuthenticated) {
-      void propertyService.incrementView(property._id).catch(() => undefined);
+      void propertyService.incrementView(reference).catch(() => undefined);
     }
 
     if (!property.coordinates) {
@@ -99,13 +102,15 @@ const PropertyDetails = () => {
   }, [isAuthenticated, property]);
 
   useEffect(() => {
-    if (!property?._id) return;
+    if (!property) return;
+    const reference = propertyRouteReference(property);
+    if (!reference) return;
     if (property.titleVerification) {
       setTitleSummary(property.titleVerification);
       return;
     }
     titleVerificationService
-      .getPropertyTitleVerification(property._id)
+      .getPropertyTitleVerification(reference)
       .then((response) => setTitleSummary(response.titleVerification))
       .catch(() => setTitleSummary(null));
   }, [property]);
@@ -119,16 +124,17 @@ const PropertyDetails = () => {
   }, [id, execute]);
 
   const owner = useMemo(
-    () => (property && typeof property.ownerId !== 'string' ? property.ownerId : null),
+    () => property?.owner ?? (property && typeof property.ownerId !== 'string' ? property.ownerId : null),
     [property],
   );
-  const canPurchase = Boolean(property && property.status !== 'sold' && (!user || (user.role === 'buyer' && resolveOwnerId(property.ownerId) !== user._id)));
+  const canPurchase = Boolean(property && property.status !== 'sold' && (!user || (user.role === 'buyer' && resolvePropertyOwnerId(property) !== user._id)));
 
   const installments = useMemo(() => (Array.isArray(installmentData) ? installmentData : []), [installmentData]);
   const propertyInstallment = useMemo(() => {
-    const propertyInstallments = installments.filter((installment) => resolveInstallmentPropertyId(installment) === property?._id);
+    const refs = new Set([property?._id, propertyReference].filter(Boolean));
+    const propertyInstallments = installments.filter((installment) => refs.has(resolveInstallmentPropertyId(installment)));
     return propertyInstallments.find(isInstallmentActive) ?? propertyInstallments[0] ?? null;
-  }, [installments, property?._id]);
+  }, [installments, property?._id, propertyReference]);
   const installmentSummary = propertyInstallment ? getInstallmentSummary(propertyInstallment) : null;
   const installmentProperty = propertyInstallment ? resolveInstallmentProperty(propertyInstallment) : null;
   const hasActiveInstallment = Boolean(propertyInstallment && installmentSummary && !installmentSummary.completed);
@@ -136,7 +142,7 @@ const PropertyDetails = () => {
   const installmentOnly = property ? requiresInstallments(property.price) : false;
 
   const handleSaveProperty = async () => {
-    if (!property?._id) return;
+    if (!propertyReference) return;
     if (!user) {
       navigate('/login-required');
       return;
@@ -144,7 +150,7 @@ const PropertyDetails = () => {
 
     setSavingProperty(true);
     try {
-      await propertyService.saveProperty(property._id);
+      await propertyService.saveProperty(propertyReference);
       toast.success('Property saved to your profile.');
       await refreshProperties();
     } catch (err) {
@@ -155,19 +161,19 @@ const PropertyDetails = () => {
   };
 
   const handleBuyProperty = async () => {
-    if (!property?._id) {
+    if (!propertyReference) {
       toast.error('Unable to initialize payment. Please try again.');
       return;
     }
 
     if (!user) {
-      paymentService.persistPendingPaymentProperty(property._id);
+      paymentService.persistPendingPaymentProperty(propertyReference);
       navigate('/login-to-purchase');
       return;
     }
 
     if (hasActiveInstallment && propertyInstallment) {
-      navigate(`/dashboard/buyer/installments/${propertyInstallment._id}?propertyId=${property._id}`);
+      navigate(`/dashboard/buyer/installments/${propertyInstallment._id}?propertyId=${propertyReference}`);
       return;
     }
 
@@ -195,25 +201,25 @@ const PropertyDetails = () => {
     if (!confirmed.isConfirmed) return;
 
     try {
-      await buyProperty(property._id, user._id);
+      await buyProperty(propertyReference, user._id);
     } catch {
       toast.error('Unable to initialize payment. Please try again.');
     }
   };
 
   const handleContinueInstallment = () => {
-    if (!property?._id) return;
+    if (!propertyReference) return;
     if (!hasActiveInstallment || !propertyInstallment) {
       navigate('/dashboard/buyer/installments');
       return;
     }
 
-    navigate(`/dashboard/buyer/installments/${propertyInstallment._id}?propertyId=${property._id}`);
+    navigate(`/dashboard/buyer/installments/${propertyInstallment._id}?propertyId=${propertyReference}`);
   };
 
   const handleTourRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!property?._id) return;
+    if (!propertyReference) return;
 
     if (!user) {
       navigate('/login');
@@ -227,7 +233,7 @@ const PropertyDetails = () => {
     setRequestingTour(true);
     try {
       const response = await tourService.requestTour({
-        propertyId: property._id,
+        propertyId: propertyReference,
         type: tourType,
         mode: tourMode,
         scheduledAt: tourDate ? new Date(tourDate).toISOString() : undefined,
@@ -250,7 +256,7 @@ const PropertyDetails = () => {
   };
 
   const handleCreateInstallment = async () => {
-    if (!property?._id) return;
+    if (!property || !propertyReference) return;
 
     if (!user) {
       navigate('/login');
@@ -268,12 +274,12 @@ const PropertyDetails = () => {
 
     if (hasActiveInstallment && propertyInstallment) {
       toast.error('An installment plan already exists for this property.');
-      navigate(`/dashboard/buyer/installments/${propertyInstallment._id}?propertyId=${property._id}`);
+      navigate(`/dashboard/buyer/installments/${propertyInstallment._id}?propertyId=${propertyReference}`);
       return;
     }
 
     setCreatingInstallment(true);
-    navigate(`/dashboard/buyer/installments?propertyId=${property._id}&frequency=${installmentFrequency}`);
+    navigate(`/dashboard/buyer/installments?propertyId=${propertyReference}&frequency=${installmentFrequency}`);
     setCreatingInstallment(false);
   };
 
@@ -614,11 +620,11 @@ const PropertyDetails = () => {
                       : 'Buy Property'}
                 </Button>
               )}
-              {user?.role === 'buyer' && property.status === 'available' && resolveOwnerId(property.ownerId) !== user._id && !hasActiveInstallment ? (
+              {user?.role === 'buyer' && property.status === 'available' && resolvePropertyOwnerId(property) !== user._id && !hasActiveInstallment ? (
                 <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
                   <p className="text-sm font-bold text-primary">Prefer protected release conditions?</p>
                   <p className="mt-1 text-xs text-secondary">Pay through escrow. Funds remain locked until agreed conditions are completed and an administrator approves release.</p>
-                  <Button fullWidth variant="secondary" className="mt-3" onClick={() => navigate(`/dashboard/buyer/escrows/create/${property._id}`)}>
+                  <Button fullWidth variant="secondary" className="mt-3" onClick={() => navigate(`/dashboard/buyer/escrows/create/${propertyReference}`)}>
                     Create Escrow Payment
                   </Button>
                 </div>
@@ -626,7 +632,7 @@ const PropertyDetails = () => {
               <Button
                 fullWidth
                 variant="secondary"
-                onClick={() => navigate(`/properties/${property._id}/roi`)}
+                onClick={() => navigate(`/properties/${propertyReference}/roi`)}
               >
                 <span className="material-symbols-outlined text-sm mr-1">monitoring</span>
                 Analyze ROI
@@ -640,7 +646,7 @@ const PropertyDetails = () => {
             <Card className="p-6 space-y-4">
               <h3 className="font-bold text-lg">Send an Inquiry</h3>
               <InquiryForm
-                propertyId={property._id}
+                propertyId={propertyReference}
                 onSubmitInquiry={async (payload) => {
                   await inquiryService.createInquiry(payload);
                   toast.success('Inquiry submitted successfully.');

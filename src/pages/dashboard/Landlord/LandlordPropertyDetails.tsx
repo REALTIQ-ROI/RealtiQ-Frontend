@@ -7,7 +7,7 @@ import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
 import { paymentService } from '../../../services/paymentService';
-import { resolveOwnerId } from '../../../types';
+import { propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
 
 const formatRelativeDate = (date?: string) => {
   if (!date) return 'Recently';
@@ -26,7 +26,8 @@ const LandlordPropertyDetails = () => {
 
   const property = id
     ? (properties.find((item) => item._id === id) ?? null)
-    : (properties.find((item) => resolveOwnerId(item.ownerId) === user?._id) ?? null);
+    : (properties.find((item) => resolvePropertyOwnerId(item) === user?._id) ?? null);
+  const propertyReference = property ? propertyRouteReference(property) : '';
 
   const relatedInquiries = (inquiries ?? []).filter((item) => {
     const propertyRef = item.property;
@@ -73,7 +74,7 @@ const LandlordPropertyDetails = () => {
           </div>
           <div className="flex gap-3 flex-wrap">
             <Link
-              to={property ? `/properties/${property._id}` : '/properties'}
+              to={propertyReference ? `/properties/${propertyReference}` : '/properties'}
               className="px-6 py-3 bg-white border-2 border-slate-100 text-slate-900 font-bold rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-lg">visibility</span>
@@ -87,7 +88,7 @@ const LandlordPropertyDetails = () => {
               Quick Edit
             </Link>
             <Link
-              to={property ? `/dashboard/landlord/title-verifications?propertyId=${property._id}` : '/dashboard/landlord/title-verifications'}
+              to={propertyReference ? `/dashboard/landlord/title-verifications?propertyId=${propertyReference}` : '/dashboard/landlord/title-verifications'}
               className="px-6 py-3 bg-surface-container-high text-slate-900 font-bold rounded-lg hover:bg-slate-200 transition-all flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-lg">verified</span>

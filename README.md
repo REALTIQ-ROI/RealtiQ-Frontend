@@ -120,3 +120,98 @@ src/
 
 - Payment initialization is mocked and currently redirects to `/payment-success`
 - Core data operations are localStorage-backed and not persisted to a real backend
+
+
+Current cryptographic title hash flow:
+
+  1. Landlord uploads restricted title document
+      - UI: LandlordTitleVerifications.tsx
+      - API: POST /api/document/title-upload
+      - Sends propertyId = RTQ-PROP-..., document type, title, and file.
+      - Backend stores it as restricted Document Vault record.
+      - Backend returns document.publicReference, e.g. RTQ-DOC-00000001.
+
+  2. Landlord submits document for title verification
+      - UI sends:
+
+        {
+          propertyId: "RTQ-PROP-...",
+          documentId: "RTQ-DOC-...",
+          documentType,
+          metadata: { source: "landlord_dashboard" }
+        }
+
+      - API: POST /api/title-verifications
+
+  3. Backend hashes the stored document bytes
+      - Backend fetches the stored file over HTTPS from document.fileUrl.
+      - Validates file type: PDF, JPEG, PNG, WebP.
+      - Validates max size: 50 MB.
+      - Computes:
+
+        crypto.createHash("sha256").update(buffer).digest("hex")
+
+      - Public label is SHA-256.
+      - This becomes submissionHash.
+
+  4. Duplicate fingerprint check
+      - Backend checks whether the same hash already exists as:
+          - another submissionHash
+          - or another verifiedDocumentHash
+
+      - If duplicate risk exists, verification is created as under_review, document is frozen, and API returns 409.
+      - Frontend shows: “A matching title-document fingerprint already exists and requires legal review.”
+
+  5. Document is frozen
+      - Backend writes hash metadata onto the Document:
+          - contentHash
+          - hashAlgorithm
+          - titleVerificationFrozen = true
+          - titleVerificationId
+          - fileSizeBytes
+
+      - This prevents the same document from being reused for another active verification.
+
+  6. Admin legal review
+      - Admin reviews in title verification admin screen.
+      - On approval, backend re-fetches and re-hashes the stored document bytes.
+      - If the new hash differs from submissionHash, approval fails with 409 because the file changed after submission.
+      - If it matches, backend sets:
+          - verifiedDocumentHash
+          - hashAlgorithm = SHA-256
+          - status approved
+
+  7. Public registry publication
+      - Backend publishes a registry record using the verified hash.
+      - It creates a canonical payload containing:
+          - sequence number
+          - property id
+          - documentHash
+          - hash algorithm
+          - verification version
+          - approval timestamp
+          - previous record hash
+
+          - Document hash: SHA-256 of the title file bytes.
+          - Record hash: SHA-256 of the registry metadata payload.
+
+      - Integrity endpoint verifies:
+          - current recordHash
+          - previous-record link
+          - signature if configured
+
+  9. Public verification page
+      - URL: /title-verification/:publicVerificationId
+      - Shows:
+          - public verification ID, e.g. RTQ-TV-2026-000001
+          - property public reference
+          - SHA-256 document hash
+          - record hash
+          - previous record hash
+          - signature/external anchor status
+
+      - Public users can upload a document copy.
+      - API hashes the uploaded file and compares it to the registered documentHash.
+
+  So the important bit: the frontend never computes the authoritative title hash. The backend hashes the exact stored bytes, freezes that fingerprint,
+  re-confirms it at legal approval, then publishes the verified hash into a chained public registry record.
