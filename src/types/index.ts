@@ -497,6 +497,7 @@ export interface TitleDocumentRecord {
   title?: string;
   documentType?: TitleDocumentType;
   category?: 'title_document' | 'property_document' | 'general' | string;
+  resourceType?: 'image' | 'video' | 'raw' | string;
   mimeType?: string;
   originalFileName?: string;
   fileSizeBytes?: number;

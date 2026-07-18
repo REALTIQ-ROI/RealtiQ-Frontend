@@ -112,12 +112,13 @@ const LandlordTitleVerifications = () => {
         file: uploadFile,
       });
       const publicReference = response.document.publicReference;
-      if (response.verification) {
+      const verification = response.verification;
+      if (verification) {
         setVerifications((current) => {
-          const withoutDuplicate = current.filter((item) => item.verificationId !== response.verification?.verificationId);
-          return [response.verification, ...withoutDuplicate];
+          const withoutDuplicate = current.filter((item) => item.verificationId !== verification.verificationId);
+          return [verification, ...withoutDuplicate];
         });
-        setRiskFlags(response.verification.riskFlags ?? []);
+        setRiskFlags(verification.riskFlags ?? []);
       }
       toast.success(
         response.verificationExisting
