@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { propertyService, type CreatePropertyPayload, type CreatePropertyResponse } from '../services/propertyService';
 import { paymentService } from '../services/paymentService';
 import type { Property, User } from '../types';
-import { requiresInstallments } from '../utils/installment';
+import { normalizePropertyPaymentTypes } from '../utils/propertyPaymentTypes';
 
 interface PropertiesContextValue {
   properties: Property[];
@@ -52,12 +52,22 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
 
   const addProperty = async (_ownerId: string, payload: CreatePropertyPayload): Promise<CreatePropertyResponse> => {
     const created = await propertyService.createPropertyWithResponse(payload);
+    setProperties((current) => [created.property, ...current]);
     await refreshProperties();
     return created;
   };
 
   const updateProperty = async (propertyId: string, payload: Partial<Property>): Promise<Property> => {
     const updated = await propertyService.updateProperty(propertyId, payload);
+    setProperties((current) =>
+      current.map((property) =>
+        (Boolean(updated._id) && property._id === updated._id) ||
+        (Boolean(updated.id) && property.id === updated.id) ||
+        (Boolean(updated.publicReference) && property.publicReference === updated.publicReference)
+          ? updated
+          : property,
+      ),
+    );
     await refreshProperties();
     return updated;
   };
@@ -73,8 +83,8 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const property = await propertyService.getPropertyById(propertyId);
-    if (requiresInstallments(property.price)) {
-      throw new Error('This property is available through installments only.');
+    if (!normalizePropertyPaymentTypes(property.paymentTypes, property.price).includes('outright')) {
+      throw new Error('Outright payment is not offered for this property.');
     }
 
     try {

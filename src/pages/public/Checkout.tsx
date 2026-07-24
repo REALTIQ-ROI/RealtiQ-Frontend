@@ -7,9 +7,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useAsync } from '../../hooks/useAsync';
 import { paymentService } from '../../services/paymentService';
 import { propertyService } from '../../services/propertyService';
-import { requiresInstallments } from '../../utils/installment';
+import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
 
-type CheckoutStage = 'ready' | 'installment-only' | 'blocked';
+type CheckoutStage = 'ready' | 'outright-unavailable' | 'blocked';
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -35,8 +35,14 @@ const Checkout = () => {
     }
 
     const loadedProperty = await propertyService.getPropertyById(propertyId);
-    if (requiresInstallments(loadedProperty.price)) {
-      return 'installment-only';
+    if (
+      loadedProperty.status !== 'available' ||
+      (loadedProperty.approvalStatus && loadedProperty.approvalStatus !== 'approved')
+    ) {
+      return 'blocked';
+    }
+    if (!normalizePropertyPaymentTypes(loadedProperty.paymentTypes, loadedProperty.price).includes('outright')) {
+      return 'outright-unavailable';
     }
 
     const checkout = await paymentService.initializePayment(propertyId);
@@ -57,18 +63,18 @@ const Checkout = () => {
     );
   }
 
-  if (hasInvalidRole || error || stage === 'blocked' || stage === 'installment-only') {
+  if (hasInvalidRole || error || stage === 'blocked' || stage === 'outright-unavailable') {
     return (
       <PublicLayout>
         <PageNotice
-          title={stage === 'installment-only' ? 'Installments Only' : 'Checkout Unavailable'}
+          title={stage === 'outright-unavailable' ? 'Outright Payment Unavailable' : 'Checkout Unavailable'}
           description={
-            stage === 'installment-only'
-              ? 'This property is above the one-time payment limit. Please use an installment plan instead.'
+            stage === 'outright-unavailable'
+              ? 'The landlord has not offered outright payment for this property. Return to the property to choose an available payment option.'
               : error ?? 'Only buyers can purchase properties.'
           }
-          actionLabel={stage === 'installment-only' ? 'Open Property' : 'Back to Properties'}
-          actionTo={stage === 'installment-only' && propertyId ? `/properties/${propertyId}` : '/properties'}
+          actionLabel={stage === 'outright-unavailable' ? 'Open Property' : 'Back to Properties'}
+          actionTo={stage === 'outright-unavailable' && propertyId ? `/properties/${propertyId}` : '/properties'}
         />
       </PublicLayout>
     );

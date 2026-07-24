@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { propertyPublicReference, type Property } from '../../types';
 import TitleVerificationBadge from '../title/TitleVerificationBadge';
+import PaymentTypeBadges from './PaymentTypeBadges';
+import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-NG', {
@@ -22,6 +24,7 @@ const PropertyCard = ({
   const coverUrl = cover?.url;
   const isVideo = cover?.type === 'video';
   const routeReference = propertyPublicReference(property);
+  const paymentTypes = normalizePropertyPaymentTypes(property.paymentTypes, property.price);
 
   return (
     <article className="group bg-surface-container-lowest rounded-xl overflow-hidden border border-outline-variant/10 hover:shadow-lg transition-shadow duration-300">
@@ -127,6 +130,7 @@ const PropertyCard = ({
             </span>
           ) : null}
         </div>
+        <PaymentTypeBadges paymentTypes={paymentTypes} />
 
         <div className="flex items-center gap-3 text-xs text-on-surface-variant pt-3 border-t border-outline-variant/20">
           <span className="flex items-center gap-1">

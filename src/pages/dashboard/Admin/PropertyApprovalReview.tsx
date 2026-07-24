@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import AdminLayout from '../../../components/layout/AdminLayout';
+import PaymentTypeBadges from '../../../components/property/PaymentTypeBadges';
 import Button from '../../../components/ui/Button';
 import LoadingState from '../../../components/ui/LoadingState';
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
 import { ApiRequestError } from '../../../lib/axios';
 import { propertyService, type PropertyApprovalDetailResponse } from '../../../services/propertyService';
 import { propertyDisplayReference, type Property } from '../../../types';
+import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
 
 const resolveOwnerName = (property?: Property | null) => {
   const owner = property?.ownerId;
@@ -143,6 +145,18 @@ const PropertyApprovalReview = () => {
                 <div><dt className="text-xs font-bold uppercase text-secondary">Title Document Status</dt><dd className="mt-1">{detail?.titleDocumentStatus || 'not_submitted'}</dd></div>
                 <div><dt className="text-xs font-bold uppercase text-secondary">Title Verification</dt><dd className="mt-1"><TitleVerificationBadge summary={selectedProperty.titleVerification} context="admin" /></dd></div>
               </dl>
+
+              <div>
+                <h3 className="font-bold">Payment options</h3>
+                <div className="mt-3">
+                  <PaymentTypeBadges
+                    paymentTypes={normalizePropertyPaymentTypes(
+                      selectedProperty.paymentTypes,
+                      selectedProperty.price,
+                    )}
+                  />
+                </div>
+              </div>
 
               <div>
                 <h3 className="font-bold">Restricted Title Documents</h3>

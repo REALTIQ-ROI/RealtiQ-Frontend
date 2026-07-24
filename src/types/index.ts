@@ -1,6 +1,7 @@
 ﻿export type UserRole = 'buyer' | 'landlord' | 'admin';
 export type PropertyType = 'house' | 'apartment' | 'land' | 'commercial' | 'villa' | 'penthouse' | 'estate';
 export type PropertyStatus = 'available' | 'sold';
+export type PropertyPaymentType = 'outright' | 'installment' | 'escrow';
 export type PropertyCategory = 'residential' | 'commercial' | 'mixed_use' | string;
 export type PropertyCompletionStage = 'off_plan' | 'unfinished' | 'finished' | 'renovation' | string;
 export type PropertyCurrency = 'NGN' | 'USD' | 'GBP' | string;
@@ -64,6 +65,7 @@ export interface Property {
   category?: PropertyCategory;
   completionStage?: PropertyCompletionStage;
   currency?: PropertyCurrency;
+  paymentTypes: PropertyPaymentType[];
   coordinates?: PropertyCoordinates | null;
   media: MediaItem[];
   status: PropertyStatus;

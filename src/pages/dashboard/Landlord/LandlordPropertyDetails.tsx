@@ -3,12 +3,14 @@ import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayou
 import MediaPreview from '../../../components/property/MediaPreview';
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
 import TitleDocumentManagement from '../../../components/title/TitleDocumentManagement';
+import PaymentTypeBadges from '../../../components/property/PaymentTypeBadges';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
 import { paymentService } from '../../../services/paymentService';
 import { propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
+import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
 
 const formatRelativeDate = (date?: string) => {
   if (!date) return 'Recently';
@@ -72,6 +74,7 @@ const LandlordPropertyDetails = () => {
               <span className="material-symbols-outlined text-sm">location_on</span>
               {property?.location ?? 'Select a property from your portfolio'}
             </p>
+            {property ? <div className="mt-3"><PaymentTypeBadges paymentTypes={normalizePropertyPaymentTypes(property.paymentTypes, property.price)} /></div> : null}
           </div>
           <div className="flex gap-3 flex-wrap">
             <Link

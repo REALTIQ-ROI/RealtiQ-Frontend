@@ -23,7 +23,7 @@ const Editproperty = () => {
   const handleSubmit = async (payload: UpdatePropertyPayload & { status?: string }) => {
     if (!property) {
       toast.error('Property not found.');
-      return;
+      return undefined;
     }
 
     const success = await updateProperty(propertyRouteReference(property), payload);
@@ -31,6 +31,7 @@ const Editproperty = () => {
       toast.success('Property updated successfully');
       navigate('/dashboard/landlord/my-properties');
     }
+    return success || undefined;
   };
 
   return (

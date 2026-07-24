@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Property } from '../../../types';
 import MediaPreview from '../MediaPreview';
+import PaymentTypeBadges from '../PaymentTypeBadges';
+import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
 
 interface Props {
   property: Property;
@@ -48,6 +50,7 @@ const PropertyMapPreviewCard = ({ property, detailsPath, actions, onClose }: Pro
           {property.bathrooms > 0 ? `${property.bathrooms} baths` : ''}
         </p>
       )}
+      <PaymentTypeBadges paymentTypes={normalizePropertyPaymentTypes(property.paymentTypes, property.price)} />
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <Link className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-on-primary" to={detailsPath(property)}>
           View Details

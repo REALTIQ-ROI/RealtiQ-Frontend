@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
+import PaymentTypeBadges from '../../../components/property/PaymentTypeBadges';
 import { ownershipService } from '../../../services/ownershipService';
 import { propertyService } from '../../../services/propertyService';
 import { titleDocumentService } from '../../../services/titleDocumentService';
 import { propertyRouteReference, type Property, type TitleDocumentRecord } from '../../../types';
 import { documentTypeLabel } from '../../../utils/titleVerification';
+import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
 
 interface PropertyDetailState {
   property: Property | null;
@@ -168,6 +170,7 @@ const PropertyDetails = () => {
                 <p className="text-sm text-secondary">No title documents are available for this property yet.</p>
               )}
             </div>
+            <PaymentTypeBadges paymentTypes={normalizePropertyPaymentTypes(property.paymentTypes, property.price)} />
           </article>
         ) : (
           <p className="text-secondary">No purchased property selected.</p>

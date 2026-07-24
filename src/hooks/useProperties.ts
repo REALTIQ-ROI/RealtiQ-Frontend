@@ -9,7 +9,7 @@ import {
 } from '../services/propertyService';
 import { paymentService } from '../services/paymentService';
 import type { Property } from '../types';
-import { requiresInstallments } from '../utils/installment';
+import { normalizePropertyPaymentTypes } from '../utils/propertyPaymentTypes';
 
 interface UsePropertiesOptions {
   autoFetch?: boolean;
@@ -80,6 +80,7 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
   const createProperty = async (payload: CreatePropertyPayload): Promise<Property | null> => {
     try {
       const created = await propertyService.createProperty(payload);
+      setProperties((current) => [created, ...current]);
       toast.success('Property created successfully');
       return created;
     } catch (err) {
@@ -103,7 +104,16 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
     if (!result.isConfirmed) return false;
 
     try {
-      await propertyService.updateProperty(id, payload);
+      const updated = await propertyService.updateProperty(id, payload);
+      setProperties((current) =>
+        current.map((property) =>
+          (Boolean(updated._id) && property._id === updated._id) ||
+          (Boolean(updated.id) && property.id === updated.id) ||
+          (Boolean(updated.publicReference) && property.publicReference === updated.publicReference)
+            ? updated
+            : property,
+        ),
+      );
       toast.success('Property updated successfully');
       return true;
     } catch (err) {
@@ -170,8 +180,8 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
 
     try {
       const property = await propertyService.getPropertyById(id);
-      if (requiresInstallments(property.price)) {
-        toast.error('This property is available through installments only.');
+      if (!normalizePropertyPaymentTypes(property.paymentTypes, property.price).includes('outright')) {
+        toast.error('Outright payment is not offered for this property.');
         return;
       }
 

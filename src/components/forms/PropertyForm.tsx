@@ -52,6 +52,7 @@ const PropertyForm = ({ initialValue, submitLabel, onSubmit }: PropertyFormProps
       await onSubmit({
         title,
         price,
+        paymentTypes: initialValue?.paymentTypes ?? ['outright'],
         location,
         propertyType,
         bedrooms,

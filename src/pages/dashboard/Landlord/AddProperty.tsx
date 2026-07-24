@@ -24,7 +24,7 @@ const AddProperty = () => {
   const handleSubmit = async (payload: CreatePropertyPayload & { status?: string }) => {
     if (!user) {
       toast.error('You must be logged in to create a property.');
-      return;
+      return undefined;
     }
 
     const response = await addProperty(user._id, payload);
@@ -35,6 +35,7 @@ const AddProperty = () => {
       }
       navigate('/dashboard/landlord/my-properties');
     }
+    return response.property;
   };
 
   return (

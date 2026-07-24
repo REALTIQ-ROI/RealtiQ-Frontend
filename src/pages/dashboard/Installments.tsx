@@ -15,6 +15,7 @@ import { installmentService } from '../../services/installmentService';
 import { paymentService } from '../../services/paymentService';
 import { propertyService } from '../../services/propertyService';
 import { propertyRouteReference } from '../../types';
+import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
 import type {
   CustomInstallmentCreatePayload,
   Installment,
@@ -201,7 +202,16 @@ const InstallmentCreateForm = ({
   const eligibleProperties = useMemo(
     () => properties.filter((property) => {
       const refs = [property._id, propertyRouteReference(property)].filter(Boolean);
-      return property.status === 'available' && refs.every((ref) => !activePropertyIds.has(ref));
+      const offersInstallment = normalizePropertyPaymentTypes(
+        property.paymentTypes,
+        property.price,
+      ).includes('installment');
+      return (
+        property.status === 'available' &&
+        (!property.approvalStatus || property.approvalStatus === 'approved') &&
+        offersInstallment &&
+        refs.every((ref) => !activePropertyIds.has(ref))
+      );
     }),
     [activePropertyIds, properties],
   );
@@ -355,12 +365,12 @@ const InstallmentCreateForm = ({
               properties={eligibleProperties}
               value={propertyId}
               onChange={(property) => setPropertyId(property ? propertyRouteReference(property) : '')}
-              emptyMessage="No eligible properties available."
+              emptyMessage="No eligible properties currently offer installment payments."
               helperText="Only available properties without an active installment plan are shown."
             />
           ) : (
             <div className="rounded-lg border border-dashed border-outline-variant/30 p-4 text-sm text-secondary sm:p-5">
-              No eligible properties available.
+              No eligible properties currently offer installment payments.
             </div>
           )}
 

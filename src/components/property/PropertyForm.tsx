@@ -4,18 +4,33 @@ import { ApiRequestError } from '../../lib/axios';
 import MediaUploader from './MediaUploader';
 import { documentService } from '../../services/documentService';
 import type { CreatePropertyPayload, TitleDocumentUploadMetadata } from '../../services/propertyService';
-import type { MediaItem, TitleDocumentPolicyMode, TitleDocumentType } from '../../types';
+import type { MediaItem, Property, PropertyPaymentType, TitleDocumentPolicyMode, TitleDocumentType } from '../../types';
 import { documentTypeLabel, titleDocumentTypeOptions } from '../../utils/titleVerification';
+import {
+  INSTALLMENT_THRESHOLD_NGN,
+  normalizePaymentTypesForForm,
+  PROPERTY_PAYMENT_TYPE_ORDER,
+  propertyPaymentTypeIcons,
+  propertyPaymentTypeLabels,
+} from '../../utils/propertyPaymentTypes';
 
 interface PropertyFormProps {
   initialData?: Partial<CreatePropertyPayload & { status: string }>;
-  onSubmit: (data: CreatePropertyPayload & { status?: string }) => Promise<void>;
+  onSubmit: (data: CreatePropertyPayload & { status?: string }) => Promise<Property | void>;
   isLoading?: boolean;
   submitLabel?: string;
   mode?: 'create' | 'edit';
 }
 
-const PROPERTY_TYPES = ['house', 'apartment', 'land', 'commercial', 'villa', 'penthouse', 'estate'];
+const PROPERTY_TYPES = [
+  'house',
+  'apartment',
+  // 'land', // Temporarily unavailable for new landlord listings.
+  'commercial',
+  'villa',
+  'penthouse',
+  'estate',
+];
 const CATEGORY_OPTIONS = ['residential', 'commercial', 'mixed_use'];
 const LAND_CATEGORY_OPTIONS = ['residential_land', 'commercial_land', 'agricultural_land', 'industrial_land', 'mixed_use_land'];
 const STAGE_OPTIONS = ['off_plan', 'unfinished', 'finished', 'renovation'];
@@ -68,6 +83,7 @@ const validate = (data: CreatePropertyPayload & { status?: string }): Record<str
   if (!data.media || data.media.length === 0) errs.media = 'At least one media file is required';
   if (!data.category) errs.category = 'Category is required';
   if (!data.currency) errs.currency = 'Currency is required';
+  if (!data.paymentTypes.length) errs.paymentTypes = 'Select at least one property payment type';
   return errs;
 };
 
@@ -95,17 +111,47 @@ const PropertyForm = ({
   const [amenityInput, setAmenityInput] = useState('');
   const [media, setMedia] = useState<MediaItem[]>(initialData?.media ?? []);
   const [status, setStatus] = useState(initialData?.status ?? 'available');
+  const [paymentTypes, setPaymentTypes] = useState<PropertyPaymentType[]>(() =>
+    mode === 'edit'
+      ? normalizePaymentTypesForForm(
+          Number(initialData?.price ?? 0),
+          initialData?.paymentTypes ?? ['outright'],
+        )
+      : [],
+  );
   const [titleDocumentRows, setTitleDocumentRows] = useState<TitleDocumentRow[]>([]);
   const [uploadingTitleDocument, setUploadingTitleDocument] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const isLandProperty = propertyType === 'land';
   const categoryOptions = isLandProperty ? LAND_CATEGORY_OPTIONS : CATEGORY_OPTIONS;
+  const propertyTypeOptions =
+    mode === 'edit' && propertyType === 'land' ? ['land', ...PROPERTY_TYPES] : PROPERTY_TYPES;
+  const parsedPrice = Number(price) || 0;
+  const installmentForced = parsedPrice > INSTALLMENT_THRESHOLD_NGN;
 
   useEffect(() => {
     if (!categoryOptions.includes(category)) {
       setCategory(categoryOptions[0]);
     }
   }, [category, categoryOptions]);
+
+  useEffect(() => {
+    if (!installmentForced) return;
+    setPaymentTypes((current) =>
+      current.includes('installment') ? current : normalizePaymentTypesForForm(parsedPrice, current),
+    );
+  }, [installmentForced, parsedPrice]);
+
+  const togglePaymentType = (type: PropertyPaymentType) => {
+    if (type === 'installment' && installmentForced) return;
+    setPaymentTypes((current) => {
+      const selected = current.includes(type)
+        ? current.filter((item) => item !== type)
+        : [...current, type];
+      return normalizePaymentTypesForForm(parsedPrice, selected);
+    });
+    setErrors((current) => ({ ...current, paymentTypes: '' }));
+  };
 
   const addAmenity = () => {
     const trimmed = amenityInput.trim();
@@ -131,6 +177,7 @@ const PropertyForm = ({
     const basePayload: CreatePropertyPayload & { status?: string } = {
       title: title.trim(),
       price: Number(price),
+      paymentTypes: normalizePaymentTypesForForm(parsedPrice, paymentTypes),
       location: location.trim(),
       propertyType,
       squareFeet: Number(squareFeet),
@@ -217,10 +264,25 @@ const PropertyForm = ({
 
     const payload = titleDocuments ? { ...basePayload, titleDocuments } : basePayload;
     try {
-      await onSubmit(payload);
+      const savedProperty = await onSubmit(payload);
+      if (savedProperty?.paymentTypes) {
+        setPaymentTypes(normalizePaymentTypesForForm(savedProperty.price, savedProperty.paymentTypes));
+      }
       setTitleDocumentRows([]);
     } catch (raw) {
       const message = raw instanceof Error ? raw.message : 'Unable to create the property.';
+      if (
+        raw instanceof ApiRequestError &&
+        (
+          raw.fieldErrors?.some((item) => item.path?.startsWith('paymentTypes')) ||
+          /payment type/i.test(message)
+        )
+      ) {
+        const fieldMessage = raw.fieldErrors
+          ?.find((item) => item.path?.startsWith('paymentTypes'))
+          ?.msg;
+        setErrors((current) => ({ ...current, paymentTypes: fieldMessage || message }));
+      }
       if (
         raw instanceof ApiRequestError &&
         raw.status === 409 &&
@@ -261,7 +323,7 @@ const PropertyForm = ({
           <div>
             <label className={labelClass}>Property Type</label>
             <select value={propertyType} onChange={(e) => setPropertyType(e.target.value)} className={inputClass}>
-              {PROPERTY_TYPES.map((t) => (
+              {propertyTypeOptions.map((t) => (
                 <option key={t} value={t} className="capitalize">
                   {t.replace('_', ' ')}
                 </option>
@@ -413,6 +475,59 @@ const PropertyForm = ({
         </div>
       </div>
 
+      <fieldset
+        aria-describedby={errors.paymentTypes ? 'payment-types-error' : 'payment-types-help'}
+        className="rounded-2xl border border-outline-variant/10 bg-white p-6"
+      >
+        <legend className="px-1 text-base font-black text-on-surface">Payment options</legend>
+        <p id="payment-types-help" className="mt-1 text-xs text-secondary">
+          Select every payment method buyers may use. Offering a method does not create or approve a payment plan.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {PROPERTY_PAYMENT_TYPE_ORDER.map((type) => {
+            const checked = paymentTypes.includes(type);
+            const disabled = type === 'installment' && installmentForced;
+            return (
+              <label
+                key={type}
+                className={`flex items-start gap-3 rounded-xl border p-4 ${
+                  checked ? 'border-primary bg-primary/5' : 'border-outline-variant/20'
+                } ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <input
+                  type="checkbox"
+                  name="paymentTypes"
+                  value={type}
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={() => togglePaymentType(type)}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="flex items-center gap-1.5 text-sm font-bold">
+                    <span aria-hidden="true" className="material-symbols-outlined text-lg">{propertyPaymentTypeIcons[type]}</span>
+                    {type === 'installment' ? 'Installment plan' : propertyPaymentTypeLabels[type]}
+                  </span>
+                  <span className="mt-1 block text-xs text-secondary">
+                    {type === 'outright'
+                      ? 'Existing direct-purchase checkout'
+                      : type === 'installment'
+                        ? 'Buyer can create an installment plan'
+                        : 'Buyer can create a protected escrow'}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        {installmentForced ? (
+          <p className="mt-3 text-xs font-semibold text-amber-800">
+            Installment is required for properties above ₦50,000,000
+          </p>
+        ) : null}
+        {errors.paymentTypes ? <p id="payment-types-error" role="alert" className={errorClass}>{errors.paymentTypes}</p> : null}
+      </fieldset>
+
       <div className="bg-white rounded-2xl p-6 space-y-4 border border-outline-variant/10">
         <h2 className="text-base font-black text-on-surface tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
           Amenities
@@ -541,7 +656,7 @@ const PropertyForm = ({
                     <option value="paid_view_once">Paid — one view</option>
                     <option value="paid_view_multiple">Paid — multiple views</option>
                   </select>
-                  {row.mode !== 'private' ? <p className="mt-2 text-xs text-secondary">₦5,000 — set by RealtiQ. The server controls the final price.</p> : null}
+                  {row.mode !== 'private' ? <p className="mt-2 text-xs text-secondary">₦5,000 — set by RealtiQ.</p> : null}
                 </div>
                 <div>
                   <label className={labelClass}>Restricted file</label>

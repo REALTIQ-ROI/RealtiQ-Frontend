@@ -8,6 +8,7 @@ import type {
   PropertyCoordinates,
   PropertyCurrency,
   PropertyFilters,
+  PropertyPaymentType,
   PropertyStatus,
   PropertyType,
   TitleDocumentRecord,
@@ -15,6 +16,7 @@ import type {
   TitleDocumentType,
   TitleVerification,
 } from '../types';
+import { normalizePropertyPaymentTypes } from '../utils/propertyPaymentTypes';
 
 export interface TitleDocumentUploadMetadata {
   assetId: string;
@@ -29,6 +31,7 @@ export interface TitleDocumentUploadMetadata {
 export interface CreatePropertyPayload {
   title: string;
   price: number;
+  paymentTypes: PropertyPaymentType[];
   location: string;
   propertyType: PropertyType | string;
   bedrooms?: number;
@@ -82,6 +85,7 @@ export interface NearbyPropertySummary {
   publicReference?: string | null;
   title: string;
   coordinates?: PropertyCoordinates | null;
+  paymentTypes?: PropertyPaymentType[];
 }
 
 export interface PropertySaveResponse {
@@ -113,10 +117,20 @@ export interface PropertyApprovalInput {
   rejectionReason?: string;
 }
 
+const normalizeProperty = (property: Property): Property => ({
+  ...property,
+  paymentTypes: normalizePropertyPaymentTypes(property.paymentTypes, property.price),
+});
+
+const normalizePropertiesResponse = (response: PropertiesResponse): PropertiesResponse => ({
+  ...response,
+  properties: response.properties.map(normalizeProperty),
+});
+
 export const propertyService = {
   async getProperties(filters?: PropertyFiltersQuery): Promise<PropertiesResponse> {
     const { data } = await api.get<PropertiesResponse>('/properties', { params: filters });
-    return data;
+    return normalizePropertiesResponse(data);
   },
 
   async listPublicProperties(filters?: PropertyFiltersQuery): Promise<PropertiesResponse> {
@@ -125,7 +139,7 @@ export const propertyService = {
 
   async getPropertyById(id: string): Promise<Property> {
     const { data } = await api.get<Property>(`/properties/${id}`);
-    return data;
+    return normalizeProperty(data);
   },
 
   async getPublicProperty(publicReference: string): Promise<Property> {
@@ -134,24 +148,26 @@ export const propertyService = {
 
   async createProperty(payload: CreatePropertyPayload): Promise<Property> {
     const { data } = await api.post<Property | CreatePropertyResponse>('/properties', payload);
-    return 'property' in data ? data.property : data;
+    return normalizeProperty('property' in data ? data.property : data);
   },
 
   async createPropertyWithResponse(payload: CreatePropertyPayload): Promise<CreatePropertyResponse> {
     const { data } = await api.post<Property | CreatePropertyResponse>('/properties', payload);
-    return 'property' in data ? data : { property: data };
+    return 'property' in data
+      ? { ...data, property: normalizeProperty(data.property) }
+      : { property: normalizeProperty(data) };
   },
 
   async getMyProperties(): Promise<PropertiesResponse> {
     const { data } = await api.get<PropertiesResponse | Property[]>('/properties/mine');
-    return Array.isArray(data)
+    return normalizePropertiesResponse(Array.isArray(data)
       ? { properties: data, total: data.length, page: 1, limit: data.length }
-      : data;
+      : data);
   },
 
   async updateProperty(id: string, payload: UpdatePropertyPayload): Promise<Property> {
     const { data } = await api.patch<Property>(`/properties/${id}`, payload);
-    return data;
+    return normalizeProperty(data);
   },
 
   async deleteProperty(id: string): Promise<{ message: string }> {
@@ -161,19 +177,19 @@ export const propertyService = {
 
   async getPropertyOwnerDetail(id: string): Promise<PropertyOwnerDetailResponse> {
     const { data } = await api.get<PropertyOwnerDetailResponse>(`/properties/${id}/owner-detail`);
-    return data;
+    return { ...data, property: normalizeProperty(data.property) };
   },
 
   async listPendingApprovalProperties(): Promise<PropertiesResponse> {
     const { data } = await api.get<PropertiesResponse | Property[]>('/properties/admin/pending-approval');
-    return Array.isArray(data)
+    return normalizePropertiesResponse(Array.isArray(data)
       ? { properties: data, total: data.length, page: 1, limit: data.length }
-      : data;
+      : data);
   },
 
   async getPropertyApprovalDetail(id: string): Promise<PropertyApprovalDetailResponse> {
     const { data } = await api.get<PropertyApprovalDetailResponse>(`/properties/${id}/admin-review`);
-    return data;
+    return { ...data, property: normalizeProperty(data.property) };
   },
 
   async updatePropertyApproval(
@@ -184,7 +200,7 @@ export const propertyService = {
       `/properties/${id}/approval`,
       input,
     );
-    return data;
+    return { ...data, property: normalizeProperty(data.property) };
   },
 
   async buyProperty(id: string): Promise<BuyPropertyResponse> {
@@ -213,7 +229,10 @@ export const propertyService = {
     params: Required<Pick<PropertyCoordinates, 'lat' | 'lng'>> & { radius: number },
   ): Promise<NearbyPropertySummary[]> {
     const { data } = await api.get<NearbyPropertySummary[]>('/properties/map/nearby', { params });
-    return data;
+    return data.map((property) => ({
+      ...property,
+      paymentTypes: normalizePropertyPaymentTypes(property.paymentTypes, 0),
+    }));
   },
 
   async uploadMedia(files: File[], onProgress?: (percent: number) => void): Promise<MediaUploadResponse> {

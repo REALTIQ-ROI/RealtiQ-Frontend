@@ -56,6 +56,7 @@ describe('purchased property title documents', () => {
         publicReference: 'RTQ-PROP-1',
         title: 'Purchased Home',
         price: 100000000,
+        paymentTypes: ['outright', 'installment'],
         location: 'Lekki',
         propertyType: 'house',
         bedrooms: 3,

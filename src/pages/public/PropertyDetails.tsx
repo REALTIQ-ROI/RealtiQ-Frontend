@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import InquiryForm from '../../components/forms/InquiryForm';
 import PropertyGallery from '../../components/property/PropertyGallery';
 import PropertyMeta from '../../components/property/PropertyMeta';
+import PaymentTypeBadges from '../../components/property/PaymentTypeBadges';
 import TitleVerificationBadge from '../../components/title/TitleVerificationBadge';
 import PublicTitleDocuments from '../../components/title/PublicTitleDocuments';
 import PublicLayout from '../../components/layout/PublicLayout';
@@ -27,8 +28,8 @@ import {
   isInstallmentActive,
   resolveInstallmentPropertyId,
   resolveInstallmentProperty,
-  requiresInstallments,
 } from '../../utils/installment';
+import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
 
 const formatCurrency = (value: number, currency = 'NGN') =>
   new Intl.NumberFormat('en-NG', {
@@ -128,7 +129,12 @@ const PropertyDetails = () => {
     () => property?.owner ?? (property && typeof property.ownerId !== 'string' ? property.ownerId : null),
     [property],
   );
-  const canPurchase = Boolean(property && property.status !== 'sold' && (!user || (user.role === 'buyer' && resolvePropertyOwnerId(property) !== user._id)));
+  const canPurchase = Boolean(
+    property &&
+      property.status === 'available' &&
+      (!property.approvalStatus || property.approvalStatus === 'approved') &&
+      (!user || (user.role === 'buyer' && resolvePropertyOwnerId(property) !== user._id)),
+  );
 
   const installments = useMemo(() => (Array.isArray(installmentData) ? installmentData : []), [installmentData]);
   const propertyInstallment = useMemo(() => {
@@ -140,7 +146,10 @@ const PropertyDetails = () => {
   const installmentProperty = propertyInstallment ? resolveInstallmentProperty(propertyInstallment) : null;
   const hasActiveInstallment = Boolean(propertyInstallment && installmentSummary && !installmentSummary.completed);
   const hasInstallmentHistory = Boolean(propertyInstallment);
-  const installmentOnly = property ? requiresInstallments(property.price) : false;
+  const paymentTypes = property ? normalizePropertyPaymentTypes(property.paymentTypes, property.price) : [];
+  const hasOutrightPayment = paymentTypes.includes('outright');
+  const hasInstallmentPayment = paymentTypes.includes('installment');
+  const hasEscrowPayment = paymentTypes.includes('escrow');
 
   const handleSaveProperty = async () => {
     if (!propertyReference) return;
@@ -183,9 +192,8 @@ const PropertyDetails = () => {
       return;
     }
 
-    if (installmentOnly) {
-      toast.error('This property is available through installments only.');
-      await handleCreateInstallment();
+    if (!hasOutrightPayment) {
+      toast.error('Outright payment is not offered for this property.');
       return;
     }
 
@@ -258,6 +266,10 @@ const PropertyDetails = () => {
 
   const handleCreateInstallment = async () => {
     if (!property || !propertyReference) return;
+    if (!hasInstallmentPayment) {
+      toast.error('Installment payment is not offered for this property.');
+      return;
+    }
 
     if (!user) {
       navigate('/login');
@@ -527,17 +539,16 @@ const PropertyDetails = () => {
                       </p>
                     </div>
                   </div>
+                ) : !hasInstallmentPayment ? (
+                  <div className="rounded-xl border border-dashed border-outline-variant/20 bg-surface-container-lowest p-6 text-sm text-secondary">
+                    The landlord has not offered installment payments for this property.
+                  </div>
                 ) : property.status === 'sold' ? (
                   <div className="rounded-xl border border-dashed border-outline-variant/20 bg-surface-container-lowest p-6 text-sm text-secondary">
                     This property has already been purchased in full. Installment creation is unavailable.
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {installmentOnly ? (
-                      <div className="rounded-xl border border-amber-400/30 bg-amber-50 p-4 text-sm text-amber-900">
-                        This property exceeds the one-time payment limit. Installment plans are required.
-                      </div>
-                    ) : null}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">
@@ -599,37 +610,37 @@ const PropertyDetails = () => {
                   {property.status.toUpperCase()}
                 </span>
               </div>
+              <PaymentTypeBadges paymentTypes={paymentTypes} />
 
               {!canPurchase ? (
                 <p className="rounded-lg bg-surface-container-low p-3 text-center text-sm text-secondary">
                   {property.status === 'sold' ? 'This property has already been sold.' : 'Purchase options are available to eligible buyers only.'}
                 </p>
-              ) : hasActiveInstallment && propertyInstallment ? (
-                <Button fullWidth onClick={handleContinueInstallment} disabled={installmentLoading}>
-                  Continue Installment
-                </Button>
-              ) : hasInstallmentHistory && installmentSummary?.completed ? (
-                <Button fullWidth disabled>
-                  Installment Plan Completed
-                </Button>
-              ) : installmentOnly ? (
-                <Button fullWidth onClick={() => void handleCreateInstallment()} disabled={creatingInstallment}>
-                  {creatingInstallment ? 'Creating...' : 'Create Installment Plan'}
-                </Button>
               ) : (
-                <Button
-                  fullWidth
-                  disabled={property.status === 'sold' || installmentLoading}
-                  onClick={() => void handleBuyProperty()}
-                >
-                  {installmentLoading
-                    ? 'Checking installment status...'
-                    : property.status === 'sold'
-                      ? 'Already Sold'
-                      : 'Buy Property'}
-                </Button>
+                <>
+                  {hasActiveInstallment && propertyInstallment ? (
+                    <Button fullWidth onClick={handleContinueInstallment} disabled={installmentLoading}>
+                      Continue Installment
+                    </Button>
+                  ) : hasInstallmentHistory && installmentSummary?.completed ? (
+                    <Button fullWidth disabled>Installment Plan Completed</Button>
+                  ) : (
+                    <>
+                      {hasOutrightPayment ? (
+                        <Button fullWidth disabled={installmentLoading} onClick={() => void handleBuyProperty()}>
+                          {installmentLoading ? 'Checking eligibility...' : 'Buy Property Outright'}
+                        </Button>
+                      ) : null}
+                      {hasInstallmentPayment ? (
+                        <Button fullWidth variant="secondary" onClick={() => void handleCreateInstallment()} disabled={creatingInstallment}>
+                          {creatingInstallment ? 'Creating...' : 'Create Installment Plan'}
+                        </Button>
+                      ) : null}
+                    </>
+                  )}
+                </>
               )}
-              {user?.role === 'buyer' && property.status === 'available' && resolvePropertyOwnerId(property) !== user._id && !hasActiveInstallment ? (
+              {hasEscrowPayment && user?.role === 'buyer' && property.status === 'available' && resolvePropertyOwnerId(property) !== user._id && !hasActiveInstallment ? (
                 <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
                   <p className="text-sm font-bold text-primary">Prefer protected release conditions?</p>
                   <p className="mt-1 text-xs text-secondary">Pay through escrow. Funds remain locked until agreed conditions are completed and an administrator approves release.</p>

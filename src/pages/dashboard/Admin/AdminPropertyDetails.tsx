@@ -4,8 +4,10 @@ import AdminLayout from '../../../components/layout/AdminLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
 import TitleDocumentManagement from '../../../components/title/TitleDocumentManagement';
+import PaymentTypeBadges from '../../../components/property/PaymentTypeBadges';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { propertyDisplayReference, propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
+import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
 
 // const sparkHeights = ['50%', '66%', '100%', '75%', '66%', '80%', '83%'];
 
@@ -60,6 +62,7 @@ const AdminPropertyDetails = () => {
               {property.location}
             </p>
             <div className="mt-3"><TitleVerificationBadge summary={property.titleVerification} context="admin" /></div>
+            <div className="mt-3"><PaymentTypeBadges paymentTypes={normalizePropertyPaymentTypes(property.paymentTypes, property.price)} /></div>
           </div>
 
           <div className="flex items-center gap-4">

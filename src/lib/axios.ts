@@ -6,8 +6,9 @@ export class ApiRequestError extends Error {
   eligibleAt?: string;
   existingPayment?: unknown;
   details?: unknown;
+  fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }>;
 
-  constructor(message: string, details?: { status?: number; missingRules?: unknown; eligibleAt?: string; existingPayment?: unknown; details?: unknown }) {
+  constructor(message: string, details?: { status?: number; missingRules?: unknown; eligibleAt?: string; existingPayment?: unknown; details?: unknown; fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }> }) {
     super(message);
     this.name = 'ApiRequestError';
     Object.assign(this, details);
@@ -53,17 +54,26 @@ api.interceptors.response.use(
         : '';
 
     if (message.trim()) {
-      const details = responseData as { missingRules?: unknown; eligibleAt?: string; payment?: unknown; details?: unknown };
+      const details = responseData as { missingRules?: unknown; eligibleAt?: string; payment?: unknown; details?: unknown; errors?: Array<{ path?: string; msg?: string; value?: unknown }> };
       return Promise.reject(new ApiRequestError(message, {
         status,
         missingRules: details.missingRules,
         eligibleAt: details.eligibleAt,
         existingPayment: details.payment,
         details: details.details,
+        fieldErrors: details.errors,
       }));
     }
 
-    return Promise.reject(new ApiRequestError('Something went wrong. Please try again later.', { status }));
+    const validationErrors =
+      typeof responseData === 'object' && responseData !== null && 'errors' in responseData
+        ? (responseData as { errors?: Array<{ path?: string; msg?: string; value?: unknown }> }).errors
+        : undefined;
+    const validationMessage = validationErrors?.map((item) => item.msg).filter(Boolean).join(' ');
+    return Promise.reject(new ApiRequestError(
+      validationMessage || 'Something went wrong. Please try again later.',
+      { status, fieldErrors: validationErrors },
+    ));
   },
 );
 
