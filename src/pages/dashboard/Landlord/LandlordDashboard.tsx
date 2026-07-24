@@ -200,7 +200,7 @@ const LandlordDashboard = () => {
             {latestPayment ? (
               <Link to="/dashboard/landlord/payment-history" className="block p-4 rounded-xl hover:bg-surface-container-low transition-colors">
                 <p className="text-[10px] uppercase tracking-widest text-secondary mb-1">Latest Payment</p>
-                <p className="font-bold">{latestPayment.property.title}</p>
+                <p className="font-bold">{latestPayment.property?.title ?? 'Property unavailable'}</p>
                 <p className="text-sm text-secondary">{formatCurrency(latestPayment.amount)}</p>
                 <p className="text-xs text-secondary mt-2">{formatRelativeDate(latestPayment.createdAt)}</p>
               </Link>

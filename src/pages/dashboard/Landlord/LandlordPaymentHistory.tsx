@@ -80,12 +80,12 @@ const LandlordPaymentHistory = () => {
                   {payments.map((payment) => (
                     <tr key={payment._id} className="group hover:bg-surface-container-low/30 transition-colors">
                       <td className="px-8 py-6">
-                        <p className="font-bold text-slate-900">{payment.property.title}</p>
-                        <p className="text-xs text-secondary">{payment.property.location}</p>
+                        <p className="font-bold text-slate-900">{payment.property?.title ?? 'Property unavailable'}</p>
+                        <p className="text-xs text-secondary">{payment.property?.location ?? 'Related record unavailable'}</p>
                       </td>
                       <td className="px-8 py-6">
-                        <p className="text-sm font-medium text-slate-700">{payment.user.name}</p>
-                        <p className="text-xs text-secondary">{payment.user.email}</p>
+                        <p className="text-sm font-medium text-slate-700">{payment.user?.name ?? 'Guest'}</p>
+                        <p className="text-xs text-secondary">{payment.user?.email ?? 'Secure guest payment'}</p>
                       </td>
                       <td className="px-8 py-6">
                         <span className="text-xs font-mono text-secondary">{payment.reference}</span>

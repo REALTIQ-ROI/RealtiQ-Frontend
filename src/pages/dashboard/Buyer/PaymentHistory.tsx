@@ -49,7 +49,7 @@ const PaymentHistory = () => {
     const needle = query.trim().toLowerCase();
     const matchesQuery =
       !needle ||
-      `${payment.reference} ${payment.property.title} ${payment.property.location} ${payment.amount}`.toLowerCase().includes(needle);
+      `${payment.reference} ${payment.property?.title ?? ''} ${payment.property?.location ?? ''} ${payment.amount}`.toLowerCase().includes(needle);
     return matchesTab && matchesQuery;
   });
 
@@ -202,8 +202,8 @@ const PaymentHistory = () => {
                   return (
                     <tr key={payment._id} className="hover:bg-surface-container-low/20 transition-colors group">
                       <td className="px-8 py-6">
-                        <p className="font-bold text-primary">{payment.property.title}</p>
-                        <p className="text-xs text-secondary">{payment.property.location}</p>
+                        <p className="font-bold text-primary">{payment.property?.title ?? 'Property unavailable'}</p>
+                        <p className="text-xs text-secondary">{payment.property?.location ?? 'Related record unavailable'}</p>
                       </td>
                       <td className="px-8 py-6">
                         <span className="font-mono text-xs text-secondary">{payment.reference}</span>

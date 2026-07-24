@@ -168,12 +168,20 @@ const ManagePayments = () => {
                           <span className="text-xs font-mono text-slate-500">{payment.reference}</span>
                         </td>
                         <td className="px-6 py-5">
-                          <p className="text-sm font-bold text-primary">{payment.property.title}</p>
-                          <p className="text-[10px] text-secondary">{payment.property.location}</p>
+                          <p className="text-sm font-bold text-primary">
+                            {payment.property?.title ?? 'Property unavailable'}
+                          </p>
+                          <p className="text-[10px] text-secondary">
+                            {payment.property?.location ?? 'Related record unavailable'}
+                          </p>
                         </td>
                         <td className="px-6 py-5">
-                          <p className="text-sm font-medium text-primary">{payment.user.name}</p>
-                          <p className="text-[10px] text-secondary">{payment.user.email}</p>
+                          <p className="text-sm font-medium text-primary">
+                            {payment.user?.name ?? 'Guest'}
+                          </p>
+                          <p className="text-[10px] text-secondary">
+                            {payment.user?.email ?? 'Secure guest payment'}
+                          </p>
                         </td>
                         <td className="px-6 py-5 text-sm text-secondary">{formatDate(payment.createdAt)}</td>
                         <td className="px-6 py-5 text-sm font-bold text-primary">{formatNGN(payment.amount)}</td>

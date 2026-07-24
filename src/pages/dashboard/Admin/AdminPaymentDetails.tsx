@@ -202,12 +202,12 @@ const AdminPaymentDetails = () => {
                   <span className="material-symbols-outlined text-secondary text-2xl">home_work</span>
                 </div>
                 <div>
-                  <h4 className="font-bold text-on-surface">{payment.property.title}</h4>
+                  <h4 className="font-bold text-on-surface">{payment.property?.title ?? 'Property unavailable'}</h4>
                   <p className="text-sm text-secondary flex items-center gap-1">
                     <span className="material-symbols-outlined text-sm">location_on</span>
-                    {payment.property.location}
+                    {payment.property?.location ?? 'Related record unavailable'}
                   </p>
-                  <p className="text-sm font-bold text-primary mt-1">{formatNGN(payment.property.price)}</p>
+                  {payment.property ? <p className="text-sm font-bold text-primary mt-1">{formatNGN(payment.property.price)}</p> : null}
                 </div>
               </div>
             </div>
@@ -217,11 +217,11 @@ const AdminPaymentDetails = () => {
               <h3 className="text-xs font-bold text-secondary uppercase tracking-widest mb-6">Buyer Details</h3>
               <div className="flex items-center gap-4 p-6 bg-surface-container-low rounded-xl">
                 <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary text-lg">
-                  {payment.user.name.charAt(0)}
+                  {(payment.user?.name ?? 'G').charAt(0)}
                 </div>
                 <div>
-                  <p className="font-bold text-on-surface">{payment.user.name}</p>
-                  <p className="text-sm text-secondary">{payment.user.email}</p>
+                  <p className="font-bold text-on-surface">{payment.user?.name ?? 'Guest'}</p>
+                  <p className="text-sm text-secondary">{payment.user?.email ?? 'Secure guest payment'}</p>
                 </div>
               </div>
             </div>

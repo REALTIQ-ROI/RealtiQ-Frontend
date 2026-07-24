@@ -40,7 +40,7 @@ const LandlordPropertyDetails = () => {
     return propertyRef._id === property?._id;
   });
 
-  const relatedPayments = (payments ?? []).filter((item) => item.property._id === property?._id);
+  const relatedPayments = (payments ?? []).filter((item) => item.property?._id === property?._id);
   const heroMedia = property?.media?.[0];
   const latestInquiry = [...relatedInquiries].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
 

@@ -178,8 +178,10 @@ export interface PaystackData {
 
 export interface ApiPayment {
   _id: string;
-  user: PaymentUser;
-  property: PaymentProperty;
+  user: PaymentUser | null;
+  property: PaymentProperty | null;
+  guestIdentity?: object | null;
+  purpose?: string;
   amount: number;
   status: 'pending' | 'paid' | 'failed';
   reference: string;
