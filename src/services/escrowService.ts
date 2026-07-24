@@ -1,5 +1,5 @@
 import api, { ApiRequestError } from '../lib/axios';
-import type { CreateEscrowPayload, Escrow, InitializeEscrowPaymentResponse, ProcessRefundResponse, RefundChatResponse, RefundDetails, RefundDetailsPayload, RefundMessage } from '../types/escrow';
+import type { CreateEscrowPayload, Escrow, InitializeEscrowPaymentResponse, ProcessRefundResponse, RefundChatResponse, RefundDetails, RefundDetailsPayload, RefundMessage, SatisfyEscrowRuleResponse } from '../types/escrow';
 
 const ESCROW_ID_KEY = 'realtiq.pendingEscrowId';
 const ESCROW_REFERENCE_KEY = 'realtiq.pendingEscrowReference';
@@ -14,7 +14,7 @@ export const escrowService = {
     sessionStorage.setItem(ESCROW_REFERENCE_KEY, data.reference);
     return data;
   },
-  async satisfyRule(id: string, ruleId: string, note?: string): Promise<Escrow> { return (await api.patch<Escrow>(`/escrow/${id}/rules/${ruleId}/satisfy`, { note: note?.trim() || undefined })).data; },
+  async satisfyRule(id: string, ruleId: string, note?: string): Promise<SatisfyEscrowRuleResponse> { return (await api.patch<SatisfyEscrowRuleResponse>(`/escrow/${id}/rules/${ruleId}/satisfy`, { note: note?.trim() || undefined })).data; },
   async requestRelease(id: string, note?: string): Promise<Escrow> { return (await api.post<Escrow>(`/escrow/${id}/request-release`, { note: note?.trim() || undefined })).data; },
   async approveRelease(id: string, note?: string): Promise<Escrow> { return (await api.patch<Escrow>(`/escrow/${id}/approve-release`, { note: note?.trim() || undefined })).data; },
   async cancel(id: string, note: string): Promise<Escrow> { return (await api.patch<Escrow>(`/escrow/${id}/cancel`, { note: note.trim() })).data; },

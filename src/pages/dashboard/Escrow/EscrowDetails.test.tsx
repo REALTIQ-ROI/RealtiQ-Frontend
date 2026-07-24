@@ -35,6 +35,7 @@ describe('EscrowDetails role actions and resilience', () => {
   afterEach(() => cleanup());
   it('shows buyer rule and dispute actions but never release actions', async () => {
     renderDetails(makeEscrow('locked'));
+    expect(screen.getByText(/legacy escrow does not have milestone amount allocations/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Satisfy' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Raise dispute' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /release/i })).not.toBeInTheDocument();
@@ -59,5 +60,74 @@ describe('EscrowDetails role actions and resilience', () => {
     renderDetails(makeEscrow('locked', true));
     fireEvent.click(screen.getByRole('button', { name: 'Request release' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Missing: Verified title document');
+  });
+
+  it('renders ordered milestone allocation progress without describing it as released funds', () => {
+    const escrow = makeEscrow('locked');
+    escrow.rules = [
+      { _id: 'r3', sequence: 3, type: 'physical_handover_completed', description: 'Handover', required: true, amount: 40_000_000, satisfied: false },
+      { _id: 'r1', sequence: 1, type: 'inspection_completed', description: 'Inspection', required: true, amount: 25_000_000, satisfied: true },
+      { _id: 'r2', sequence: 2, type: 'document_verified', description: 'Documents', required: true, amount: 35_000_000, satisfied: false },
+    ];
+    escrow.milestoneSummary = {
+      configured: true,
+      totalAllocated: 100_000_000,
+      satisfiedAmount: 25_000_000,
+      remainingAmount: 75_000_000,
+      milestoneCount: 3,
+      satisfiedMilestoneCount: 1,
+    };
+
+    renderDetails(escrow);
+
+    expect(screen.getByRole('heading', { name: 'Milestone progress' })).toBeInTheDocument();
+    expect(screen.getByText('Satisfied allocation').parentElement).toHaveTextContent(/25,000,000/);
+    expect(screen.getByText('Remaining allocation').parentElement).toHaveTextContent(/75,000,000/);
+    expect(screen.getByText(/not money released or transferred/i)).toBeInTheDocument();
+    const milestoneLabels = screen.getAllByText(/Milestone [123]/).map((item) => item.textContent);
+    expect(milestoneLabels).toEqual(['Milestone 1', 'Milestone 2', 'Milestone 3']);
+  });
+
+  it('applies the returned milestone summary immediately after satisfying a rule', async () => {
+    const escrow = makeEscrow('locked');
+    escrow.rules = [{
+      _id: 'r1',
+      sequence: 1,
+      type: 'buyer_confirmation_required',
+      description: 'Buyer confirms inspection',
+      required: true,
+      amount: 50_000_000,
+      satisfied: false,
+    }];
+    escrow.milestoneSummary = {
+      configured: true,
+      totalAllocated: 50_000_000,
+      satisfiedAmount: 0,
+      remainingAmount: 50_000_000,
+      milestoneCount: 1,
+      satisfiedMilestoneCount: 0,
+    };
+    vi.mocked(escrowService.satisfyRule).mockResolvedValueOnce({
+      escrow: { _id: 'e1', status: 'locked', amount: 50_000_000 },
+      rule: { ...escrow.rules[0], satisfied: true },
+      missingRules: [],
+      milestoneSummary: {
+        configured: true,
+        totalAllocated: 50_000_000,
+        satisfiedAmount: 50_000_000,
+        remainingAmount: 0,
+        milestoneCount: 1,
+        satisfiedMilestoneCount: 1,
+      },
+    });
+
+    renderDetails(escrow);
+    fireEvent.click(screen.getByRole('button', { name: 'Satisfy' }));
+
+    await waitFor(() =>
+      expect(screen.getByText('Satisfied allocation').parentElement)
+        .toHaveTextContent(/50,000,000/),
+    );
+    expect(escrowService.satisfyRule).toHaveBeenCalledWith('e1', 'r1', 'Audit note');
   });
 });

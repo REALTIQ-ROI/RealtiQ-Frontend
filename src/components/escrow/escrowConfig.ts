@@ -24,6 +24,17 @@ export const RULE_LABELS: Record<EscrowRuleType, string> = {
 };
 
 export const RULE_TYPES = Object.entries(RULE_LABELS).map(([value, label]) => ({ value: value as EscrowRuleType, label }));
+export const RULE_ACTOR_GUIDANCE: Record<EscrowRuleType, string> = {
+  buyer_confirmation_required: 'Completed by the buyer.',
+  seller_confirmation_required: 'Completed by the landlord.',
+  admin_approval_required: 'Completed by a RealtiQ administrator.',
+  inspection_completed: 'Confirmed by the buyer after inspection.',
+  document_verified: 'Completed by a RealtiQ administrator.',
+  title_document_uploaded: 'Completed by a RealtiQ administrator.',
+  physical_handover_completed: 'Confirmed by the landlord.',
+  release_after_days: 'Completed by a RealtiQ administrator after the waiting period.',
+  custom_manual_condition: 'Completed by a RealtiQ administrator.',
+};
 const permissions: Record<UserRole, EscrowRuleType[]> = {
   buyer: ['buyer_confirmation_required', 'inspection_completed'],
   landlord: ['seller_confirmation_required', 'physical_handover_completed'],

@@ -13,15 +13,26 @@ export type EscrowProperty = Pick<Property, '_id' | 'publicReference' | 'title' 
 
 export interface EscrowRule {
   _id: string;
+  sequence?: number;
   type: EscrowRuleType;
   description: string;
   required: boolean;
+  amount?: number;
   satisfied?: boolean;
   isSatisfied?: boolean;
-  satisfiedAt?: string;
+  satisfiedAt?: string | null;
   satisfiedBy?: EscrowParty | string | null;
   note?: string;
   metadata?: EscrowMetadata;
+}
+
+export interface EscrowMilestoneSummary {
+  configured: boolean;
+  totalAllocated: number;
+  satisfiedAmount: number;
+  remainingAmount: number;
+  milestoneCount: number;
+  satisfiedMilestoneCount: number;
 }
 
 export interface EscrowLog {
@@ -90,6 +101,7 @@ export interface Escrow {
   refundProcessingAt?: string | null;
   refundedAt?: string | null;
   rules?: EscrowRule[];
+  milestoneSummary?: EscrowMilestoneSummary;
   logs?: EscrowLog[];
   metadata?: EscrowMetadata;
   paymentReference?: string;
@@ -102,15 +114,28 @@ export interface Escrow {
   disputedAt?: string;
 }
 
-export interface CreateEscrowRule {
+export interface EscrowMilestoneInput {
   type: EscrowRuleType;
   description: string;
-  required: boolean;
+  required?: boolean;
+  amount?: number;
   metadata?: EscrowMetadata;
+}
+
+export interface CreateEscrowRule extends EscrowMilestoneInput {
+  required: boolean;
 }
 
 export interface CreateEscrowPayload { propertyId: string; amount: number; rules?: CreateEscrowRule[]; metadata?: EscrowMetadata }
 export interface InitializeEscrowPaymentResponse { redirectUrl: string; reference: string; paymentId: string; escrowId: string }
+export interface SatisfyEscrowRuleResponse {
+  escrow: Pick<Escrow, '_id' | 'status' | 'amount'>;
+  rule: EscrowRule;
+  missingRules: Array<Pick<EscrowRule, '_id'> & Partial<EscrowRule>>;
+  milestoneSummary: EscrowMilestoneSummary;
+}
+
+export type EscrowMilestone = EscrowRule;
 
 export const populated = <T extends { _id: string }>(value?: T | string | null): T | null => value && typeof value !== 'string' ? value : null;
 export const escrowProperty = (escrow: Escrow) => populated(escrow.property ?? escrow.propertyId);

@@ -11,9 +11,10 @@ describe('escrowService', () => {
     mockedApi.post.mockResolvedValue({ data: { _id: 'e1' } });
     await escrowService.create({ propertyId: 'p1', amount: 50_000_000 });
     expect(mockedApi.post).toHaveBeenCalledWith('/escrow', { propertyId: 'p1', amount: 50_000_000 });
-    const rules = [{ type: 'inspection_completed' as const, description: 'Inspect property', required: true, metadata: {} }];
+    const rules = [{ type: 'inspection_completed' as const, description: 'Inspect property', required: true, amount: 50_000_000, metadata: {} }];
     await escrowService.create({ propertyId: 'p1', amount: 50_000_000, rules });
     expect(mockedApi.post).toHaveBeenLastCalledWith('/escrow', { propertyId: 'p1', amount: 50_000_000, rules });
+    expect(typeof rules[0].amount).toBe('number');
   });
   it('uses every mutation endpoint with the required body', async () => {
     mockedApi.patch.mockResolvedValue({ data: {} }); mockedApi.post.mockResolvedValue({ data: {} });
@@ -27,6 +28,30 @@ describe('escrowService', () => {
     expect(mockedApi.patch).toHaveBeenCalledWith('/escrow/e1/approve-release', { note: 'approved' });
     expect(mockedApi.patch).toHaveBeenCalledWith('/escrow/e1/cancel', { note: 'duplicate' });
     expect(mockedApi.patch).toHaveBeenCalledWith('/escrow/e1/dispute', { note: 'title issue', metadata: { document: 'title' } });
+  });
+  it('preserves milestone create and satisfaction response amounts', async () => {
+    const created = {
+      _id: 'e1',
+      amount: 100_000_000,
+      status: 'pending_payment',
+      rules: [{ _id: 'r1', sequence: 1, type: 'inspection_completed', description: 'Inspect', required: true, amount: 100_000_000, satisfied: false }],
+      milestoneSummary: { configured: true, totalAllocated: 100_000_000, satisfiedAmount: 0, remainingAmount: 100_000_000, milestoneCount: 1, satisfiedMilestoneCount: 0 },
+    };
+    mockedApi.post.mockResolvedValueOnce({ data: created });
+    await expect(escrowService.create({
+      propertyId: 'p1',
+      amount: 100_000_000,
+      rules: [{ type: 'inspection_completed', description: 'Inspect', required: true, amount: 100_000_000 }],
+    })).resolves.toEqual(created);
+
+    const satisfied = {
+      escrow: { _id: 'e1', status: 'locked', amount: 100_000_000 },
+      rule: { ...created.rules[0], satisfied: true },
+      missingRules: [],
+      milestoneSummary: { ...created.milestoneSummary, satisfiedAmount: 100_000_000, remainingAmount: 0, satisfiedMilestoneCount: 1 },
+    };
+    mockedApi.patch.mockResolvedValueOnce({ data: satisfied });
+    await expect(escrowService.satisfyRule('e1', 'r1')).resolves.toEqual(satisfied);
   });
   it('persists only escrow checkout context when payment is initialized', async () => {
     mockedApi.post.mockResolvedValue({ data: { redirectUrl: 'https://pay.test', reference: 'ref1', paymentId: 'pay1', escrowId: 'e1' } });
