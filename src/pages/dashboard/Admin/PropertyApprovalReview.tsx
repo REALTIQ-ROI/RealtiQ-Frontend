@@ -152,7 +152,7 @@ const PropertyApprovalReview = () => {
                       <div key={document.publicReference || document._id} className="rounded-lg border border-outline-variant/20 p-4 text-sm">
                         <p className="font-bold">{document.title || document.originalFileName || 'Title document'}</p>
                         <p className="mt-1 text-xs text-secondary">{document.publicReference || 'Reference pending'} - {document.documentType || 'other'}</p>
-                        {document.fileUrl ? <a className="mt-2 inline-block text-xs font-bold text-primary hover:underline" href={document.fileUrl} target="_blank" rel="noreferrer">Open restricted document</a> : null}
+                        <p className="mt-2 text-xs font-bold text-secondary">Open through the protected viewer from the property management panel.</p>
                       </div>
                     ))}
                   </div>

@@ -7,13 +7,16 @@ import type {
 } from '../types';
 
 export const titleDocumentTypeOptions: Array<{ value: TitleDocumentType; label: string }> = [
+  { value: 'survey_plan', label: 'Survey Plan' },
   { value: 'certificate_of_occupancy', label: 'Certificate of Occupancy' },
   { value: 'deed_of_assignment', label: 'Deed of Assignment' },
-  { value: 'survey_plan', label: 'Survey Plan' },
   { value: 'governors_consent', label: "Governor's Consent" },
-  { value: 'land_purchase_agreement', label: 'Land Purchase Agreement' },
   { value: 'allocation_letter', label: 'Allocation Letter' },
-  { value: 'other', label: 'Other Title Document' },
+  { value: 'land_purchase_agreement', label: 'Land Purchase Agreement' },
+  { value: 'approved_building_plan', label: 'Approved Building Plan' },
+  { value: 'gazette', label: 'Gazette' },
+  { value: 'excision_document', label: 'Excision Document' },
+  { value: 'other', label: 'Other' },
 ];
 
 export const allowedTitleMatchMimeTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];

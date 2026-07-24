@@ -251,13 +251,9 @@ const TitleVerificationReview = () => {
                   <div>
                     <dt className="font-bold">Actual document</dt>
                     <dd>
-                      {selectedDocument?.fileUrl ? (
-                        <a className="font-bold text-primary hover:underline" href={selectedDocument.fileUrl} target="_blank" rel="noreferrer">
-                          Open restricted document
-                        </a>
-                      ) : (
-                        <span className="text-secondary">Document file unavailable</span>
-                      )}
+                      {selectedDocument ? (
+                        <span className="text-secondary">Protected viewer access is available from the property management panel.</span>
+                      ) : <span className="text-secondary">Document metadata unavailable</span>}
                     </dd>
                   </div>
                   <div><dt className="font-bold">Document type</dt><dd>{documentTypeLabel(selected.documentType)}</dd></div>

@@ -14,13 +14,12 @@ export interface ListPropertyDocumentsParams {
 }
 
 export interface TitleAssetUploadResponse {
-  titleDocument: {
-    fileUrl: string;
-    publicId: string;
-    resourceType: 'image' | 'raw' | string;
-    mimeType?: string;
-    originalFileName?: string;
-    fileSizeBytes?: number;
+  titleDocumentAsset: {
+    assetId: string;
+    mimeType: string;
+    originalFileName: string;
+    fileSizeBytes: number;
+    expiresAt: string;
   };
 }
 
@@ -32,10 +31,15 @@ export interface TitleDocumentUploadResponse {
 }
 
 export const documentService = {
-  async uploadTitleAsset(file: File): Promise<TitleAssetUploadResponse> {
+  async uploadTitleAsset(file: File, onProgress?: (percent: number) => void): Promise<TitleAssetUploadResponse> {
     const form = new FormData();
     form.append('file', file);
-    const { data } = await api.post<TitleAssetUploadResponse>('/document/title-asset-upload', form);
+    const { data } = await api.post<TitleAssetUploadResponse>('/document/title-asset-upload', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (event) => {
+        if (event.total && onProgress) onProgress(Math.round((event.loaded * 100) / event.total));
+      },
+    });
     return data;
   },
 

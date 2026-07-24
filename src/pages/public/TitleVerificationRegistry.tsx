@@ -24,6 +24,48 @@ const PublicReferenceRow = ({ label, value }: { label: string; value?: string | 
   </div>
 );
 
+const DocumentTypeStatus = ({
+  registryStatus,
+  legalReviewStatus,
+}: {
+  registryStatus: string;
+  legalReviewStatus?: string;
+}) => {
+  const status =
+    registryStatus === 'active'
+      ? 'published'
+      : registryStatus === 'revoked' || registryStatus === 'superseded'
+        ? registryStatus
+        : legalReviewStatus || registryStatus;
+  const label =
+    status === 'published'
+      ? 'Published'
+      : status === 'approved'
+        ? 'Approved'
+        : status.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const icon =
+    status === 'published' || status === 'approved'
+      ? 'check_circle'
+      : status === 'revoked'
+        ? 'cancel'
+        : status === 'superseded'
+          ? 'history'
+          : status === 'rejected'
+            ? 'error'
+            : 'schedule';
+
+  return (
+    <span
+      role="status"
+      aria-label={`Document status: ${label}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold capitalize ${titleStatusClasses(status)}`}
+    >
+      <span aria-hidden="true" className="material-symbols-outlined text-base">{icon}</span>
+      {label}
+    </span>
+  );
+};
+
 const TitleVerificationRegistry = () => {
   const { publicVerificationId = '' } = useParams();
   const [record, setRecord] = useState<PublicRegistryRecord | null>(null);
@@ -93,7 +135,13 @@ const TitleVerificationRegistry = () => {
                 <dd className="text-sm text-secondary">{record.property?.location ?? 'Location not listed'}</dd>
                 <dd className="text-xs font-semibold text-secondary">{record.property?.publicReference ?? 'Reference pending'}</dd>
               </div>
-              <div><dt className="text-xs font-bold uppercase tracking-widest text-secondary">Document type</dt><dd className="mt-1">{documentTypeLabel(record.documentType)}</dd></div>
+              <div>
+                <dt className="text-xs font-bold uppercase tracking-widest text-secondary">Document type</dt>
+                <dd className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">{documentTypeLabel(record.documentType)}</span>
+                  <DocumentTypeStatus registryStatus={record.registryStatus} legalReviewStatus={record.legalReviewStatus} />
+                </dd>
+              </div>
               <div><dt className="text-xs font-bold uppercase tracking-widest text-secondary">Registry status</dt><dd className="mt-1 capitalize">{record.registryStatus}</dd></div>
               <div><dt className="text-xs font-bold uppercase tracking-widest text-secondary">Legal review status</dt><dd className="mt-1 capitalize">{record.legalReviewStatus ?? 'approved'}</dd></div>
               <div><dt className="text-xs font-bold uppercase tracking-widest text-secondary">Approved</dt><dd className="mt-1">{formatDateTime(record.approvedAt)}</dd></div>

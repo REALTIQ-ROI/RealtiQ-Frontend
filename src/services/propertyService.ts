@@ -11,19 +11,19 @@ import type {
   PropertyStatus,
   PropertyType,
   TitleDocumentRecord,
+  TitleDocumentPolicyMode,
   TitleDocumentType,
   TitleVerification,
 } from '../types';
 
 export interface TitleDocumentUploadMetadata {
+  assetId: string;
   title: string;
   documentType: TitleDocumentType;
-  fileUrl: string;
-  publicId: string;
-  resourceType?: string;
-  mimeType?: string;
-  originalFileName?: string;
-  fileSizeBytes?: number;
+  accessPolicy: {
+    enabled: boolean;
+    mode: TitleDocumentPolicyMode;
+  };
 }
 
 export interface CreatePropertyPayload {

@@ -6,7 +6,7 @@ import MediaPreview from '../../../components/property/MediaPreview';
 import MapListLayout from '../../../components/property/map/MapListLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
-import { propertyDisplayReference, resolvePropertyOwnerId } from '../../../types';
+import { propertyDisplayReference, propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
 
 const statusConfig = {
   available: { label: 'Active', className: 'bg-emerald-100 text-emerald-800' },
@@ -202,11 +202,14 @@ const LandlordMyProperties = () => {
 
         <MapListLayout
           properties={myProperties}
-          detailsPath={(property) => `/dashboard/landlord/property-details/${property._id}`}
+          detailsPath={(property) => {
+            const reference = propertyRouteReference(property);
+            return reference ? `/dashboard/landlord/property-details/${reference}` : '/dashboard/landlord/my-properties';
+          }}
           actions={(property) => (
             <>
-              <Link className="rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold text-primary" to={`/dashboard/landlord/edit-property/${property._id}`}>Edit</Link>
-              <button type="button" className="rounded-lg bg-error-container px-3 py-2 text-xs font-bold text-error" onClick={() => void handleDelete(property._id)}>Delete</button>
+              <Link className="rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold text-primary" to={`/dashboard/landlord/edit-property/${propertyRouteReference(property)}`}>Edit</Link>
+              <button type="button" className="rounded-lg bg-error-container px-3 py-2 text-xs font-bold text-error" onClick={() => void handleDelete(propertyRouteReference(property))}>Delete</button>
             </>
           )}
         >
@@ -233,7 +236,7 @@ const LandlordMyProperties = () => {
                   myProperties.map((property) => {
                     const cfg = statusConfig[property.status] ?? statusConfig.available;
                     return (
-                      <tr key={property._id} className="group hover:bg-surface-bright transition-colors">
+                      <tr key={propertyRouteReference(property)} className="group hover:bg-surface-bright transition-colors">
                         <td className="px-6 py-5">
                           <div className="flex items-center gap-4">
                             <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-200 flex-shrink-0">
@@ -271,21 +274,21 @@ const LandlordMyProperties = () => {
                             <Link
                               className="p-2 text-secondary hover:text-primary hover:bg-surface-container-low rounded-lg transition-all"
                               title="View"
-                              to={`/dashboard/landlord/property-details/${property._id}`}
+                              to={`/dashboard/landlord/property-details/${propertyRouteReference(property)}`}
                             >
                               <span className="material-symbols-outlined text-xl">visibility</span>
                             </Link>
                             <Link
                               className="p-2 text-secondary hover:text-primary hover:bg-surface-container-low rounded-lg transition-all"
                               title="Edit"
-                              to={`/dashboard/landlord/edit-property/${property._id}`}
+                              to={`/dashboard/landlord/edit-property/${propertyRouteReference(property)}`}
                             >
                               <span className="material-symbols-outlined text-xl">edit</span>
                             </Link>
                             <button
                               className="p-2 text-secondary hover:text-error hover:bg-error-container/20 rounded-lg transition-all"
                               title="Delete"
-                              onClick={() => void handleDelete(property._id)}
+                              onClick={() => void handleDelete(propertyRouteReference(property))}
                               type="button"
                             >
                               <span className="material-symbols-outlined text-xl">delete</span>
@@ -308,7 +311,7 @@ const LandlordMyProperties = () => {
                 myProperties.map((property) => {
                   const cfg = statusConfig[property.status] ?? statusConfig.available;
                   return (
-                    <div key={property._id} className="group bg-surface-container-lowest rounded-xl overflow-hidden">
+                    <div key={propertyRouteReference(property)} className="group bg-surface-container-lowest rounded-xl overflow-hidden">
                       <div className="h-56 bg-slate-200">
                         <MediaPreview media={property.media?.[0]} alt={property.title} className="w-full h-full object-cover" />
                       </div>
@@ -333,21 +336,21 @@ const LandlordMyProperties = () => {
                           <Link
                             className="p-2 text-secondary hover:text-primary hover:bg-surface-container-low rounded-lg transition-all"
                             title="View"
-                            to={`/dashboard/landlord/property-details/${property._id}`}
+                            to={`/dashboard/landlord/property-details/${propertyRouteReference(property)}`}
                           >
                             <span className="material-symbols-outlined text-xl">visibility</span>
                           </Link>
                           <Link
                             className="p-2 text-secondary hover:text-primary hover:bg-surface-container-low rounded-lg transition-all"
                             title="Edit"
-                            to={`/dashboard/landlord/edit-property/${property._id}`}
+                            to={`/dashboard/landlord/edit-property/${propertyRouteReference(property)}`}
                           >
                             <span className="material-symbols-outlined text-xl">edit</span>
                           </Link>
                           <button
                             className="p-2 text-secondary hover:text-error hover:bg-error-container/20 rounded-lg transition-all"
                             title="Delete"
-                            onClick={() => void handleDelete(property._id)}
+                            onClick={() => void handleDelete(propertyRouteReference(property))}
                             type="button"
                           >
                             <span className="material-symbols-outlined text-xl">delete</span>

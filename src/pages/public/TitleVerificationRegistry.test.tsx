@@ -75,6 +75,7 @@ describe('TitleVerificationRegistry', () => {
     expect(await screen.findAllByText('RTQ-TV-2026-000001')).not.toHaveLength(0);
     expect(screen.getByText('3 Bedroom Flat in Lekki')).toBeInTheDocument();
     expect(screen.getByText('Certificate of Occupancy')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Document status: Published' })).toHaveTextContent('Published');
     expect(screen.getByText('https://realtiq.com.ng/title-verification/RTQ-TV-2026-000001')).toBeInTheDocument();
     expect(screen.queryByText('document_hash')).not.toBeInTheDocument();
     expect(screen.queryByText('record_hash')).not.toBeInTheDocument();
@@ -83,6 +84,25 @@ describe('TitleVerificationRegistry', () => {
     expect(screen.queryByText(/cloudinary/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/kyc/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/private key/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the individual document type with its revoked status symbol and text', async () => {
+    service.getPublicRegistryRecord.mockResolvedValueOnce({
+      record: {
+        publicVerificationId: 'RTQ-TV-2026-000001',
+        registryStatus: 'revoked',
+        property: { title: '3 Bedroom Flat in Lekki', location: 'Lekki, Lagos' },
+        documentType: 'certificate_of_occupancy',
+        legalReviewStatus: 'approved',
+        revokedAt: '2026-07-20T10:00:00.000Z',
+        revocationReason: 'Registry review withdrawn.',
+      },
+    });
+    renderPage();
+
+    expect(await screen.findByText('Certificate of Occupancy')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Document status: Revoked' })).toHaveTextContent('Revoked');
+    expect(screen.getByText('cancel')).toBeInTheDocument();
   });
 
   it('copies the public verification ID', async () => {

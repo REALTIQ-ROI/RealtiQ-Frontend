@@ -66,7 +66,7 @@ export const paymentService = {
   },
 
   async verifyPayment(reference: string): Promise<VerifyPaymentResponse> {
-    const { data } = await api.get<VerifyPaymentResponse>(`/payments/verify/${reference}`);
+    const { data } = await api.get<VerifyPaymentResponse>(`/payments/verify/${reference}`, { withCredentials: true });
     return data;
   },
 };

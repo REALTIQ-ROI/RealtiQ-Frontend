@@ -6,6 +6,7 @@ import InquiryForm from '../../components/forms/InquiryForm';
 import PropertyGallery from '../../components/property/PropertyGallery';
 import PropertyMeta from '../../components/property/PropertyMeta';
 import TitleVerificationBadge from '../../components/title/TitleVerificationBadge';
+import PublicTitleDocuments from '../../components/title/PublicTitleDocuments';
 import PublicLayout from '../../components/layout/PublicLayout';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
@@ -367,6 +368,14 @@ const PropertyDetails = () => {
                 </div>
               </div>
             ) : null}
+
+            <div>
+              <h2 className="text-2xl font-bold mb-2">Verified title documents</h2>
+              <p className="mb-4 text-sm text-secondary">
+                Safe metadata is shown here. Restricted files open only through a short-lived protected viewer session.
+              </p>
+              <PublicTitleDocuments propertyId={propertyReference} />
+            </div>
 
             <div>
               <h2 className="text-2xl font-bold mb-4">Nearby Properties</h2>

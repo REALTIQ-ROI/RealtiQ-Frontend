@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
 import { ownershipService } from '../../../services/ownershipService';
 import { propertyService } from '../../../services/propertyService';
+import { titleDocumentService } from '../../../services/titleDocumentService';
 import { propertyRouteReference, type Property, type TitleDocumentRecord } from '../../../types';
+import { documentTypeLabel } from '../../../utils/titleVerification';
 
 interface PropertyDetailState {
   property: Property | null;
@@ -12,9 +15,11 @@ interface PropertyDetailState {
 
 const PropertyDetails = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [detail, setDetail] = useState<PropertyDetailState>({ property: null, titleDocuments: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -60,6 +65,32 @@ const PropertyDetails = () => {
 
   const { property, titleDocuments } = detail;
 
+  const openOwnedTitleDocument = async (document: TitleDocumentRecord) => {
+    if (!property || openingDocumentId) return;
+    const documentId = document._id || document.publicReference;
+    if (!documentId) {
+      toast.error('This title document is missing its protected viewer reference.');
+      return;
+    }
+
+    setOpeningDocumentId(documentId);
+    try {
+      const session = await titleDocumentService.openViewer(documentId);
+      navigate('/protected-title-viewer', {
+        state: {
+          session,
+          documentId,
+          propertyId: propertyRouteReference(property),
+          returnPath: `/dashboard/buyer/property-details/${propertyRouteReference(property)}`,
+        },
+      });
+    } catch (raw) {
+      toast.error(raw instanceof Error ? raw.message : 'Unable to open this title document.');
+    } finally {
+      setOpeningDocumentId(null);
+    }
+  };
+
   return (
     <BuyerPortalLayout
       pageEyebrow="Portfolio Overview"
@@ -103,31 +134,35 @@ const PropertyDetails = () => {
             )}
             <div className="pt-4 border-t border-outline-variant/20">
               <p className="text-xs font-bold uppercase tracking-wider text-secondary mb-3">Title Documents</p>
+              <p className="mb-3 text-sm text-secondary">
+                As the property owner, you can open every available title document without another payment. Documents still use a short-lived protected viewer to keep private vault storage secure.
+              </p>
               {titleDocuments.length > 0 ? (
                 <div className="space-y-3">
-                  {titleDocuments.map((document) => (
-                    <div
-                      key={document.publicReference ?? document._id ?? document.fileUrl}
-                      className="flex items-center justify-between gap-4 rounded-lg bg-surface-container-low p-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-bold truncate">{document.title ?? document.originalFileName ?? 'Title document'}</p>
-                        <p className="text-xs text-secondary truncate">{document.documentType ?? document.mimeType ?? 'Document metadata'}</p>
-                      </div>
-                      {document.fileUrl ? (
-                        <a
-                          className="shrink-0 text-xs font-bold text-primary hover:underline"
-                          href={document.fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                  {titleDocuments.map((document) => {
+                    const documentId = document._id || document.publicReference || '';
+                    return (
+                      <div
+                        key={documentId}
+                        className="flex flex-col items-start justify-between gap-4 rounded-lg bg-surface-container-low p-4 sm:flex-row sm:items-center"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-bold truncate">{document.title ?? document.originalFileName ?? 'Title document'}</p>
+                          <p className="text-xs text-secondary truncate">
+                            {documentTypeLabel(document.documentType)}{document.publicReference ? ` • ${document.publicReference}` : ''}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!documentId || openingDocumentId === documentId}
+                          onClick={() => void openOwnedTitleDocument(document)}
+                          className="shrink-0 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          View
-                        </a>
-                      ) : (
-                        <span className="shrink-0 text-xs font-bold text-secondary">Restricted</span>
-                      )}
-                    </div>
-                  ))}
+                          {openingDocumentId === documentId ? 'Opening…' : 'View title document'}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-sm text-secondary">No title documents are available for this property yet.</p>

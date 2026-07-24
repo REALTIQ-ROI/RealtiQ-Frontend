@@ -1,9 +1,10 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import PublicLayout from "../../components/layout/PublicLayout";
 import { escrowService } from "../../services/escrowService";
 import { paymentService } from "../../services/paymentService";
+import { titleDocumentService } from "../../services/titleDocumentService";
 
 type VerifyStatus = "verifying" | "success" | "failed";
 const wait = (milliseconds: number) =>
@@ -11,6 +12,8 @@ const wait = (milliseconds: number) =>
 
 const PostPaymentRedirect = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const pendingTitlePayment = titleDocumentService.getPendingPayment();
   const queryReference =
     searchParams.get("reference") ?? searchParams.get("trxref");
   const escrowId = escrowService.getPendingId();
@@ -28,6 +31,13 @@ const PostPaymentRedirect = () => {
     reference ? "verifying" : "failed",
   );
   const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [titleDocumentId, setTitleDocumentId] = useState<string | null>(pendingTitlePayment.documentId);
+  const [titlePropertyId, setTitlePropertyId] = useState<string | null>(pendingTitlePayment.propertyId);
+  const [titleAccessReady, setTitleAccessReady] = useState(false);
+  const [openingViewer, setOpeningViewer] = useState(false);
+  const [isTitleDocumentPayment, setIsTitleDocumentPayment] = useState(
+    Boolean(reference && (reference.startsWith("RTQ-DOC-PAY-") || reference === pendingTitlePayment.reference)),
+  );
   const [errorMessage, setErrorMessage] = useState(
     reference
       ? null
@@ -42,7 +52,31 @@ const PostPaymentRedirect = () => {
       const result = await paymentService.verifyPayment(reference);
       if (!result.verified) throw new Error("Payment could not be verified.");
       setPaymentId(result.payment._id);
-      if (isEscrow && escrowId) {
+      const verifiedTitlePayment =
+        result.payment.purpose === "title_document_view" ||
+        result.payment.metadata?.paymentPurpose === "title_document_view" ||
+        reference.startsWith("RTQ-DOC-PAY-");
+      if (verifiedTitlePayment) {
+        const documentId = result.payment.metadata?.documentId ?? pendingTitlePayment.documentId;
+        const propertyId = result.payment.metadata?.propertyId ?? pendingTitlePayment.propertyId;
+        setIsTitleDocumentPayment(true);
+        setTitleDocumentId(documentId);
+        setTitlePropertyId(propertyId);
+        if (!documentId) throw new Error("Payment was verified, but its title document could not be identified.");
+        let ready = false;
+        for (let attempt = 0; attempt < 4 && !ready; attempt += 1) {
+          if (attempt > 0) await wait(750 * attempt);
+          const access = await titleDocumentService.accessStatus(documentId);
+          ready = access.hasAccess;
+          if (!ready && !access.paymentRequired && access.message) break;
+        }
+        setTitleAccessReady(ready);
+        titleDocumentService.clearPendingPayment();
+        if (!sessionStorage.getItem(`realtiq.titlePaymentNotified.${reference}`)) {
+          toast.success("Payment successful — your document access is ready.");
+          sessionStorage.setItem(`realtiq.titlePaymentNotified.${reference}`, "1");
+        }
+      } else if (isEscrow && escrowId) {
         let escrow = await escrowService.get(escrowId);
         for (
           let attempt = 0;
@@ -69,7 +103,23 @@ const PostPaymentRedirect = () => {
         error instanceof Error ? error.message : "Unable to verify payment.",
       );
     }
-  }, [escrowId, isEscrow, reference]);
+  }, [escrowId, isEscrow, pendingTitlePayment.documentId, pendingTitlePayment.propertyId, reference]);
+
+  const openTitleViewer = async () => {
+    if (!titleDocumentId || openingViewer) return;
+    setOpeningViewer(true);
+    try {
+      const session = await titleDocumentService.openViewer(titleDocumentId);
+      navigate("/protected-title-viewer", {
+        state: { session, documentId: titleDocumentId, propertyId: titlePropertyId ?? "" },
+      });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to open the protected viewer.");
+      setStatus("failed");
+    } finally {
+      setOpeningViewer(false);
+    }
+  };
 
   useEffect(() => {
     if (fired.current) return;
@@ -88,7 +138,9 @@ const PostPaymentRedirect = () => {
             <p className="mt-3 text-secondary">
               {isEscrow
                 ? "Confirming payment and securing the funds in escrow…"
-                : "Confirming your payment…"}
+                : isTitleDocumentPayment
+                  ? "Confirming payment and preparing access without starting a viewer session…"
+                  : "Confirming your payment…"}
             </p>
             {reference ? (
               <p className="mt-2 break-all text-xs text-secondary">
@@ -105,15 +157,28 @@ const PostPaymentRedirect = () => {
               </span>
             </div>
             <h1 className="text-3xl font-extrabold">
-              {isEscrow ? "Payment secured in escrow" : "Payment Successful"}
+              {isEscrow ? "Payment secured in escrow" : isTitleDocumentPayment ? "Document access ready" : "Payment Successful"}
             </h1>
             <p className="mt-3 text-secondary">
               {isEscrow
                 ? "Your payment is locked while the agreed conditions are completed. This is not yet a completed property purchase."
+                : isTitleDocumentPayment
+                  ? titleAccessReady
+                    ? "Payment successful — your document access is ready. Payment did not start or consume a viewer session."
+                    : "Payment was verified. Access activation is still processing; return to the property shortly and check access again."
                 : "Your property purchase has been confirmed."}
             </p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-              {isEscrow && escrowId ? (
+              {isTitleDocumentPayment && titleAccessReady && titleDocumentId ? (
+                <button
+                  type="button"
+                  onClick={() => void openTitleViewer()}
+                  disabled={openingViewer}
+                  className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary disabled:opacity-60"
+                >
+                  {openingViewer ? "Opening…" : "Open protected viewer"}
+                </button>
+              ) : isEscrow && escrowId ? (
                 <Link
                   to={`/dashboard/buyer/escrows/${escrowId}`}
                   className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary"
@@ -129,10 +194,10 @@ const PostPaymentRedirect = () => {
                 </Link>
               ) : null}
               <Link
-                to="/dashboard/buyer"
+                to={isTitleDocumentPayment && titlePropertyId ? `/properties/${titlePropertyId}` : "/dashboard/buyer"}
                 className="rounded-xl bg-surface-container-low px-8 py-3 text-sm font-bold"
               >
-                Go to Dashboard
+                {isTitleDocumentPayment ? "Return to property" : "Go to Dashboard"}
               </Link>
             </div>
           </>

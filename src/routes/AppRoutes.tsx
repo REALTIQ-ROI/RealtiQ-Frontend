@@ -18,6 +18,7 @@ import Listings from '../pages/public/Listings';
 import PropertyDetails from '../pages/public/PropertyDetails';
 import TitleVerificationRegistry from '../pages/public/TitleVerificationRegistry';
 import TitleRegistrySnapshots from '../pages/public/TitleRegistrySnapshots';
+import ProtectedTitleViewer from '../pages/public/ProtectedTitleViewer';
 
 import Login from '../pages/auth/Login';
 import Register from '../pages/auth/Register';
@@ -75,6 +76,7 @@ import PropertyROICalculatorPage from '../pages/dashboard/ROI/PropertyROICalcula
 import MyROIScenarios from '../pages/dashboard/ROI/MyROIScenarios';
 import ROIAssumptions from '../pages/dashboard/Admin/ROIAssumptions';
 import AdminSettings from '../pages/dashboard/Admin/AdminSettings';
+import AdminWallet from '../pages/dashboard/Admin/AdminWallet';
 import KycManagement from '../pages/dashboard/Admin/KycManagement';
 import EscrowList from '../pages/dashboard/Escrow/EscrowList';
 import EscrowDetails from '../pages/dashboard/Escrow/EscrowDetails';
@@ -127,6 +129,7 @@ const AppRoutes = () => {
         <Route path="/properties/:id" element={<PropertyDetails />} />
         <Route path="/title-verification/:publicVerificationId" element={<TitleVerificationRegistry />} />
         <Route path="/title-registry/snapshots" element={<TitleRegistrySnapshots />} />
+        <Route path="/protected-title-viewer" element={<ProtectedTitleViewer />} />
         <Route path="/properties/:propertyId/roi" element={<PropertyROICalculatorPage />} />
 
         <Route element={<ProtectedRoute />}>
@@ -203,6 +206,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />
           <Route path="/dashboard/admin/roi-assumptions" element={<ROIAssumptions />} />
           <Route path="/dashboard/admin/settings" element={<AdminSettings />} />
+          <Route path="/dashboard/admin/wallet" element={<AdminWallet />} />
           <Route path="/dashboard/admin/escrows" element={<EscrowList />} />
           <Route path="/dashboard/admin/escrows/:id" element={<EscrowDetails />} />
         </Route>

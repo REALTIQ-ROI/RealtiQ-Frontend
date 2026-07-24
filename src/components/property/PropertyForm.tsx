@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { toast } from 'sonner';
+import { ApiRequestError } from '../../lib/axios';
 import MediaUploader from './MediaUploader';
 import { documentService } from '../../services/documentService';
 import type { CreatePropertyPayload, TitleDocumentUploadMetadata } from '../../services/propertyService';
-import type { MediaItem, TitleDocumentType } from '../../types';
-import { titleDocumentTypeOptions } from '../../utils/titleVerification';
+import type { MediaItem, TitleDocumentPolicyMode, TitleDocumentType } from '../../types';
+import { documentTypeLabel, titleDocumentTypeOptions } from '../../utils/titleVerification';
 
 interface PropertyFormProps {
   initialData?: Partial<CreatePropertyPayload & { status: string }>;
@@ -21,6 +22,30 @@ const STAGE_OPTIONS = ['off_plan', 'unfinished', 'finished', 'renovation'];
 const CURRENCY_OPTIONS = ['NGN', 'USD', 'GBP'];
 const STATUS_OPTIONS = ['available', 'sold'];
 const TITLE_DOCUMENT_ACCEPT = '.pdf,image/jpeg,image/png,image/webp';
+const MAX_TITLE_DOCUMENT_BYTES = 50 * 1024 * 1024;
+
+interface TitleDocumentRow {
+  key: string;
+  file: File | null;
+  documentType: TitleDocumentType;
+  title: string;
+  mode: TitleDocumentPolicyMode;
+  assetId?: string;
+  expiresAt?: string;
+  progress: number;
+  status: 'idle' | 'uploading' | 'staged' | 'failed';
+  error?: string;
+}
+
+const createTitleDocumentRow = (): TitleDocumentRow => ({
+  key: crypto.randomUUID(),
+  file: null,
+  documentType: 'survey_plan',
+  title: 'Survey Plan',
+  mode: 'private',
+  progress: 0,
+  status: 'idle',
+});
 
 const inputClass =
   'w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all';
@@ -70,9 +95,7 @@ const PropertyForm = ({
   const [amenityInput, setAmenityInput] = useState('');
   const [media, setMedia] = useState<MediaItem[]>(initialData?.media ?? []);
   const [status, setStatus] = useState(initialData?.status ?? 'available');
-  const [titleDocumentFile, setTitleDocumentFile] = useState<File | null>(null);
-  const [titleDocumentType, setTitleDocumentType] = useState<TitleDocumentType>('certificate_of_occupancy');
-  const [titleDocumentTitle, setTitleDocumentTitle] = useState('Certificate of Occupancy');
+  const [titleDocumentRows, setTitleDocumentRows] = useState<TitleDocumentRow[]>([]);
   const [uploadingTitleDocument, setUploadingTitleDocument] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const isLandProperty = propertyType === 'land';
@@ -135,27 +158,57 @@ const PropertyForm = ({
     setErrors({});
 
     let titleDocuments: TitleDocumentUploadMetadata[] | undefined;
-    if (mode === 'create' && titleDocumentFile) {
+    if (mode === 'create' && titleDocumentRows.length > 0) {
+      const duplicateTypes = titleDocumentRows.filter(
+        (row, index, rows) => rows.findIndex((candidate) => candidate.documentType === row.documentType) !== index,
+      );
+      if (duplicateTypes.length > 0) {
+        setErrors((current) => ({ ...current, titleDocuments: 'Each active title document must use a different type.' }));
+        return;
+      }
+      if (titleDocumentRows.some((row) => !row.file)) {
+        setErrors((current) => ({ ...current, titleDocuments: 'Choose a file for every title document row.' }));
+        return;
+      }
+
       setUploadingTitleDocument(true);
       try {
-        const upload = await documentService.uploadTitleAsset(titleDocumentFile);
-        const uploaded = upload.titleDocument;
-        if (!uploaded?.fileUrl) {
-          throw new Error('Title document upload did not return a file URL.');
+        const stagedRows: TitleDocumentRow[] = [];
+        for (const row of titleDocumentRows) {
+          if (row.assetId && row.expiresAt && new Date(row.expiresAt).getTime() > Date.now()) {
+            stagedRows.push(row);
+            continue;
+          }
+          setTitleDocumentRows((current) =>
+            current.map((item) => item.key === row.key ? { ...item, status: 'uploading', progress: 0, error: undefined } : item),
+          );
+          try {
+            const upload = await documentService.uploadTitleAsset(row.file!, (progress) => {
+              setTitleDocumentRows((current) =>
+                current.map((item) => item.key === row.key ? { ...item, progress } : item),
+              );
+            });
+            const asset = upload.titleDocumentAsset;
+            const staged = { ...row, assetId: asset.assetId, expiresAt: asset.expiresAt, status: 'staged' as const, progress: 100 };
+            stagedRows.push(staged);
+            setTitleDocumentRows((current) => current.map((item) => item.key === row.key ? staged : item));
+          } catch (raw) {
+            const message = raw instanceof Error ? raw.message : 'Unable to stage this title document.';
+            setTitleDocumentRows((current) =>
+              current.map((item) => item.key === row.key ? { ...item, status: 'failed', error: message } : item),
+            );
+            throw raw;
+          }
         }
-        titleDocuments = [{
-          title: titleDocumentTitle.trim() || titleDocumentTypeOptions.find((option) => option.value === titleDocumentType)?.label || 'Title Document',
-          documentType: titleDocumentType,
-          fileUrl: uploaded.fileUrl,
-          publicId: uploaded.publicId,
-          resourceType: uploaded.resourceType,
-          mimeType: uploaded.mimeType || titleDocumentFile.type,
-          originalFileName: uploaded.originalFileName || titleDocumentFile.name,
-          fileSizeBytes: uploaded.fileSizeBytes || titleDocumentFile.size,
-        }];
+        titleDocuments = stagedRows.map((row) => ({
+          assetId: row.assetId!,
+          title: row.title.trim() || documentTypeLabel(row.documentType),
+          documentType: row.documentType,
+          accessPolicy: { enabled: row.mode !== 'private', mode: row.mode },
+        }));
       } catch (raw) {
         const message = raw instanceof Error ? raw.message : 'Unable to upload title document.';
-        toast.error(`${message} Please re-upload using the title document uploader.`);
+        toast.error(`${message} Retry the affected title document; ordinary property details have been retained.`);
         setUploadingTitleDocument(false);
         return;
       }
@@ -163,7 +216,26 @@ const PropertyForm = ({
     }
 
     const payload = titleDocuments ? { ...basePayload, titleDocuments } : basePayload;
-    await onSubmit(payload);
+    try {
+      await onSubmit(payload);
+      setTitleDocumentRows([]);
+    } catch (raw) {
+      const message = raw instanceof Error ? raw.message : 'Unable to create the property.';
+      if (
+        raw instanceof ApiRequestError &&
+        raw.status === 409 &&
+        /\b(asset|expired|consumed)\b/i.test(message)
+      ) {
+        setTitleDocumentRows((current) => current.map((row) => ({
+          ...row,
+          assetId: undefined,
+          expiresAt: undefined,
+          status: 'failed',
+          error: 'This staged asset expired or was already consumed. Select the file again to create a fresh private asset.',
+        })));
+      }
+      toast.error(message);
+    }
   };
 
   return (
@@ -394,39 +466,108 @@ const PropertyForm = ({
 
       {mode === 'create' ? (
         <div className="bg-white rounded-2xl p-6 space-y-4 border border-outline-variant/10">
-          <div>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
             <h2 className="text-base font-black text-on-surface tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
-              Optional Title Document
+              Private title documents
             </h2>
             <p className="mt-1 text-xs text-secondary">
-              Title documents are stored as restricted Document Vault records and are not shown as public listing media.
+              Add different document types to the private vault. They never become public property media.
             </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTitleDocumentRows((current) => [...current, createTitleDocumentRow()])}
+              className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-on-primary"
+            >
+              Add document
+            </button>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className={labelClass}>Document Type</label>
-              <select value={titleDocumentType} onChange={(e) => setTitleDocumentType(e.target.value as TitleDocumentType)} className={inputClass}>
-                {titleDocumentTypeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
+          {titleDocumentRows.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-outline-variant/20 p-5 text-sm text-secondary">
+              Title documents are optional. You can add or resubmit them later from the property vault.
+            </p>
+          ) : null}
+          {titleDocumentRows.map((row, index) => (
+            <div key={row.key} className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-sm font-bold">Document {index + 1}</p>
+                <button
+                  type="button"
+                  onClick={() => setTitleDocumentRows((current) => current.filter((item) => item.key !== row.key))}
+                  className="text-xs font-bold text-error"
+                >
+                  Remove
+                </button>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className={labelClass}>Document type</label>
+                  <select
+                    value={row.documentType}
+                    onChange={(event) => {
+                      const documentType = event.target.value as TitleDocumentType;
+                      setTitleDocumentRows((current) => current.map((item) =>
+                        item.key === row.key ? { ...item, documentType, title: documentTypeLabel(documentType) } : item,
+                      ));
+                    }}
+                    className={inputClass}
+                  >
+                    {titleDocumentTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Document title</label>
+                  <input
+                    value={row.title}
+                    onChange={(event) => setTitleDocumentRows((current) => current.map((item) =>
+                      item.key === row.key ? { ...item, title: event.target.value } : item,
+                    ))}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Access</label>
+                  <select
+                    value={row.mode}
+                    onChange={(event) => setTitleDocumentRows((current) => current.map((item) =>
+                      item.key === row.key ? { ...item, mode: event.target.value as TitleDocumentPolicyMode } : item,
+                    ))}
+                    className={inputClass}
+                  >
+                    <option value="private">Private</option>
+                    <option value="paid_view_once">Paid — one view</option>
+                    <option value="paid_view_multiple">Paid — multiple views</option>
+                  </select>
+                  {row.mode !== 'private' ? <p className="mt-2 text-xs text-secondary">₦5,000 — set by RealtiQ. The server controls the final price.</p> : null}
+                </div>
+                <div>
+                  <label className={labelClass}>Restricted file</label>
+                  <input
+                    type="file"
+                    accept={TITLE_DOCUMENT_ACCEPT}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      const fileError = file && file.size > MAX_TITLE_DOCUMENT_BYTES ? 'Maximum file size is 50 MB.' : undefined;
+                      setTitleDocumentRows((current) => current.map((item) =>
+                        item.key === row.key
+                          ? { ...item, file: fileError ? null : file, assetId: undefined, expiresAt: undefined, status: fileError ? 'failed' : 'idle', progress: 0, error: fileError }
+                          : item,
+                      ));
+                    }}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+              {row.status === 'uploading' ? <p className="mt-3 text-xs text-secondary">Staging securely… {row.progress}%</p> : null}
+              {row.status === 'staged' ? <p className="mt-3 text-xs font-semibold text-emerald-700">Securely staged until {new Date(row.expiresAt!).toLocaleString()}.</p> : null}
+              {row.error ? <p className="mt-3 text-xs text-error">{row.error} Select the file again or submit to retry.</p> : null}
             </div>
-            <div>
-              <label className={labelClass}>Document Title</label>
-              <input value={titleDocumentTitle} onChange={(e) => setTitleDocumentTitle(e.target.value)} className={inputClass} placeholder="Certificate of Occupancy" />
-            </div>
-            <div className="md:col-span-2">
-              <label className={labelClass}>Restricted File</label>
-              <input
-                type="file"
-                accept={TITLE_DOCUMENT_ACCEPT}
-                onChange={(event) => setTitleDocumentFile(event.target.files?.[0] ?? null)}
-                className={inputClass}
-              />
-              <p className="mt-2 text-xs text-secondary">Accepted: PDF, JPEG, PNG, and WebP. Replacement or editing after submission requires admin/legal support.</p>
-              {titleDocumentFile ? <p className="mt-2 text-xs font-semibold text-on-surface">{titleDocumentFile.name}</p> : null}
-            </div>
-          </div>
+          ))}
+          {errors.titleDocuments ? <p className={errorClass}>{errors.titleDocuments}</p> : null}
+          <p className="text-xs text-secondary">Accepted: PDF, JPEG, PNG, and WebP, up to 50 MB. A rejected document is resubmitted as a new version; verified history is retained.</p>
         </div>
       ) : null}
 

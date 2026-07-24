@@ -7,7 +7,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import type { UpdatePropertyPayload } from '../../../services/propertyService';
-import { resolvePropertyOwnerId } from '../../../types';
+import { propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
 
 const Editproperty = () => {
   const { user } = useAuth();
@@ -16,7 +16,7 @@ const Editproperty = () => {
   const { id } = useParams<{ id: string }>();
 
   const property = useMemo(() => {
-    if (id) return properties.find((item) => item._id === id) ?? null;
+    if (id) return properties.find((item) => propertyRouteReference(item) === id || item._id === id || item.id === id) ?? null;
     return properties.find((item) => resolvePropertyOwnerId(item) === user?._id) ?? null;
   }, [properties, user, id]);
 
@@ -26,7 +26,7 @@ const Editproperty = () => {
       return;
     }
 
-    const success = await updateProperty(property._id, payload);
+    const success = await updateProperty(propertyRouteReference(property), payload);
     if (success) {
       toast.success('Property updated successfully');
       navigate('/dashboard/landlord/my-properties');
@@ -47,7 +47,7 @@ const Editproperty = () => {
               {property?.title ?? 'Edit Property'}
             </h1>
             <p className="text-secondary">
-              {property ? `Editing property ID: ${property._id}` : 'Loading property data...'}
+              {property ? `Editing property: ${propertyRouteReference(property)}` : 'Loading property data...'}
             </p>
           </div>
           <button

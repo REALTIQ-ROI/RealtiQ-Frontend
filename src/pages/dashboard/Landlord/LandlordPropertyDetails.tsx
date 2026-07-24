@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
+import TitleDocumentManagement from '../../../components/title/TitleDocumentManagement';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
@@ -25,7 +26,7 @@ const LandlordPropertyDetails = () => {
   const { data: payments } = useAsync(() => paymentService.getPayments(), true);
 
   const property = id
-    ? (properties.find((item) => item._id === id) ?? null)
+    ? (properties.find((item) => propertyRouteReference(item) === id || item._id === id || item.id === id) ?? null)
     : (properties.find((item) => resolvePropertyOwnerId(item) === user?._id) ?? null);
   const propertyReference = property ? propertyRouteReference(property) : '';
 
@@ -81,7 +82,7 @@ const LandlordPropertyDetails = () => {
               Preview Listing
             </Link>
             <Link
-              to={property ? `/dashboard/landlord/edit-property/${property._id}` : '/dashboard/landlord/my-properties'}
+              to={propertyReference ? `/dashboard/landlord/edit-property/${propertyReference}` : '/dashboard/landlord/my-properties'}
               className="px-6 py-3 bg-primary text-white font-bold rounded-lg hover:opacity-90 transition-all flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-lg">edit</span>
@@ -209,7 +210,7 @@ const LandlordPropertyDetails = () => {
                   </div>
                 </div>
                 <Link
-                  to={property ? `/dashboard/landlord/edit-property/${property._id}` : '/dashboard/landlord/my-properties'}
+                  to={propertyReference ? `/dashboard/landlord/edit-property/${propertyReference}` : '/dashboard/landlord/my-properties'}
                   className="block w-full bg-primary text-white font-black py-4 rounded-lg hover:opacity-90 transition-all text-center mb-4"
                 >
                   Update Financials
@@ -247,6 +248,7 @@ const LandlordPropertyDetails = () => {
             </div>
           </div>
         </div>
+        {property ? <TitleDocumentManagement propertyId={propertyReference} sold={property.status === 'sold'} /> : null}
       </div>
     </LandlordPortalLayout>
   );

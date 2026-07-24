@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
+import TitleDocumentManagement from '../../../components/title/TitleDocumentManagement';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { propertyDisplayReference, propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
 
@@ -336,6 +337,7 @@ const AdminPropertyDetails = () => {
             )}
           </div>
         </div>
+        <TitleDocumentManagement propertyId={propertyReference} sold={property.status === 'sold'} />
       </div>
     </AdminLayout>
   );

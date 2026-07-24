@@ -7,7 +7,7 @@ import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
 import { paymentService } from '../../../services/paymentService';
-import { resolvePropertyOwnerId } from '../../../types';
+import { propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-NG', {
@@ -137,8 +137,8 @@ const LandlordDashboard = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {searchResults.map((property) => (
                   <Link
-                    key={property._id}
-                    to={`/dashboard/landlord/property-details/${property._id}`}
+                    key={propertyRouteReference(property)}
+                    to={`/dashboard/landlord/property-details/${propertyRouteReference(property)}`}
                     className="bg-surface-container-low rounded-xl overflow-hidden border border-transparent hover:border-outline-variant/10 transition-colors"
                   >
                     <div className="h-44 bg-surface-container-high">

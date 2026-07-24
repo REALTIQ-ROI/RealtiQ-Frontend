@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import { ApiRequestError } from '../../../lib/axios';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import Button from '../../../components/ui/Button';
 import LoadingState from '../../../components/ui/LoadingState';
@@ -10,6 +11,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { documentService } from '../../../services/documentService';
 import { titleVerificationService } from '../../../services/titleVerificationService';
+import { titleDocumentService } from '../../../services/titleDocumentService';
 import {
   propertyDisplayReference,
   propertyPublicReference,
@@ -26,12 +28,16 @@ const TITLE_DOCUMENT_ACCEPT = '.pdf,image/jpeg,image/png,image/webp';
 
 const LandlordTitleVerifications = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { properties, refreshProperties } = useProperties();
   const [searchParams] = useSearchParams();
   const [propertyId, setPropertyId] = useState(searchParams.get('propertyId') ?? '');
   const [documentType, setDocumentType] = useState<TitleDocumentType>('certificate_of_occupancy');
   const [documents, setDocuments] = useState<TitleDocumentRecord[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [selectedDocumentId, setSelectedDocumentId] = useState('');
+  const [submittingVerification, setSubmittingVerification] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadTitle, setUploadTitle] = useState('Certificate of Occupancy');
   const [uploading, setUploading] = useState(false);
@@ -64,6 +70,7 @@ const LandlordTitleVerifications = () => {
     try {
       const response = await documentService.listPropertyDocuments({ propertyId: reference, category: 'title_document' });
       setDocuments(response.documents ?? []);
+      setSelectedDocumentId((current) => current || response.documents?.[0]?.publicReference || response.documents?.[0]?._id || '');
     } catch (raw) {
       toast.error(raw instanceof Error ? raw.message : 'Unable to load title documents.');
       setDocuments([]);
@@ -148,29 +155,49 @@ const LandlordTitleVerifications = () => {
       return;
     }
 
-    if (document.fileUrl) {
-      window.open(document.fileUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    const popup = window.open('about:blank', '_blank');
     setOpeningDocumentId(reference);
     try {
-      const response = await documentService.getDocument(reference);
-      if (!response.document.fileUrl) {
-        throw new Error('This document does not have a viewable file URL.');
-      }
-      if (popup) {
-        popup.opener = null;
-        popup.location.href = response.document.fileUrl;
-      } else {
-        window.open(response.document.fileUrl, '_blank', 'noopener,noreferrer');
-      }
+      const session = await titleDocumentService.openViewer(reference);
+      navigate('/protected-title-viewer', {
+        state: { session, documentId: reference, propertyId: selectedPropertyPublicReference },
+      });
     } catch (raw) {
-      popup?.close();
       toast.error(raw instanceof Error ? raw.message : 'Unable to open title document.');
     } finally {
       setOpeningDocumentId('');
+    }
+  };
+
+  const submitForLegalReview = async () => {
+    const document = documents.find((item) => (item.publicReference || item._id) === selectedDocumentId);
+    if (!document || !selectedPropertyPublicReference) {
+      toast.error('Select a restricted title document before submitting it for legal review.');
+      return;
+    }
+    setSubmittingVerification(true);
+    setRiskFlags([]);
+    setSubmissionError(null);
+    try {
+      const response = await titleVerificationService.submitTitleVerification({
+        propertyId: selectedPropertyPublicReference,
+        documentId: selectedDocumentId,
+        documentType: document.documentType || documentType,
+        metadata: { source: 'landlord_dashboard' },
+      });
+      setVerifications((current) => [
+        response.verification,
+        ...current.filter((item) => item.verificationId !== response.verification.verificationId),
+      ]);
+      toast.success(response.existing ? 'The existing legal review remains active.' : 'Submitted for legal review.');
+    } catch (raw) {
+      setSubmissionError(raw instanceof Error ? raw.message : 'Unable to submit the document for legal review.');
+      if (raw instanceof ApiRequestError && raw.details && typeof raw.details === 'object' && 'riskFlags' in raw.details) {
+        const flags = (raw.details as { riskFlags?: TitleRiskFlag[] }).riskFlags;
+        if (Array.isArray(flags)) setRiskFlags(flags);
+      }
+      toast.error(raw instanceof Error ? raw.message : 'Unable to submit the document for legal review.');
+    } finally {
+      setSubmittingVerification(false);
     }
   };
 
@@ -238,6 +265,26 @@ const LandlordTitleVerifications = () => {
                   </div>
                 </div>
               ) : null}
+              {documents.length ? (
+                <div className="sm:col-span-2 rounded-lg border border-outline-variant/20 p-4">
+                  <label className="text-sm font-semibold">
+                    Restricted title document
+                    <select
+                      value={selectedDocumentId}
+                      onChange={(event) => setSelectedDocumentId(event.target.value)}
+                      className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm"
+                    >
+                      {documents.map((document) => {
+                        const reference = document.publicReference || document._id || '';
+                        return <option key={reference} value={reference}>{document.title || documentTypeLabel(document.documentType)} — {reference}</option>;
+                      })}
+                    </select>
+                  </label>
+                  <Button type="button" className="mt-3" disabled={submittingVerification || !selectedDocumentId} onClick={() => void submitForLegalReview()}>
+                    {submittingVerification ? 'Submitting…' : 'Submit for legal review'}
+                  </Button>
+                </div>
+              ) : null}
               {!documents.length && !documentsLoading ? <p className="sm:col-span-2 rounded-lg bg-surface-container-low p-4 text-sm text-secondary">No title documents uploaded for this property yet.</p> : null}
               {documentsLoading ? <div className="sm:col-span-2"><LoadingState label="Loading title documents..." /></div> : null}
             </div>
@@ -263,6 +310,7 @@ const LandlordTitleVerifications = () => {
                 </ul>
               </div>
             ) : null}
+            {submissionError ? <p role="alert" className="mt-3 text-sm text-red-700">{submissionError}</p> : null}
           </section>
 
           <aside className="rounded-xl bg-surface-container-low p-6">

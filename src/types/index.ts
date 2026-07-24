@@ -51,6 +51,7 @@ export interface UserKyc {
 
 export interface Property {
   _id: string;
+  id?: string;
   publicReference?: string | null;
   title: string;
   price: number;
@@ -88,8 +89,8 @@ export interface Property {
 export const propertyPublicReference = (property?: Pick<Property, 'publicReference' | '_id'> | null): string =>
   property?.publicReference || '';
 
-export const propertyRouteReference = (property?: Pick<Property, 'publicReference' | '_id'> | null): string =>
-  property?.publicReference || property?._id || '';
+export const propertyRouteReference = (property?: Pick<Property, 'publicReference' | '_id' | 'id'> | null): string =>
+  property?.publicReference || property?._id || property?.id || '';
 
 export const propertyDisplayReference = (property?: Pick<Property, 'publicReference'> | null): string =>
   property?.publicReference || 'Reference pending';
@@ -190,6 +191,14 @@ export interface VerifyPaymentResponse {
     _id: string;
     status: 'pending' | 'paid' | 'failed';
     reference: string;
+    purpose?: string;
+    amount?: number;
+    metadata?: {
+      paymentPurpose?: string;
+      requestedAccessMode?: PaidAccessMode;
+      documentId?: string;
+      propertyId?: string;
+    };
   };
 }
 
@@ -398,13 +407,117 @@ export type PropertyTitleVerificationStatus =
   | 'revoked';
 
 export type TitleDocumentType =
+  | 'survey_plan'
   | 'certificate_of_occupancy'
   | 'deed_of_assignment'
-  | 'survey_plan'
   | 'governors_consent'
-  | 'land_purchase_agreement'
   | 'allocation_letter'
+  | 'land_purchase_agreement'
+  | 'approved_building_plan'
+  | 'gazette'
+  | 'excision_document'
   | 'other';
+
+export type TitleDocumentPolicyMode = 'private' | 'paid_view_once' | 'paid_view_multiple';
+export type PaidAccessMode = 'view_once' | 'view_multiple';
+
+export interface PublicTitleDocument {
+  id: string;
+  publicReference?: string;
+  documentType: TitleDocumentType;
+  title: string;
+  verificationStatus: TitleVerificationStatus;
+  verified: boolean;
+  accessMode: TitleDocumentPolicyMode;
+  price: number | null;
+}
+
+export interface ManagedTitleDocument extends PublicTitleDocument {
+  submissionVersion: number;
+  previousDocument?: string | null;
+  accessPolicy: {
+    enabled: boolean;
+    mode: TitleDocumentPolicyMode;
+    price: number;
+  };
+  submittedAt?: string;
+  rejectionReason?: string | null;
+  publicVerificationId?: string | null;
+}
+
+export interface TitleDocumentAccessStatus {
+  hasAccess: boolean;
+  paymentRequired: boolean;
+  price: number | null;
+  mode?: PaidAccessMode;
+  verificationStatus?: TitleVerificationStatus;
+  viewed?: boolean;
+  remainingViews?: number;
+  viewCount?: number;
+  message?: string;
+}
+
+export interface ViewerSession {
+  sessionToken: string;
+  contentUrl: string;
+  expiresAt: string;
+  watermark: {
+    heading: string;
+    viewer: string;
+    access: string;
+    property: string;
+    timestamp: string;
+  };
+  controls: {
+    download: false;
+    print: false;
+  };
+}
+
+export interface TitleDocumentAnalytics {
+  successfulPayments: number;
+  uniqueViewers: number;
+  totalViews: number;
+  consumedViewOnce: number;
+  revenue: number;
+}
+
+export interface WalletSummary {
+  totalCredits: number;
+  totalDebits: number;
+  netRevenue: number;
+  availableRevenue: number;
+  transactionCount: number;
+  breakdown: {
+    titleDocumentViews: number;
+    tourPayments: number;
+    other: number;
+    refunds: number;
+  };
+}
+
+export type WalletTransactionType = 'title_document_view' | 'tour_payment' | 'platform_fee' | 'other';
+export type WalletTransactionStatus = 'pending' | 'completed' | 'reversed' | 'refunded';
+
+export interface WalletTransaction {
+  _id: string;
+  type: WalletTransactionType;
+  direction: 'credit' | 'debit';
+  amount: number;
+  paymentReference?: string;
+  user?: { _id: string; name: string; email: string } | null;
+  guestIdentity?: unknown;
+  property?: { _id: string; title: string; publicReference?: string } | null;
+  document?: {
+    _id: string;
+    title: string;
+    publicReference?: string;
+    documentType: TitleDocumentType;
+  } | null;
+  description?: string;
+  status: WalletTransactionStatus;
+  createdAt: string;
+}
 
 export type TitleRiskSeverity = 'low' | 'medium' | 'high' | 'critical' | string;
 
@@ -501,9 +614,10 @@ export interface TitleDocumentRecord {
   mimeType?: string;
   originalFileName?: string;
   fileSizeBytes?: number;
-  fileUrl?: string;
   titleVerificationFrozen?: boolean;
   titleVerificationId?: string;
+  accessStatusEndpoint?: string;
+  viewerEndpoint?: string;
   contentHash?: string;
   createdAt?: string;
   updatedAt?: string;
