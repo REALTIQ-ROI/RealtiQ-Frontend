@@ -27,4 +27,21 @@ describe('TitleVerificationBadge', () => {
     rerender(<TitleVerificationBadge context="owner" summary={{ status: 'published', externalAnchorStatus: 'anchored' }} />);
     expect(screen.getByText(/external anchor completed/i)).toBeInTheDocument();
   });
+
+  it('shows a mixed multi-document verification count instead of marking the property unverified', () => {
+    render(
+      <TitleVerificationBadge
+        context="public"
+        summary={{ status: 'pending' }}
+        documents={[
+          { verificationStatus: 'published' },
+          { verificationStatus: 'approved' },
+          { verificationStatus: 'pending' },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('2 of 3 Title Documents Verified')).toBeInTheDocument();
+    expect(screen.queryByText('Title Document Not Verified')).not.toBeInTheDocument();
+  });
 });

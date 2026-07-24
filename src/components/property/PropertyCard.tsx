@@ -1,5 +1,12 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { propertyPublicReference, type Property } from '../../types';
+import { titleDocumentService } from '../../services/titleDocumentService';
+import {
+  propertyPublicReference,
+  type Property,
+  type PublicTitleDocument,
+  type TitleDocumentReference,
+} from '../../types';
 import TitleVerificationBadge from '../title/TitleVerificationBadge';
 import PaymentTypeBadges from './PaymentTypeBadges';
 import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
@@ -25,6 +32,34 @@ const PropertyCard = ({
   const isVideo = cover?.type === 'video';
   const routeReference = propertyPublicReference(property);
   const paymentTypes = normalizePropertyPaymentTypes(property.paymentTypes, property.price);
+  const [fetchedTitleDocuments, setFetchedTitleDocuments] = useState<{
+    propertyReference: string;
+    documents: PublicTitleDocument[];
+  } | null>(null);
+  const titleDocuments: PublicTitleDocument[] | TitleDocumentReference[] | undefined =
+    property.titleDocumentReferences?.length
+      ? property.titleDocumentReferences
+      : fetchedTitleDocuments?.propertyReference === routeReference
+        ? fetchedTitleDocuments.documents
+        : undefined;
+
+  useEffect(() => {
+    if (property.titleDocumentReferences?.length || !routeReference) return;
+
+    let active = true;
+    titleDocumentService
+      .listPublic(routeReference)
+      .then((documents) => {
+        if (active) {
+          setFetchedTitleDocuments({ propertyReference: routeReference, documents });
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [property.titleDocumentReferences, routeReference]);
 
   return (
     <article className="group bg-surface-container-lowest rounded-xl overflow-hidden border border-outline-variant/10 hover:shadow-lg transition-shadow duration-300">
@@ -113,7 +148,11 @@ const PropertyCard = ({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <TitleVerificationBadge summary={property.titleVerification} context="public" />
+          <TitleVerificationBadge
+            summary={property.titleVerification}
+            context="public"
+            documents={titleDocuments}
+          />
           {property.featured ? (
             <span className="px-2 py-1 rounded-full bg-amber-400/15 text-amber-700 text-[10px] font-black uppercase tracking-wide">
               Featured

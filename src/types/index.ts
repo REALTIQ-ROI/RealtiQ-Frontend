@@ -426,6 +426,7 @@ export type PaidAccessMode = 'view_once' | 'view_multiple';
 export interface PublicTitleDocument {
   id: string;
   publicReference?: string;
+  publicVerificationId?: string | null;
   documentType: TitleDocumentType;
   title: string;
   verificationStatus: TitleVerificationStatus;

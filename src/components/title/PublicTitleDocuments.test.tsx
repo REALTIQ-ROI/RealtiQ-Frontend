@@ -50,4 +50,39 @@ describe('PublicTitleDocuments', () => {
     expect(titleDocumentService.initializePayment).not.toHaveBeenCalled();
     expect(titleDocumentService.openViewer).not.toHaveBeenCalled();
   });
+
+  it('links a published document registry ID for visitors and buyers', async () => {
+    vi.mocked(titleDocumentService.listPublic).mockResolvedValue([
+      {
+        id: 'doc1',
+        publicReference: 'RTQ-DOC-1',
+        documentType: 'survey_plan',
+        title: 'Survey',
+        verificationStatus: 'published',
+        verified: true,
+        accessMode: 'private',
+        price: null,
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <PublicTitleDocuments
+          propertyId="prop1"
+          registryReferences={[
+            {
+              publicReference: 'RTQ-DOC-1',
+              documentType: 'survey_plan',
+              verificationStatus: 'published',
+              publicVerificationId: 'RTQ-TV-2026-000001',
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('link', { name: 'RTQ-TV-2026-000001' }),
+    ).toHaveAttribute('href', '/title-verification/RTQ-TV-2026-000001');
+  });
 });

@@ -65,6 +65,12 @@ describe('purchased property title documents', () => {
         squareFeet: 2500,
         media: [],
         status: 'sold',
+        titleDocumentReferences: [{
+          publicReference: 'RTQ-DOC-1',
+          documentType: 'survey_plan',
+          verificationStatus: 'published',
+          publicVerificationId: 'RTQ-TV-2026-000001',
+        }],
       },
       titleDocuments: [{
         _id: 'doc1',
@@ -89,6 +95,10 @@ describe('purchased property title documents', () => {
 
     expect(await screen.findByText('Survey Plan')).toBeInTheDocument();
     expect(screen.getByText(/without another payment/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /RTQ-TV-2026-000001/i })).toHaveAttribute(
+      'href',
+      '/title-verification/RTQ-TV-2026-000001',
+    );
     await userEvent.click(screen.getByRole('button', { name: 'View title document' }));
 
     expect(titleDocumentService.openViewer).toHaveBeenCalledWith('doc1');

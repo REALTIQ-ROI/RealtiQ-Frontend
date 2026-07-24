@@ -16,7 +16,11 @@ const DASHBOARD_PATHS: Record<Role, string> = {
   landlord: '/dashboard/landlord',
 };
 
-const Login = () => {
+interface LoginProps {
+  purchaseMode?: boolean;
+}
+
+const Login = ({ purchaseMode = false }: LoginProps) => {
   const navigate = useNavigate();
   const { login, logout, isLoading } = useAuth();
   const [role, setRole] = useState<Role>('buyer');
@@ -26,17 +30,18 @@ const Login = () => {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const loginRole: Role = purchaseMode ? 'buyer' : role;
     try {
-      const user = await login({ email, password, role });
+      const user = await login({ email, password, role: loginRole });
 
-      if (user.role !== role) {
+      if (user.role !== loginRole) {
         logout();
         toast.error('You are attempting to log in through the wrong portal');
         return;
       }
 
       toast.success('Login successful');
-      navigate(DASHBOARD_PATHS[user.role as Role] ?? '/dashboard');
+      navigate(purchaseMode ? '/checkout' : DASHBOARD_PATHS[user.role as Role] ?? '/dashboard');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to login. Please check your details.';
       toast.error(message);
@@ -106,17 +111,21 @@ const Login = () => {
               >
                 Welcome Back
               </h1>
-              <p className="text-secondary text-sm">Please enter your details to access your collection.</p>
+              <p className="text-secondary text-sm">
+                {purchaseMode
+                  ? 'Sign in as a buyer to continue your property purchase.'
+                  : 'Please enter your details to access your collection.'}
+              </p>
             </div>
 
             {/* Role Tabs */}
             <div className="flex rounded-lg bg-surface-container-low p-1 mb-6">
-              {ROLES.map(({ value, label }) => (
+              {(purchaseMode ? ROLES.filter(({ value }) => value === 'buyer') : ROLES).map(({ value, label }) => (
                 <button
                   key={value}
                   type="button"
                   className={`flex-1 py-2 rounded-md text-xs font-bold tracking-wide transition-all duration-200 ${
-                    role === value
+                    (purchaseMode ? value === 'buyer' : role === value)
                       ? 'bg-white text-on-surface shadow-sm'
                       : 'text-on-surface-variant hover:text-on-surface'
                   }`}
@@ -129,10 +138,14 @@ const Login = () => {
 
             <form className="space-y-5" onSubmit={(e) => void onSubmit(e)}>
               <div>
-                <label className="block text-on-surface text-xs font-bold uppercase tracking-wider mb-2">
+                <label
+                  htmlFor="login-email"
+                  className="block text-on-surface text-xs font-bold uppercase tracking-wider mb-2"
+                >
                   Email Address
                 </label>
                 <input
+                  id="login-email"
                   className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-surface-tint/20 transition-all duration-300"
                   style={{ border: '1px solid rgba(198,198,205,0.2)' }}
                   type="email"
@@ -144,11 +157,15 @@ const Login = () => {
               </div>
 
               <div>
-                <label className="block text-on-surface text-xs font-bold uppercase tracking-wider mb-2">
+                <label
+                  htmlFor="login-password"
+                  className="block text-on-surface text-xs font-bold uppercase tracking-wider mb-2"
+                >
                   Password
                 </label>
                 <div className="relative">
                   <input
+                    id="login-password"
                     className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-surface-tint/20 transition-all duration-300"
                     style={{ border: '1px solid rgba(198,198,205,0.2)' }}
                     type={showPassword ? 'text' : 'password'}
@@ -169,7 +186,7 @@ const Login = () => {
                 </div>
                 <div className="mt-2 text-right">
                   <Link
-                    to={`/forgot-password?role=${role}&email=${encodeURIComponent(email)}`}
+                    to={`/forgot-password?role=${purchaseMode ? 'buyer' : role}&email=${encodeURIComponent(email)}`}
                     className="text-xs font-bold text-primary hover:underline uppercase tracking-wider"
                   >
                     Forgot Password?
@@ -187,13 +204,16 @@ const Login = () => {
                 type="submit"
                 disabled={isLoading}
               >
-                {isLoading ? 'Signing In...' : 'Sign In'}
+                {isLoading ? 'Signing In...' : purchaseMode ? 'Sign In to Purchase' : 'Sign In'}
               </button>
             </form>
 
             <p className="mt-8 text-center text-secondary text-sm">
               Don't have an account?{' '}
-              <Link to="/register" className="text-primary font-bold hover:underline">
+              <Link
+                to={purchaseMode ? '/register-to-purchase' : '/register'}
+                className="text-primary font-bold hover:underline"
+              >
                 Create one
               </Link>
             </p>

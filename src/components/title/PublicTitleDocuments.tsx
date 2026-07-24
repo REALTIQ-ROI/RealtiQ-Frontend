@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { titleDocumentService } from '../../services/titleDocumentService';
-import type { PublicTitleDocument, TitleDocumentAccessStatus } from '../../types';
+import type {
+  PublicTitleDocument,
+  TitleDocumentAccessStatus,
+  TitleDocumentReference,
+} from '../../types';
 import { documentTypeLabel, titleStatusClasses } from '../../utils/titleVerification';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
@@ -15,9 +19,15 @@ const formatNaira = (amount: number | null) =>
 
 interface PublicTitleDocumentsProps {
   propertyId: string;
+  onDocumentsLoaded?: (documents: PublicTitleDocument[]) => void;
+  registryReferences?: TitleDocumentReference[];
 }
 
-const PublicTitleDocuments = ({ propertyId }: PublicTitleDocumentsProps) => {
+const PublicTitleDocuments = ({
+  propertyId,
+  onDocumentsLoaded,
+  registryReferences,
+}: PublicTitleDocumentsProps) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<PublicTitleDocument[]>([]);
@@ -43,6 +53,7 @@ const PublicTitleDocuments = ({ propertyId }: PublicTitleDocumentsProps) => {
       .then(async (result) => {
         if (!active) return;
         setDocuments(result);
+        onDocumentsLoaded?.(result);
         const available = result.filter((document) =>
           document.accessMode !== 'private' && ['approved', 'published'].includes(document.verificationStatus),
         );
@@ -58,7 +69,7 @@ const PublicTitleDocuments = ({ propertyId }: PublicTitleDocumentsProps) => {
     return () => {
       active = false;
     };
-  }, [propertyId]);
+  }, [onDocumentsLoaded, propertyId]);
 
   const openViewer = async (document: PublicTitleDocument) => {
     if (busyId) return;
@@ -113,6 +124,12 @@ const PublicTitleDocuments = ({ propertyId }: PublicTitleDocumentsProps) => {
   return (
     <div className="grid gap-4">
       {documents.map((document) => {
+        const registryReference = registryReferences?.find((reference) =>
+          reference.publicReference === document.publicReference ||
+          reference.documentType === document.documentType,
+        );
+        const publicVerificationId =
+          document.publicVerificationId || registryReference?.publicVerificationId;
         const status = statuses[document.id];
         const available = ['approved', 'published'].includes(document.verificationStatus);
         const consumed = status?.mode === 'view_once' && status.viewed && status.remainingViews === 0;
@@ -125,6 +142,17 @@ const PublicTitleDocuments = ({ propertyId }: PublicTitleDocumentsProps) => {
                 <p className="text-xs font-bold uppercase tracking-widest text-secondary">{documentTypeLabel(document.documentType)}</p>
                 <h3 className="mt-1 font-bold">{document.title}</h3>
                 {document.publicReference ? <p className="mt-1 text-xs text-secondary">{document.publicReference}</p> : null}
+                {document.verificationStatus === 'published' && publicVerificationId ? (
+                  <p className="mt-2 text-xs text-secondary">
+                    Registry ID:{' '}
+                    <Link
+                      className="font-bold text-primary hover:underline"
+                      to={`/title-verification/${publicVerificationId}`}
+                    >
+                      {publicVerificationId}
+                    </Link>
+                  </p>
+                ) : null}
               </div>
               <span className={`rounded-full border px-3 py-1 text-xs font-bold capitalize ${titleStatusClasses(document.verificationStatus)}`}>
                 {document.verificationStatus.replace('_', ' ')}

@@ -21,7 +21,12 @@ import { paymentService } from '../../services/paymentService';
 import { propertyService, type NearbyPropertySummary } from '../../services/propertyService';
 import { tourService } from '../../services/tourService';
 import { titleVerificationService } from '../../services/titleVerificationService';
-import { propertyRouteReference, resolvePropertyOwnerId, type PropertyTitleVerificationSummary } from '../../types';
+import {
+  propertyRouteReference,
+  resolvePropertyOwnerId,
+  type PropertyTitleVerificationSummary,
+  type PublicTitleDocument,
+} from '../../types';
 import {
   calculateInstallmentAmount,
   getInstallmentSummary,
@@ -79,6 +84,7 @@ const PropertyDetails = () => {
   const [tourNotes, setTourNotes] = useState('');
   const [installmentFrequency, setInstallmentFrequency] = useState<(typeof INSTALLMENT_FREQUENCIES)[number]['value']>('monthly');
   const [titleSummary, setTitleSummary] = useState<PropertyTitleVerificationSummary | null>(null);
+  const [publicTitleDocuments, setPublicTitleDocuments] = useState<PublicTitleDocument[]>([]);
   const propertyReference = property ? propertyRouteReference(property) : '';
 
   useEffect(() => {
@@ -347,7 +353,15 @@ const PropertyDetails = () => {
                     Featured
                   </span>
                 ) : null}
-                <TitleVerificationBadge summary={titleSummary} context="public" />
+                <TitleVerificationBadge
+                  summary={titleSummary}
+                  context="public"
+                  documents={
+                    publicTitleDocuments.length
+                      ? publicTitleDocuments
+                      : property.titleDocumentReferences
+                  }
+                />
               </div>
               <h1 className="text-4xl md:text-5xl font-extrabold tracking-tighter text-primary mb-2">
                 {property.title}
@@ -386,7 +400,11 @@ const PropertyDetails = () => {
               <p className="mb-4 text-sm text-secondary">
                 Safe metadata is shown here. Restricted files open only through a short-lived protected viewer session.
               </p>
-              <PublicTitleDocuments propertyId={propertyReference} />
+              <PublicTitleDocuments
+                propertyId={propertyReference}
+                onDocumentsLoaded={setPublicTitleDocuments}
+                registryReferences={property.titleDocumentReferences}
+              />
             </div>
 
             <div>

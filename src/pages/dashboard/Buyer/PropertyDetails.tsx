@@ -143,6 +143,10 @@ const PropertyDetails = () => {
                 <div className="space-y-3">
                   {titleDocuments.map((document) => {
                     const documentId = document._id || document.publicReference || '';
+                    const registryReference = property.titleDocumentReferences?.find((reference) =>
+                      reference.publicReference === document.publicReference ||
+                      reference.documentType === document.documentType,
+                    );
                     return (
                       <div
                         key={documentId}
@@ -153,6 +157,15 @@ const PropertyDetails = () => {
                           <p className="text-xs text-secondary truncate">
                             {documentTypeLabel(document.documentType)}{document.publicReference ? ` • ${document.publicReference}` : ''}
                           </p>
+                          {registryReference?.verificationStatus === 'published' &&
+                          registryReference.publicVerificationId ? (
+                            <Link
+                              className="mt-2 inline-block text-xs font-bold text-primary hover:underline"
+                              to={`/title-verification/${registryReference.publicVerificationId}`}
+                            >
+                              Registry ID: {registryReference.publicVerificationId}
+                            </Link>
+                          ) : null}
                         </div>
                         <button
                           type="button"
