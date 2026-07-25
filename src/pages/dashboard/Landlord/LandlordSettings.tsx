@@ -8,6 +8,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
+import SellerPayoutAccountSettings from '../../../components/escrow/SellerPayoutAccountSettings';
 
 const phoneRegex = /^(\+234|234|0)[789][01]\d{8}$/;
 
@@ -83,6 +84,7 @@ const LandlordSettings = () => {
         ) : error ? (
           <ErrorState message={error} onRetry={() => void execute()} />
         ) : (
+          <>
           <form className="space-y-8" onSubmit={onSave}>
             <section className="bg-surface-container-lowest p-8 rounded-xl">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -227,6 +229,8 @@ const LandlordSettings = () => {
               </Button>
             </div>
           </form>
+          <SellerPayoutAccountSettings />
+          </>
         )}
       </div>
     </LandlordPortalLayout>

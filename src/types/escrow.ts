@@ -1,7 +1,21 @@
 import type { ApiPayment, MediaItem, Property, User } from './index';
 
-export type EscrowStatus = 'pending_payment' | 'locked' | 'release_pending' | 'released' | 'disputed' | 'cancelled' | 'refund_pending' | 'refund_processing' | 'refunded' | 'refund_failed';
-export type RefundStatus = 'none' | 'pending' | 'processing' | 'completed' | 'failed';
+export type EscrowStatus =
+  | 'pending_payment' | 'locked' | 'release_pending' | 'released' | 'disputed'
+  | 'refund_pending' | 'refund_processing' | 'refund_failed' | 'refunded'
+  | 'release_processing' | 'cancellation_pending_refund'
+  | 'cancelled' | 'cancelled_refunded';
+export type RefundStatus =
+  | 'none' | 'pending' | 'processing' | 'needs_account_details'
+  | 'completed' | 'failed';
+export type SellerPayoutStatus = 'none' | 'processing' | 'completed' | 'failed' | 'reversed';
+export type EscrowDisputeStatus =
+  | 'open' | 'under_review' | 'awaiting_refund'
+  | 'awaiting_seller_release' | 'resolved' | 'cancelled';
+export type EscrowDisputeResolution =
+  | 'reopened' | 'refund_buyer' | 'release_seller' | 'cancel_escrow';
+export type EscrowDisputeAction =
+  | 'reopen' | 'refund_buyer' | 'release_seller' | 'cancel_escrow';
 export type EscrowRuleType =
   | 'buyer_confirmation_required' | 'seller_confirmation_required' | 'admin_approval_required'
   | 'inspection_completed' | 'document_verified' | 'title_document_uploaded'
@@ -49,8 +63,10 @@ export interface EscrowLog {
 }
 
 export interface RefundDetails {
-  accountName: string;
-  accountNumber: string;
+  accountName?: string;
+  verifiedAccountName?: string;
+  accountNumber?: string;
+  maskedAccountNumber?: string;
   bankName: string;
   bankCode: string;
   recipientCode?: string | null;
@@ -75,8 +91,119 @@ export interface RefundMessage {
 }
 
 export interface RefundChatResponse { conversation: RefundConversation | null; messages: RefundMessage[] }
-export interface RefundDetailsPayload { accountName: string; accountNumber: string; bankName: string; bankCode: string }
+export interface RefundDetailsPayload { accountNumber: string; bankName: string; bankCode: string }
 export interface ProcessRefundResponse { escrow?: Escrow; message?: string }
+
+export interface EscrowDispute {
+  _id: string;
+  escrow: Escrow | string;
+  raisedBy: EscrowParty | string;
+  raisedAgainst?: EscrowParty | string;
+  reason: string;
+  description?: string;
+  evidence: Record<string, unknown>[];
+  status: EscrowDisputeStatus;
+  preDisputeStatus: 'locked' | 'release_pending';
+  resolution?: EscrowDisputeResolution;
+  resolutionReason?: string;
+  resolvedBy?: EscrowParty | string;
+  openedAt: string;
+  resolvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AvailableDisputeActions {
+  reopen: boolean;
+  refundBuyer: boolean;
+  releaseSeller: boolean;
+  cancelEscrow: boolean;
+}
+
+export interface CreateEscrowDisputePayload {
+  reason: string;
+  description?: string;
+  evidence?: Record<string, unknown>[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface EscrowDisputeListQuery {
+  page?: number;
+  limit?: number;
+  status?: EscrowDisputeStatus;
+  escrow?: string;
+  buyer?: string;
+  seller?: string;
+  property?: string;
+  search?: string;
+}
+
+export interface EscrowDisputeListResponse {
+  items: EscrowDispute[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+}
+
+export interface EscrowFinancialRecord {
+  _id?: string;
+  status?: string;
+  amount?: number;
+  currency?: string;
+  method?: string;
+  transferReference?: string;
+}
+
+export interface AdminEscrowDisputeDetail {
+  dispute: EscrowDispute;
+  escrow: Escrow;
+  milestones: {
+    all: EscrowRule[];
+    satisfied: EscrowRule[];
+    outstanding: EscrowRule[];
+  };
+  financialState: {
+    paymentStatus?: string;
+    refund?: EscrowFinancialRecord | null;
+    sellerPayout?: EscrowFinancialRecord | null;
+  };
+  history: EscrowDispute[];
+  logs: EscrowLog[];
+  availableActions: AvailableDisputeActions;
+}
+
+export interface ResolveEscrowDisputePayload {
+  action: EscrowDisputeAction;
+  reason: string;
+}
+
+export interface ResolveEscrowDisputeResponse {
+  escrow: Partial<Escrow> & Pick<Escrow, '_id' | 'status'>;
+  dispute?: Partial<EscrowDispute> & Pick<EscrowDispute, '_id'>;
+  refund?: EscrowFinancialRecord;
+  payout?: EscrowFinancialRecord;
+  pending?: boolean;
+  reconciliationRequired?: boolean;
+}
+
+export interface RefundAccountDetailsResponse {
+  accountName: string;
+  maskedAccountNumber: string;
+  bankName: string;
+  submittedAt: string;
+}
+
+export interface PayoutAccount {
+  configured: boolean;
+  maskedAccountNumber?: string;
+  bankName?: string;
+  verifiedAccountName?: string;
+  verifiedAt?: string;
+}
+
+export interface PayoutAccountPayload {
+  accountNumber: string;
+  bankCode: string;
+  bankName: string;
+}
 
 export interface Escrow {
   _id: string;
@@ -92,6 +219,7 @@ export interface Escrow {
   currency?: string;
   status: EscrowStatus;
   refundStatus?: RefundStatus;
+  sellerPayoutStatus?: SellerPayoutStatus;
   refundDetails?: RefundDetails | null;
   refundReference?: string | null;
   refundProvider?: string | null;
@@ -101,6 +229,7 @@ export interface Escrow {
   refundProcessingAt?: string | null;
   refundedAt?: string | null;
   rules?: EscrowRule[];
+  disputes?: EscrowDispute[];
   milestoneSummary?: EscrowMilestoneSummary;
   logs?: EscrowLog[];
   metadata?: EscrowMetadata;

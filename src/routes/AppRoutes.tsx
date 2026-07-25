@@ -77,6 +77,8 @@ import MyROIScenarios from '../pages/dashboard/ROI/MyROIScenarios';
 import ROIAssumptions from '../pages/dashboard/Admin/ROIAssumptions';
 import AdminSettings from '../pages/dashboard/Admin/AdminSettings';
 import AdminWallet from '../pages/dashboard/Admin/AdminWallet';
+import AdminEscrowDisputes from '../pages/dashboard/Admin/AdminEscrowDisputes';
+import AdminEscrowDisputeDetails from '../pages/dashboard/Admin/AdminEscrowDisputeDetails';
 import KycManagement from '../pages/dashboard/Admin/KycManagement';
 import EscrowList from '../pages/dashboard/Escrow/EscrowList';
 import EscrowDetails from '../pages/dashboard/Escrow/EscrowDetails';
@@ -209,6 +211,8 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/wallet" element={<AdminWallet />} />
           <Route path="/dashboard/admin/escrows" element={<EscrowList />} />
           <Route path="/dashboard/admin/escrows/:id" element={<EscrowDetails />} />
+          <Route path="/dashboard/admin/escrow-disputes" element={<AdminEscrowDisputes />} />
+          <Route path="/dashboard/admin/escrow-disputes/:disputeId" element={<AdminEscrowDisputeDetails />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

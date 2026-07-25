@@ -4,11 +4,11 @@ import { ESCROW_STATUS } from "./escrowConfig";
 const EscrowStatusBadge = ({ status }: { status: EscrowStatus }) => {
   const config = ESCROW_STATUS[status];
   const icon =
-    status === "refunded" || status === "released"
+    status === "refunded" || status === "released" || status === "cancelled_refunded"
       ? "check_circle"
       : status === "refund_failed" || status === "disputed"
         ? "error"
-        : status === "refund_processing"
+        : status === "refund_processing" || status === "release_processing" || status === "cancellation_pending_refund"
           ? "progress_activity"
           : status === "refund_pending"
             ? "currency_exchange"

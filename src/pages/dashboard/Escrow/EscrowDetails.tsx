@@ -12,6 +12,8 @@ import {
   RULE_LABELS,
 } from '../../../components/escrow/escrowConfig';
 import EscrowRoleLayout from '../../../components/escrow/EscrowRoleLayout';
+import EscrowDisputePanel from '../../../components/escrow/EscrowDisputePanel';
+import BuyerRefundAccountForm from '../../../components/escrow/BuyerRefundAccountForm';
 import EscrowStatusBadge from '../../../components/escrow/EscrowStatusBadge';
 import RefundAdminPanel from '../../../components/escrow/RefundAdminPanel';
 import RefundChat from '../../../components/escrow/RefundChat';
@@ -38,7 +40,7 @@ import {
   populated,
 } from '../../../types/escrow';
 
-type Action = 'request' | 'approve' | 'cancel' | 'dispute';
+type Action = 'request' | 'approve' | 'cancel';
 type MutationResponse = Escrow | SatisfyEscrowRuleResponse;
 
 const refundStatuses = [
@@ -46,7 +48,14 @@ const refundStatuses = [
   'refund_processing',
   'refunded',
   'refund_failed',
+  'cancellation_pending_refund',
+  'cancelled_refunded',
 ];
+const processingStatuses = new Set([
+  'refund_processing',
+  'release_processing',
+  'cancellation_pending_refund',
+]);
 
 const notePrompt = (
   title: string,
@@ -71,9 +80,6 @@ const actorName = (value: unknown) => {
   );
   return actor?.name ?? (typeof value === 'string' ? 'Participant' : 'System');
 };
-
-const metadataText = (metadata?: Record<string, unknown>) =>
-  metadata && Object.keys(metadata).length ? JSON.stringify(metadata) : null;
 
 const EscrowDetails = () => {
   const { id = '' } = useParams();
@@ -116,6 +122,9 @@ const EscrowDetails = () => {
     () => (escrow ? { ...escrow, rules: displayedRules } : null),
     [displayedRules, escrow],
   );
+  const firstUnsatisfiedMilestoneIndex = displayedRules.findIndex(
+    (rule) => !isRuleSatisfied(rule),
+  );
   const milestoneSummary =
     satisfactionUpdate && satisfactionUpdate.escrow._id === escrow?._id
       ? satisfactionUpdate.milestoneSummary
@@ -131,9 +140,9 @@ const EscrowDetails = () => {
   );
 
   useEffect(() => {
-    if (escrow?.status !== 'refund_processing') return;
+    if (!escrow || !processingStatuses.has(escrow.status)) return;
     const refresh = () => {
-      if (document.visibilityState === 'visible') void execute();
+      if (document.visibilityState === 'visible') void execute({ silent: true });
     };
     const timer = window.setInterval(refresh, 15_000);
     document.addEventListener('visibilitychange', refresh);
@@ -141,7 +150,7 @@ const EscrowDetails = () => {
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', refresh);
     };
-  }, [escrow?.status, execute]);
+  }, [escrow, execute]);
 
   const mutate = async (
     key: string,
@@ -192,9 +201,7 @@ const EscrowDetails = () => {
   const action = async (type: Action) => {
     if (!displayedEscrow) return;
     const settings: readonly [string, boolean, string] =
-      type === 'dispute'
-        ? ['Raise a dispute', true, 'Submit dispute']
-        : type === 'cancel'
+      type === 'cancel'
           ? ['Cancel this escrow?', true, 'Cancel escrow']
           : type === 'approve'
             ? ['Approve final release?', false, 'Approve release']
@@ -202,11 +209,6 @@ const EscrowDetails = () => {
     const result = await notePrompt(settings[0], settings[1], settings[2]);
     if (!result.isConfirmed) return;
     const note = result.value?.trim() ?? '';
-    if (type === 'dispute') {
-      await mutate(type, () =>
-        escrowService.dispute(displayedEscrow._id, note),
-      );
-    }
     if (type === 'cancel') {
       await mutate(type, () => escrowService.cancel(displayedEscrow._id, note));
     }
@@ -554,6 +556,18 @@ const EscrowDetails = () => {
                 {displayedRules.map((rule, index) => {
                   const satisfied = isRuleSatisfied(rule);
                   const eligibleAt = ruleEligibility[rule._id];
+                  const sequenceBlocked =
+                    !satisfied &&
+                    firstUnsatisfiedMilestoneIndex >= 0 &&
+                    index > firstUnsatisfiedMilestoneIndex;
+                  const blockingMilestone =
+                    sequenceBlocked
+                      ? displayedRules[firstUnsatisfiedMilestoneIndex]
+                      : null;
+                  const canCurrentUserSatisfy = Boolean(
+                    user &&
+                    canSatisfyRule(user.role, displayedEscrow, rule),
+                  );
                   return (
                     <article
                       key={rule._id}
@@ -588,14 +602,18 @@ const EscrowDetails = () => {
                               Eligible {formatDateTime(eligibleAt)}
                             </p>
                           ) : null}
+                          {sequenceBlocked && canCurrentUserSatisfy ? (
+                            <p className="mt-2 text-xs font-semibold text-amber-700">
+                              Complete milestone {blockingMilestone?.sequence ?? firstUnsatisfiedMilestoneIndex + 1} first.
+                            </p>
+                          ) : null}
                         </div>
-                        {user &&
-                        canSatisfyRule(user.role, displayedEscrow, rule) ? (
+                        {canCurrentUserSatisfy ? (
                           <button
                             type="button"
-                            disabled={Boolean(pending)}
+                            disabled={Boolean(pending) || sequenceBlocked}
                             onClick={() => void satisfy(rule._id)}
-                            className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-on-primary"
+                            className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             Satisfy
                           </button>
@@ -608,12 +626,15 @@ const EscrowDetails = () => {
             </section>
           )}
 
-          {refundEscrow ? (
+          {refundEscrow && user && ['buyer', 'admin'].includes(user.role) ? (
             <RefundChat escrow={displayedEscrow} onChanged={execute} />
           ) : null}
+          <BuyerRefundAccountForm escrow={displayedEscrow} onChanged={execute} />
           {user?.role === 'admin' && refundEscrow ? (
             <RefundAdminPanel escrow={displayedEscrow} onChanged={execute} />
           ) : null}
+
+          <EscrowDisputePanel escrow={displayedEscrow} onChanged={execute} />
 
           <section className="rounded-xl bg-white p-5 sm:p-7">
             <h2 className="text-xl font-bold">Audit timeline</h2>
@@ -635,11 +656,6 @@ const EscrowDetails = () => {
                     {log.note ? (
                       <p className="mt-2 rounded-lg bg-surface-container-low p-3 text-sm">
                         {log.note}
-                      </p>
-                    ) : null}
-                    {metadataText(log.metadata) ? (
-                      <p className="mt-1 break-all text-xs text-secondary">
-                        Metadata: {metadataText(log.metadata)}
                       </p>
                     ) : null}
                   </li>
@@ -685,15 +701,6 @@ const EscrowDetails = () => {
                 Approve final release
               </button>
             ) : null}
-            {actions.dispute ? (
-              <button
-                type="button"
-                onClick={() => void action('dispute')}
-                className="w-full rounded-lg bg-red-100 px-4 py-3 font-bold text-red-800"
-              >
-                Raise dispute
-              </button>
-            ) : null}
             {actions.cancel ? (
               <button
                 type="button"
@@ -703,7 +710,9 @@ const EscrowDetails = () => {
                 Cancel escrow
               </button>
             ) : null}
-            {refundEscrow ? (
+            {refundEscrow &&
+            user &&
+            ['buyer', 'admin'].includes(user.role) ? (
               <a
                 href="#refund-chat"
                 className="block rounded-lg bg-primary px-4 py-3 text-center font-bold text-on-primary"

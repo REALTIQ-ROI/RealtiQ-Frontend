@@ -6,6 +6,10 @@ interface UseAsyncState<T> {
   error: string | null;
 }
 
+interface ExecuteOptions {
+  silent?: boolean;
+}
+
 export const useAsync = <T,>(asyncFn: () => Promise<T>, immediate = true) => {
   const asyncFnRef = useRef(asyncFn);
   const [state, setState] = useState<UseAsyncState<T>>({
@@ -18,8 +22,11 @@ export const useAsync = <T,>(asyncFn: () => Promise<T>, immediate = true) => {
     asyncFnRef.current = asyncFn;
   }, [asyncFn]);
 
-  const execute = useCallback(async () => {
-    setState((previous) => ({ ...previous, loading: true, error: null }));
+  const execute = useCallback(async (options?: ExecuteOptions) => {
+    const silent = options?.silent === true;
+    if (!silent) {
+      setState((previous) => ({ ...previous, loading: true, error: null }));
+    }
 
     try {
       const data = await asyncFnRef.current();
@@ -27,7 +34,9 @@ export const useAsync = <T,>(asyncFn: () => Promise<T>, immediate = true) => {
       return data;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
-      setState({ data: null, loading: false, error: message });
+      if (!silent) {
+        setState({ data: null, loading: false, error: message });
+      }
       return null;
     }
   }, []);

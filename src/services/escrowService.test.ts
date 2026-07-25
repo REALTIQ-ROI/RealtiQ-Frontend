@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import api from '../lib/axios';
 import { escrowService } from './escrowService';
 
-vi.mock('../lib/axios', () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn() }, ApiRequestError: class extends Error {} }));
+vi.mock('../lib/axios', () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), put: vi.fn() }, ApiRequestError: class extends Error {} }));
 const mockedApi = vi.mocked(api);
 
 describe('escrowService', () => {
@@ -22,12 +22,12 @@ describe('escrowService', () => {
     await escrowService.requestRelease('e1', 'ready');
     await escrowService.approveRelease('e1', 'approved');
     await escrowService.cancel('e1', 'duplicate');
-    await escrowService.dispute('e1', 'title issue', { document: 'title' });
+    await escrowService.dispute('e1', { reason: 'title issue', evidence: [{ document: 'title' }] });
     expect(mockedApi.patch).toHaveBeenCalledWith('/escrow/e1/rules/r1/satisfy', { note: 'checked' });
     expect(mockedApi.post).toHaveBeenCalledWith('/escrow/e1/request-release', { note: 'ready' });
     expect(mockedApi.patch).toHaveBeenCalledWith('/escrow/e1/approve-release', { note: 'approved' });
     expect(mockedApi.patch).toHaveBeenCalledWith('/escrow/e1/cancel', { note: 'duplicate' });
-    expect(mockedApi.patch).toHaveBeenCalledWith('/escrow/e1/dispute', { note: 'title issue', metadata: { document: 'title' } });
+    expect(mockedApi.patch).toHaveBeenCalledWith('/escrow/e1/dispute', { reason: 'title issue', evidence: [{ document: 'title' }] });
   });
   it('preserves milestone create and satisfaction response amounts', async () => {
     const created = {
@@ -69,12 +69,31 @@ describe('escrowService', () => {
     mockedApi.post.mockResolvedValue({ data: {}, status: 202 }); mockedApi.patch.mockResolvedValue({ data: {} });
     await escrowService.requestRefundDetails('e1', ' Please send details ');
     await escrowService.getRefundChat('e1'); await escrowService.sendRefundMessage('e1', ' Hello ');
-    await escrowService.saveRefundDetails('e1', { accountName: 'Ada', accountNumber: '0123456789', bankName: 'Bank', bankCode: '001' });
+    await escrowService.saveRefundDetails('e1', { accountNumber: '0123456789', bankName: 'Bank', bankCode: '001' });
     const result = await escrowService.processRefund('e1');
     expect(mockedApi.post).toHaveBeenCalledWith('/escrow/e1/refund-chat/request-details', { message: 'Please send details' });
     expect(mockedApi.get).toHaveBeenCalledWith('/escrow/e1/refund-chat');
     expect(mockedApi.post).toHaveBeenCalledWith('/escrow/e1/refund-chat/messages', { message: 'Hello' });
-    expect(mockedApi.patch).toHaveBeenCalledWith('/escrow/e1/refund-details', { accountName: 'Ada', accountNumber: '0123456789', bankName: 'Bank', bankCode: '001' });
-    expect(mockedApi.post).toHaveBeenCalledWith('/escrow/e1/process-refund', {}); expect(result.status).toBe(202);
+    expect(mockedApi.post).toHaveBeenCalledWith('/escrow/e1/refund-account-details', { accountNumber: '0123456789', bankName: 'Bank', bankCode: '001' });
+    expect(mockedApi.post).toHaveBeenCalledWith('/admin/escrows/e1/process-refund', {}); expect(result.status).toBe(202);
+  });
+  it('maps admin dispute list, detail, and four-option resolution routes', async () => {
+    mockedApi.get.mockResolvedValue({ data: { items: [], pagination: { page: 2, limit: 20, total: 0, pages: 0 } } });
+    mockedApi.patch.mockResolvedValue({ data: { escrow: { _id: 'e1', status: 'release_processing' }, pending: true }, status: 202 });
+    await escrowService.listAdminDisputes({ page: 2, limit: 20, status: 'open', search: 'lekki' });
+    await escrowService.getAdminDispute('d1');
+    const result = await escrowService.resolveAdminDispute('d1', { action: 'release_seller', reason: 'Milestones complete' });
+    expect(mockedApi.get).toHaveBeenCalledWith('/admin/escrow-disputes', { params: { page: 2, limit: 20, status: 'open', search: 'lekki' } });
+    expect(mockedApi.get).toHaveBeenCalledWith('/admin/escrow-disputes/d1');
+    expect(mockedApi.patch).toHaveBeenCalledWith('/admin/escrow-disputes/d1/resolve', { action: 'release_seller', reason: 'Milestones complete' });
+    expect(result.status).toBe(202);
+  });
+  it('uses seller-owned payout account routes', async () => {
+    mockedApi.get.mockResolvedValue({ data: { configured: false } });
+    mockedApi.put.mockResolvedValue({ data: { configured: true, maskedAccountNumber: '******6789' } });
+    await escrowService.getPayoutAccount();
+    await escrowService.savePayoutAccount({ accountNumber: '0123456789', bankCode: '058', bankName: 'GTBank' });
+    expect(mockedApi.get).toHaveBeenCalledWith('/escrow/payout-account');
+    expect(mockedApi.put).toHaveBeenCalledWith('/escrow/payout-account', { accountNumber: '0123456789', bankCode: '058', bankName: 'GTBank' });
   });
 });

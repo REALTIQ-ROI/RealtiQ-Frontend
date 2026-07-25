@@ -24,7 +24,7 @@ describe('escrow rule validation and permissions', () => {
     expect(escrowActions('buyer', escrow('pending_payment'))).toMatchObject({ initializePayment: true, cancel: true, requestRelease: false, approveRelease: false });
     expect(escrowActions('landlord', escrow('locked', true))).toMatchObject({ dispute: true, requestRelease: true, approveRelease: false });
     expect(escrowActions('admin', escrow('release_pending', true))).toMatchObject({ approveRelease: true, requestRelease: true, dispute: false });
-    expect(escrowActions('admin', escrow('disputed', true)).approveRelease).toBe(true);
+    expect(escrowActions('admin', escrow('disputed', true)).approveRelease).toBe(false);
     expect(escrowActions('buyer', escrow('released', true))).toMatchObject({ dispute: false, cancel: false, requestRelease: false });
   });
   it('allows only each role’s rule types while locked', () => {

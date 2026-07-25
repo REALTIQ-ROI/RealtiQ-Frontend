@@ -11,8 +11,9 @@ export const validateRefundDetails = (values: RefundDetailsPayload): RefundDetai
 };
 
 export const trimRefundDetails = (values: RefundDetailsPayload): RefundDetailsPayload => ({
-  accountName: values.accountName.trim(), accountNumber: values.accountNumber.trim(),
-  bankName: values.bankName.trim(), bankCode: values.bankCode.trim(),
+  accountNumber: values.accountNumber.trim(),
+  bankName: values.bankName.trim(),
+  bankCode: values.bankCode.trim(),
 });
 
 export const maskAccountNumber = (value: string) => value.length <= 4 ? value : `${'•'.repeat(Math.max(4, value.length - 4))}${value.slice(-4)}`;

@@ -1,20 +1,76 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 import { escrowErrorDetails, escrowService } from '../../services/escrowService';
-import type { Escrow, RefundDetailsPayload } from '../../types/escrow';
+import type { Escrow } from '../../types/escrow';
 import { escrowBuyer, escrowProperty } from '../../types/escrow';
 import { formatEscrowMoney } from './escrowConfig';
-import { maskAccountNumber, trimRefundDetails, validateRefundDetails, type RefundDetailErrors } from './refundUtils';
 
-const empty: RefundDetailsPayload = { accountName: '', accountNumber: '', bankName: '', bankCode: '' };
-const RefundAdminPanel = ({ escrow, onChanged }: { escrow: Escrow; onChanged: () => Promise<unknown> }) => {
-  const [values, setValues] = useState<RefundDetailsPayload>(empty); const [errors, setErrors] = useState<RefundDetailErrors>({}); const [pending, setPending] = useState<'save' | 'process' | null>(null); const [saved, setSaved] = useState(Boolean(escrow.refundDetails)); const [conflict, setConflict] = useState<string | null>(null);
-  useEffect(() => { const details = escrow.refundDetails; setValues(details ? { accountName: details.accountName ?? '', accountNumber: details.accountNumber ?? '', bankName: details.bankName ?? '', bankCode: details.bankCode ?? '' } : empty); setSaved(Boolean(details)); return () => setValues(empty); }, [escrow._id, escrow.refundDetails]);
-  const update = (key: keyof RefundDetailsPayload, value: string) => { setValues((current) => ({ ...current, [key]: value })); setSaved(false); setErrors((current) => ({ ...current, [key]: undefined })); };
-  const save = async () => { if (pending) return; const normalized = trimRefundDetails(values); const next = validateRefundDetails(normalized); setErrors(next); if (Object.keys(next).length) return; setPending('save'); try { await escrowService.saveRefundDetails(escrow._id, normalized); setValues(normalized); setSaved(true); toast.success('Refund account details saved.'); await onChanged(); } catch (raw) { const err = escrowErrorDetails(raw); toast.error(err.status === 403 ? 'Only an administrator can save refund details.' : err.status === 404 ? 'This escrow was not found.' : err.message); } finally { setPending(null); } };
-  const process = async () => { if (pending || !saved || !escrow.refundDetails) return; const buyer = escrowBuyer(escrow); const property = escrowProperty(escrow); const details = escrow.refundDetails; const review = [`Buyer: ${buyer?.name ?? 'Buyer'}`, `Property: ${property?.title ?? 'Property'}`, `Amount: ${formatEscrowMoney(escrow.amount, escrow.currency ?? property?.currency)}`, `Account: ${details.accountName} · ${maskAccountNumber(details.accountNumber)}`, `Bank: ${details.bankName}`, '', 'Paystack refund processing will begin. Verify these details against the buyer conversation before continuing.'].join('\n'); const confirmed = await Swal.fire({ title: escrow.status === 'refund_failed' ? 'Retry this refund?' : 'Process this refund?', text: review, icon: 'warning', showCancelButton: true, confirmButtonText: escrow.status === 'refund_failed' ? 'Retry refund' : 'Begin refund', confirmButtonColor: '#b42318' }); if (!confirmed.isConfirmed) return; setPending('process'); setConflict(null); try { const result = await escrowService.processRefund(escrow._id); toast.success(result.status === 202 ? 'Refund accepted and processing.' : 'Refund completed successfully.'); await onChanged(); } catch (raw) { const err = escrowErrorDetails(raw); if (err.status === 409) setConflict(`Refund state conflict: ${err.message}`); else if (err.status === 403) toast.error('Only an administrator can process refunds.'); else if (err.status === 404) toast.error('This escrow was not found.'); else toast.error(err.message); await onChanged(); } finally { setPending(null); } };
-  const editable = escrow.status === 'refund_pending' || escrow.status === 'refund_failed';
-  return <section className="rounded-xl bg-white p-5 sm:p-7" aria-labelledby="refund-details-title"><h2 id="refund-details-title" className="text-xl font-bold">Refund account details</h2><p className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Verify these details against the buyer conversation. Saving is required before processing.</p>{conflict ? <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{conflict}</p> : null}<div className="mt-5 grid gap-4 sm:grid-cols-2">{([['accountName', 'Account name'], ['accountNumber', 'Account number'], ['bankName', 'Bank name'], ['bankCode', 'Bank code']] as const).map(([key, label]) => <label key={key} className="text-sm font-semibold">{label}<input type="text" inputMode={key === 'accountNumber' ? 'numeric' : 'text'} autoComplete="off" disabled={!editable || Boolean(pending)} value={values[key]} onChange={(event) => update(key, event.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant/30 p-3 font-normal disabled:bg-surface-container-low" aria-invalid={Boolean(errors[key])} />{errors[key] ? <span className="mt-1 block text-xs text-error">{errors[key]}</span> : null}</label>)}</div>{editable ? <div className="mt-5 flex flex-wrap gap-3"><button type="button" disabled={Boolean(pending)} onClick={() => void save()} className="rounded-lg border border-primary px-4 py-2 font-bold text-primary disabled:opacity-50">{pending === 'save' ? 'Saving...' : 'Save details'}</button><button type="button" disabled={Boolean(pending) || !saved} onClick={() => void process()} className="rounded-lg bg-red-700 px-4 py-2 font-bold text-white disabled:opacity-50">{pending === 'process' ? 'Submitting...' : escrow.status === 'refund_failed' ? 'Retry refund' : 'Process refund'}</button></div> : <p className="mt-5 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">{escrow.status === 'refund_processing' ? 'Refund processing is awaiting Paystack confirmation.' : 'Refund processing is complete. Account details are read-only.'}</p>}</section>;
+const RefundAdminPanel = ({
+  escrow,
+  onChanged,
+}: {
+  escrow: Escrow;
+  onChanged: () => Promise<unknown>;
+}) => {
+  const [pending, setPending] = useState(false);
+  const [attention, setAttention] = useState<string | null>(null);
+  const buyer = escrowBuyer(escrow);
+  const property = escrowProperty(escrow);
+  const terminal = escrow.refundStatus === 'completed' || ['refunded', 'cancelled_refunded'].includes(escrow.status);
+  const processing = escrow.refundStatus === 'processing' || ['refund_processing', 'cancellation_pending_refund'].includes(escrow.status);
+
+  const process = async () => {
+    if (pending || terminal || processing) return;
+    const confirmed = await Swal.fire({
+      title: escrow.refundStatus === 'failed' ? 'Retry buyer refund?' : 'Process buyer refund?',
+      text: `${buyer?.name ?? 'Buyer'} · ${property?.title ?? 'Property'} · ${formatEscrowMoney(escrow.amount, escrow.currency ?? property?.currency)}. Paystack will first attempt the original payment transaction.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: escrow.refundStatus === 'failed' ? 'Retry refund' : 'Process refund',
+      confirmButtonColor: '#b42318',
+    });
+    if (!confirmed.isConfirmed) return;
+    setPending(true);
+    setAttention(null);
+    try {
+      const result = await escrowService.processRefund(escrow._id);
+      toast.success(result.status === 202 ? 'Buyer refund is processing.' : 'Refund state refreshed.');
+      await onChanged();
+    } catch (raw) {
+      const error = escrowErrorDetails(raw);
+      if (error.requiresAccountDetails) {
+        setAttention('Buyer account details are required. Request them through the refund conversation; administrators cannot enter another user’s bank account.');
+      } else {
+        setAttention(error.message);
+      }
+      if (error.status === 409) await onChanged();
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <section className="rounded-xl bg-white p-5 sm:p-7" aria-labelledby="admin-refund-title">
+      <h2 id="admin-refund-title" className="text-xl font-bold">Admin refund processing</h2>
+      <p className="mt-2 text-sm text-secondary">
+        Refunds return through the original Paystack transaction first. Buyer bank details are requested only when the backend reports they are required.
+      </p>
+      {attention ? <p role="alert" className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{attention}</p> : null}
+      {escrow.refundStatus === 'needs_account_details' ? (
+        <a href="#refund-chat" className="mt-4 inline-flex rounded-lg border border-primary px-4 py-2 font-bold text-primary">
+          Open refund detail request
+        </a>
+      ) : null}
+      {processing ? <p role="status" className="mt-4 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">Provider confirmation is pending. Do not retry this financial action until RealtiQ receives confirmation.</p> : null}
+      {terminal ? <p role="status" className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">The backend has confirmed that the buyer refund is complete.</p> : null}
+      {!processing && !terminal ? (
+        <button type="button" disabled={pending} onClick={() => void process()} className="mt-4 rounded-lg bg-red-700 px-4 py-3 font-bold text-white disabled:opacity-50">
+          {pending ? 'Submitting...' : escrow.refundStatus === 'failed' ? 'Retry refund' : 'Process refund'}
+        </button>
+      ) : null}
+    </section>
+  );
 };
+
 export default RefundAdminPanel;

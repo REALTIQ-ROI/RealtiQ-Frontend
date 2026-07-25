@@ -6,17 +6,20 @@ export class ApiRequestError extends Error {
   eligibleAt?: string;
   existingPayment?: unknown;
   details?: unknown;
+  requiresAccountDetails?: boolean;
+  requiresSellerAccount?: boolean;
+  reconciliationRequired?: boolean;
   fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }>;
 
-  constructor(message: string, details?: { status?: number; missingRules?: unknown; eligibleAt?: string; existingPayment?: unknown; details?: unknown; fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }> }) {
+  constructor(message: string, details?: { status?: number; missingRules?: unknown; eligibleAt?: string; existingPayment?: unknown; details?: unknown; requiresAccountDetails?: boolean; requiresSellerAccount?: boolean; reconciliationRequired?: boolean; fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }> }) {
     super(message);
     this.name = 'ApiRequestError';
     Object.assign(this, details);
   }
 }
 
-// const defaultBaseURL = import.meta.env.DEV ? '/api' : 'https://api.realtiq.com.ng/api';
-const defaultBaseURL = import.meta.env.DEV ? '/api' : 'http://localhost:5000/api';
+const defaultBaseURL = import.meta.env.DEV ? '/api' : 'https://api.realtiq.com.ng/api';
+// const defaultBaseURL = import.meta.env.DEV ? '/api' : 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? defaultBaseURL,
@@ -54,13 +57,16 @@ api.interceptors.response.use(
         : '';
 
     if (message.trim()) {
-      const details = responseData as { missingRules?: unknown; eligibleAt?: string; payment?: unknown; details?: unknown; errors?: Array<{ path?: string; msg?: string; value?: unknown }> };
+      const details = responseData as { missingRules?: unknown; eligibleAt?: string; payment?: unknown; details?: unknown; requiresAccountDetails?: boolean; requiresSellerAccount?: boolean; reconciliationRequired?: boolean; errors?: Array<{ path?: string; msg?: string; value?: unknown }> };
       return Promise.reject(new ApiRequestError(message, {
         status,
         missingRules: details.missingRules,
         eligibleAt: details.eligibleAt,
         existingPayment: details.payment,
         details: details.details,
+        requiresAccountDetails: details.requiresAccountDetails,
+        requiresSellerAccount: details.requiresSellerAccount,
+        reconciliationRequired: details.reconciliationRequired,
         fieldErrors: details.errors,
       }));
     }

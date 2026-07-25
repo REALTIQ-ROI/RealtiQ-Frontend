@@ -13,6 +13,9 @@ export const ESCROW_STATUS: Record<EscrowStatus, { label: string; description: s
   refund_processing: { label: 'Refund processing', description: 'The refund was submitted to Paystack and is awaiting confirmation.', classes: 'bg-blue-100 text-blue-800' },
   refunded: { label: 'Refunded', description: 'Payment refunded.', classes: 'bg-cyan-100 text-cyan-800' },
   refund_failed: { label: 'Refund failed', description: 'Refund processing failed and requires administrator review.', classes: 'bg-red-100 text-red-800' },
+  release_processing: { label: 'Seller payout processing', description: 'Seller payout has started and is awaiting provider confirmation.', classes: 'bg-blue-100 text-blue-800' },
+  cancellation_pending_refund: { label: 'Cancellation pending refund', description: 'Cancellation is awaiting confirmation of the buyer refund.', classes: 'bg-orange-100 text-orange-800' },
+  cancelled_refunded: { label: 'Cancelled and refunded', description: 'The escrow was cancelled and the buyer refund was confirmed.', classes: 'bg-cyan-100 text-cyan-800' },
 };
 
 export const RULE_LABELS: Record<EscrowRuleType, string> = {
@@ -56,7 +59,7 @@ export const escrowActions = (role: UserRole, escrow: Escrow) => {
     initializePayment: role === 'buyer' && escrow.status === 'pending_payment',
     dispute: (role === 'buyer' || role === 'landlord') && ['locked', 'release_pending'].includes(escrow.status),
     requestRelease: (role === 'landlord' || role === 'admin') && ['locked', 'release_pending'].includes(escrow.status) && progress.allComplete,
-    approveRelease: role === 'admin' && (escrow.status === 'release_pending' || escrow.status === 'disputed') && progress.allComplete,
-    cancel: (role === 'buyer' && escrow.status === 'pending_payment') || (role === 'admin' && ['locked', 'disputed'].includes(escrow.status)),
+    approveRelease: role === 'admin' && escrow.status === 'release_pending' && progress.allComplete,
+    cancel: (role === 'buyer' && escrow.status === 'pending_payment') || (role === 'admin' && escrow.status === 'locked'),
   };
 };
