@@ -658,12 +658,24 @@ const PropertyDetails = () => {
                   )}
                 </>
               )}
-              {hasEscrowPayment && user?.role === 'buyer' && property.status === 'available' && resolvePropertyOwnerId(property) !== user._id && !hasActiveInstallment ? (
+              {hasEscrowPayment && canPurchase && !hasActiveInstallment && (!user || (user.role === 'buyer' && resolvePropertyOwnerId(property) !== user._id)) ? (
                 <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
                   <p className="text-sm font-bold text-primary">Prefer protected release conditions?</p>
                   <p className="mt-1 text-xs text-secondary">Pay through escrow. Funds remain locked until agreed conditions are completed and an administrator approves release.</p>
-                  <Button fullWidth variant="secondary" className="mt-3" onClick={() => navigate(`/dashboard/buyer/escrows/create/${propertyReference}`)}>
-                    Create Escrow Payment
+                  <Button
+                    fullWidth
+                    variant="secondary"
+                    className="mt-3"
+                    onClick={() => {
+                      const escrowPath = `/dashboard/buyer/escrows/create/${propertyReference}`;
+                      if (!user) {
+                        navigate('/login-to-purchase', { state: { redirectTo: escrowPath } });
+                        return;
+                      }
+                      navigate(escrowPath);
+                    }}
+                  >
+                    {user ? 'Create Escrow Payment' : 'Login to Create Payment Escrow'}
                   </Button>
                 </div>
               ) : null}

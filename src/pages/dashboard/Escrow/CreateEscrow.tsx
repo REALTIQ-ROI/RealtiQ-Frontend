@@ -72,6 +72,19 @@ const AllocationSummary = ({
         </div>
       </div>
     </dl>
+    <p
+      id="escrow-allocation-status"
+      className={`mt-3 text-xs font-bold ${
+        difference === 0 ? 'text-emerald-700' : 'text-amber-800'
+      }`}
+      role="status"
+    >
+      {difference === 0
+        ? 'Allocation complete. The milestones exactly match the escrow amount.'
+        : difference > 0
+          ? `Allocate the remaining ${formatEscrowMoney(difference, currency)} before continuing.`
+          : `Reduce milestone allocations by ${formatEscrowMoney(Math.abs(difference), currency)} before continuing.`}
+    </p>
     <p className="mt-3 text-xs text-secondary">
       The full escrow amount is funded upfront. Milestone amounts are accounting
       allocations only and are released together after every required milestone
@@ -351,7 +364,12 @@ const CreateEscrow = () => {
                   </div>
                 ) : null}
 
-                <Button className="mt-8" onClick={continueToReview}>
+                <Button
+                  className="mt-8"
+                  disabled={custom && (!rules.length || !allocation.exact)}
+                  aria-describedby={custom ? 'escrow-allocation-status' : undefined}
+                  onClick={continueToReview}
+                >
                   Review Escrow
                 </Button>
               </>

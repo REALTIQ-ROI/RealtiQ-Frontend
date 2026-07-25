@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import type { UserRole } from '../../types';
@@ -22,11 +22,19 @@ interface LoginProps {
 
 const Login = ({ purchaseMode = false }: LoginProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, logout, isLoading } = useAuth();
   const [role, setRole] = useState<Role>('buyer');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const requestedRedirect = (location.state as { redirectTo?: unknown } | null)?.redirectTo;
+  const buyerRedirect =
+    typeof requestedRedirect === 'string' &&
+    requestedRedirect.startsWith('/dashboard/buyer/') &&
+    !requestedRedirect.startsWith('//')
+      ? requestedRedirect
+      : null;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -41,7 +49,7 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
       }
 
       toast.success('Login successful');
-      navigate(purchaseMode ? '/checkout' : DASHBOARD_PATHS[user.role as Role] ?? '/dashboard');
+      navigate(purchaseMode ? buyerRedirect ?? '/checkout' : DASHBOARD_PATHS[user.role as Role] ?? '/dashboard');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to login. Please check your details.';
       toast.error(message);
@@ -212,6 +220,7 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
               Don't have an account?{' '}
               <Link
                 to={purchaseMode ? '/register-to-purchase' : '/register'}
+                state={purchaseMode ? location.state : undefined}
                 className="text-primary font-bold hover:underline"
               >
                 Create one

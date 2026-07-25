@@ -56,4 +56,26 @@ describe('LoginToPurchase', () => {
     });
     expect(await screen.findByText('Checkout destination')).toBeInTheDocument();
   });
+
+  it('continues to the requested buyer escrow screen after authentication', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[{
+          pathname: '/login-to-purchase',
+          state: { redirectTo: '/dashboard/buyer/escrows/create/RTQ-PROP-1' },
+        }]}
+      >
+        <Routes>
+          <Route path="/login-to-purchase" element={<LoginToPurchase />} />
+          <Route path="/dashboard/buyer/escrows/create/:propertyId" element={<p>Create escrow destination</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await userEvent.type(screen.getByLabelText('Email Address'), 'buyer@example.com');
+    await userEvent.type(screen.getByLabelText('Password'), 'secret123');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign In to Purchase' }));
+
+    expect(await screen.findByText('Create escrow destination')).toBeInTheDocument();
+  });
 });

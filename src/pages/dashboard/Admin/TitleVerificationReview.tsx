@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { LoaderCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
@@ -15,6 +16,7 @@ import type { TitleDocumentRecord, TitleDocumentType, TitleRiskFlag, TitleVerifi
 import { documentTypeLabel, externalAnchorLabel, formatDateTime, riskFlagText, shortenHash, titleDocumentTypeOptions } from '../../../utils/titleVerification';
 
 const statusOptions: Array<TitleVerificationStatus | 'all'> = ['all', 'pending', 'under_review', 'approved', 'published', 'rejected', 'revoked', 'superseded'];
+type PendingAction = 'approve' | 'reject' | 'revoke' | 'external-anchor';
 
 const propertyName = (verification: TitleVerification) => {
   const ref = verification.property ?? verification.propertyId;
@@ -34,7 +36,8 @@ const TitleVerificationReview = () => {
   const [logs, setLogs] = useState<TitleVerificationLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [mutating, setMutating] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const mutating = pendingAction !== null;
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -99,7 +102,7 @@ const TitleVerificationReview = () => {
       inputValidator: (value) => decision === 'reject' && !value.trim() ? 'Enter a rejection reason.' : undefined,
     });
     if (!result.isConfirmed) return;
-    setMutating(true);
+    setPendingAction(decision);
     try {
       const response = await titleVerificationService.reviewTitleVerification(selected.verificationId, {
         decision,
@@ -113,7 +116,7 @@ const TitleVerificationReview = () => {
       toast.error(err?.message ?? (raw instanceof Error ? raw.message : 'Unable to review title verification.'));
       if (err?.status === 409) await refreshAll(selected.verificationId);
     } finally {
-      setMutating(false);
+      setPendingAction(null);
     }
   };
 
@@ -130,7 +133,7 @@ const TitleVerificationReview = () => {
       inputValidator: (value) => !value.trim() ? 'Enter a revocation reason.' : undefined,
     });
     if (!result.isConfirmed) return;
-    setMutating(true);
+    setPendingAction('revoke');
     try {
       await titleVerificationService.revokeTitleVerification(selected.verificationId, { revocationReason: result.value ?? '' });
       toast.success('Title verification revoked. The public registry page remains visible with revoked status.');
@@ -138,13 +141,13 @@ const TitleVerificationReview = () => {
     } catch (raw) {
       toast.error(raw instanceof Error ? raw.message : 'Unable to revoke title verification.');
     } finally {
-      setMutating(false);
+      setPendingAction(null);
     }
   };
 
   const requestExternalAnchor = async () => {
     if (!selected?.publicVerificationId) return;
-    setMutating(true);
+    setPendingAction('external-anchor');
     try {
       await titleVerificationService.requestRegistryExternalAnchor(selected.publicVerificationId);
       toast.success('External anchor requested.');
@@ -153,7 +156,7 @@ const TitleVerificationReview = () => {
       const err = raw instanceof ApiRequestError ? raw : null;
       toast[err?.status === 409 ? 'info' : 'error'](raw instanceof Error ? raw.message : 'Unable to request external anchor.');
     } finally {
-      setMutating(false);
+      setPendingAction(null);
     }
   };
 
@@ -271,10 +274,26 @@ const TitleVerificationReview = () => {
                   </div>
                 ) : null}
                 <div className="flex flex-wrap gap-2">
-                  {['pending', 'under_review'].includes(selected.status) ? <Button disabled={mutating} onClick={() => void review('approve')}>Approve</Button> : null}
-                  {['pending', 'under_review'].includes(selected.status) ? <Button variant="secondary" disabled={mutating} onClick={() => void review('reject')}>Reject</Button> : null}
-                  {selected.status === 'published' ? <Button variant="secondary" disabled={mutating} onClick={() => void revoke()}>Revoke</Button> : null}
-                  {selected.status === 'published' && selected.publicVerificationId ? <Button variant="ghost" disabled={mutating} onClick={() => void requestExternalAnchor()}>Request External Anchor</Button> : null}
+                  {['pending', 'under_review'].includes(selected.status) ? (
+                    <Button disabled={mutating} aria-busy={pendingAction === 'approve'} onClick={() => void review('approve')}>
+                      {pendingAction === 'approve' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Approving...</> : 'Approve'}
+                    </Button>
+                  ) : null}
+                  {['pending', 'under_review'].includes(selected.status) ? (
+                    <Button variant="secondary" disabled={mutating} aria-busy={pendingAction === 'reject'} onClick={() => void review('reject')}>
+                      {pendingAction === 'reject' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Rejecting...</> : 'Reject'}
+                    </Button>
+                  ) : null}
+                  {selected.status === 'published' ? (
+                    <Button variant="secondary" disabled={mutating} aria-busy={pendingAction === 'revoke'} onClick={() => void revoke()}>
+                      {pendingAction === 'revoke' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Revoking...</> : 'Revoke'}
+                    </Button>
+                  ) : null}
+                  {selected.status === 'published' && selected.publicVerificationId ? (
+                    <Button variant="ghost" disabled={mutating} aria-busy={pendingAction === 'external-anchor'} onClick={() => void requestExternalAnchor()}>
+                      {pendingAction === 'external-anchor' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Requesting...</> : 'Request External Anchor'}
+                    </Button>
+                  ) : null}
                 </div>
                 <RegistryAuditDetails publicVerificationId={selected.publicVerificationId} />
                 <div>

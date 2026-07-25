@@ -132,31 +132,28 @@ describe('CreateEscrow milestone amounts', () => {
     expect(await screen.findByText('Escrow detail destination')).toBeInTheDocument();
   });
 
-  it('blocks missing, below-total, and overallocated custom milestones', async () => {
+  it('blocks underallocation and caps entries at the escrow total', async () => {
     renderCreate();
     await enableCustomAllocation();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Review Escrow' }));
-    expect(await screen.findByText(/Enter an amount for this required milestone/i))
+    const reviewButton = screen.getByRole('button', { name: 'Review Escrow' });
+    expect(reviewButton).toBeDisabled();
+    expect(screen.getByText(/Allocate the remaining.*100,000,000.*before continuing/i))
       .toBeInTheDocument();
 
     const amount = screen.getByRole('spinbutton', {
       name: /Milestone amount \(NGN\)/i,
     });
     await userEvent.type(amount, '90000000');
-    await userEvent.click(screen.getByRole('button', { name: 'Review Escrow' }));
-    expect(toast.error).toHaveBeenCalledWith(
-      'Milestone allocations must total the full escrow amount.',
-    );
+    expect(reviewButton).toBeDisabled();
+    expect(screen.getByText(/Allocate the remaining.*10,000,000.*before continuing/i))
+      .toBeInTheDocument();
 
     await userEvent.clear(amount);
     await userEvent.type(amount, '110000000');
-    expect(screen.getByText('Overallocated amount').parentElement)
-      .toHaveTextContent(/10,000,000/);
-    await userEvent.click(screen.getByRole('button', { name: 'Review Escrow' }));
-    expect(toast.error).toHaveBeenCalledWith(
-      'Milestone allocations exceed the escrow amount.',
-    );
+    expect(amount).toHaveValue(100_000_000);
+    expect(reviewButton).toBeEnabled();
+    expect(screen.getByText(/Allocation complete/i)).toBeInTheDocument();
     expect(escrowService.create).not.toHaveBeenCalled();
   });
 

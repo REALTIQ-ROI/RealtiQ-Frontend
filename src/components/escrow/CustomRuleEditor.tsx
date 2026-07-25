@@ -49,6 +49,17 @@ const CustomRuleEditor = ({
     <div className="space-y-4">
       {rules.map((rule, index) => {
         const amountId = `escrow-milestone-${rule.clientId}-amount`;
+        const allocatedToOtherMilestones = rules.reduce(
+          (total, item) =>
+            item.clientId === rule.clientId || !Number.isFinite(item.amount)
+              ? total
+              : total + Math.round(Number(item.amount)),
+          0,
+        );
+        const maximumAmount = Math.max(
+          0,
+          Math.round(escrowAmount) - allocatedToOtherMilestones,
+        );
         return (
           <fieldset
             key={rule.clientId}
@@ -113,15 +124,23 @@ const CustomRuleEditor = ({
               Milestone amount (NGN)
               <input
                 id={amountId}
+                aria-label="Milestone amount (NGN)"
                 type="number"
                 min={1}
-                max={escrowAmount}
+                max={maximumAmount}
                 step={1}
                 value={rule.amount ?? ''}
+                disabled={maximumAmount === 0 && rule.amount === undefined}
                 onChange={(event) => {
                   const value = event.target.value;
+                  const parsed = Number(value);
                   update(rule.clientId, {
-                    amount: value === '' ? undefined : Number(value),
+                    amount:
+                      value === ''
+                        ? undefined
+                        : Number.isFinite(parsed)
+                          ? Math.min(parsed, maximumAmount)
+                          : undefined,
                   });
                 }}
                 className="mt-1 w-full rounded-lg bg-surface-container-low px-3 py-2.5 text-sm"
@@ -134,6 +153,10 @@ const CustomRuleEditor = ({
                   {formatEscrowMoney(rule.amount, currency)}
                 </span>
               ) : null}
+              <span className="mt-1 block font-normal text-secondary">
+                Maximum available for this milestone:{' '}
+                {formatEscrowMoney(maximumAmount, currency)}
+              </span>
               {errors[rule.clientId]?.amount ? (
                 <span className="mt-1 block text-error" role="alert">
                   {errors[rule.clientId].amount}

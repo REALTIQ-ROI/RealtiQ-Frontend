@@ -65,6 +65,17 @@ describe('CustomRuleEditor', () => {
     await userEvent.type(amount, '25000000');
 
     expect(screen.getByTestId('first-amount')).toHaveTextContent('number:25000000');
-    expect(screen.getByText(/25,000,000/)).toBeInTheDocument();
+    expect(screen.getAllByText(/25,000,000/).length).toBeGreaterThan(0);
+  });
+
+  it('caps a milestone at the unallocated escrow balance', async () => {
+    render(<Harness />);
+
+    const amount = screen.getAllByLabelText('Milestone amount (NGN)')[0];
+    expect(amount).toHaveAttribute('max', '25000000');
+    await userEvent.type(amount, '40000000');
+
+    expect(amount).toHaveValue(25_000_000);
+    expect(screen.getByTestId('first-amount')).toHaveTextContent('number:25000000');
   });
 });

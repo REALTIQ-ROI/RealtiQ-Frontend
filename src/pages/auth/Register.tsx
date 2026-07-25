@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import type { UserRole } from '../../types';
@@ -20,8 +20,13 @@ const validatePassword = (pwd: string): string | null => {
   return null;
 };
 
-const Register = () => {
+interface RegisterProps {
+  purchaseMode?: boolean;
+}
+
+const Register = ({ purchaseMode = false }: RegisterProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { register, isLoading } = useAuth();
   const [role, setRole] = useState<RegisterRole>('buyer');
   const [name, setName] = useState('');
@@ -29,6 +34,13 @@ const Register = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const requestedRedirect = (location.state as { redirectTo?: unknown } | null)?.redirectTo;
+  const buyerRedirect =
+    typeof requestedRedirect === 'string' &&
+    requestedRedirect.startsWith('/dashboard/buyer/') &&
+    !requestedRedirect.startsWith('//')
+      ? requestedRedirect
+      : null;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -41,9 +53,9 @@ const Register = () => {
     setPasswordError(null);
 
     try {
-      await register({ name, email, password, role });
+      await register({ name, email, password, role: purchaseMode ? 'buyer' : role });
       toast.success('Registration successful. Please check your email to verify your account.');
-      navigate('/registration-success');
+      navigate(purchaseMode ? buyerRedirect ?? '/checkout' : '/registration-success');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to register. Please try again.';
       toast.error(message);
@@ -127,8 +139,8 @@ const Register = () => {
             </div>
 
             {/* Role Selection */}
-            <div className="grid grid-cols-2 gap-3 mb-7">
-              {ROLES.map(({ value, label, description }) => (
+            <div className={`grid gap-3 mb-7 ${purchaseMode ? 'grid-cols-1' : 'grid-cols-2'}`}>
+              {(purchaseMode ? ROLES.filter(({ value }) => value === 'buyer') : ROLES).map(({ value, label, description }) => (
                 <button
                   key={value}
                   type="button"
@@ -234,7 +246,11 @@ const Register = () => {
 
             <p className="mt-10 text-center text-sm text-secondary">
               Already have an account?{' '}
-              <Link className="text-primary font-bold hover:underline underline-offset-4 ml-1" to="/login">
+              <Link
+                className="text-primary font-bold hover:underline underline-offset-4 ml-1"
+                to={purchaseMode ? '/login-to-purchase' : '/login'}
+                state={purchaseMode ? location.state : undefined}
+              >
                 Sign In
               </Link>
             </p>
