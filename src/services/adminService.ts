@@ -18,6 +18,8 @@ export interface WalletTransactionFilters {
   user?: string;
   reference?: string;
   paymentStatus?: string;
+  inspector?: string;
+  inspectionRequest?: string;
 }
 
 export interface WalletTransactionsResponse {

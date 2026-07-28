@@ -5,11 +5,11 @@ import { useAsync } from '../../../hooks/useAsync';
 import { useProperties } from '../../../contexts/PropertiesContext';
 // import { inquiryService } from '../../../services/inquiryService';
 import { adminService } from '../../../services/adminService';
-import type { Property } from '../../../types';
+import type { AdminStats, Property } from '../../../types';
 
 // const barHeights = [30, 45, 40, 65, 50, 35, 60, 85, 45, 55, 70, 40, 30, 50, 95, 45, 60, 35, 75, 55];
 
-const emptyStats = {
+const emptyStats: AdminStats = {
   totalUsers: 0,
   totalProperties: 0,
   activeListings: 0,
@@ -152,6 +152,17 @@ const AdminDashboard = () => {
                 <StatCard title="Sold Properties" value={stats.soldProperties.toLocaleString()} icon="verified" />
                 <StatCard title="Total Inquiries" value={stats.totalInquiries.toLocaleString()} icon="mail" />
                 <StatCard title="Total Revenue" value={formatNGN(stats.totalRevenue)} icon="payments" />
+                <StatCard title="Verified Property Agents" value={(stats.totalProxyInspectors ?? 0).toLocaleString()} icon="engineering" />
+                <StatCard title="Pending Inspector Approvals" value={(stats.pendingProxyInspectorApprovals ?? 0).toLocaleString()} icon="pending_actions" />
+                <StatCard title="Approved Inspectors" value={(stats.approvedProxyInspectors ?? 0).toLocaleString()} icon="verified" />
+                <StatCard title="Suspended Inspectors" value={(stats.suspendedProxyInspectors ?? 0).toLocaleString()} icon="person_off" />
+                <StatCard title="Property Agent Requests" value={(stats.totalProxyInspectionRequests ?? 0).toLocaleString()} icon="fact_check" />
+                <StatCard title="Active Property Agent Jobs" value={(stats.activeProxyInspectionJobs ?? 0).toLocaleString()} icon="construction" />
+                <StatCard title="Completed Property Agent Jobs" value={(stats.completedProxyInspectionJobs ?? 0).toLocaleString()} icon="task_alt" />
+                <StatCard title="Disputed Property Agent Jobs" value={(stats.disputedProxyInspectionJobs ?? 0).toLocaleString()} icon="gavel" />
+                <StatCard title="Property Agent Gross Volume" value={formatNGN(stats.proxyInspectionGrossVolume ?? 0)} icon="account_balance" />
+                <StatCard title="Property Agent Network Revenue" value={formatNGN(stats.proxyInspectionRevenue ?? 0)} icon="paid" />
+                <StatCard title="Inspector Payout Total" value={formatNGN(stats.proxyInspectorPayoutTotal ?? 0)} icon="payments" />
               </>
             )}
           </section>

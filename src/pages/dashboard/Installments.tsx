@@ -849,7 +849,7 @@ const Installments = () => {
   const [listError, setListError] = useState<string | null>(null);
   const [propertyError, setPropertyError] = useState<string | null>(null);
 
-  const role = user?.role;
+  const role = user?.role === 'proxy_inspector' ? undefined : user?.role;
   const routeBase = role === 'admin' ? '/dashboard/admin/installments' : role === 'landlord' ? '/dashboard/landlord/installments' : '/dashboard/buyer/installments';
 
   const loadList = useCallback(async () => {

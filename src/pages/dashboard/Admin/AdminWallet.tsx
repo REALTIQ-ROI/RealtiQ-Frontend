@@ -34,6 +34,8 @@ const AdminWallet = () => {
     user: searchParams.get('user') || undefined,
     reference: searchParams.get('reference') || undefined,
     paymentStatus: searchParams.get('paymentStatus') || undefined,
+    inspector: searchParams.get('inspector') || undefined,
+    inspectionRequest: searchParams.get('inspectionRequest') || undefined,
   }), [searchParams]);
 
   const load = useCallback(async () => {
@@ -85,6 +87,7 @@ const AdminWallet = () => {
     ['Available revenue', summary.availableRevenue],
     ['Title-document views', summary.breakdown.titleDocumentViews],
     ['Tour payments', summary.breakdown.tourPayments],
+    ['Property Agent revenue', summary.breakdown.proxyInspectionRevenue ?? 0],
     ['Other platform revenue', summary.breakdown.other],
     ['Refunds', summary.breakdown.refunds],
   ] as const : [];
@@ -121,6 +124,7 @@ const AdminWallet = () => {
                   <option value="title_document_view">Title document view</option>
                   <option value="tour_payment">Tour payment</option>
                   <option value="platform_fee">Platform fee</option>
+                  <option value="proxy_inspection_commission">Property Agent commission</option>
                   <option value="other">Other</option>
                 </select>
                 <select aria-label="Transaction status" value={searchParams.get('status') ?? ''} onChange={(event) => updateFilter('status', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm">
@@ -136,6 +140,8 @@ const AdminWallet = () => {
                 <input aria-label="User filter" placeholder="User ID" value={searchParams.get('user') ?? ''} onChange={(event) => updateFilter('user', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
                 <input aria-label="Exact payment reference" placeholder="Exact payment reference" value={reference} onChange={(event) => setReference(event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
                 <input aria-label="Payment status" placeholder="Payment status" value={searchParams.get('paymentStatus') ?? ''} onChange={(event) => updateFilter('paymentStatus', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
+                <input aria-label="Inspector filter" placeholder="Inspector user ID" value={searchParams.get('inspector') ?? ''} onChange={(event) => updateFilter('inspector', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
+                <input aria-label="Inspection request filter" placeholder="Inspection request ID" value={searchParams.get('inspectionRequest') ?? ''} onChange={(event) => updateFilter('inspectionRequest', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
               </div>
               <div className="mt-5 overflow-x-auto">
                 <table className="w-full min-w-[1050px] text-left text-sm">
@@ -151,8 +157,8 @@ const AdminWallet = () => {
                         <td className="p-3 font-bold">{formatNaira(transaction.amount)}</td>
                         <td className="p-3 capitalize">{transaction.status}</td>
                         <td className="p-3 font-mono text-xs">{transaction.paymentReference || '—'}</td>
-                        <td className="p-3"><p>{transaction.property?.title || '—'}</p><p className="text-xs text-secondary">{transaction.document?.title || transaction.property?.publicReference || ''}</p></td>
-                        <td className="p-3">{transaction.user?.name || 'Guest'}</td>
+                        <td className="p-3"><p>{transaction.property?.title || (transaction.inspectionRequest ? `Property Agent job · ${transaction.inspectionRequest.status || 'job'}` : '—')}</p><p className="text-xs text-secondary">{transaction.document?.title || transaction.property?.publicReference || (transaction.inspectionRequest?.agreedPrice ? formatNaira(transaction.inspectionRequest.agreedPrice) : '')}</p></td>
+                        <td className="p-3">{transaction.user?.name || 'Guest'}{transaction.provider ? <p className="text-xs text-secondary">Inspector: {transaction.provider.name}</p> : null}</td>
                         <td className="p-3">{transaction.description || '—'}</td>
                       </tr>
                     ))}

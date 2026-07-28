@@ -16,6 +16,10 @@ const Dashboard = () => {
     return <Navigate to="/dashboard/landlord" replace />;
   }
 
+  if (user.role === 'proxy_inspector') {
+    return <Navigate to="/proxy/tasks" replace />;
+  }
+
   return <Navigate to="/dashboard/buyer" replace />;
 };
 

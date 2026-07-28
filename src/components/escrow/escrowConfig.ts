@@ -41,6 +41,7 @@ export const RULE_ACTOR_GUIDANCE: Record<EscrowRuleType, string> = {
 const permissions: Record<UserRole, EscrowRuleType[]> = {
   buyer: ['buyer_confirmation_required', 'inspection_completed'],
   landlord: ['seller_confirmation_required', 'physical_handover_completed'],
+  proxy_inspector: [],
   admin: ['admin_approval_required', 'document_verified', 'title_document_uploaded', 'custom_manual_condition', 'release_after_days'],
 };
 export const canSatisfyRule = (role: UserRole, escrow: Escrow, rule: EscrowRule) =>

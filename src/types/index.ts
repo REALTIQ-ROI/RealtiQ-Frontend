@@ -1,4 +1,4 @@
-﻿export type UserRole = 'buyer' | 'landlord' | 'admin';
+﻿export type UserRole = 'buyer' | 'landlord' | 'proxy_inspector' | 'admin';
 export type PropertyType = 'house' | 'apartment' | 'land' | 'commercial' | 'villa' | 'penthouse' | 'estate';
 export type PropertyStatus = 'available' | 'sold';
 export type PropertyPaymentType = 'outright' | 'installment' | 'escrow';
@@ -143,6 +143,17 @@ export interface AdminStats {
   soldProperties: number;
   totalInquiries: number;
   totalRevenue: number;
+  totalProxyInspectors?: number;
+  pendingProxyInspectorApprovals?: number;
+  approvedProxyInspectors?: number;
+  suspendedProxyInspectors?: number;
+  totalProxyInspectionRequests?: number;
+  activeProxyInspectionJobs?: number;
+  completedProxyInspectionJobs?: number;
+  disputedProxyInspectionJobs?: number;
+  proxyInspectionGrossVolume?: number;
+  proxyInspectionRevenue?: number;
+  proxyInspectorPayoutTotal?: number;
 }
 
 export interface Payment {
@@ -496,12 +507,13 @@ export interface WalletSummary {
   breakdown: {
     titleDocumentViews: number;
     tourPayments: number;
+    proxyInspectionRevenue?: number;
     other: number;
     refunds: number;
   };
 }
 
-export type WalletTransactionType = 'title_document_view' | 'tour_payment' | 'platform_fee' | 'other';
+export type WalletTransactionType = 'title_document_view' | 'tour_payment' | 'platform_fee' | 'proxy_inspection_commission' | 'other';
 export type WalletTransactionStatus = 'pending' | 'completed' | 'reversed' | 'refunded';
 
 export interface WalletTransaction {
@@ -513,6 +525,15 @@ export interface WalletTransaction {
   user?: { _id: string; name: string; email: string } | null;
   guestIdentity?: unknown;
   property?: { _id: string; title: string; publicReference?: string } | null;
+  provider?: { _id: string; name: string; email?: string } | null;
+  inspectionRequest?: { _id: string; status?: string; agreedPrice?: number } | null;
+  serviceEscrow?: {
+    _id: string;
+    status?: string;
+    grossAmount?: number;
+    platformFeeAmount?: number;
+    providerAmount?: number;
+  } | null;
   document?: {
     _id: string;
     title: string;

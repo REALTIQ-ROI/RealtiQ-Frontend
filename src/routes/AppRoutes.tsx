@@ -83,6 +83,16 @@ import KycManagement from '../pages/dashboard/Admin/KycManagement';
 import EscrowList from '../pages/dashboard/Escrow/EscrowList';
 import EscrowDetails from '../pages/dashboard/Escrow/EscrowDetails';
 import CreateEscrow from '../pages/dashboard/Escrow/CreateEscrow';
+import PublicInspectorDirectory from '../pages/proxyNetwork/PublicInspectorDirectory';
+import PublicInspectorProfile from '../pages/proxyNetwork/PublicInspectorProfile';
+import InspectorRegistration from '../pages/proxyNetwork/InspectorRegistration';
+import InspectorOnboarding from '../pages/proxyNetwork/InspectorOnboarding';
+import PayoutAccountSettings from '../pages/proxyNetwork/PayoutAccountSettings';
+import CreateProxyInspection from '../pages/proxyNetwork/CreateProxyInspection';
+import { BuyerProxyInspections, InspectorTasks, AdminProxyInspections } from '../pages/proxyNetwork/ProxyJobLists';
+import { BuyerProxyWorkspace, InspectorProxyWorkspace, AdminProxyWorkspace } from '../pages/proxyNetwork/ProxyWorkspaces';
+import ProxyPaymentReturn from '../pages/proxyNetwork/ProxyPaymentReturn';
+import { AdminInspectorDetailPage, AdminInspectorList } from '../pages/proxyNetwork/AdminInspectors';
 
 const AppRoutes = () => {
   return (
@@ -91,6 +101,9 @@ const AppRoutes = () => {
         <Route path="/" element={<Home />} />
 
         <Route path="/properties" element={<Listings />} />
+        <Route path="/proxy-inspectors" element={<PublicInspectorDirectory />} />
+        <Route path="/proxy-inspectors/register" element={<InspectorRegistration />} />
+        <Route path="/proxy-inspectors/:profileId" element={<PublicInspectorProfile />} />
 
         <Route path="/about-contact" element={<AboutAndContact />} />
         <Route path="/about" element={<About />} />
@@ -104,6 +117,7 @@ const AppRoutes = () => {
         <Route path="/payment-failed" element={<PaymentFailed />} />
         <Route path="/payment-success" element={<PaymentSucess />} />
         <Route path="/post-payment-redirect" element={<PostPaymentRedirect />} />
+        <Route path="/payments/verify" element={<ProxyPaymentReturn />} />
         <Route path="/redirecting" element={<Redirecting />} />
 
         <Route path="/tools/roi-calculator" element={<ROICalculatorPage />} />
@@ -139,6 +153,9 @@ const AppRoutes = () => {
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['buyer']} />}>
+          <Route path="/buyer/proxy-inspections" element={<BuyerProxyInspections />} />
+          <Route path="/buyer/proxy-inspections/new" element={<CreateProxyInspection />} />
+          <Route path="/buyer/proxy-inspections/:requestId" element={<BuyerProxyWorkspace />} />
           <Route path="/dashboard/buyer" element={<BuyerDashboard />} />
           <Route path="/dashboard/buyer/my-properties" element={<MyProperties />} />
           <Route path="/dashboard/buyer/tours" element={<Tours />} />
@@ -157,6 +174,13 @@ const AppRoutes = () => {
           <Route path="/dashboard/buyer/escrows/create/:propertyId" element={<CreateEscrow />} />
           <Route path="/dashboard/buyer/escrows/:id" element={<EscrowDetails />} />
           <Route path="/dashboard/roi-scenarios" element={<MyROIScenarios />} />
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={['proxy_inspector']} />}>
+          <Route path="/proxy-inspector/onboarding" element={<InspectorOnboarding />} />
+          <Route path="/proxy-inspector/payout-account" element={<PayoutAccountSettings />} />
+          <Route path="/proxy/tasks" element={<InspectorTasks />} />
+          <Route path="/proxy/tasks/:requestId" element={<InspectorProxyWorkspace />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['landlord']} />}>
@@ -184,6 +208,12 @@ const AppRoutes = () => {
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route path="/admin/proxy-inspectors" element={<AdminInspectorList />} />
+          <Route path="/admin/proxy-inspectors/:profileId" element={<AdminInspectorDetailPage />} />
+          <Route path="/admin/proxy-inspections" element={<AdminProxyInspections />} />
+          <Route path="/admin/proxy-inspections/:requestId" element={<AdminProxyWorkspace />} />
+          <Route path="/dashboard/admin/proxy-inspectors" element={<Navigate to="/admin/proxy-inspectors" replace />} />
+          <Route path="/dashboard/admin/proxy-inspections" element={<Navigate to="/admin/proxy-inspections" replace />} />
           <Route path="/dashboard/admin" element={<AdminDashboard />} />
           <Route path="/dashboard/admin/tours" element={<Tours />} />
           <Route path="/dashboard/admin/installments" element={<Installments />} />

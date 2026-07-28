@@ -1,19 +1,21 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import type { UserRole } from '../../types';
 
-type Role = Extract<UserRole, 'buyer' | 'landlord'>;
+type Role = Extract<UserRole, 'buyer' | 'landlord' | 'proxy_inspector'>;
 
 const ROLES: { value: Role; label: string }[] = [
   { value: 'buyer', label: 'Buyer' },
   { value: 'landlord', label: 'Landlord' },
+  { value: 'proxy_inspector', label: 'Verified Property Agent' },
 ];
 
 const DASHBOARD_PATHS: Record<Role, string> = {
   buyer: '/dashboard/buyer',
   landlord: '/dashboard/landlord',
+  proxy_inspector: '/proxy/tasks',
 };
 
 interface LoginProps {
@@ -23,8 +25,9 @@ interface LoginProps {
 const Login = ({ purchaseMode = false }: LoginProps) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { login, logout, isLoading } = useAuth();
-  const [role, setRole] = useState<Role>('buyer');
+  const [role, setRole] = useState<Role>(searchParams.get('role') === 'proxy_inspector' ? 'proxy_inspector' : 'buyer');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -49,7 +52,16 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
       }
 
       toast.success('Login successful');
-      navigate(purchaseMode ? buyerRedirect ?? '/checkout' : DASHBOARD_PATHS[user.role as Role] ?? '/dashboard');
+      const requested = (location.state as { redirectTo?: unknown } | null)?.redirectTo;
+      const safeRoleRedirect =
+        typeof requested === 'string' &&
+        requested.startsWith('/') &&
+        !requested.startsWith('//') &&
+        ((loginRole === 'buyer' && requested.startsWith('/buyer/proxy-inspections')) ||
+          (loginRole === 'proxy_inspector' && requested.startsWith('/proxy/')))
+          ? requested
+          : null;
+      navigate(purchaseMode ? buyerRedirect ?? '/checkout' : safeRoleRedirect ?? DASHBOARD_PATHS[user.role as Role] ?? '/dashboard');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to login. Please check your details.';
       toast.error(message);
@@ -194,10 +206,10 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
                 </div>
                 <div className="mt-2 text-right">
                   <Link
-                    to={`/forgot-password?role=${purchaseMode ? 'buyer' : role}&email=${encodeURIComponent(email)}`}
+                    to={role === 'proxy_inspector' ? '/contact' : `/forgot-password?role=${purchaseMode ? 'buyer' : role}&email=${encodeURIComponent(email)}`}
                     className="text-xs font-bold text-primary hover:underline uppercase tracking-wider"
                   >
-                    Forgot Password?
+                    {role === 'proxy_inspector' ? 'Need account help?' : 'Forgot Password?'}
                   </Link>
                 </div>
               </div>

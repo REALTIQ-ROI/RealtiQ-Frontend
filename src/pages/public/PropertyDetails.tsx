@@ -629,6 +629,20 @@ const PropertyDetails = () => {
                 </span>
               </div>
               <PaymentTypeBadges paymentTypes={paymentTypes} />
+              {property.status === 'available' && (!property.approvalStatus || property.approvalStatus === 'approved') ? (
+                user?.role === 'landlord' || user?.role === 'admin' || user?.role === 'proxy_inspector' ? null : (
+                  <Button
+                    fullWidth
+                    variant="secondary"
+                    onClick={() => {
+                      const path = `/proxy-inspectors?propertyId=${encodeURIComponent(property._id)}`;
+                      navigate(path);
+                    }}
+                  >
+                    Hire a RealtiQ Verified Property Agent
+                  </Button>
+                )
+              ) : null}
 
               {!canPurchase ? (
                 <p className="rounded-lg bg-surface-container-low p-3 text-center text-sm text-secondary">

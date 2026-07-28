@@ -9,6 +9,7 @@ const VerifyEmail = () => {
   const { token: pathToken } = useParams<{ token: string }>();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? pathToken;
+  const proxyInspectorVerification = searchParams.get('role') === 'proxy_inspector';
   const navigate = useNavigate();
   const [status, setStatus] = useState<Status>(token ? 'loading' : 'error');
   const [message, setMessage] = useState(token ? '' : 'Invalid verification link. No token provided.');
@@ -47,7 +48,7 @@ const VerifyEmail = () => {
       setCountdown((c) => {
         if (c <= 1) {
           clearInterval(interval);
-          navigate('/login', { replace: true });
+          navigate(proxyInspectorVerification ? '/login?role=proxy_inspector' : '/login', { replace: true });
           return 0;
         }
         return c - 1;
@@ -55,7 +56,7 @@ const VerifyEmail = () => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [status, navigate]);
+  }, [status, navigate, proxyInspectorVerification]);
 
   if (status === 'loading') return <AuthLoader />;
 
@@ -91,7 +92,7 @@ const VerifyEmail = () => {
               Redirecting to login in {countdown}s…
             </p>
             <Link
-              to="/login"
+              to={proxyInspectorVerification ? '/login?role=proxy_inspector' : '/login'}
               className="inline-block w-full py-4 rounded-xl text-white font-bold text-sm tracking-tight hover:opacity-90 transition-opacity"
               style={{ background: 'linear-gradient(135deg, #000000 0%, #111c2d 100%)' }}
             >

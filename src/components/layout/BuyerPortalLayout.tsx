@@ -14,6 +14,7 @@ interface BuyerPortalLayoutProps {
 const navItems = [
   { to: '/dashboard/buyer', icon: 'dashboard', label: 'Overview' },
   { to: '/dashboard/buyer/my-properties', icon: 'domain', label: 'My Properties' },
+  { to: '/buyer/proxy-inspections', icon: 'fact_check', label: 'Proxy Inspections' },
   { to: '/dashboard/buyer/tours', icon: 'tour', label: 'Tours' },
   { to: '/dashboard/buyer/installments', icon: 'schedule', label: 'Installments' },
   { to: '/dashboard/buyer/payment-history', icon: 'payments', label: 'Payment History' },

@@ -2,7 +2,7 @@
 import { useAuth } from '../contexts/AuthContext';
 
 interface ProtectedRouteProps {
-  allowedRoles?: Array<'buyer' | 'landlord' | 'admin'>;
+  allowedRoles?: Array<'buyer' | 'landlord' | 'proxy_inspector' | 'admin'>;
 }
 
 const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {

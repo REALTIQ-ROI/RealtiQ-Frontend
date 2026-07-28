@@ -15,6 +15,8 @@ const navLinks = [
   { to: '/dashboard/admin/manage-users', label: 'Manage Users', icon: 'group' },
   { to: '/dashboard/admin/manage-inquiries', label: 'Inquiries', icon: 'mail' },
   { to: '/dashboard/admin/manage-payments', label: 'Payments', icon: 'payments' },
+  { to: '/admin/proxy-inspectors', label: 'Verified Property Agents', icon: 'engineering' },
+  { to: '/admin/proxy-inspections', label: 'Verified Property Agent Jobs', icon: 'fact_check' },
   { to: '/dashboard/admin/wallet', label: 'Platform Ledger', icon: 'account_balance_wallet' },
   { to: '/dashboard/admin/escrows', label: 'Escrow Management', icon: 'shield_lock' },
   { to: '/dashboard/admin/escrow-disputes', label: 'Escrow Disputes', icon: 'gavel' },

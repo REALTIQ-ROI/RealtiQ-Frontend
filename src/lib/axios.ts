@@ -46,10 +46,9 @@ api.interceptors.response.use(
     }
 
     const status = error.response.status;
-    if (status >= 500) {
-      return Promise.reject(new ApiRequestError('Something went wrong. Please try again later.', { status }));
+    if (status === 401) {
+      window.dispatchEvent(new Event('realtiq:session-expired'));
     }
-
     const responseData = error.response.data;
     const message =
       typeof responseData === 'object' && responseData !== null && 'message' in responseData
@@ -69,6 +68,22 @@ api.interceptors.response.use(
         reconciliationRequired: details.reconciliationRequired,
         fieldErrors: details.errors,
       }));
+    }
+
+    if (status >= 500) {
+      return Promise.reject(new ApiRequestError(
+        status === 502
+          ? 'The provider response is uncertain. Refresh the latest status before retrying.'
+          : 'Something went wrong. Please try again later.',
+        { status },
+      ));
+    }
+
+    if (status === 403) {
+      return Promise.reject(new ApiRequestError('You do not have access to perform this action.', { status }));
+    }
+    if (status === 413) {
+      return Promise.reject(new ApiRequestError('The selected file is larger than the server allows. Choose a smaller file and try again.', { status }));
     }
 
     const validationErrors =

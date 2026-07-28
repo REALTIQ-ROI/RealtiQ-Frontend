@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { authService } from '../services/authService';
 import { userService } from '../services/userService';
 import type { LoginPayload, RegisterPayload, User } from '../types';
@@ -89,6 +89,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     setToken(null);
   };
+
+  useEffect(() => {
+    const expire = () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setUser(null);
+      setToken(null);
+    };
+    window.addEventListener('realtiq:session-expired', expire);
+    return () => window.removeEventListener('realtiq:session-expired', expire);
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
