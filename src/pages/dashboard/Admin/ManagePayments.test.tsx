@@ -84,7 +84,12 @@ describe('ManagePayments', () => {
         createdAt: '2026-07-24T09:00:00.000Z',
       },
     ]);
-    vi.mocked(Swal.fire).mockResolvedValue({ isConfirmed: true, value: 'Duplicate pending hold' });
+    vi.mocked(Swal.fire).mockResolvedValue({
+      isConfirmed: true,
+      isDenied: false,
+      isDismissed: false,
+      value: 'Duplicate pending hold',
+    });
     vi.mocked(paymentService.cancelPayment).mockResolvedValue({
       message: 'Payment canceled successfully.',
       alreadyCanceled: false,

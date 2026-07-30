@@ -600,7 +600,6 @@ const ReportPanel = ({
   report,
   editable,
   requestedServices,
-  busy = false,
   onLocalDraftSaved,
 }: {
   id: string;

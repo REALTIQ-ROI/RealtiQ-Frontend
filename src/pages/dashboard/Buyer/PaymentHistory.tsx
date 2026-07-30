@@ -25,6 +25,7 @@ const statusBadge = (status: ApiPayment['status']) => {
     paid: 'bg-green-100 text-green-700',
     pending: 'bg-amber-100 text-amber-700',
     failed: 'bg-red-100 text-red-700',
+    canceled: 'bg-slate-100 text-slate-700',
   };
 
   return (
@@ -34,7 +35,7 @@ const statusBadge = (status: ApiPayment['status']) => {
   );
 };
 
-type FilterTab = 'all' | 'paid' | 'pending' | 'failed';
+type FilterTab = 'all' | 'paid' | 'pending' | 'failed' | 'canceled';
 
 const PaymentHistory = () => {
   const navigate = useNavigate();

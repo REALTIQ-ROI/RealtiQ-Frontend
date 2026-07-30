@@ -26,6 +26,7 @@ const statusBadge = (status: ApiPayment['status']) => {
     paid: 'bg-green-100 text-green-700',
     pending: 'bg-amber-100 text-amber-700',
     failed: 'bg-red-100 text-red-700',
+    canceled: 'bg-slate-100 text-slate-700',
   };
   return <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold capitalize ${cfg[status]}`}>{status}</span>;
 };

@@ -27,14 +27,16 @@ vi.mock('../../services/proxyNetworkService', () => ({
 }));
 
 describe('PayoutAccountSettings', () => {
-  const reload = vi.fn();
+  const reload = vi.fn().mockResolvedValue(null);
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useProxyResource).mockReturnValue({
       data: null,
       loading: false,
+      refreshing: false,
       error: null,
+      status: undefined,
       reload,
     });
   });
