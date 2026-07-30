@@ -86,6 +86,16 @@ export interface Property {
   titleVerificationLookupId?: string | null;
   titleDocumentReferences?: TitleDocumentReference[];
   owner?: PropertyOwner;
+  previousPrice?: number;
+  priceLastChangedAt?: string;
+  priceChangePercentage?: number;
+  priceChangeDirection?: 'increase' | 'decrease' | 'unchanged' | string;
+  marketActivity?: {
+    metric: 'market_interest' | 'views' | 'saves' | 'inquiries' | 'purchases' | string;
+    level: 'low' | 'medium' | 'high' | 'very_high' | string;
+    score: number;
+    periodDays: number;
+  };
 }
 
 export const propertyPublicReference = (property?: Pick<Property, 'publicReference' | '_id'> | null): string =>
@@ -210,9 +220,12 @@ export interface VerifyPaymentResponse {
   verified: boolean;
   payment: {
     _id: string;
-    status: 'pending' | 'paid' | 'failed';
+    user?: string;
+    property?: string | null;
+    status: 'pending' | 'paid' | 'failed' | 'canceled';
     reference: string;
     purpose?: string;
+    fulfilledAt?: string;
     amount?: number;
     metadata?: {
       paymentPurpose?: string;
@@ -253,6 +266,15 @@ export interface PropertyFilters {
   currency?: PropertyCurrency;
   featured?: boolean;
   status?: PropertyStatus;
+  north?: number;
+  south?: number;
+  east?: number;
+  west?: number;
+  zoom?: number;
+  verified?: boolean;
+  activityMetric?: 'market_interest' | 'views' | 'saves' | 'inquiries' | 'purchases';
+  activityLevel?: 'low' | 'medium' | 'high' | 'very_high';
+  activityPeriod?: '7d' | '30d' | '90d';
   page?: number;
   limit?: number;
 }

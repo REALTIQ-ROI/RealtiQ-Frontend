@@ -71,9 +71,6 @@ const ManageProperties = () => {
       return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
     });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-  const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
-
   const handleFilterChange = (f: FilterType) => {
     setActiveFilter(f);
     setPage(1);
@@ -191,7 +188,10 @@ const ManageProperties = () => {
             </>
           )}
         >
-        {/* Table */}
+        {(visibleProperties) => {
+          const totalPages = Math.max(1, Math.ceil(visibleProperties.length / ITEMS_PER_PAGE));
+          const paginated = visibleProperties.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+          return (
         <div className="bg-surface-container-low rounded-xl overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -208,7 +208,7 @@ const ManageProperties = () => {
               {paginated.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-10 text-center text-secondary text-sm">
-                    No properties found.
+                    {filtered.length ? 'No properties are visible in the current map view.' : 'No properties found.'}
                   </td>
                 </tr>
               ) : (
@@ -300,7 +300,7 @@ const ManageProperties = () => {
           <div className="px-6 py-4 bg-surface-container flex items-center justify-between border-t border-surface-variant/20">
             <p className="text-xs text-secondary font-medium">
               Showing {filtered.length === 0 ? 0 : (page - 1) * ITEMS_PER_PAGE + 1} to{' '}
-              {Math.min(page * ITEMS_PER_PAGE, filtered.length)} of {filtered.length} properties
+              {Math.min(page * ITEMS_PER_PAGE, visibleProperties.length)} of {visibleProperties.length} visible properties
             </p>
             <div className="flex items-center gap-1">
               <button
@@ -348,6 +348,8 @@ const ManageProperties = () => {
             </div>
           </div>
         </div>
+          );
+        }}
         </MapListLayout>
 
         {/* Bento Info Cards */}

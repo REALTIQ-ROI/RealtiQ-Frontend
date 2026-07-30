@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import InquiryForm from '../../components/forms/InquiryForm';
 import PropertyGallery from '../../components/property/PropertyGallery';
 import PropertyMeta from '../../components/property/PropertyMeta';
+import PriceHistorySection from '../../components/property/PriceHistorySection';
 import PaymentTypeBadges from '../../components/property/PaymentTypeBadges';
 import TitleVerificationBadge from '../../components/title/TitleVerificationBadge';
 import PublicTitleDocuments from '../../components/title/PublicTitleDocuments';
@@ -377,6 +378,8 @@ const PropertyDetails = () => {
               <h2 className="text-2xl font-bold mb-3">Description</h2>
               <p className="text-on-surface-variant leading-relaxed">{property.description}</p>
             </div>
+
+            <PriceHistorySection propertyId={propertyReference} />
 
             {property.amenities?.length ? (
               <div>

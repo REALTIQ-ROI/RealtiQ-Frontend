@@ -9,6 +9,7 @@ interface Props {
   detailsPath: (property: Property) => string;
   actions?: (property: Property) => ReactNode;
   className?: string;
+  onVisiblePropertiesChange?: (properties: Property[]) => void;
 }
 
 const isMappable = (property: Property) => {
@@ -25,7 +26,7 @@ const priceLabel = (price: number) => {
   return `₦${price}`;
 };
 
-const PropertyMap = ({ properties, detailsPath, actions, className = '' }: Props) => {
+const PropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -79,6 +80,21 @@ const PropertyMap = ({ properties, detailsPath, actions, className = '' }: Props
     });
     if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
   }, [mappable]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !onVisiblePropertiesChange) return;
+    const updateVisible = () => {
+      const bounds = map.getBounds();
+      onVisiblePropertiesChange(mappable.filter((property) => bounds.contains([property.coordinates!.lat, property.coordinates!.lng])));
+    };
+    const timer = window.setTimeout(updateVisible, 0);
+    map.on('moveend zoomend', updateVisible);
+    return () => {
+      window.clearTimeout(timer);
+      map.off('moveend zoomend', updateVisible);
+    };
+  }, [mappable, onVisiblePropertiesChange]);
 
   return (
     <section className={`relative min-h-[55vh] overflow-hidden rounded-xl bg-surface-container-low sm:min-h-[420px] ${className}`} aria-label="Property map">

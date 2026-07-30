@@ -213,6 +213,7 @@ const LandlordMyProperties = () => {
             </>
           )}
         >
+        {(visibleProperties) => (
         <div className="bg-white rounded-xl overflow-x-auto">
           {viewMode === 'list' ? (
             <table className="w-full text-left border-collapse">
@@ -226,14 +227,14 @@ const LandlordMyProperties = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-container">
-                {myProperties.length === 0 ? (
+                {visibleProperties.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-16 text-center text-secondary text-sm">
-                      No properties match the current filters.
+                      {myProperties.length ? 'No properties are visible in the current map view.' : 'No properties match the current filters.'}
                     </td>
                   </tr>
                 ) : (
-                  myProperties.map((property) => {
+                  visibleProperties.map((property) => {
                     const cfg = statusConfig[property.status] ?? statusConfig.available;
                     return (
                       <tr key={propertyRouteReference(property)} className="group hover:bg-surface-bright transition-colors">
@@ -303,12 +304,12 @@ const LandlordMyProperties = () => {
             </table>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 p-6">
-              {myProperties.length === 0 ? (
+              {visibleProperties.length === 0 ? (
                 <div className="md:col-span-2 xl:col-span-3 py-16 text-center text-secondary text-sm">
-                  No properties match the current filters.
+                  {myProperties.length ? 'No properties are visible in the current map view.' : 'No properties match the current filters.'}
                 </div>
               ) : (
-                myProperties.map((property) => {
+                visibleProperties.map((property) => {
                   const cfg = statusConfig[property.status] ?? statusConfig.available;
                   return (
                     <div key={propertyRouteReference(property)} className="group bg-surface-container-lowest rounded-xl overflow-hidden">
@@ -366,7 +367,7 @@ const LandlordMyProperties = () => {
 
           <div className="px-6 py-6 border-t border-surface-container flex items-center justify-between">
             <p className="text-xs text-secondary font-medium">
-              Showing <span className="text-primary font-bold">1 to {Math.min(myProperties.length, 4)}</span> of {myProperties.length} properties
+              Showing <span className="text-primary font-bold">1 to {Math.min(visibleProperties.length, 4)}</span> of {visibleProperties.length} visible properties
             </p>
             <div className="flex items-center gap-1">
               <button className="p-2 text-slate-400 hover:text-primary transition-colors disabled:opacity-50" disabled type="button">
@@ -387,6 +388,7 @@ const LandlordMyProperties = () => {
             </div>
           </div>
         </div>
+        )}
         </MapListLayout>
       </main>
 

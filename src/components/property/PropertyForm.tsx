@@ -71,6 +71,7 @@ const validate = (data: CreatePropertyPayload & { status?: string }): Record<str
   const errs: Record<string, string> = {};
   if (!data.title.trim()) errs.title = 'Title is required';
   if (!data.price || data.price <= 0) errs.price = 'Price must be greater than 0';
+  if (!Number.isFinite(data.price)) errs.price = 'Price must be a valid number';
   if (!data.location.trim()) errs.location = 'Location is required';
   if (!data.propertyType) errs.propertyType = 'Property type is required';
   if (data.propertyType !== 'land') {
@@ -84,6 +85,17 @@ const validate = (data: CreatePropertyPayload & { status?: string }): Record<str
   if (!data.category) errs.category = 'Category is required';
   if (!data.currency) errs.currency = 'Currency is required';
   if (!data.paymentTypes.length) errs.paymentTypes = 'Select at least one property payment type';
+  if (data.coordinates) {
+    if (!Number.isFinite(data.coordinates.lat) || data.coordinates.lat < -90 || data.coordinates.lat > 90) {
+      errs.coordinatesLat = 'Latitude must be between -90 and 90';
+    }
+    if (!Number.isFinite(data.coordinates.lng) || data.coordinates.lng < -180 || data.coordinates.lng > 180) {
+      errs.coordinatesLng = 'Longitude must be between -180 and 180';
+    }
+  }
+  if (data.priceChangeReason && data.priceChangeReason.length > 500) {
+    errs.priceChangeReason = 'Reason must be 500 characters or fewer';
+  }
   return errs;
 };
 
@@ -107,6 +119,7 @@ const PropertyForm = ({
   const [currency, setCurrency] = useState(initialData?.currency ?? 'NGN');
   const [coordinatesLat, setCoordinatesLat] = useState(initialData?.coordinates?.lat?.toString() ?? '');
   const [coordinatesLng, setCoordinatesLng] = useState(initialData?.coordinates?.lng?.toString() ?? '');
+  const [priceChangeReason, setPriceChangeReason] = useState('');
   const [amenities, setAmenities] = useState<string[]>(initialData?.amenities ?? []);
   const [amenityInput, setAmenityInput] = useState('');
   const [media, setMedia] = useState<MediaItem[]>(initialData?.media ?? []);
@@ -127,6 +140,8 @@ const PropertyForm = ({
   const propertyTypeOptions =
     mode === 'edit' && propertyType === 'land' ? ['land', ...PROPERTY_TYPES] : PROPERTY_TYPES;
   const parsedPrice = Number(price) || 0;
+  const initialPrice = Number(initialData?.price ?? 0);
+  const priceChanged = mode === 'edit' && Number.isFinite(parsedPrice) && initialPrice > 0 && parsedPrice !== initialPrice;
   const installmentForced = parsedPrice > INSTALLMENT_THRESHOLD_NGN;
 
   useEffect(() => {
@@ -174,6 +189,8 @@ const PropertyForm = ({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const latProvided = coordinatesLat.trim() !== '';
+    const lngProvided = coordinatesLng.trim() !== '';
     const basePayload: CreatePropertyPayload & { status?: string } = {
       title: title.trim(),
       price: Number(price),
@@ -187,7 +204,7 @@ const PropertyForm = ({
       category,
       currency,
       coordinates:
-        coordinatesLat && coordinatesLng
+        latProvided && lngProvided
           ? { lat: Number(coordinatesLat), lng: Number(coordinatesLng) }
           : undefined,
       ...(!isLandProperty && {
@@ -196,7 +213,15 @@ const PropertyForm = ({
         completionStage,
       }),
       ...(mode === 'edit' && { status }),
+      ...(priceChanged && priceChangeReason.trim() ? { priceChangeReason: priceChangeReason.trim().slice(0, 500) } : {}),
     };
+    if (latProvided !== lngProvided) {
+      setErrors({
+        coordinatesLat: latProvided ? '' : 'Latitude is required when longitude is provided',
+        coordinatesLng: lngProvided ? '' : 'Longitude is required when latitude is provided',
+      });
+      return;
+    }
     const errs = validate(basePayload);
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
@@ -357,6 +382,22 @@ const PropertyForm = ({
             {errors.price && <p className={errorClass}>{errors.price}</p>}
           </div>
 
+          {priceChanged ? (
+            <div>
+              <label className={labelClass}>Reason for price change</label>
+              <textarea
+                value={priceChangeReason}
+                onChange={(e) => setPriceChangeReason(e.target.value.slice(0, 500))}
+                rows={3}
+                maxLength={500}
+                placeholder="Optional note for the price-history record"
+                className={`${inputClass} resize-none`}
+              />
+              <p className="mt-1 text-xs text-secondary">{priceChangeReason.length}/500 characters</p>
+              {errors.priceChangeReason && <p className={errorClass}>{errors.priceChangeReason}</p>}
+            </div>
+          ) : null}
+
           <div>
             <label className={labelClass}>Currency</label>
             <select value={currency} onChange={(e) => setCurrency(e.target.value)} className={inputClass}>
@@ -434,6 +475,7 @@ const PropertyForm = ({
               placeholder="6.45"
               className={inputClass}
             />
+            {errors.coordinatesLat && <p className={errorClass}>{errors.coordinatesLat}</p>}
           </div>
 
           <div>
@@ -446,6 +488,7 @@ const PropertyForm = ({
               placeholder="3.39"
               className={inputClass}
             />
+            {errors.coordinatesLng && <p className={errorClass}>{errors.coordinatesLng}</p>}
           </div>
 
           {mode === 'edit' && (

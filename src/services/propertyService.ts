@@ -46,6 +46,7 @@ export interface CreatePropertyPayload {
   coordinates?: PropertyCoordinates | null;
   status?: PropertyStatus;
   titleDocuments?: TitleDocumentUploadMetadata[];
+  priceChangeReason?: string;
 }
 
 export interface UpdatePropertyPayload extends Partial<CreatePropertyPayload> {
@@ -99,6 +100,102 @@ export interface PropertyViewResponse {
   views?: number;
 }
 
+export interface PropertyMapBounds {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+  zoom: number;
+}
+
+export interface PropertyMapFilters extends PropertyMapBounds {
+  propertyType?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  bedrooms?: number;
+  bathrooms?: number;
+  status?: string;
+  verified?: boolean;
+  activityMetric?: 'market_interest' | 'views' | 'saves' | 'inquiries' | 'purchases';
+  activityLevel?: 'low' | 'medium' | 'high' | 'very_high';
+  activityPeriod?: '7d' | '30d' | '90d';
+  page?: number;
+  limit?: number;
+}
+
+export interface PropertyMapCluster {
+  clusterId: string;
+  lat: number;
+  lng: number;
+  propertyCount: number;
+  minimumPrice: number;
+  maximumPrice: number;
+  averagePrice: number;
+}
+
+export type PropertyMapResponse =
+  | (PropertyMapBounds & {
+      mode: 'clusters';
+      bounds: PropertyMapBounds;
+      total: number;
+      clusters: PropertyMapCluster[];
+    })
+  | (PropertyMapBounds & {
+      mode: 'properties';
+      bounds: PropertyMapBounds;
+      total: number;
+      returned: number;
+      truncated?: boolean;
+      page: number;
+      limit: number;
+      properties: Property[];
+    });
+
+export interface PropertyPriceHistoryItem {
+  _id: string;
+  property: string;
+  previousPrice: number;
+  newPrice: number;
+  currency: string;
+  absoluteChange: number;
+  percentageChange: number;
+  changeType: 'increase' | 'decrease' | 'unchanged' | string;
+  reason?: string;
+  source?: string;
+  effectiveAt: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface PropertyPriceHistoryResponse {
+  property: {
+    id: string;
+    publicReference?: string | null;
+    title: string;
+    currentPrice: number;
+    currency: string;
+  };
+  summary: {
+    initialPrice: number;
+    currentPrice: number;
+    absoluteChange: number;
+    percentageChange: number;
+    highestPrice: number;
+    lowestPrice: number;
+    numberOfChanges: number;
+  };
+  history: PropertyPriceHistoryItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface PropertyPriceHistoryChartResponse {
+  propertyId: string;
+  currency: string;
+  series: Array<{ date: string; price: number }>;
+}
+
 export interface PropertyOwnerDetailResponse {
   property: Property;
   titleDocuments?: TitleDocumentRecord[];
@@ -131,6 +228,14 @@ export const propertyService = {
   async getProperties(filters?: PropertyFiltersQuery): Promise<PropertiesResponse> {
     const { data } = await api.get<PropertiesResponse>('/properties', { params: filters });
     return normalizePropertiesResponse(data);
+  },
+
+  async getMapProperties(filters: PropertyMapFilters, signal?: AbortSignal): Promise<PropertyMapResponse> {
+    const { data } = await api.get<PropertyMapResponse>('/properties/map', { params: filters, signal });
+    if (data.mode === 'properties') {
+      return { ...data, properties: data.properties.map(normalizeProperty) };
+    }
+    return data;
   },
 
   async listPublicProperties(filters?: PropertyFiltersQuery): Promise<PropertiesResponse> {
@@ -233,6 +338,22 @@ export const propertyService = {
       ...property,
       paymentTypes: normalizePropertyPaymentTypes(property.paymentTypes, 0),
     }));
+  },
+
+  async getPriceHistory(
+    id: string,
+    params?: { page?: number; limit?: number; startDate?: string; endDate?: string; sort?: 'asc' | 'desc' },
+  ): Promise<PropertyPriceHistoryResponse> {
+    const { data } = await api.get<PropertyPriceHistoryResponse>(`/properties/${id}/price-history`, { params });
+    return data;
+  },
+
+  async getPriceHistoryChart(
+    id: string,
+    params?: { startDate?: string; endDate?: string },
+  ): Promise<PropertyPriceHistoryChartResponse> {
+    const { data } = await api.get<PropertyPriceHistoryChartResponse>(`/properties/${id}/price-history/chart`, { params });
+    return data;
   },
 
   async uploadMedia(files: File[], onProgress?: (percent: number) => void): Promise<MediaUploadResponse> {

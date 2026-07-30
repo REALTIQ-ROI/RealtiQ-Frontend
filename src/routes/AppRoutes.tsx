@@ -16,6 +16,7 @@ import PostPaymentRedirect from '../pages/public/PostPaymentRedirect';
 import Redirecting from '../pages/public/Redirecting';
 import Listings from '../pages/public/Listings';
 import PropertyDetails from '../pages/public/PropertyDetails';
+import PropertyPriceHistory from '../pages/public/PropertyPriceHistory';
 import TitleVerificationRegistry from '../pages/public/TitleVerificationRegistry';
 import TitleRegistrySnapshots from '../pages/public/TitleRegistrySnapshots';
 import ProtectedTitleViewer from '../pages/public/ProtectedTitleViewer';
@@ -93,6 +94,7 @@ import { BuyerProxyInspections, InspectorTasks, AdminProxyInspections } from '..
 import { BuyerProxyWorkspace, InspectorProxyWorkspace, AdminProxyWorkspace } from '../pages/proxyNetwork/ProxyWorkspaces';
 import ProxyPaymentReturn from '../pages/proxyNetwork/ProxyPaymentReturn';
 import { AdminInspectorDetailPage, AdminInspectorList } from '../pages/proxyNetwork/AdminInspectors';
+import PropertyMarketAnalytics from '../pages/analytics/PropertyMarketAnalytics';
 
 const AppRoutes = () => {
   return (
@@ -143,6 +145,7 @@ const AppRoutes = () => {
         <Route path="/auth/landlord/register" element={<LandlordRegistration />} />
 
         <Route path="/properties/:id" element={<PropertyDetails />} />
+        <Route path="/properties/:id/price-history" element={<PropertyPriceHistory />} />
         <Route path="/title-verification/:publicVerificationId" element={<TitleVerificationRegistry />} />
         <Route path="/title-registry/snapshots" element={<TitleRegistrySnapshots />} />
         <Route path="/protected-title-viewer" element={<ProtectedTitleViewer />} />
@@ -150,6 +153,9 @@ const AppRoutes = () => {
 
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/analytics/property-market" element={<PropertyMarketAnalytics />} />
+          <Route path="/analytics/property-market/access" element={<PropertyMarketAnalytics />} />
+          <Route path="/analytics/property-market/payment-return" element={<ProxyPaymentReturn />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['buyer']} />}>

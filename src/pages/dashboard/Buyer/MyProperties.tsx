@@ -32,7 +32,6 @@ const MyProperties = () => {
     });
   }, [category, ownedProperties, query]);
 
-  const paginated = myProperties.slice((page - 1) * itemsPerPage, page * itemsPerPage);
   const totalValue = myProperties.reduce((sum, item) => sum + item.price, 0);
 
   const topbarSearch = (
@@ -91,6 +90,9 @@ const MyProperties = () => {
       </section>
 
       <MapListLayout properties={myProperties} detailsPath={(property) => `/dashboard/buyer/property-details/${propertyRouteReference(property)}`}>
+      {(visibleProperties) => {
+        const paginated = visibleProperties.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+        return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {paginated.map((property) => (
           <div key={property._id} className="group flex flex-col bg-surface-container-lowest rounded-xl overflow-hidden hover:translate-y-[-4px] transition-all duration-300">
@@ -135,11 +137,11 @@ const MyProperties = () => {
           </div>
         ))}
 
-        {myProperties.length === 0 ? (
+        {visibleProperties.length === 0 ? (
           <div className="md:col-span-2 lg:col-span-3 bg-surface-container-lowest rounded-xl p-12 text-center text-secondary">
             <span className="material-symbols-outlined text-6xl opacity-30 mb-4 block">domain_disabled</span>
-            <p className="font-bold text-primary">No purchased properties found</p>
-            <p className="text-sm mt-1">Browse available listings to start your portfolio.</p>
+            <p className="font-bold text-primary">{myProperties.length ? 'No properties in this map view' : 'No purchased properties found'}</p>
+            <p className="text-sm mt-1">{myProperties.length ? 'Move or zoom the map to update the visible list.' : 'Browse available listings to start your portfolio.'}</p>
           </div>
         ) : null}
 
@@ -155,6 +157,8 @@ const MyProperties = () => {
           <span className="mt-6 text-xs font-bold text-primary underline underline-offset-4 tracking-wider uppercase">Explore New Listings</span>
         </Link>
       </div>
+        );
+      }}
       </MapListLayout>
 
       <footer className="mt-20 flex flex-col md:flex-row items-center justify-between border-t border-outline-variant/20 pt-10">

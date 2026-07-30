@@ -1,0 +1,90 @@
+RealtiQ Frontend Features
+
+Public property browsing
+- Users can browse live property listings from the backend with pagination and filters such as search, price, type, bedrooms, status, category, stage, currency, and featured state.
+- Property cards show media, price, location, metadata, title-document status, payment options, and view details links.
+- The property list includes an embedded map and fullscreen map. The list updates to show only properties visible in the current map view after zooming or moving the map.
+- A Market Analytics button appears above the fullscreen map button. Logged-out users see a login-required modal; logged-in users are routed to analytics.
+
+Property detail
+- Public property details load from the backend using Mongo ID or public reference.
+- The page shows gallery, title verification badge/documents, description, amenities, nearby properties, location map, inquiry form, save action, tour request, installment options, escrow option, outright purchase, and ROI link.
+- Authenticated detail views call the existing property view endpoint once for tracking.
+
+Property price history
+- Property detail includes a price-history section.
+- A standalone route also exists at /properties/:id/price-history.
+- The flow loads public price-history table data and chart data from the backend, showing initial/current price, total change, percentage change, high/low price, and each recorded change.
+
+Property creation and editing
+- Verified landlords can create properties with details, media, amenities, coordinates, payment options, and optional private title documents.
+- Property edits support status changes and price updates.
+- When editing a property price, an optional “Reason for price change” field is shown and sent as priceChangeReason.
+- Coordinates are validated client-side before submit: latitude must be -90 to 90 and longitude must be -180 to 180.
+
+Buyer dashboard
+- Buyers can view dashboard summary, owned properties, tours, installments, payment history/details, inquiry history/details, escrow list/details, ROI scenarios, profile settings, and proxy inspection jobs.
+- Buyer-owned property maps also filter the displayed list based on the current map viewport.
+
+Landlord dashboard
+- Landlords can manage their property portfolio, add/edit listings, view inquiries, tours, installments, payment history, escrows, verification, title verification submissions, and settings.
+- Landlord property maps also filter the list/table based on the current map viewport.
+
+Admin dashboard
+- Admins can manage users, landlords, properties, listing approvals, payments, inquiries, KYC, title reviews, featured listings, platform wallet, escrows, escrow disputes, ROI assumptions, proxy inspectors, and proxy inspection jobs.
+- Admin property maps also filter the visible table based on the current map viewport.
+- Admin payment screens support verifying payments and canceling pending/failed payments while preserving canceled records for audit history.
+
+Payments
+- Property purchase, title-document access, installment, escrow, proxy inspection, and analytics access payments use backend initialization flows and Paystack redirect URLs.
+- Payment verification uses the backend /payments/verify/:reference endpoint.
+- The payment return flow branches by payment purpose. property_market_analytics payments refresh analytics access after verification and route back to the analytics dashboard.
+
+Property Market Analytics
+- Analytics is available at /analytics/property-market behind the existing protected route.
+- On page load, the frontend checks /analytics/access/status. If access is missing, it shows a paywall/unlock state.
+- Unlocking analytics calls /analytics/access/initialize-payment and redirects to Paystack.
+- With active access, the page loads market summary, aggregate heatmap points, and price trends from the analytics backend.
+- Filters include metric, period, date range, property type, and location.
+- The analytics map fits to properties matching the selected filters when coordinates are available, with aggregate heatmap data rendered as a blended canvas layer and property dots shown separately.
+- Most active areas show backend-provided area/place names when available, then nearest matching property location, then a generic activity-area label.
+- The frontend does not expose raw user-level analytics, user IDs, sessions, emails, or individual activity records.
+
+Proxy / Property Agent inspections
+- Buyers can browse verified property agents and request proxy/property-agent inspections.
+- Buyers cannot request the same property agent for the same property more than once from the frontend.
+- Buyers can initialize secure inspection payment. Fresh and pending initialization responses both continue to Paystack when redirectUrl is returned.
+- The buyer detail view avoids continuous payment initialization loops and uses action-specific loading states.
+- Inspectors can manage assigned tasks, schedule/confirm appointment details, upload evidence, save local drafts, save report data to the backend, and submit completion only when requested-service requirements are satisfied.
+- Submit completion sends no report/evidence body; it only calls submit-completion after report and evidence have been saved through their dedicated endpoints.
+- Missing completion requirements from backend 422 responses are shown directly to the inspector.
+- Buyers can confirm completion or dispute after inspector submission.
+- Admins can inspect proxy jobs, resolve disputes, and initiate payout/release flows. Processing states poll with capped backoff to avoid infinite request loops.
+
+Proxy inspector onboarding and payout account
+- Proxy/property agents can register, complete onboarding, upload required verification materials, and configure payout account details.
+- Verify account and Save payout account are separate actions with independent loading states and spacing.
+- Payout account save requires successful account verification before submit.
+
+Title documents and verification
+- Landlords can upload private title documents during property creation.
+- Public property pages show safe title-document metadata and title verification status.
+- Restricted documents open through protected viewer flows when access is available.
+- Admins can review title verification submissions and title-related risk/verification records.
+
+Escrow and installments
+- Buyers can create escrow payments for eligible properties and view escrow status/details.
+- Admins can manage escrow disputes and dispute details.
+- Buyers can create and continue installment plans for eligible properties.
+- Installment pages handle schedule/payment state, payment initialization, and relevant loading/error states.
+
+ROI tools
+- Public ROI calculator and property-specific ROI calculator are available.
+- Authenticated users can save and manage ROI scenarios.
+- Admins can manage ROI assumptions.
+
+Authentication and role routing
+- Auth uses the existing JWT/localStorage flow and shared Axios client.
+- Protected routes redirect unauthenticated users to login.
+- Role-protected routes restrict buyer, landlord, proxy inspector, and admin dashboard sections.
+- Session expiry events clear local auth state.

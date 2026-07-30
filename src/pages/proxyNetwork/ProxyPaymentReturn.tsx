@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
+import { propertyAnalyticsService } from '../../services/propertyAnalyticsService';
 import { proxyNetworkService } from '../../services/proxyNetworkService';
 
 const ProxyPaymentReturn = () => {
   const [params] = useSearchParams(); const navigate = useNavigate(); const fired = useRef(false);
-  const hasReference = !!(params.get('reference') || params.get('trxref') || sessionStorage.getItem('realtiq.proxyPaymentContext'));
+  const hasReference = !!(params.get('reference') || params.get('trxref') || sessionStorage.getItem('realtiq.proxyPaymentContext') || sessionStorage.getItem('realtiq.analyticsPaymentReference'));
   const [state,setState] = useState(hasReference
     ? { loading:true, message:'Verifying payment with the backend…', error:false }
     : { loading:false, error:true, message:'No payment reference was provided.' });
@@ -13,9 +14,23 @@ const ProxyPaymentReturn = () => {
     if (fired.current) return; fired.current=true;
     let stored: {reference?:string;requestId?:string} = {};
     try { stored=JSON.parse(sessionStorage.getItem('realtiq.proxyPaymentContext') || '{}') as typeof stored; } catch { stored={}; }
-    const reference=params.get('reference') || params.get('trxref') || stored.reference;
+    const reference=params.get('reference') || params.get('trxref') || stored.reference || sessionStorage.getItem('realtiq.analyticsPaymentReference');
     if (!reference) return;
     proxyNetworkService.verifyPayment(reference).then(async (result) => {
+      if (result.payment.purpose === 'property_market_analytics') {
+        if (!result.verified || result.payment.status !== 'paid') {
+          setState({loading:false,error:true,message:'Analytics payment is not yet confirmed. Return to the analytics page to retry.'});
+          return;
+        }
+        const access = await propertyAnalyticsService.getAccessStatus();
+        if (access.hasAccess) {
+          sessionStorage.removeItem('realtiq.analyticsPaymentReference');
+          navigate('/analytics/property-market',{replace:true});
+          return;
+        }
+        setState({loading:false,error:true,message:'Payment was verified, but analytics access is not active yet. Use the retry button on the analytics page.'});
+        return;
+      }
       const requestId=result.payment.proxyInspectionRequest || stored.requestId;
       if (!result.verified || result.payment.status !== 'paid') { setState({loading:false,error:true,message:'Payment is not yet confirmed. Refresh the inspection workspace before trying again.'}); return; }
       if (!requestId) { setState({loading:false,error:false,message:'Payment verified. Return to your inspection list to view the funded job.'}); return; }

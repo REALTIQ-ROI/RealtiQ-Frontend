@@ -102,15 +102,23 @@ const Listings = () => {
                 const reference = propertyPublicReference(property);
                 return reference ? `/properties/${reference}` : '';
               }}>
+                {(visibleProperties) => (
+                <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {properties.map((property) => (
+                  {visibleProperties.map((property) => (
                     <PropertyCard key={propertyRouteReference(property)} property={property} showSaveAction onSave={handleSave} />
                   ))}
                 </div>
 
+                {visibleProperties.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-outline-variant/20 bg-surface-container-lowest p-8 text-center text-sm text-secondary">
+                    No properties in the current map view. Move or zoom the map to update the visible list.
+                  </div>
+                ) : null}
+
                 <div className="flex items-center justify-between border-t border-outline-variant/20 pt-6">
                   <p className="text-xs text-secondary font-medium">
-                    {formatRange(page, 12, total)}
+                    {visibleProperties.length === properties.length ? formatRange(page, 12, total) : `${visibleProperties.length} visible on map`}
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -132,6 +140,8 @@ const Listings = () => {
                     </button>
                   </div>
                 </div>
+                </>
+                )}
               </MapListLayout>
             ) : null}
           </section>
