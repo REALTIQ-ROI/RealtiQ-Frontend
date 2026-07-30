@@ -3,7 +3,7 @@ import api from '../lib/axios';
 import type {
   AdminInspectorDetail, AdminInspectorFilters, AdminInspectorListResponse, DisputeResolution,
   InspectionListFilters, InspectorListResponse, KycSubmissionResponse, PaymentInitializationResponse,
-  PayoutAccount, ProxyConversationResponse, ProxyEvidence, ProxyInspectionDetail,
+  PayoutAccount, PayoutAccountVerification, ProxyConversationResponse, ProxyEvidence, ProxyInspectionDetail,
   ProxyInspectionDispute, ProxyInspectionReport, ProxyInspectionRequest, ProxyInspectorReview,
   ProxyPaymentVerificationResponse, ProxyRegistrationResponse, PublicInspectorFilters,
   PublicInspectorProfile, ReportSection, ReportRecommendation, RequestListResponse, RequestedService,
@@ -86,6 +86,9 @@ export const proxyNetworkService = {
   },
   async getPayoutAccount(signal?: AbortSignal) {
     const { data } = await api.get<PayoutAccount | null>('/proxy-inspectors/payout-account', config(signal)); return data;
+  },
+  async verifyPayoutAccount(accountNumber: string, bankCode: string) {
+    const { data } = await api.post<PayoutAccountVerification>('/proxy-inspectors/payout-account/verify', { accountNumber, bankCode }); return data;
   },
   async savePayoutAccount(accountNumber: string, bankCode: string) {
     const { data } = await api.put<PayoutAccount>('/proxy-inspectors/payout-account', { accountNumber, bankCode }); return data;

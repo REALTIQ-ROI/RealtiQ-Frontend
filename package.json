@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@some19ice/nigeria-geo-core": "^0.1.4",
     "@types/react-router-dom": "^5.3.3",
     "autoprefixer": "^10.4.27",
     "axios": "^1.14.0",

@@ -17,13 +17,14 @@ const formatDate = (dateStr: string) =>
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
-type FilterTab = 'all' | 'paid' | 'pending' | 'failed';
+type FilterTab = 'all' | 'paid' | 'pending' | 'failed' | 'canceled';
 
 const statusBadge = (status: ApiPayment['status']) => {
   const cfg: Record<ApiPayment['status'], string> = {
     paid: 'bg-emerald-50 text-emerald-600',
     pending: 'bg-amber-50 text-amber-600',
     failed: 'bg-rose-50 text-rose-600',
+    canceled: 'bg-slate-100 text-slate-600',
   };
   return (
     <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full uppercase ${cfg[status]}`}>
@@ -37,13 +38,16 @@ const ManagePayments = () => {
   const { data, loading, error, execute } = useAsync(() => paymentService.getPayments(), true);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [verifying, setVerifying] = useState<string | null>(null);
+  const [canceling, setCanceling] = useState<string | null>(null);
+  const [localPayments, setLocalPayments] = useState<Record<string, ApiPayment>>({});
 
-  const payments = data ?? [];
+  const payments = (data ?? []).map((payment) => localPayments[payment._id] ?? payment);
   const filtered = activeTab === 'all' ? payments : payments.filter((p) => p.status === activeTab);
 
   const totalVolume = payments.reduce((s, p) => s + p.amount, 0);
   const paidCount = payments.filter((p) => p.status === 'paid').length;
   const pendingCount = payments.filter((p) => p.status === 'pending').length;
+  const canceledCount = payments.filter((p) => p.status === 'canceled').length;
 
   const handleVerify = async (payment: ApiPayment) => {
     const confirmed = await Swal.fire({
@@ -75,6 +79,36 @@ const ManagePayments = () => {
     }
   };
 
+  const handleCancel = async (payment: ApiPayment) => {
+    const confirmed = await Swal.fire({
+      title: 'Cancel payment?',
+      text: 'This preserves the transaction as canceled for audit/history and releases the pending or failed payment hold.',
+      icon: 'warning',
+      input: 'textarea',
+      inputLabel: 'Cancellation reason (optional)',
+      inputPlaceholder: 'Enter an admin note...',
+      showCancelButton: true,
+      confirmButtonText: 'Cancel payment',
+      cancelButtonText: 'Keep payment',
+      confirmButtonColor: '#b91c1c',
+      cancelButtonColor: '#6b7280',
+      reverseButtons: true,
+    });
+    if (!confirmed.isConfirmed) return;
+
+    setCanceling(payment._id);
+    try {
+      const result = await paymentService.cancelPayment(payment._id || payment.reference, typeof confirmed.value === 'string' ? confirmed.value : undefined);
+      setLocalPayments((previous) => ({ ...previous, [payment._id]: { ...payment, ...result.payment, status: 'canceled' } }));
+      toast.success(result.message);
+      void execute({ silent: true });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to cancel payment');
+    } finally {
+      setCanceling(null);
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="min-h-screen">
@@ -99,6 +133,7 @@ const ManagePayments = () => {
                     <span><span className="text-white font-bold">{paidCount}</span> successful</span>
                     <span><span className="text-amber-300 font-bold">{pendingCount}</span> pending</span>
                     <span><span className="text-rose-300 font-bold">{payments.filter((p) => p.status === 'failed').length}</span> failed</span>
+                    <span><span className="text-slate-300 font-bold">{canceledCount}</span> canceled</span>
                   </div>
                 </div>
                 <div className="absolute -right-12 -bottom-12 w-48 h-48 bg-white/5 rounded-full blur-3xl" />
@@ -109,7 +144,7 @@ const ManagePayments = () => {
           {/* Filters */}
           <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
             <div className="flex items-center gap-2">
-              {(['all', 'paid', 'pending', 'failed'] as FilterTab[]).map((tab) => (
+              {(['all', 'paid', 'pending', 'failed', 'canceled'] as FilterTab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -126,8 +161,8 @@ const ManagePayments = () => {
           </div>
 
           {/* Transaction Ledger */}
-          <div className="bg-surface-container-low rounded-xl overflow-hidden">
-            <table className="w-full text-left border-collapse">
+          <div className="overflow-x-auto rounded-xl bg-surface-container-low">
+            <table className="w-full min-w-[1120px] text-left border-collapse">
               <thead>
                 <tr className="bg-surface-container-high/50">
                   <th className="px-6 py-4 text-[10px] font-bold text-secondary uppercase tracking-widest">Reference</th>
@@ -161,7 +196,7 @@ const ManagePayments = () => {
                   </tr>
                 ) : (
                   filtered.map((payment) => {
-                    const isBusy = verifying === payment._id;
+                    const isBusy = verifying === payment._id || canceling === payment._id;
                     return (
                       <tr key={payment._id} className="hover:bg-surface-container-lowest transition-colors group">
                         <td className="px-6 py-5">
@@ -187,11 +222,11 @@ const ManagePayments = () => {
                         <td className="px-6 py-5 text-sm font-bold text-primary">{formatNGN(payment.amount)}</td>
                         <td className="px-6 py-5">{statusBadge(payment.status)}</td>
                         <td className="px-6 py-5 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {payment.status === 'paid' && (
+                          <div className="flex min-w-max items-center justify-end gap-2 whitespace-nowrap">
+                            {(payment.status === 'paid' || payment.status === 'canceled') && (
                               <button
                                 onClick={() => void navigate(`/dashboard/admin/payment-details/${payment._id}`)}
-                                className="px-3 py-1.5 text-xs font-bold text-secondary hover:text-primary hover:bg-surface-container rounded-lg transition-all"
+                                className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-secondary hover:text-primary hover:bg-surface-container rounded-lg transition-all"
                               >
                                 View Details
                               </button>
@@ -199,11 +234,24 @@ const ManagePayments = () => {
                             {(payment.status === 'pending' || payment.status === 'failed') && (
                               <>
                                 <button
+                                  onClick={() => void navigate(`/dashboard/admin/payment-details/${payment._id}`)}
+                                  className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-secondary hover:text-primary hover:bg-surface-container rounded-lg transition-all"
+                                >
+                                  Details
+                                </button>
+                                <button
                                   disabled={isBusy}
                                   onClick={() => void handleVerify(payment)}
-                                  className="px-3 py-1.5 text-xs font-bold bg-primary text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50 transition-all"
+                                  className="whitespace-nowrap px-3 py-1.5 text-xs font-bold bg-primary text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50 transition-all"
                                 >
                                   {isBusy ? '…' : 'Verify'}
+                                </button>
+                                <button
+                                  disabled={isBusy}
+                                  onClick={() => void handleCancel(payment)}
+                                  className="whitespace-nowrap px-3 py-1.5 text-xs font-bold border border-rose-200 text-rose-700 rounded-lg hover:bg-rose-50 disabled:opacity-50 transition-all"
+                                >
+                                  {canceling === payment._id ? '…' : 'Cancel payment'}
                                 </button>
                                 <button
                                   disabled={isBusy}
@@ -232,7 +280,7 @@ const ManagePayments = () => {
           </div>
 
           {/* Insights */}
-          <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="mt-16 grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-surface-container-low p-6 rounded-xl border-l-4 border-slate-900">
               <h4 className="text-xs font-bold text-secondary uppercase tracking-[0.1em] mb-4">Pending Payouts</h4>
               <div className="text-2xl font-bold tracking-tight">{formatNGN(payments.filter((p) => p.status === 'pending').reduce((s, p) => s + p.amount, 0))}</div>
@@ -247,6 +295,11 @@ const ManagePayments = () => {
               <h4 className="text-xs font-bold text-secondary uppercase tracking-[0.1em] mb-4">Failed Payments</h4>
               <div className="text-2xl font-bold tracking-tight">{payments.filter((p) => p.status === 'failed').length}</div>
               <div className="text-[10px] text-rose-600 mt-1 font-semibold">Require attention</div>
+            </div>
+            <div className="bg-surface-container-low p-6 rounded-xl border-l-4 border-slate-500">
+              <h4 className="text-xs font-bold text-secondary uppercase tracking-[0.1em] mb-4">Canceled Payments</h4>
+              <div className="text-2xl font-bold tracking-tight">{canceledCount}</div>
+              <div className="text-[10px] text-slate-600 mt-1 font-semibold">Preserved for audit</div>
             </div>
           </div>
         </div>

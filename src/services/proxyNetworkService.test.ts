@@ -109,6 +109,48 @@ describe('proxyNetworkService contracts', () => {
     expect(api.post).toHaveBeenCalledWith('/proxy-inspections', { propertyId: 'property-1', inspectorId: 'inspector-user-1', requestedServices: ['photos'], preferredDate: '2026-08-20T09:00:00.000Z' });
   });
 
+  it('returns payment initialization pricing from the backend unchanged', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      data: {
+        redirectUrl: 'https://checkout.paystack.com/example',
+        reference: 'PAYSTACK_REFERENCE',
+        pricing: {
+          agreedPrice: 40_000,
+          buyerFeePercentage: 10,
+          buyerFeeAmount: 4_000,
+          buyerTotalAmount: 44_000,
+          inspectorCommissionPercentage: 10,
+          inspectorCommissionAmount: 4_000,
+          inspectorPayoutAmount: 36_000,
+          totalPlatformRevenue: 8_000,
+        },
+      },
+    });
+
+    const response = await proxyNetworkService.initializePayment('request-1');
+
+    expect(api.post).toHaveBeenCalledWith('/proxy-inspections/request-1/initialize-payment');
+    expect(response.pricing?.buyerTotalAmount).toBe(44_000);
+    expect(response.pricing?.inspectorPayoutAmount).toBe(36_000);
+  });
+
+  it('verifies a payout account separately before saving', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      data: {
+        bankName: 'Guaranty Trust Bank',
+        verifiedAccountName: 'ADA AGENT',
+      },
+    });
+
+    const response = await proxyNetworkService.verifyPayoutAccount('0123456789', '058');
+
+    expect(api.post).toHaveBeenCalledWith('/proxy-inspectors/payout-account/verify', {
+      accountNumber: '0123456789',
+      bankCode: '058',
+    });
+    expect(response.verifiedAccountName).toBe('ADA AGENT');
+  });
+
   it('aligns repeated evidence fields and captions', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: [] });
     await proxyNetworkService.uploadEvidence('request-1', [new File(['a'],'front.jpg'),new File(['b'],'walkthrough.mp4')], ['Front elevation','Recorded walkthrough']);

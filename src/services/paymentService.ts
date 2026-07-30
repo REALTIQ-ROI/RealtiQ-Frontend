@@ -9,6 +9,12 @@ export interface InitializePaymentResponse {
   reference: string;
 }
 
+export interface CancelPaymentResponse {
+  message: string;
+  payment: ApiPayment;
+  alreadyCanceled: boolean;
+}
+
 const persistPendingPayment = (reference: string, propertyId?: string) => {
   sessionStorage.setItem(PENDING_PAYMENT_REFERENCE_KEY, reference);
   if (propertyId) {
@@ -67,6 +73,14 @@ export const paymentService = {
 
   async verifyPayment(reference: string): Promise<VerifyPaymentResponse> {
     const { data } = await api.get<VerifyPaymentResponse>(`/payments/verify/${reference}`, { withCredentials: true });
+    return data;
+  },
+
+  async cancelPayment(idOrReference: string, reason?: string): Promise<CancelPaymentResponse> {
+    const { data } = await api.patch<CancelPaymentResponse>(
+      `/admin/payments/${encodeURIComponent(idOrReference)}/cancel`,
+      { reason: reason?.trim() || undefined },
+    );
     return data;
   },
 };

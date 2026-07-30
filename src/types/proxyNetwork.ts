@@ -12,12 +12,23 @@ export type ReportRecommendation = 'recommended' | 'recommended_with_concerns' |
 export type DisputeResolution = 'resume_service' | 'refund_buyer' | 'release_inspector' | 'cancel_and_refund';
 export type MessageKind = 'user' | 'system' | 'administrative';
 
+export interface ProxyPricing {
+  agreedPrice?: number;
+  buyerFeePercentage?: number;
+  buyerFeeAmount?: number;
+  buyerTotalAmount?: number;
+  inspectorCommissionPercentage?: number;
+  inspectorCommissionAmount?: number;
+  inspectorPayoutAmount?: number;
+  totalPlatformRevenue?: number;
+}
+
 export interface PublicInspectorProfile {
   _id: string;
   user: EntityRef<{ _id: string; name: string }>;
   professionalType: ProfessionalType;
   professionalTitle?: string; bio?: string; yearsOfExperience?: number; specialties?: string[];
-  profilePhoto?: { url?: string; public_id?: string };
+  profilePhoto?: { url?: string; accessUrl?: string; public_id?: string };
   location?: { country?: string; state?: string; city?: string; coordinates?: { lat?: number; lng?: number } };
   serviceAreas?: string[]; availabilityStatus: AvailabilityStatus;
   verificationStatus?: VerificationStatus; isSearchable?: boolean;
@@ -39,7 +50,9 @@ export interface ProxyInspectionRequest {
 }
 export interface ServiceEscrow {
   _id: string; serviceType: 'proxy_inspection'; serviceReference: string; payer: string; provider: string;
-  grossAmount: number; platformFeePercentage: number; platformFeeAmount: number; providerAmount: number;
+  agreedPrice?: number; buyerFeePercentage?: number; buyerFeeAmount?: number; buyerTotalAmount?: number;
+  inspectorCommissionPercentage?: number; inspectorCommissionAmount?: number; inspectorPayoutAmount?: number; totalPlatformRevenue?: number;
+  grossAmount?: number; platformFeePercentage?: number; platformFeeAmount?: number; providerAmount?: number;
   payment?: unknown; paymentReference?: string; transferReference?: string; refundReference?: string;
   status: ServiceEscrowStatus; fundedAt?: string; releaseRequestedAt?: string; releasedAt?: string; refundedAt?: string;
 }
@@ -70,13 +83,40 @@ export interface ProxyConversationResponse { conversation: ProxyConversation; me
 export interface ProxyInspectionDetail {
   request: ProxyInspectionRequest; serviceEscrow: ServiceEscrow | null; report: ProxyInspectionReport | null;
   evidence: ProxyEvidence[]; dispute: ProxyInspectionDispute | null; auditHistory?: ProxyAuditEntry[]; conversation?: ProxyConversationResponse;
-  payoutAccount?: PayoutAccount | null;
+  payoutAccount?: PayoutAccount | null; pricing?: ProxyPricing | null;
 }
 export interface PayoutAccount { _id?: string; user?: string; maskedAccountNumber: string; bankName: string; verifiedAccountName: string; verifiedAt: string }
+export interface PayoutAccountVerification {
+  bankName: string;
+  verifiedAccountName: string;
+  accountNumber?: string;
+}
 export interface ProxyInspectorReview { _id: string; inspectionRequest: string; buyer: string; inspector: string; rating: number; professionalism?: number; accuracy?: number; communication?: number; timeliness?: number; comment?: string; createdAt: string }
-export interface ProxyKycDocument { label?: string; mimeType?: string; accessUrl?: string; verificationStatus?: 'unverified' | 'verified' | 'rejected' }
+export interface ProxyKycDocument {
+  _id?: string;
+  label?: string;
+  mimeType?: string;
+  resourceType?: string;
+  accessUrl?: string;
+  url?: string;
+  verificationStatus?: 'unverified' | 'verified' | 'rejected';
+}
 export interface AdminInspectorProfile extends Omit<PublicInspectorProfile, 'user'> {
-  user: EntityRef<{ _id: string; name: string; email?: string; phone?: string; role?: 'proxy_inspector'; kyc?: { fullLegalName?: string; address?: string; nationalId?: string; status?: string; submittedAt?: string; idDocumentUrl?: string; selfieUrl?: string; professionalDocuments?: ProxyKycDocument[] } }>;
+  profileImageUrl?: string;
+  user: EntityRef<{ _id: string; name: string; email?: string; phone?: string; role?: 'proxy_inspector'; kyc?: {
+    fullLegalName?: string;
+    address?: string;
+    nationalId?: string;
+    status?: string;
+    submittedAt?: string;
+    idDocumentUrl?: string;
+    idDocumentAccessUrl?: string;
+    idDocumentMimeType?: string;
+    selfieUrl?: string;
+    selfieAccessUrl?: string;
+    selfieMimeType?: string;
+    professionalDocuments?: ProxyKycDocument[];
+  } }>;
   rejectionReason?: string; suspensionReason?: string; suspendedAt?: string;
 }
 export interface AdminInspectorDetail { profile: AdminInspectorProfile; jobCount: number; disputeCount: number; payoutAccount: PayoutAccount | null; payoutSummary: unknown[]; reviews: ProxyInspectorReview[] }
@@ -87,7 +127,7 @@ export interface ProxyApiErrorDetails { missing?: string[]; [key: string]: unkno
 export interface ProxyPaymentVerificationResponse { verified: boolean; payment: { _id: string; user?: string; property?: string; amount?: number; purpose?: string; serviceEscrow?: string; proxyInspectionRequest?: string; status: string; reference: string; fulfilledAt?: string } }
 export interface ProxyRegistrationResponse { message: string; user: { _id: string; role: 'proxy_inspector'; emailVerified: boolean }; profile: { _id: string; verificationStatus: VerificationStatus; isSearchable: boolean }; nextStep: string }
 export interface KycSubmissionResponse { status: string; verificationStatus: VerificationStatus; submittedAt: string }
-export interface PaymentInitializationResponse { redirectUrl?: string; reference: string; pending?: boolean; message?: string }
+export interface PaymentInitializationResponse { redirectUrl?: string; reference: string; pending?: boolean; message?: string; pricing?: ProxyPricing }
 export interface PublicInspectorFilters { state?: string; city?: string; serviceArea?: string; professionalType?: ProfessionalType; specialty?: string; minimumRating?: number; availability?: AvailabilityStatus; search?: string; latitude?: number; longitude?: number; radius?: number; page?: number; limit?: number }
 export interface InspectionListFilters { status?: ProxyInspectionStatus; property?: string; inspector?: string; buyer?: string; from?: string; to?: string; page?: number; limit?: number }
 export interface AdminInspectorFilters {

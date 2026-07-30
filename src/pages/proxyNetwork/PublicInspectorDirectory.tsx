@@ -54,6 +54,14 @@ const PublicInspectorDirectory = () => {
     }
     if (key !== 'page') next.set('page', '1'); setParams(next);
   };
+  const hasActiveFilters = ['search', 'state', 'city', 'serviceArea', 'specialty', 'professionalType', 'minimumRating', 'availability', 'latitude', 'longitude', 'radius'].some((key) => params.has(key));
+  const clearFilters = () => {
+    const next = new URLSearchParams();
+    const propertyId = params.get('propertyId');
+    if (propertyId) next.set('propertyId', propertyId);
+    setSearch('');
+    setParams(next);
+  };
   const locate = () => navigator.geolocation?.getCurrentPosition(
     ({ coords }) => { const next = new URLSearchParams(params); next.set('latitude', String(coords.latitude)); next.set('longitude', String(coords.longitude)); next.set('radius', next.get('radius') || '50'); next.set('page', '1'); setParams(next); },
     () => { /* manual fields remain available */ },
@@ -76,13 +84,14 @@ const PublicInspectorDirectory = () => {
           <label className="text-xs font-bold">Availability<select value={params.get('availability') ?? ''} onChange={(e) => update('availability', e.target.value)} className="mt-2 w-full rounded-lg bg-surface-container-low px-3 py-3 text-sm"><option value="">Any</option><option value="available">Available</option><option value="busy">Busy</option><option value="unavailable">Unavailable</option></select></label>
           <button className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary" type="submit">Apply search</button>
           <button className="rounded-lg bg-surface-container-high px-4 py-3 text-sm font-bold" type="button" onClick={locate}>Use my location</button>
+          <button className="rounded-lg border border-outline px-4 py-3 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={clearFilters} disabled={!hasActiveFilters}>Clear all filters</button>
         </form>
         {facets.error ? <p role="status" className="mt-3 text-sm text-error">Filter options could not be refreshed. <button type="button" className="font-bold underline" onClick={() => void facets.reload()}>Retry</button></p> : null}
-        {resource.loading ? <LoadingState label="Finding verified inspectors…" /> : null}
+        {resource.loading ? <LoadingState label="Finding verified property agents..." /> : null}
         {resource.error ? <ErrorState message={resource.error.message} onRetry={() => void resource.reload()} /> : null}
-        {resource.data?.inspectors.length === 0 ? <div className="py-16 text-center"><h2 className="text-xl font-bold">No inspectors found</h2><p className="mt-2 text-secondary">Try a broader location or fewer filters.</p></div> : null}
+        {resource.data?.inspectors.length === 0 ? <div className="py-16 text-center"><h2 className="text-xl font-bold">No property agents found</h2><p className="mt-2 text-secondary">Try a broader location or fewer filters.</p></div> : null}
         <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{resource.data?.inspectors.map((item) => <ProxyInspectorCard key={item._id} inspector={item} propertyId={params.get('propertyId') || undefined} />)}</div>
-        {resource.data ? <nav aria-label="Inspector pages" className="mt-8 flex items-center justify-between"><p className="text-sm text-secondary">Page {resource.data.page} · {resource.data.total} professionals</p><div className="flex gap-2"><button disabled={resource.data.page <= 1} onClick={() => update('page', String(resource.data!.page - 1))} className="rounded-lg bg-white px-4 py-2 disabled:opacity-40">Previous</button><button disabled={resource.data.page * resource.data.limit >= resource.data.total} onClick={() => update('page', String(resource.data!.page + 1))} className="rounded-lg bg-white px-4 py-2 disabled:opacity-40">Next</button></div></nav> : null}
+        {resource.data ? <nav aria-label="Property agent pages" className="mt-8 flex items-center justify-between"><p className="text-sm text-secondary">Page {resource.data.page} · {resource.data.total} professionals</p><div className="flex gap-2"><button disabled={resource.data.page <= 1} onClick={() => update('page', String(resource.data!.page - 1))} className="rounded-lg bg-white px-4 py-2 disabled:opacity-40">Previous</button><button disabled={resource.data.page * resource.data.limit >= resource.data.total} onClick={() => update('page', String(resource.data!.page + 1))} className="rounded-lg bg-white px-4 py-2 disabled:opacity-40">Next</button></div></nav> : null}
       </section>
     </PublicLayout>
   );

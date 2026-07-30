@@ -41,7 +41,10 @@ describe('Proxy Network action selectors', () => {
   it('shows Inspector execution controls only for the assigned Inspector in valid states', () => {
     const funded = detail('funded', 'funded');
     expect(selectProxyActions(funded, 'proxy_inspector', 'inspector-1').start).toBe(true);
+    expect(selectProxyActions(funded, 'proxy_inspector', 'inspector-1').schedule).toBe(true);
+    expect(selectProxyActions(funded, 'buyer', 'buyer-1').schedule).toBe(false);
     expect(selectProxyActions(funded, 'proxy_inspector', 'someone-else').start).toBe(false);
+    expect(selectProxyActions(funded, 'proxy_inspector', 'someone-else').schedule).toBe(false);
     expect(selectProxyActions(detail('in_progress', 'service_in_progress'), 'buyer', 'buyer-1').uploadEvidence).toBe(false);
     expect(selectProxyActions(detail('in_progress', 'service_in_progress'), 'proxy_inspector', 'inspector-1').editReport).toBe(true);
   });
@@ -64,6 +67,13 @@ describe('Proxy Network action selectors', () => {
     release.serviceEscrow!.status = 'release_processing';
     expect(selectProxyActions(release, 'admin', 'admin-1', true).releasePayment).toBe(false);
     expect(shouldPollProxyDetail(release)).toBe(true);
+  });
+
+  it('does not poll awaiting payment jobs after payment initialization', () => {
+    const state = detail('awaiting_payment', 'awaiting_payment');
+    state.serviceEscrow!.paymentReference = 'pay-ref-1';
+
+    expect(shouldPollProxyDetail(state)).toBe(false);
   });
 
   it.each(['completed', 'refunded', 'cancelled'] as ProxyInspectionStatus[])(

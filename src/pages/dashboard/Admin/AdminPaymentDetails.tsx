@@ -20,6 +20,7 @@ const statusBadge = (status: ApiPayment['status']) => {
     paid: 'bg-green-100 text-green-700',
     pending: 'bg-amber-100 text-amber-700',
     failed: 'bg-red-100 text-red-700',
+    canceled: 'bg-slate-100 text-slate-700',
   };
   return (
     <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold capitalize ${cfg[status]}`}>
@@ -36,6 +37,7 @@ const AdminPaymentDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [canceling, setCanceling] = useState(false);
 
   useEffect(() => {
     if (!id) { setError('No payment ID provided.'); setLoading(false); return; }
@@ -78,6 +80,36 @@ const AdminPaymentDetails = () => {
     }
   };
 
+  const handleCancel = async () => {
+    if (!payment) return;
+    const confirmed = await Swal.fire({
+      title: 'Cancel payment?',
+      text: 'Canceling preserves this transaction for audit/history and releases the payment hold so the original flow can initialize a new payment.',
+      icon: 'warning',
+      input: 'textarea',
+      inputLabel: 'Cancellation reason (optional)',
+      inputPlaceholder: 'Enter an admin note...',
+      showCancelButton: true,
+      confirmButtonText: 'Cancel payment',
+      cancelButtonText: 'Keep payment',
+      confirmButtonColor: '#b91c1c',
+      cancelButtonColor: '#6b7280',
+      reverseButtons: true,
+    });
+    if (!confirmed.isConfirmed) return;
+
+    setCanceling(true);
+    try {
+      const result = await paymentService.cancelPayment(payment._id || payment.reference, typeof confirmed.value === 'string' ? confirmed.value : undefined);
+      setPayment((prev) => (prev ? { ...prev, ...result.payment, status: 'canceled' } : prev));
+      toast.success(result.message);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to cancel payment');
+    } finally {
+      setCanceling(false);
+    }
+  };
+
   if (loading) {
     return (
       <AdminLayout>
@@ -108,6 +140,8 @@ const AdminPaymentDetails = () => {
   }
 
   const canVerify = payment.status === 'pending' || payment.status === 'failed';
+  const canCancel = payment.status === 'pending' || payment.status === 'failed';
+  const busy = verifying || canceling;
 
   return (
     <AdminLayout>
@@ -127,12 +161,22 @@ const AdminPaymentDetails = () => {
           <div className="flex gap-3">
             {canVerify && (
               <button
-                disabled={verifying}
+                disabled={busy}
                 onClick={() => void handleVerify()}
                 className="flex items-center gap-2 bg-primary text-on-primary px-6 py-3 rounded-md font-bold text-sm hover:opacity-90 transition-all disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-sm">verified</span>
                 {verifying ? 'Verifying…' : 'Verify Payment'}
+              </button>
+            )}
+            {canCancel && (
+              <button
+                disabled={busy}
+                onClick={() => void handleCancel()}
+                className="flex items-center gap-2 border border-rose-200 text-rose-700 px-6 py-3 rounded-md font-bold text-sm hover:bg-rose-50 transition-all disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-sm">block</span>
+                {canceling ? 'Canceling...' : 'Cancel payment'}
               </button>
             )}
             <button
@@ -164,6 +208,15 @@ const AdminPaymentDetails = () => {
             </div>
           </div>
         )}
+        {payment.status === 'canceled' && (
+          <div className="mb-8 p-5 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-4">
+            <span className="material-symbols-outlined text-2xl text-slate-500" style={{ fontVariationSettings: "'FILL' 1" }}>block</span>
+            <div>
+              <p className="font-bold text-slate-800">Payment Canceled</p>
+              <p className="text-slate-700 text-sm">This transaction remains visible for audit/history and can no longer be verified or canceled.</p>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-12 gap-8">
           {/* Main details */}
@@ -179,10 +232,17 @@ const AdminPaymentDetails = () => {
                   { label: 'Transaction Date', value: formatDate(payment.createdAt) },
                   ...(payment.paystackData
                     ? [
-                        { label: 'Payment Channel', value: payment.paystackData.channel },
-                        { label: 'Currency', value: payment.paystackData.currency },
-                        { label: 'Gateway Response', value: payment.paystackData.gateway_response },
-                        { label: 'Processing Fees', value: formatNGN(payment.paystackData.fees) },
+                        { label: 'Payment Channel', value: payment.paystackData.channel || 'Not recorded' },
+                        { label: 'Currency', value: payment.paystackData.currency || 'Not recorded' },
+                        { label: 'Gateway Response', value: payment.paystackData.gateway_response || 'Not recorded' },
+                        { label: 'Processing Fees', value: typeof payment.paystackData.fees === 'number' ? formatNGN(payment.paystackData.fees) : 'Not recorded' },
+                      ]
+                    : []),
+                  ...(payment.metadata?.canceledAt
+                    ? [
+                        { label: 'Canceled At', value: formatDate(payment.metadata.canceledAt) },
+                        { label: 'Canceled By', value: payment.metadata.canceledBy || 'Admin' },
+                        { label: 'Cancellation Reason', value: payment.metadata.cancellationReason || 'No reason provided' },
                       ]
                     : []),
                 ].map((row) => (
@@ -240,7 +300,7 @@ const AdminPaymentDetails = () => {
                 {payment.paystackData && (
                   <div className="mt-3 flex justify-between items-center">
                     <span className="text-xs text-on-primary-container/70">Channel</span>
-                    <span className="text-xs font-bold text-white capitalize">{payment.paystackData.channel.replace('_', ' ')}</span>
+                    <span className="text-xs font-bold text-white capitalize">{payment.paystackData.channel?.replace('_', ' ') || 'Not recorded'}</span>
                   </div>
                 )}
               </div>
@@ -255,7 +315,7 @@ const AdminPaymentDetails = () => {
                     : 'Payment failed. You can retry verification.'}
                 </p>
                 <button
-                  disabled={verifying}
+                  disabled={busy}
                   onClick={() => void handleVerify()}
                   className="w-full py-2.5 bg-primary text-on-primary rounded-lg text-sm font-bold hover:opacity-90 transition-all disabled:opacity-50"
                 >

@@ -194,10 +194,16 @@ export interface ApiPayment {
   guestIdentity?: object | null;
   purpose?: string;
   amount: number;
-  status: 'pending' | 'paid' | 'failed';
+  status: 'pending' | 'paid' | 'failed' | 'canceled';
   reference: string;
   createdAt: string;
   paystackData?: PaystackData;
+  metadata?: {
+    canceledBy?: string;
+    canceledAt?: string;
+    cancellationReason?: string;
+    [key: string]: unknown;
+  };
 }
 
 export interface VerifyPaymentResponse {
@@ -513,7 +519,7 @@ export interface WalletSummary {
   };
 }
 
-export type WalletTransactionType = 'title_document_view' | 'tour_payment' | 'platform_fee' | 'proxy_inspection_commission' | 'other';
+export type WalletTransactionType = 'title_document_view' | 'tour_payment' | 'platform_fee' | 'proxy_inspection_commission' | 'proxy_inspection_buyer_fee' | 'other';
 export type WalletTransactionStatus = 'pending' | 'completed' | 'reversed' | 'refunded';
 
 export interface WalletTransaction {
@@ -530,7 +536,16 @@ export interface WalletTransaction {
   serviceEscrow?: {
     _id: string;
     status?: string;
+    agreedPrice?: number;
+    buyerFeePercentage?: number;
+    buyerFeeAmount?: number;
+    buyerTotalAmount?: number;
+    inspectorCommissionPercentage?: number;
+    inspectorCommissionAmount?: number;
+    inspectorPayoutAmount?: number;
+    totalPlatformRevenue?: number;
     grossAmount?: number;
+    platformFeePercentage?: number;
     platformFeeAmount?: number;
     providerAmount?: number;
   } | null;

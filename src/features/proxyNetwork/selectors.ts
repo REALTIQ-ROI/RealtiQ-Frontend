@@ -35,7 +35,7 @@ export const selectProxyActions = (
   const partyConfirmed = buyer ? request.buyerPriceConfirmed : inspector ? request.inspectorPriceConfirmed : true;
   result.confirmPrice = (buyer || inspector) && negotiating && !!request.proposedPrice && !partyConfirmed && !request.priceLockedAt && !activeDispute;
   result.initializePayment = buyer && request.status === 'awaiting_payment' && !!request.priceLockedAt && !activeDispute;
-  result.schedule = (buyer || inspector) && ['funded', 'scheduled'].includes(request.status) && !activeDispute;
+  result.schedule = inspector && ['funded', 'scheduled'].includes(request.status) && !activeDispute;
   result.start = inspector && ['funded', 'scheduled'].includes(request.status) && !activeDispute;
   result.uploadEvidence = inspector && request.status === 'in_progress' && !activeDispute;
   result.editReport = result.uploadEvidence && !request.reportLockedAt;
@@ -50,5 +50,4 @@ export const selectProxyActions = (
 
 export const shouldPollProxyDetail = (detail?: ProxyInspectionDetail | null) =>
   detail?.serviceEscrow?.status === 'release_processing' ||
-  detail?.serviceEscrow?.status === 'refund_processing' ||
-  (detail?.request.status === 'awaiting_payment' && !!detail.serviceEscrow?.paymentReference);
+  detail?.serviceEscrow?.status === 'refund_processing';

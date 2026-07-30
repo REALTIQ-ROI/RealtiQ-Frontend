@@ -12,7 +12,10 @@ export const useProxyResource = <T,>(
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const loaderRef = useRef(loader);
+  const pollRef = useRef(options?.poll);
+  const pollCountRef = useRef(0);
   loaderRef.current = loader;
+  pollRef.current = options?.poll;
 
   const load = useCallback(async (silent = false) => {
     const controller = new AbortController();
@@ -38,18 +41,23 @@ export const useProxyResource = <T,>(
     return () => window.removeEventListener(PROXY_DATA_CHANGED, refresh);
   }, [load]);
   useEffect(() => {
-    if (!options?.poll?.(data) || document.hidden || !navigator.onLine) return;
-    let count = 0;
+    pollCountRef.current = 0;
+  }, [load]);
+  useEffect(() => {
+    const shouldPoll = pollRef.current;
+    if (!shouldPoll?.(data) || document.hidden || !navigator.onLine) {
+      pollCountRef.current = 0;
+      return;
+    }
     const delays = [2000, 4000, 8000, 15000, 30000];
-    let timer = 0;
-    const tick = async () => {
-      if (document.hidden || !navigator.onLine || count >= delays.length) return;
-      const next = await load(true);
-      count += 1;
-      if (options.poll?.(next)) timer = window.setTimeout(tick, delays[Math.min(count, delays.length - 1)]);
-    };
-    timer = window.setTimeout(tick, delays[0]);
+    if (pollCountRef.current >= delays.length) return;
+    const delay = delays[Math.min(pollCountRef.current, delays.length - 1)];
+    const timer = window.setTimeout(async () => {
+      if (document.hidden || !navigator.onLine || pollCountRef.current >= delays.length) return;
+      pollCountRef.current += 1;
+      await load(true);
+    }, delay);
     return () => window.clearTimeout(timer);
-  }, [data, load, options]);
+  }, [data, load]);
   return { data, loading, refreshing, error, status: error instanceof ApiRequestError ? error.status : undefined, reload: () => load(false) };
 };
