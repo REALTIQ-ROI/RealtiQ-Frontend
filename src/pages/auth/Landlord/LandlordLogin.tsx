@@ -1,165 +1,213 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
 
 const LandlordLogin = () => {
   const navigate = useNavigate();
-  const { login, isLoading } = useAuth();
+  const location = useLocation();
+  const { login, logout, isLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const requestedRedirect = (location.state as { redirectTo?: unknown } | null)?.redirectTo;
+  const landlordRedirect =
+    typeof requestedRedirect === 'string' &&
+    requestedRedirect.startsWith('/dashboard/landlord') &&
+    !requestedRedirect.startsWith('//')
+      ? requestedRedirect
+      : null;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setError(null);
     try {
-      await login({ email, password, role: 'landlord' });
-      navigate('/dashboard/landlord');
+      const user = await login({ email, password, role: 'landlord' });
+
+      if (user.role !== 'landlord') {
+        logout();
+        toast.error('You are attempting to log in through the wrong portal');
+        return;
+      }
+
+      toast.success('Login successful');
+      navigate(landlordRedirect ?? '/dashboard/landlord');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to login. Please check your details.');
+      const message = err instanceof Error ? err.message : 'Unable to login. Please check your details.';
+      toast.error(message);
     }
   };
 
   return (
-    <div className="bg-surface text-on-surface antialiased min-h-screen flex flex-col" style={{ fontFamily: 'Inter, sans-serif' }}>
-      <main className="flex-grow flex items-center justify-center p-6 sm:p-12 relative overflow-hidden">
-        {/* Background blurs */}
-        <div className="absolute top-0 right-0 -mr-32 -mt-32 w-96 h-96 bg-secondary-fixed/30 rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-0 left-0 -ml-32 -mb-32 w-96 h-96 bg-primary-fixed/20 rounded-full blur-[120px] pointer-events-none" />
+    <div className="min-h-screen flex flex-col" style={{ fontFamily: 'Inter, sans-serif', backgroundColor: '#f7f9fb' }}>
+      <header className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-xl">
+        <div className="flex justify-between items-center px-8 py-6 max-w-screen-2xl mx-auto">
+          <Link
+            to="/"
+            className="text-2xl font-black tracking-tighter text-slate-900"
+            style={{ fontFamily: 'Manrope, sans-serif' }}
+          >
+            RealtiQ
+          </Link>
+          <Link
+            to="/properties"
+            className="text-slate-500 hover:text-slate-900 transition-colors font-bold text-sm tracking-tight"
+          >
+            Back to Gallery
+          </Link>
+        </div>
+      </header>
 
-        <div className="w-full max-w-md z-10">
-          {/* Logo */}
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center gap-2 mb-4">
-              <span className="material-symbols-outlined text-primary text-3xl">domain</span>
-              <h1 className="font-black text-2xl tracking-tighter text-primary" style={{ fontFamily: 'Manrope, sans-serif' }}>RealtiQ</h1>
+      <main className="flex-grow flex items-center justify-center pt-20 px-6">
+        <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-12 gap-0 overflow-hidden rounded-xl bg-white">
+          <div className="hidden md:flex md:col-span-7 relative h-[700px] overflow-hidden">
+            <img
+              className="absolute inset-0 w-full h-full object-cover"
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuAuVWl4OXCKE9Q3cqPVSkHtNi_09DTHTtXG9KICEbNdRwgmmmDnKujsFTTgNrVd582CejeUacDf1Xd5QafxiD8LFRXPzJAqLbnwu_JkRYp4BpWFNqM7Go5DYQq3hG341mLWatHDbJOwFF2ypboWXcIZW5l2OZgtdng9R-Ttz-OTDyK2oKkfAlEzZGh4QtH6LLCnPeHIrq4OObSne-kSAYA4Q-E6stk6aBH5FyX8VZ0_BqoVV08S-pDC2Y9B-irv-wyxgKezlJtpwA"
+              alt="Modern architectural interior"
+            />
+            <div
+              className="absolute inset-0 flex flex-col justify-end p-12"
+              style={{ background: 'rgba(17,28,45,0.2)', backdropFilter: 'brightness(0.75)' }}
+            >
+              <div className="max-w-md">
+                <span className="text-white/80 text-xs uppercase tracking-widest mb-4 block">
+                  Architectural Curation
+                </span>
+                <h2
+                  className="text-white text-4xl font-extrabold tracking-tight leading-none mb-6"
+                  style={{ fontFamily: 'Manrope, sans-serif' }}
+                >
+                  Experience real estate as an art form.
+                </h2>
+                <div className="h-1 w-12 bg-white/40 mb-6" />
+                <p className="text-white/70 text-sm leading-relaxed">
+                  Access your landlord workspace to manage listings, portfolio activity, and property operations.
+                </p>
+              </div>
             </div>
-            <p className="text-secondary uppercase tracking-[0.1rem] text-[0.65rem] font-bold">Landlord Portal Access</p>
           </div>
 
-          {/* Card */}
-          <div className="bg-white rounded-xl p-8 sm:p-10" style={{ boxShadow: '0 20px 40px rgba(25,28,30,0.06)' }}>
-            <header className="mb-8">
-              <h2 className="font-bold text-2xl text-on-surface mb-2 tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                Welcome back
-              </h2>
-              <p className="text-secondary">Enter your credentials to manage your property portfolio.</p>
-            </header>
+          <div className="md:col-span-5 p-8 md:p-16 flex flex-col justify-center bg-white">
+            <div className="mb-8">
+              <h1
+                className="text-primary text-3xl font-extrabold tracking-tighter mb-2"
+                style={{ fontFamily: 'Manrope, sans-serif' }}
+              >
+                Welcome Back
+              </h1>
+              <p className="text-secondary text-sm">Please enter your details to access your landlord dashboard.</p>
+            </div>
 
-            <form className="space-y-6" onSubmit={(e) => void onSubmit(e)}>
-              <div className="space-y-2">
-                <label className="block font-semibold text-[0.75rem] text-on-surface-variant uppercase tracking-wider" htmlFor="email">
+            <div className="flex rounded-lg bg-surface-container-low p-1 mb-6">
+              <button
+                type="button"
+                className="flex-1 py-2 rounded-md text-xs font-bold tracking-wide transition-all duration-200 bg-white text-on-surface shadow-sm"
+              >
+                Landlord
+              </button>
+            </div>
+
+            <form className="space-y-5" onSubmit={(e) => void onSubmit(e)}>
+              <div>
+                <label
+                  htmlFor="landlord-login-email"
+                  className="block text-on-surface text-xs font-bold uppercase tracking-wider mb-2"
+                >
                   Email Address
                 </label>
                 <input
-                  className="w-full bg-surface-container-low rounded-md px-4 py-3 text-on-surface placeholder:text-outline focus:ring-0 focus:border-surface-tint transition-all outline-none"
-                  style={{ border: '1px solid rgba(198,199,205,0.2)' }}
-                  id="email"
-                  placeholder="name@realtiq.com"
+                  id="landlord-login-email"
+                  className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-surface-tint/20 transition-all duration-300"
+                  style={{ border: '1px solid rgba(198,198,205,0.2)' }}
                   type="email"
+                  placeholder="curator@realtiq.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                 />
               </div>
 
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="block font-semibold text-[0.75rem] text-on-surface-variant uppercase tracking-wider" htmlFor="password">
-                    Password
-                  </label>
+              <div>
+                <label
+                  htmlFor="landlord-login-password"
+                  className="block text-on-surface text-xs font-bold uppercase tracking-wider mb-2"
+                >
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    id="landlord-login-password"
+                    className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-surface-tint/20 transition-all duration-300"
+                    style={{ border: '1px solid rgba(198,198,205,0.2)' }}
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant/60 cursor-pointer"
+                    onClick={() => setShowPassword((v) => !v)}
+                  >
+                    <span className="material-symbols-outlined text-xl">
+                      {showPassword ? 'visibility_off' : 'visibility'}
+                    </span>
+                  </button>
+                </div>
+                <div className="mt-2 text-right">
                   <Link
                     to={`/forgot-password?role=landlord&email=${encodeURIComponent(email)}`}
-                    className="text-[0.7rem] text-surface-tint hover:text-primary font-bold transition-colors uppercase tracking-wider"
+                    className="text-xs font-bold text-primary hover:underline uppercase tracking-wider"
                   >
-                    Forgot?
+                    Forgot Password?
                   </Link>
                 </div>
-                <input
-                  className="w-full bg-surface-container-low rounded-md px-4 py-3 text-on-surface placeholder:text-outline focus:ring-0 focus:border-surface-tint transition-all outline-none"
-                  style={{ border: '1px solid rgba(198,199,205,0.2)' }}
-                  id="password"
-                  placeholder="••••••••"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
               </div>
 
-              {error && <p className="text-error text-sm">{error}</p>}
-
               <button
-                className="w-full text-on-primary font-bold py-4 rounded-md hover:opacity-90 active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2"
-                style={{ background: 'linear-gradient(135deg, #000000 0%, #111c2d 100%)', fontFamily: 'Manrope, sans-serif' }}
+                className="w-full text-white font-bold py-4 rounded-lg hover:opacity-90 transition-opacity duration-300 disabled:cursor-not-allowed disabled:opacity-70"
+                style={{
+                  background: 'linear-gradient(135deg, #000000 0%, #111c2d 100%)',
+                  fontFamily: 'Manrope, sans-serif',
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
+                }}
                 type="submit"
                 disabled={isLoading}
               >
-                {isLoading ? 'Signing In...' : 'Sign In to Dashboard'}
-                <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                {isLoading ? 'Signing In...' : 'Sign In'}
               </button>
             </form>
 
-            <div className="mt-8 pt-8 border-t border-surface-container flex flex-col gap-4">
-              <div className="flex items-center gap-4">
-                <div className="h-[1px] flex-grow bg-surface-container-highest" />
-                <span className="text-[0.7rem] text-outline font-medium uppercase tracking-wider">Partner Access</span>
-                <div className="h-[1px] flex-grow bg-surface-container-highest" />
-              </div>
-              <button
-                className="w-full bg-surface-container-low text-on-surface font-semibold py-3 rounded-md hover:bg-surface-container-high transition-colors flex items-center justify-center gap-3"
-                style={{ border: '1px solid rgba(198,199,205,0.2)' }}
-                type="button"
-              >
-                <span className="material-symbols-outlined text-lg">key</span>
-                Single Sign-On
-              </button>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <footer className="mt-8 text-center space-y-4">
-            <p className="text-secondary text-sm">
-              New to RealtiQ?{' '}
-              <Link className="text-primary font-bold hover:underline" to="/auth/landlord/register">
-                Apply for Partnership
+            <p className="mt-8 text-center text-secondary text-sm">
+              Don&apos;t have an account?{' '}
+              <Link to="/auth/landlord/register" className="text-primary font-bold hover:underline">
+                Create one
               </Link>
             </p>
-            <div className="flex justify-center gap-6">
-              <a className="text-outline text-xs hover:text-secondary transition-colors" href="#">Privacy Policy</a>
-              <a className="text-outline text-xs hover:text-secondary transition-colors" href="#">Terms of Service</a>
-            </div>
-          </footer>
+          </div>
         </div>
       </main>
 
-      {/* Bottom Image Strip */}
-      <section className="hidden lg:grid grid-cols-3 h-48 w-full bg-surface-container-low">
-        <div className="relative group overflow-hidden">
-          <img
-            className="w-full h-full object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAKTI9ghJ1OyMkFfvNu9UDdv9fccJakCyxi2ItFtpS48VNojUFn8b9Wg2nCDxvcowI59GuYrphG7A1ZllKsWhUDv2bioFGgTD8Q0iF4TbIoIcWh7eeyH_vLjLWODk0U8wX9sCy1NqPcmDakLPLso40Bxf2ygqGvW7vRDD26MlHqAhdNfIZJkaZ9f2MMVVrNaC6bL6ONnTK8HCQjs-sggns8F1AK9E-ZEF6APR26S5bfVgOvNwEh1xCU--0KEtIURZcqveKev34WSw"
-            alt="Modern apartment building"
-          />
-          <div className="absolute inset-0 bg-primary-container/20" />
+      <footer className="w-full mt-auto bg-slate-900">
+        <div className="w-full px-8 py-12 flex flex-col md:flex-row justify-between items-center gap-6 max-w-screen-2xl mx-auto">
+          <div
+            className="text-xl font-bold text-white tracking-tighter"
+            style={{ fontFamily: 'Manrope, sans-serif' }}
+          >
+            RealtiQ
+          </div>
+          <div className="flex flex-wrap justify-center gap-8">
+            <a className="text-slate-400 hover:text-white transition-colors text-sm tracking-wide" href="#">
+              Privacy Policy
+            </a>
+            <a className="text-slate-400 hover:text-white transition-colors text-sm tracking-wide" href="#">
+              Terms of Service
+            </a>
+          </div>
+          <p className="text-slate-500 text-xs tracking-wide">&copy; 2024 RealtiQ Architectural Curation.</p>
         </div>
-        <div className="relative group overflow-hidden">
-          <img
-            className="w-full h-full object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDHC-s0gQ_-Wm6VcvSPdKSjy7KzQQ70Ph5jthqB3_V_2yhJWRo94jPB6MbabjZrw6NJmJYPgUhckQTEgfKnnoW9x8nqJOAzHLIaOnQ5e_-rhqezhQKEzvCwHqiyYjGjO5WnzA-X2bVV-uBRRu0wast0LeUDT1rowxy_Q9tsYHPP5dnTAzTfrCCzIEZNYY5hwhvT-8mVenjOJFAWSIpcLvOCPPwvwsOxMub9-eff_pqZFZSSm8RSPys1P8n3gS3jYJuTB41rbnlkgg"
-            alt="Contemporary villa"
-          />
-          <div className="absolute inset-0 bg-primary-container/20" />
-        </div>
-        <div className="relative group overflow-hidden">
-          <img
-            className="w-full h-full object-cover grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAlQiraA21mkJ7FP6Yjzv6D_PJPkyTLuuZBpaBFLIHYoqq6pzUfHEKaP8d8GM37EgUo9oucbfVezznP29bSs9UIjkrnONIryzZ_792DefolPSzBEQxT4ezSY11Lvv6OgDwUABMvsxzqEkRXchWDfxvfSy6SaIxYC-2trBQFtbfNXlGVuyftGxldsCkdgixX9AuhGNEdDqVMhsJ2fkhHqKfRkeQV8aDar5nylUkB3L5Ou9W8T0WiiilP5JChIsKDn6vbTD5AhHAeqg"
-            alt="Glass skyscraper"
-          />
-          <div className="absolute inset-0 bg-primary-container/20" />
-        </div>
-      </section>
+      </footer>
     </div>
   );
 };

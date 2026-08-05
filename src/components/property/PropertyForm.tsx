@@ -134,7 +134,9 @@ const PropertyForm = ({
   );
   const [titleDocumentRows, setTitleDocumentRows] = useState<TitleDocumentRow[]>([]);
   const [uploadingTitleDocument, setUploadingTitleDocument] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const saving = isLoading || uploadingTitleDocument || submitting;
   const isLandProperty = propertyType === 'land';
   const categoryOptions = isLandProperty ? LAND_CATEGORY_OPTIONS : CATEGORY_OPTIONS;
   const propertyTypeOptions =
@@ -189,6 +191,8 @@ const PropertyForm = ({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (saving) return;
+
     const latProvided = coordinatesLat.trim() !== '';
     const lngProvided = coordinatesLng.trim() !== '';
     const basePayload: CreatePropertyPayload & { status?: string } = {
@@ -288,6 +292,7 @@ const PropertyForm = ({
     }
 
     const payload = titleDocuments ? { ...basePayload, titleDocuments } : basePayload;
+    setSubmitting(true);
     try {
       const savedProperty = await onSubmit(payload);
       if (savedProperty?.paymentTypes) {
@@ -322,6 +327,8 @@ const PropertyForm = ({
         })));
       }
       toast.error(message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -731,11 +738,11 @@ const PropertyForm = ({
 
       <button
         type="submit"
-        disabled={isLoading || uploadingTitleDocument}
+        disabled={saving}
         className="w-full py-4 rounded-xl text-white font-bold text-sm tracking-tight hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
         style={{ background: 'linear-gradient(135deg, #000000 0%, #111c2d 100%)' }}
       >
-        {isLoading || uploadingTitleDocument ? 'Saving...' : submitLabel}
+        {saving ? 'Saving...' : submitLabel}
       </button>
     </form>
   );
