@@ -5,11 +5,20 @@ import PostPaymentRedirect from './PostPaymentRedirect';
 import { escrowService } from '../../services/escrowService';
 import { paymentService } from '../../services/paymentService';
 import { titleDocumentService } from '../../services/titleDocumentService';
+import { cartService } from '../../services/cartService';
 
 vi.mock('../../components/layout/PublicLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn() } }));
 vi.mock('../../services/paymentService', () => ({ paymentService: { getPendingPaymentReference: vi.fn(), verifyPayment: vi.fn(), clearPendingPayment: vi.fn() } }));
 vi.mock('../../services/escrowService', () => ({ escrowService: { getPendingId: vi.fn(), getPendingReference: vi.fn(), get: vi.fn(), clearPending: vi.fn() } }));
+vi.mock('../../services/cartService', () => ({
+  cartService: {
+    getPendingCheckout: vi.fn(() => ({ checkoutId: null, reference: null })),
+    getCartCheckout: vi.fn(),
+    listCartCheckouts: vi.fn(),
+    clearPendingCheckout: vi.fn(),
+  },
+}));
 vi.mock('../../services/titleDocumentService', () => ({
   titleDocumentService: {
     getPendingPayment: vi.fn(() => ({ documentId: null, propertyId: null, reference: null })),
@@ -60,5 +69,28 @@ describe('PostPaymentRedirect', () => {
     render(<MemoryRouter initialEntries={['/post-payment-redirect?trxref=ref1']}><PostPaymentRedirect /></MemoryRouter>);
     expect(await screen.findByText('Network unavailable')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry Verification' })).toBeInTheDocument();
+  });
+  it('verifies cart payments through shared payment verify and shows the cart receipt link', async () => {
+    vi.mocked(escrowService.getPendingId).mockReturnValue(null);
+    vi.mocked(escrowService.getPendingReference).mockReturnValue(null);
+    vi.mocked(cartService.getPendingCheckout).mockReturnValue({ checkoutId: 'checkout1', reference: 'cart-ref-1' });
+    vi.mocked(paymentService.verifyPayment).mockResolvedValue({
+      verified: true,
+      payment: { _id: 'pay1', status: 'paid', reference: 'cart-ref-1', purpose: 'multi_service_cart', amount: 55000 },
+    });
+    vi.mocked(cartService.getCartCheckout).mockResolvedValue({
+      checkoutId: 'checkout1',
+      paymentReference: 'cart-ref-1',
+      totalAmount: 55000,
+      currency: 'NGN',
+      status: 'partially_failed',
+      items: [{ id: 'item1', type: 'title_document_view', resourceId: 'doc1', amount: 5000, status: 'failed' }],
+    });
+    render(<MemoryRouter initialEntries={['/post-payment-redirect?reference=cart-ref-1']}><PostPaymentRedirect /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: 'Service checkout received' })).toBeInTheDocument();
+    expect(screen.getByText(/No additional payment is required/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View Service Receipt' })).toHaveAttribute('href', '/dashboard/buyer/cart-checkouts/checkout1');
+    expect(cartService.getCartCheckout).toHaveBeenCalledWith('checkout1');
+    expect(cartService.listCartCheckouts).not.toHaveBeenCalled();
   });
 });

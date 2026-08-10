@@ -5,6 +5,7 @@ import PublicLayout from '../../components/layout/PublicLayout';
 import SimpleLineChart from '../../components/analytics/SimpleLineChart';
 import LoadingState from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
+import { useCart } from '../../contexts/CartContext';
 import { ApiRequestError } from '../../lib/axios';
 import {
   propertyAnalyticsService,
@@ -171,12 +172,16 @@ const activeAreaLabel = (area: ActiveArea, index: number, matchingProperties: Pr
 const Paywall = ({
   access,
   onUnlock,
+  onAddToCart,
   initializing,
+  addingToCart,
   message,
 }: {
   access: AnalyticsAccessStatus | null;
   onUnlock: () => void;
+  onAddToCart: () => void;
   initializing: boolean;
+  addingToCart: boolean;
   message?: string | null;
 }) => (
   <section className="mx-auto max-w-3xl rounded-xl border border-outline-variant/10 bg-white p-8 text-center shadow-sm">
@@ -186,19 +191,31 @@ const Paywall = ({
       Access aggregate heatmaps, market summary, and price trends for the RealtiQ property market. Access is verified from the backend every time.
     </p>
     {message ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800">{message}</p> : null}
-    <button
-      type="button"
-      disabled={initializing}
-      onClick={onUnlock}
-      className="mt-6 inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-bold text-on-primary disabled:opacity-60"
-    >
-      <span className="material-symbols-outlined text-base">lock_open</span>
-      {initializing ? 'Starting checkout...' : access?.access ? 'Renew access' : 'Unlock analytics'}
-    </button>
+    <div className="mt-6 flex flex-wrap justify-center gap-3">
+      <button
+        type="button"
+        disabled={initializing}
+        onClick={onUnlock}
+        className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-bold text-on-primary disabled:opacity-60"
+      >
+        <span className="material-symbols-outlined text-base">lock_open</span>
+        {initializing ? 'Starting checkout...' : access?.access ? 'Renew access' : 'Pay Now'}
+      </button>
+      <button
+        type="button"
+        disabled={addingToCart}
+        onClick={onAddToCart}
+        className="inline-flex items-center justify-center gap-2 rounded-lg bg-surface-container-high px-6 py-3 text-sm font-bold text-on-surface disabled:opacity-60"
+      >
+        <span className="material-symbols-outlined text-base">shopping_cart</span>
+        {addingToCart ? 'Adding...' : 'Add to Cart'}
+      </button>
+    </div>
   </section>
 );
 
 const PropertyMarketAnalytics = () => {
+  const { addItem } = useCart();
   const [access, setAccess] = useState<AnalyticsAccessStatus | null>(null);
   const [summary, setSummary] = useState<PropertyMarketSummaryResponse | null>(null);
   const [heatmap, setHeatmap] = useState<PropertyHeatmapResponse | null>(null);
@@ -207,6 +224,7 @@ const PropertyMarketAnalytics = () => {
   const [loadingAccess, setLoadingAccess] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
   const [initializing, setInitializing] = useState(false);
+  const [addingToCart, setAddingToCart] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paywallMessage, setPaywallMessage] = useState<string | null>(null);
   const [filters, setFilters] = useState({
@@ -305,6 +323,19 @@ const PropertyMarketAnalytics = () => {
     }
   };
 
+  const addAnalyticsToCart = async () => {
+    setAddingToCart(true);
+    try {
+      await addItem({ itemType: 'property_market_analytics', accessType: 'one_time' });
+      toast.success('Analytics access added to cart.');
+    } catch (raw) {
+      toast.error(raw instanceof Error ? raw.message : 'Unable to add analytics to cart.');
+      await loadAccess();
+    } finally {
+      setAddingToCart(false);
+    }
+  };
+
   const trendModeData = useMemo(
     () => (trends?.series ?? []).map((point) => ({ label: point.period, value: point.averageListedPrice })),
     [trends],
@@ -315,7 +346,7 @@ const PropertyMarketAnalytics = () => {
       <section className="mx-auto max-w-screen-2xl px-4 py-8 sm:px-8">
         {loadingAccess ? <LoadingState label="Checking analytics access..." /> : null}
         {!loadingAccess && !access?.hasAccess ? (
-          <Paywall access={access} onUnlock={startCheckout} initializing={initializing} message={paywallMessage} />
+          <Paywall access={access} onUnlock={startCheckout} onAddToCart={addAnalyticsToCart} initializing={initializing} addingToCart={addingToCart} message={paywallMessage} />
         ) : null}
         {!loadingAccess && access?.hasAccess ? (
           <div className="space-y-6">

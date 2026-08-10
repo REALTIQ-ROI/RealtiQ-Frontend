@@ -8,6 +8,33 @@ export type PropertyCurrency = 'NGN' | 'USD' | 'GBP' | string;
 export type TourType = 'open_house' | 'virtual_paid' | 'staging_view';
 export type TourMode = 'physical' | 'virtual';
 export type TourStatus = 'pending' | 'approved' | 'rejected' | 'completed';
+export type CartItemType =
+  | 'title_document_view'
+  | 'proxy_inspection_escrow'
+  | 'property_market_analytics'
+  | 'paid_virtual_tour';
+export type CartStatus =
+  | 'active'
+  | 'checkout_pending'
+  | 'checked_out'
+  | 'abandoned';
+export type CartCheckoutStatus =
+  | 'pending'
+  | 'payment_initialized'
+  | 'paid'
+  | 'allocation_processing'
+  | 'completed'
+  | 'partially_failed'
+  | 'failed'
+  | 'expired'
+  | 'refunded'
+  | 'partially_refunded';
+export type AllocationStatus =
+  | 'pending'
+  | 'processing'
+  | 'allocated'
+  | 'failed'
+  | 'refunded';
 export type InstallmentStatus = 'pending' | 'active' | 'overdue' | 'defaulted' | 'completed' | 'cancelled';
 export type PropertyApprovalStatus = 'pending_review' | 'approved' | 'rejected';
 
@@ -370,6 +397,112 @@ export interface TourRequestPayload {
   mode: TourMode;
   scheduledAt?: string;
   notes?: string;
+  paymentOption?: 'cart';
+  addToCart?: boolean;
+}
+
+export interface CartItemResponse {
+  id: string;
+  itemType: CartItemType;
+  resourceId: string;
+  resourceModel: string;
+  quantity: number;
+  unitAmount: number;
+  amount: number;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  addedAt?: string;
+}
+
+export interface CartResponse {
+  cartId: string;
+  currency: 'NGN';
+  subtotal: number;
+  itemCount: number;
+  status: CartStatus;
+  items: CartItemResponse[];
+}
+
+export type AddCartItemRequest =
+  | { itemType: 'title_document_view'; resourceId: string }
+  | { itemType: 'proxy_inspection_escrow'; resourceId: string }
+  | { itemType: 'property_market_analytics'; accessType?: 'one_time' | 'daily' | 'monthly' }
+  | { itemType: 'paid_virtual_tour'; resourceId: string };
+
+export interface CartEligibilityParams {
+  itemType: CartItemType;
+  resourceId?: string;
+  accessType?: 'one_time' | 'daily' | 'monthly';
+}
+
+export interface CartEligibilityResponse {
+  eligible: boolean;
+  amount?: number;
+  description?: string;
+  reason?: string;
+}
+
+export interface CartCheckoutInitializeResponse {
+  redirectUrl: string;
+  authorizationUrl: string;
+  reference: string;
+  checkoutId: string;
+  totalAmount: number;
+  currency: 'NGN';
+  pending?: boolean;
+}
+
+export interface CartCheckoutItemDetail {
+  id: string;
+  type: CartItemType;
+  resourceId: string;
+  description?: string;
+  amount: number;
+  status: AllocationStatus;
+  allocationId?: string;
+  failureReason?: string;
+}
+
+export interface CartCheckoutDetail {
+  checkoutId: string;
+  paymentReference?: string;
+  totalAmount: number;
+  currency: 'NGN';
+  status: CartCheckoutStatus;
+  expiresAt?: string;
+  items: CartCheckoutItemDetail[];
+}
+
+export interface CartCheckoutListQuery {
+  page?: number;
+  limit?: number;
+  status?: CartCheckoutStatus;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface AdminCartCheckoutListQuery extends CartCheckoutListQuery {
+  user?: string;
+  paymentReference?: string;
+}
+
+export interface CartCheckoutListResponse {
+  checkouts: CartCheckoutDetail[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface AdminCartCheckoutDetail {
+  checkout: CartCheckoutDetail;
+  user?: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  payment?: ApiPayment;
+  allocations?: unknown[];
+  platformTransactions?: unknown[];
 }
 
 export type InstallmentFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'custom';

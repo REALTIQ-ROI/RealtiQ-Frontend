@@ -8,6 +8,7 @@ import Button from '../../components/ui/Button';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCart } from '../../contexts/CartContext';
 import { useAsync } from '../../hooks/useAsync';
 import { tourService } from '../../services/tourService';
 import type { Tour, TourStatus } from '../../types';
@@ -37,6 +38,7 @@ const formatPropertyRef = (propertyId: Tour['propertyId']) => {
 
 const Tours = () => {
   const { user } = useAuth();
+  const { addItem } = useCart();
   const [searchParams] = useSearchParams();
   const initialPropertyId = searchParams.get('propertyId') ?? '';
   const { data, loading, error, execute } = useAsync(() => tourService.getTours(), true);
@@ -46,7 +48,9 @@ const Tours = () => {
   const [mode, setMode] = useState<'physical' | 'virtual'>('physical');
   const [scheduledAt, setScheduledAt] = useState('');
   const [notes, setNotes] = useState('');
+  const [paymentOption, setPaymentOption] = useState<'pay_now' | 'cart'>('pay_now');
   const [submitting, setSubmitting] = useState(false);
+  const [cartingTourId, setCartingTourId] = useState<string | null>(null);
   const [statusUpdates, setStatusUpdates] = useState<Record<string, TourStatus>>({});
   const [query, setQuery] = useState('');
 
@@ -83,7 +87,22 @@ const Tours = () => {
         mode,
         scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
         notes: notes.trim() || undefined,
+        paymentOption: type === 'virtual_paid' && paymentOption === 'cart' ? 'cart' : undefined,
       });
+
+      if (type === 'virtual_paid' && paymentOption === 'cart') {
+        const cartItem = response.cartItem ?? { itemType: 'paid_virtual_tour' as const, resourceId: response.tour._id };
+        try {
+          await addItem(cartItem);
+          toast.success('Paid virtual tour created and added to cart.');
+          setNotes('');
+          setScheduledAt('');
+          await execute();
+        } catch (raw) {
+          toast.error(raw instanceof Error ? raw.message : 'Tour was created, but could not be added to cart. Retry adding the pending tour.');
+        }
+        return;
+      }
 
       if (response.redirectUrl) {
         window.location.href = response.redirectUrl;
@@ -111,6 +130,18 @@ const Tours = () => {
       await execute();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to update tour status.');
+    }
+  };
+
+  const addTourToCart = async (tour: Tour) => {
+    setCartingTourId(tour._id);
+    try {
+      await addItem({ itemType: 'paid_virtual_tour', resourceId: tour._id });
+      toast.success('Paid virtual tour added to cart.');
+    } catch (raw) {
+      toast.error(raw instanceof Error ? raw.message : 'Unable to add tour to cart.');
+    } finally {
+      setCartingTourId(null);
     }
   };
 
@@ -199,6 +230,27 @@ const Tours = () => {
             />
           </div>
           <div className="md:col-span-2">
+            {type === 'virtual_paid' ? (
+              <div className="mb-4">
+                <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Payment Option</label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    className={`rounded-lg border px-4 py-3 text-sm font-bold ${paymentOption === 'pay_now' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/20 bg-surface-container-low'}`}
+                    onClick={() => setPaymentOption('pay_now')}
+                  >
+                    Pay Now
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-lg border px-4 py-3 text-sm font-bold ${paymentOption === 'cart' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/20 bg-surface-container-low'}`}
+                    onClick={() => setPaymentOption('cart')}
+                  >
+                    Add to Cart
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <Button type="submit" disabled={submitting}>
               {submitting ? 'Submitting...' : 'Request Tour'}
             </Button>
@@ -240,6 +292,11 @@ const Tours = () => {
                   </div>
                 </div>
                 {tour.notes ? <p className="text-sm text-secondary">{tour.notes}</p> : null}
+                {user?.role === 'buyer' && tour.type === 'virtual_paid' && tour.status === 'pending' ? (
+                  <Button type="button" variant="secondary" disabled={cartingTourId === tour._id} onClick={() => void addTourToCart(tour)}>
+                    {cartingTourId === tour._id ? 'Adding...' : 'Add to Cart'}
+                  </Button>
+                ) : null}
                 {user?.role !== 'buyer' ? (
                   <div className="flex flex-col sm:flex-row gap-3">
                     <select

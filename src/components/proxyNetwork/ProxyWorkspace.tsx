@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "../../contexts/AuthContext";
+import { useCart } from "../../contexts/CartContext";
 import { ApiRequestError } from "../../lib/axios";
 import ActionConfirmModal from "./ActionConfirmModal";
 import type {
@@ -50,6 +51,7 @@ type PendingAction =
   | "proposePrice"
   | "confirmPrice"
   | "initializePayment"
+  | "addToCart"
   | "refreshStatus"
   | "schedule"
   | "start"
@@ -1327,6 +1329,7 @@ const ProxyWorkspace = ({
   payoutVerified?: boolean;
 }) => {
   const { user } = useAuth();
+  const { addItem, refreshCart } = useCart();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [missing, setMissing] = useState<string[]>([]);
   const [price, setPrice] = useState("");
@@ -1396,6 +1399,30 @@ const ProxyWorkspace = ({
         const missingItems = raw.missing || details?.missing;
         if (missingItems?.length) setMissing(missingItems);
         if ([409, 502].includes(raw.status || 0)) await reload();
+      }
+    } finally {
+      setPendingAction(null);
+    }
+  };
+  const addProxyInspectionToCart = async () => {
+    if (pendingAction) return;
+    setPendingAction("addToCart");
+    setMissing([]);
+    try {
+      await addItem({ itemType: "proxy_inspection_escrow", resourceId: requestId });
+      toast.success("Proxy inspection added to cart.");
+      await reload();
+    } catch (raw) {
+      const err = raw instanceof Error ? raw : new Error("Unable to add proxy inspection to cart.");
+      toast.error(err.message);
+      if (raw instanceof ApiRequestError) {
+        const details = raw.details as { missing?: string[] } | undefined;
+        const missingItems = raw.missing || details?.missing;
+        if (missingItems?.length) setMissing(missingItems);
+        if ([409, 422].includes(raw.status || 0)) {
+          void refreshCart();
+          await reload();
+        }
       }
     } finally {
       setPendingAction(null);
@@ -1605,13 +1632,25 @@ const ProxyWorkspace = ({
         ) : null}
         {actions.initializePayment ? (
           <div className="mt-4">
-            <button
-              className={action}
-              disabled={pending}
-              onClick={() => void initializePayment()}
-            >
-              {isPending("initializePayment") ? "Loading payment total..." : "Load secure payment total"}
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button
+                className={action}
+                disabled={pending}
+                onClick={() => void initializePayment()}
+              >
+                {isPending("initializePayment") ? "Loading payment total..." : "Pay Now"}
+              </button>
+              {role === "buyer" ? (
+                <button
+                  type="button"
+                  className="rounded-lg bg-surface-container-high px-4 py-3 text-sm font-bold text-on-surface disabled:opacity-50"
+                  disabled={pending}
+                  onClick={() => void addProxyInspectionToCart()}
+                >
+                  {isPending("addToCart") ? "Adding..." : "Add to Cart"}
+                </button>
+              ) : null}
+            </div>
             {initializedPricing ? (
               <div className="mt-4 rounded-xl border border-primary/20 p-4">
                 <BuyerPricingBreakdown pricing={initializedPricing} />

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCart } from '../../contexts/CartContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
 
 interface BuyerPortalLayoutProps {
@@ -18,6 +19,8 @@ const navItems = [
   { to: '/dashboard/buyer/tours', icon: 'tour', label: 'Tours' },
   { to: '/dashboard/buyer/installments', icon: 'schedule', label: 'Installments' },
   { to: '/dashboard/buyer/payment-history', icon: 'payments', label: 'Payment History' },
+  { to: '/dashboard/buyer/cart', icon: 'shopping_cart', label: 'Service Cart' },
+  { to: '/dashboard/buyer/cart-checkouts', icon: 'receipt_long', label: 'Cart Checkouts' },
   { to: '/dashboard/buyer/escrows', icon: 'shield_lock', label: 'My Escrows' },
   { to: '/dashboard/buyer/inquiry-history', icon: 'chat_bubble', label: 'Inquiry History' },
   { to: '/dashboard/roi-scenarios', icon: 'monitoring', label: 'ROI Scenarios' },
@@ -32,6 +35,7 @@ const BuyerPortalLayout = ({
   topbarRight,
 }: BuyerPortalLayoutProps) => {
   const { user, logout } = useAuth();
+  const { itemCount } = useCart();
   const hasScrolled = useHasScrolled(8);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -92,9 +96,9 @@ const BuyerPortalLayout = ({
         <div className="flex items-center gap-3 sm:gap-6 justify-end">
           <div className="hidden md:block">{topbarRight}</div>
           <div className="flex gap-3">
-            <Link to="/dashboard/buyer/payment-history" className="text-slate-500 hover:text-slate-900 transition-colors relative" aria-label="Payment history">
-              <span className="material-symbols-outlined">notifications</span>
-              <span className="absolute top-0 right-0 w-2 h-2 bg-error rounded-full border-2 border-white" />
+            <Link to="/dashboard/buyer/cart" className="text-slate-500 hover:text-slate-900 transition-colors relative" aria-label="Service cart">
+              <span className="material-symbols-outlined">shopping_cart</span>
+              {itemCount ? <span className="absolute -right-2 -top-2 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-on-primary">{itemCount}</span> : null}
             </Link>
             <Link to="/dashboard/buyer/inquiry-history" className="text-slate-500 hover:text-slate-900 transition-colors" aria-label="Inquiry history">
               <span className="material-symbols-outlined">mail</span>

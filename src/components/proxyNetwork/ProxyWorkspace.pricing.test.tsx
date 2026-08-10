@@ -121,7 +121,7 @@ describe('ProxyWorkspace pricing display', () => {
 
     expect(proxyNetworkService.initializePayment).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: 'Load secure payment total' }));
+    await user.click(screen.getByRole('button', { name: 'Pay Now' }));
 
     expect(proxyNetworkService.initializePayment).toHaveBeenCalledTimes(1);
     expect(reload).not.toHaveBeenCalled();
@@ -152,7 +152,7 @@ describe('ProxyWorkspace pricing display', () => {
       </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Load secure payment total' }));
+    await user.click(screen.getByRole('button', { name: 'Pay Now' }));
 
     expect(proxyNetworkService.initializePayment).toHaveBeenCalledTimes(1);
     expect(assign).toHaveBeenCalledWith('https://pay.example/pending-checkout');
@@ -174,7 +174,7 @@ describe('ProxyWorkspace pricing display', () => {
       </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Load secure payment total' }));
+    await user.click(screen.getByRole('button', { name: 'Pay Now' }));
 
     expect(assign).not.toHaveBeenCalled();
     expect(await screen.findByRole('status')).toHaveTextContent('Checkout link is unavailable. Try again later.');

@@ -1,11 +1,13 @@
 import api from '../lib/axios';
-import type { Tour, TourMode, TourRequestPayload, TourStatus, TourType } from '../types';
+import type { AddCartItemRequest, Tour, TourMode, TourRequestPayload, TourStatus, TourType } from '../types';
 
 export interface TourRequestResponse {
   tour: Partial<Tour> & { _id: string; status: TourStatus; price?: number };
   redirectUrl?: string;
   reference?: string;
   requiresPayment?: boolean;
+  paymentOption?: 'cart';
+  cartItem?: Extract<AddCartItemRequest, { itemType: 'paid_virtual_tour' }>;
 }
 
 export interface UpdateTourStatusPayload {

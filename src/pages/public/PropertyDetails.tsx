@@ -14,6 +14,7 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCart } from '../../contexts/CartContext';
 import { useProperties } from '../../contexts/PropertiesContext';
 import { useAsync } from '../../hooks/useAsync';
 import { inquiryService } from '../../services/inquiryService';
@@ -66,6 +67,7 @@ const PropertyDetails = () => {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
+  const { addItem } = useCart();
   const { buyProperty, refreshProperties } = useProperties();
   const { data: property, loading, error, execute } = useAsync(() => propertyService.getPropertyById(id), true);
   const {
@@ -83,6 +85,7 @@ const PropertyDetails = () => {
   const [tourMode, setTourMode] = useState<(typeof PROPERTY_TOUR_MODES)[number]['value']>('physical');
   const [tourDate, setTourDate] = useState('');
   const [tourNotes, setTourNotes] = useState('');
+  const [tourPaymentOption, setTourPaymentOption] = useState<'pay_now' | 'cart'>('pay_now');
   const [installmentFrequency, setInstallmentFrequency] = useState<(typeof INSTALLMENT_FREQUENCIES)[number]['value']>('monthly');
   const [titleSummary, setTitleSummary] = useState<PropertyTitleVerificationSummary | null>(null);
   const [publicTitleDocuments, setPublicTitleDocuments] = useState<PublicTitleDocument[]>([]);
@@ -254,7 +257,22 @@ const PropertyDetails = () => {
         mode: tourMode,
         scheduledAt: tourDate ? new Date(tourDate).toISOString() : undefined,
         notes: tourNotes.trim() || undefined,
+        paymentOption: tourType === 'virtual_paid' && tourPaymentOption === 'cart' ? 'cart' : undefined,
       });
+
+      if (tourType === 'virtual_paid' && tourPaymentOption === 'cart') {
+        const cartItem = response.cartItem ?? { itemType: 'paid_virtual_tour' as const, resourceId: response.tour._id };
+        try {
+          await addItem(cartItem);
+          toast.success('Paid virtual tour created and added to cart.');
+          setTourNotes('');
+          setTourDate('');
+        } catch (raw) {
+          toast.error(raw instanceof Error ? raw.message : 'Tour was created, but could not be added to cart. Retry from your tours page.');
+          toast.info(`Pending tour: ${response.tour._id}`);
+        }
+        return;
+      }
 
       if (response.redirectUrl) {
         window.location.href = response.redirectUrl;
@@ -504,6 +522,27 @@ const PropertyDetails = () => {
                     />
                   </div>
                   <div className="md:col-span-2">
+                    {tourType === 'virtual_paid' ? (
+                      <div className="mb-4">
+                        <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Payment Option</label>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            className={`rounded-lg border px-4 py-3 text-sm font-bold ${tourPaymentOption === 'pay_now' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/20 bg-surface-container-low'}`}
+                            onClick={() => setTourPaymentOption('pay_now')}
+                          >
+                            Pay Now
+                          </button>
+                          <button
+                            type="button"
+                            className={`rounded-lg border px-4 py-3 text-sm font-bold ${tourPaymentOption === 'cart' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/20 bg-surface-container-low'}`}
+                            onClick={() => setTourPaymentOption('cart')}
+                          >
+                            Add to Cart
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                     <Button type="submit" disabled={requestingTour} className="w-full">
                       {requestingTour ? 'Submitting...' : 'Request Tour'}
                     </Button>

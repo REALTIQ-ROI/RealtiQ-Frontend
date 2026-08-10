@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
+import { cartService } from '../../services/cartService';
 import { propertyAnalyticsService } from '../../services/propertyAnalyticsService';
 import { proxyNetworkService } from '../../services/proxyNetworkService';
 
@@ -17,6 +18,21 @@ const ProxyPaymentReturn = () => {
     const reference=params.get('reference') || params.get('trxref') || stored.reference || sessionStorage.getItem('realtiq.analyticsPaymentReference');
     if (!reference) return;
     proxyNetworkService.verifyPayment(reference).then(async (result) => {
+      if (result.payment.purpose === 'multi_service_cart') {
+        const pending = cartService.getPendingCheckout();
+        let checkoutId = pending.checkoutId;
+        if (!checkoutId) {
+          const recent = await cartService.listCartCheckouts({ page: 1, limit: 10 });
+          checkoutId = recent.checkouts.find((item) => item.paymentReference === reference)?.checkoutId ?? recent.checkouts[0]?.checkoutId;
+        }
+        cartService.clearPendingCheckout();
+        if (checkoutId) {
+          navigate(`/dashboard/buyer/cart-checkouts/${checkoutId}`, { replace: true });
+          return;
+        }
+        setState({loading:false,error:false,message:'Cart payment verified. Open your service checkout history to view allocation status.'});
+        return;
+      }
       if (result.payment.purpose === 'property_market_analytics') {
         if (!result.verified || result.payment.status !== 'paid') {
           setState({loading:false,error:true,message:'Analytics payment is not yet confirmed. Return to the analytics page to retry.'});

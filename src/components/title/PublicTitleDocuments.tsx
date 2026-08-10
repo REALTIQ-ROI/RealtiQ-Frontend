@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCart } from '../../contexts/CartContext';
+import { ApiRequestError } from '../../lib/axios';
 import { titleDocumentService } from '../../services/titleDocumentService';
 import type {
   PublicTitleDocument,
@@ -29,11 +31,13 @@ const PublicTitleDocuments = ({
   registryReferences,
 }: PublicTitleDocumentsProps) => {
   const { user } = useAuth();
+  const { addItem, refreshCart } = useCart();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<PublicTitleDocument[]>([]);
   const [statuses, setStatuses] = useState<Record<string, TitleDocumentAccessStatus>>({});
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [cartBusyId, setCartBusyId] = useState<string | null>(null);
   const [guestEmailByDocument, setGuestEmailByDocument] = useState<Record<string, string>>({});
 
   const refreshStatus = useCallback(async (documentId: string) => {
@@ -118,7 +122,29 @@ const PublicTitleDocuments = ({
     }
   };
 
-  if (loading) return <p className="text-sm text-secondary">Loading verified title documents…</p>;
+  const addToCart = async (document: PublicTitleDocument) => {
+    if (!user) {
+      navigate('/login', { state: { from: { pathname: window.location.pathname } } });
+      return;
+    }
+    if (user.role !== 'buyer') {
+      toast.error('Only buyers can add service purchases to cart.');
+      return;
+    }
+    setCartBusyId(document.id);
+    try {
+      await addItem({ itemType: 'title_document_view', resourceId: document.id });
+      toast.success('Title document added to cart.');
+    } catch (raw) {
+      toast.error(raw instanceof Error ? raw.message : 'Unable to add document to cart.');
+      if (raw instanceof ApiRequestError && raw.existingAccess) await refreshStatus(document.id);
+      if (raw instanceof ApiRequestError && raw.status === 409) void refreshCart();
+    } finally {
+      setCartBusyId(null);
+    }
+  };
+
+  if (loading) return <p className="text-sm text-secondary">Loading verified title documents...</p>;
   if (documents.length === 0) return <p className="text-sm text-secondary">No buyer-viewable title-document metadata is available.</p>;
 
   return (
@@ -159,12 +185,12 @@ const PublicTitleDocuments = ({
               </span>
             </div>
             <div className="mt-4 flex flex-wrap gap-3 text-xs text-secondary">
-              <span>{document.accessMode === 'private' ? 'Private' : document.accessMode === 'paid_view_once' ? 'Paid — one viewer session' : 'Paid — reusable access'}</span>
+              <span>{document.accessMode === 'private' ? 'Private' : document.accessMode === 'paid_view_once' ? 'Paid - one viewer session' : 'Paid - reusable access'}</span>
               {document.price !== null ? <span>{formatNaira(document.price)} set by RealtiQ</span> : null}
               {status?.viewCount !== undefined ? <span>{status.viewCount} viewer sessions started</span> : null}
             </div>
             {!available ? <p className="mt-4 text-sm text-secondary">Not available for viewing.</p> : null}
-            {document.accessMode === 'private' ? <p className="mt-4 text-sm text-secondary">Private document — paid purchase is unavailable.</p> : null}
+            {document.accessMode === 'private' ? <p className="mt-4 text-sm text-secondary">Private document - paid purchase is unavailable.</p> : null}
             {!user && canPay ? (
               <div className="mt-4">
                 <label className="block text-xs font-bold uppercase tracking-widest text-secondary">Guest email</label>
@@ -176,19 +202,24 @@ const PublicTitleDocuments = ({
                   placeholder="guest@example.com"
                 />
                 <p className="mt-2 text-xs text-secondary">
-                  Access is tied to this browser’s secure HttpOnly cookie. Closing the browser does not consume access, but clearing browser data or changing browsers can remove the identity. Email is for receipts and support; email alone cannot automatically restore access in this release.
+                  Access is tied to this browser's secure HttpOnly cookie. Closing the browser does not consume access, but clearing browser data or changing browsers can remove the identity. Email is for receipts and support; email alone cannot automatically restore access in this release.
                 </p>
               </div>
             ) : null}
             <div className="mt-4 flex flex-wrap gap-3">
               {canOpen ? (
                 <Button type="button" disabled={busyId === document.id} onClick={() => void openViewer(document)}>
-                  {busyId === document.id ? 'Opening…' : 'Open protected viewer'}
+                  {busyId === document.id ? 'Opening...' : 'Open protected viewer'}
                 </Button>
               ) : null}
               {canPay ? (
                 <Button type="button" disabled={busyId === document.id} onClick={() => void startPayment(document)}>
-                  {busyId === document.id ? 'Please wait…' : consumed ? 'Purchase another view' : `Pay ${formatNaira(status.price ?? document.price)} to view`}
+                  {busyId === document.id ? 'Please wait...' : consumed ? 'Purchase another view' : `Pay ${formatNaira(status.price ?? document.price)} to view`}
+                </Button>
+              ) : null}
+              {canPay && user?.role === 'buyer' ? (
+                <Button type="button" variant="secondary" disabled={cartBusyId === document.id} onClick={() => void addToCart(document)}>
+                  {cartBusyId === document.id ? 'Adding...' : 'Add to Cart'}
                 </Button>
               ) : null}
               {status?.message ? <p className="w-full text-sm text-secondary">{status.message}</p> : null}

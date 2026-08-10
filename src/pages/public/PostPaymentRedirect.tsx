@@ -2,9 +2,13 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import PublicLayout from "../../components/layout/PublicLayout";
+import { useCart } from "../../contexts/CartContext";
+import { cartService } from "../../services/cartService";
 import { escrowService } from "../../services/escrowService";
 import { paymentService } from "../../services/paymentService";
 import { titleDocumentService } from "../../services/titleDocumentService";
+import type { CartCheckoutDetail } from "../../types";
+import { checkoutStatusClasses, checkoutStatusLabel } from "../../utils/cartFormatters";
 
 type VerifyStatus = "verifying" | "success" | "failed";
 const wait = (milliseconds: number) =>
@@ -31,6 +35,7 @@ const PostPaymentRedirect = () => {
     reference ? "verifying" : "failed",
   );
   const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [cartCheckout, setCartCheckout] = useState<CartCheckoutDetail | null>(null);
   const [titleDocumentId, setTitleDocumentId] = useState<string | null>(pendingTitlePayment.documentId);
   const [titlePropertyId, setTitlePropertyId] = useState<string | null>(pendingTitlePayment.propertyId);
   const [titleAccessReady, setTitleAccessReady] = useState(false);
@@ -43,6 +48,7 @@ const PostPaymentRedirect = () => {
       ? null
       : "No payment reference was found. Return to your escrow or payment history to retry.",
   );
+  const { refreshCart } = useCart();
 
   const verify = useCallback(async () => {
     if (!reference) return;
@@ -52,8 +58,28 @@ const PostPaymentRedirect = () => {
       const result = await paymentService.verifyPayment(reference);
       if (!result.verified) throw new Error("Payment could not be verified.");
       setPaymentId(result.payment._id);
+      const paymentPurpose = result.payment.purpose || result.payment.metadata?.paymentPurpose;
+      if (paymentPurpose === "multi_service_cart") {
+        const pendingCheckout = cartService.getPendingCheckout();
+        let checkout: CartCheckoutDetail | null = null;
+        if (pendingCheckout.checkoutId && (!pendingCheckout.reference || pendingCheckout.reference === reference)) {
+          checkout = await cartService.getCartCheckout(pendingCheckout.checkoutId);
+        } else {
+          const recent = await cartService.listCartCheckouts({ page: 1, limit: 10 });
+          checkout = recent.checkouts.find((item) => item.paymentReference === reference) ?? null;
+        }
+        setCartCheckout(checkout);
+        cartService.clearPendingCheckout();
+        void refreshCart().catch(() => undefined);
+        if (!sessionStorage.getItem(`realtiq.cartPaymentNotified.${reference}`)) {
+          toast.success("Cart payment verified.");
+          sessionStorage.setItem(`realtiq.cartPaymentNotified.${reference}`, "1");
+        }
+        setStatus("success");
+        return;
+      }
       const verifiedTitlePayment =
-        result.payment.purpose === "title_document_view" ||
+        paymentPurpose === "title_document_view" ||
         result.payment.metadata?.paymentPurpose === "title_document_view" ||
         reference.startsWith("RTQ-DOC-PAY-");
       if (verifiedTitlePayment) {
@@ -103,7 +129,7 @@ const PostPaymentRedirect = () => {
         error instanceof Error ? error.message : "Unable to verify payment.",
       );
     }
-  }, [escrowId, isEscrow, pendingTitlePayment.documentId, pendingTitlePayment.propertyId, reference]);
+  }, [escrowId, isEscrow, pendingTitlePayment.documentId, pendingTitlePayment.propertyId, reference, refreshCart]);
 
   const openTitleViewer = async () => {
     if (!titleDocumentId || openingViewer) return;
@@ -157,10 +183,20 @@ const PostPaymentRedirect = () => {
               </span>
             </div>
             <h1 className="text-3xl font-extrabold">
-              {isEscrow ? "Payment secured in escrow" : isTitleDocumentPayment ? "Document access ready" : "Payment Successful"}
+              {cartCheckout ? "Service checkout received" : isEscrow ? "Payment secured in escrow" : isTitleDocumentPayment ? "Document access ready" : "Payment Successful"}
             </h1>
             <p className="mt-3 text-secondary">
-              {isEscrow
+              {cartCheckout
+                ? cartCheckout.status === "completed"
+                  ? "Payment received and all services are active."
+                  : cartCheckout.status === "allocation_processing"
+                    ? "Payment received; services are being activated."
+                    : cartCheckout.status === "partially_failed"
+                      ? "Payment succeeded, but one or more services are still being activated. No additional payment is required."
+                      : cartCheckout.status === "failed"
+                        ? "Payment succeeded, but service activation needs support review. No additional payment is required."
+                        : "Payment has been verified. Allocation status is shown on your receipt."
+                : isEscrow
                 ? "Your payment is locked while the agreed conditions are completed. This is not yet a completed property purchase."
                 : isTitleDocumentPayment
                   ? titleAccessReady
@@ -168,8 +204,23 @@ const PostPaymentRedirect = () => {
                     : "Payment was verified. Access activation is still processing; return to the property shortly and check access again."
                 : "Your property purchase has been confirmed."}
             </p>
+            {cartCheckout ? (
+              <div className="mx-auto mt-5 max-w-sm rounded-xl bg-surface-container-low p-4 text-left text-sm">
+                <p className="font-bold">Allocation status</p>
+                <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-bold ${checkoutStatusClasses(cartCheckout.status)}`}>
+                  {checkoutStatusLabel(cartCheckout.status)}
+                </span>
+              </div>
+            ) : null}
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-              {isTitleDocumentPayment && titleAccessReady && titleDocumentId ? (
+              {cartCheckout ? (
+                <Link
+                  to={`/dashboard/buyer/cart-checkouts/${cartCheckout.checkoutId}`}
+                  className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary"
+                >
+                  View Service Receipt
+                </Link>
+              ) : isTitleDocumentPayment && titleAccessReady && titleDocumentId ? (
                 <button
                   type="button"
                   onClick={() => void openTitleViewer()}

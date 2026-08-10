@@ -10,9 +10,11 @@ export class ApiRequestError extends Error {
   requiresAccountDetails?: boolean;
   requiresSellerAccount?: boolean;
   reconciliationRequired?: boolean;
+  existingAccess?: boolean;
+  invalidItems?: unknown;
   fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }>;
 
-  constructor(message: string, details?: { status?: number; missing?: string[]; missingRules?: unknown; eligibleAt?: string; existingPayment?: unknown; details?: unknown; requiresAccountDetails?: boolean; requiresSellerAccount?: boolean; reconciliationRequired?: boolean; fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }> }) {
+  constructor(message: string, details?: { status?: number; missing?: string[]; missingRules?: unknown; eligibleAt?: string; existingPayment?: unknown; details?: unknown; requiresAccountDetails?: boolean; requiresSellerAccount?: boolean; reconciliationRequired?: boolean; existingAccess?: boolean; invalidItems?: unknown; fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }> }) {
     super(message);
     this.name = 'ApiRequestError';
     Object.assign(this, details);
@@ -57,7 +59,7 @@ api.interceptors.response.use(
         : '';
 
     if (message.trim()) {
-      const details = responseData as { missing?: unknown; missingRules?: unknown; eligibleAt?: string; payment?: unknown; details?: unknown; requiresAccountDetails?: boolean; requiresSellerAccount?: boolean; reconciliationRequired?: boolean; errors?: Array<{ path?: string; msg?: string; value?: unknown }> };
+      const details = responseData as { missing?: unknown; missingRules?: unknown; eligibleAt?: string; payment?: unknown; details?: unknown; requiresAccountDetails?: boolean; requiresSellerAccount?: boolean; reconciliationRequired?: boolean; existingAccess?: boolean; invalidItems?: unknown; errors?: Array<{ path?: string; msg?: string; value?: unknown }> };
       return Promise.reject(new ApiRequestError(message, {
         status,
         missing: Array.isArray(details.missing) ? details.missing.map(String) : undefined,
@@ -68,6 +70,8 @@ api.interceptors.response.use(
         requiresAccountDetails: details.requiresAccountDetails,
         requiresSellerAccount: details.requiresSellerAccount,
         reconciliationRequired: details.reconciliationRequired,
+        existingAccess: details.existingAccess,
+        invalidItems: details.invalidItems,
         fieldErrors: details.errors,
       }));
     }
