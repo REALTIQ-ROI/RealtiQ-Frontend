@@ -123,11 +123,7 @@ const PublicTitleDocuments = ({
   };
 
   const addToCart = async (document: PublicTitleDocument) => {
-    if (!user) {
-      navigate('/login', { state: { from: { pathname: window.location.pathname } } });
-      return;
-    }
-    if (user.role !== 'buyer') {
+    if (user && user.role !== 'buyer') {
       toast.error('Only buyers can add service purchases to cart.');
       return;
     }
@@ -135,6 +131,7 @@ const PublicTitleDocuments = ({
     try {
       await addItem({ itemType: 'title_document_view', resourceId: document.id });
       toast.success('Title document added to cart.');
+      void refreshCart();
     } catch (raw) {
       toast.error(raw instanceof Error ? raw.message : 'Unable to add document to cart.');
       if (raw instanceof ApiRequestError && raw.existingAccess) await refreshStatus(document.id);
@@ -217,7 +214,7 @@ const PublicTitleDocuments = ({
                   {busyId === document.id ? 'Please wait...' : consumed ? 'Purchase another view' : `Pay ${formatNaira(status.price ?? document.price)} to view`}
                 </Button>
               ) : null}
-              {canPay && user?.role === 'buyer' ? (
+              {canPay && (!user || user.role === 'buyer') ? (
                 <Button type="button" variant="secondary" disabled={cartBusyId === document.id} onClick={() => void addToCart(document)}>
                   {cartBusyId === document.id ? 'Adding...' : 'Add to Cart'}
                 </Button>

@@ -116,6 +116,7 @@ const AppRoutes = () => {
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/checkout" element={<Checkout />} />
+        <Route path="/cart" element={<ServiceCart />} />
         <Route path="/featured-control" element={<FeaturedListingControl />} />
         <Route path="/filters" element={<FiltersAndSort />} />
         <Route path="/inquiry" element={<InquiryForm />} />

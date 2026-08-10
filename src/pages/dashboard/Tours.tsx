@@ -4,14 +4,17 @@ import { toast } from 'sonner';
 import AdminLayout from '../../components/layout/AdminLayout';
 import BuyerPortalLayout from '../../components/layout/BuyerPortalLayout';
 import LandlordPortalLayout from '../../components/layout/LandlordPortalLayout';
+import PropertySearchSelect from '../../components/forms/PropertySearchSelect';
 import Button from '../../components/ui/Button';
+import Card from '../../components/ui/Card';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import { useAsync } from '../../hooks/useAsync';
+import { propertyService } from '../../services/propertyService';
 import { tourService } from '../../services/tourService';
-import type { Tour, TourStatus } from '../../types';
+import { propertyRouteReference, type Property, type Tour, type TourMode, type TourPropertySummary, type TourStatus, type TourType } from '../../types';
 
 const statusClasses: Record<TourStatus, string> = {
   pending: 'bg-amber-100 text-amber-700',
@@ -30,10 +33,30 @@ const formatCurrency = (value?: number) =>
     ? new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value)
     : 'N/A';
 
-const formatPropertyRef = (propertyId: Tour['propertyId']) => {
-  if (!propertyId) return 'Property unavailable';
-  if (typeof propertyId === 'string') return propertyId;
-  return propertyId.title ?? propertyId._id ?? 'Property unavailable';
+const TOUR_TYPES: Array<{ value: TourType; label: string }> = [
+  { value: 'open_house', label: 'Open House' },
+  { value: 'virtual_paid', label: 'Virtual Paid' },
+  { value: 'staging_view', label: 'Staging View' },
+];
+
+const TOUR_MODES: Array<{ value: TourMode; label: string }> = [
+  { value: 'physical', label: 'Physical' },
+  { value: 'virtual', label: 'Virtual' },
+];
+
+const propertyKeys = (property: Pick<Property, '_id' | 'id' | 'publicReference'> | TourPropertySummary) =>
+  [property._id, property.id, property.publicReference].filter(Boolean) as string[];
+
+const formatPropertyRef = (
+  propertyRef: Tour['property'] | Tour['propertyId'],
+  propertyLookup: Map<string, Property>,
+) => {
+  if (!propertyRef) return 'Property unavailable';
+  if (typeof propertyRef !== 'string') {
+    const lookupTitle = propertyKeys(propertyRef).map((key) => propertyLookup.get(key)?.title).find(Boolean);
+    return propertyRef.title ?? lookupTitle ?? propertyRef._id ?? 'Property unavailable';
+  }
+  return propertyLookup.get(propertyRef)?.title ?? propertyRef;
 };
 
 const Tours = () => {
@@ -41,11 +64,27 @@ const Tours = () => {
   const { addItem } = useCart();
   const [searchParams] = useSearchParams();
   const initialPropertyId = searchParams.get('propertyId') ?? '';
-  const { data, loading, error, execute } = useAsync(() => tourService.getTours(), true);
-  const tours = useMemo(() => (Array.isArray(data) ? data : []), [data]);
+  const { data: tourData, loading, error, execute } = useAsync(() => tourService.getTours(), true);
+  const {
+    data: propertyData,
+    loading: loadingProperties,
+    error: propertyError,
+  } = useAsync(() => propertyService.getProperties({ limit: 500 }), user?.role === 'buyer');
+  const tours = useMemo(() => (Array.isArray(tourData) ? tourData : []), [tourData]);
+  const allProperties = useMemo(() => propertyData?.properties ?? [], [propertyData]);
+  const properties = useMemo(() => allProperties.filter((property) => property.status === 'available'), [allProperties]);
+  const propertyLookup = useMemo(() => {
+    const lookup = new Map<string, Property>();
+    allProperties.forEach((property) => {
+      propertyKeys(property).forEach((key) => lookup.set(key, property));
+      const routeReference = propertyRouteReference(property);
+      if (routeReference) lookup.set(routeReference, property);
+    });
+    return lookup;
+  }, [allProperties]);
   const [propertyId, setPropertyId] = useState(initialPropertyId);
-  const [type, setType] = useState<'open_house' | 'virtual_paid' | 'staging_view'>('open_house');
-  const [mode, setMode] = useState<'physical' | 'virtual'>('physical');
+  const [type, setType] = useState<TourType>('open_house');
+  const [mode, setMode] = useState<TourMode>('physical');
   const [scheduledAt, setScheduledAt] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentOption, setPaymentOption] = useState<'pay_now' | 'cart'>('pay_now');
@@ -58,9 +97,10 @@ const Tours = () => {
     const needle = query.trim().toLowerCase();
     if (!needle) return tours;
     return tours.filter((tour) => {
+      const propertyRef = tour.property ?? tour.propertyId;
       const haystack = [
         tour._id,
-        formatPropertyRef(tour.propertyId),
+        formatPropertyRef(propertyRef, propertyLookup),
         tour.type,
         tour.mode,
         tour.status,
@@ -70,19 +110,20 @@ const Tours = () => {
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [query, tours]);
+  }, [propertyLookup, query, tours]);
 
   const handleRequestTour = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!propertyId.trim()) {
-      toast.error('Property ID is required.');
+      toast.error('Property is required.');
       return;
     }
 
     setSubmitting(true);
     try {
+      const requestPropertyId = propertyLookup.get(propertyId.trim())?._id ?? propertyId.trim();
       const response = await tourService.requestTour({
-        propertyId: propertyId.trim(),
+        propertyId: requestPropertyId,
         type,
         mode,
         scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
@@ -182,80 +223,93 @@ const Tours = () => {
       ) : null}
 
       {user?.role === 'buyer' ? (
-        <form
-          className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-surface-container-lowest p-6 rounded-xl border border-outline-variant/10 mb-8"
-          onSubmit={(event) => void handleRequestTour(event)}
-        >
-          <div className="md:col-span-2">
-            <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Property ID</label>
-            <input
-              value={propertyId}
-              onChange={(e) => setPropertyId(e.target.value)}
-              className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm outline-none"
-              placeholder="Property ID"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Tour Type</label>
-            <select value={type} onChange={(e) => setType(e.target.value as typeof type)} className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm">
-              <option value="open_house">Open House</option>
-              <option value="virtual_paid">Virtual Paid</option>
-              <option value="staging_view">Staging View</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Mode</label>
-            <select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)} className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm">
-              <option value="physical">Physical</option>
-              <option value="virtual">Virtual</option>
-            </select>
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Scheduled At</label>
-            <input
-              type="datetime-local"
-              value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)}
-              className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm outline-none"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Notes</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm resize-none outline-none"
-              placeholder="Need evening access, virtual walkthrough, etc."
-            />
-          </div>
-          <div className="md:col-span-2">
-            {type === 'virtual_paid' ? (
-              <div className="mb-4">
-                <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Payment Option</label>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    className={`rounded-lg border px-4 py-3 text-sm font-bold ${paymentOption === 'pay_now' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/20 bg-surface-container-low'}`}
-                    onClick={() => setPaymentOption('pay_now')}
-                  >
-                    Pay Now
-                  </button>
-                  <button
-                    type="button"
-                    className={`rounded-lg border px-4 py-3 text-sm font-bold ${paymentOption === 'cart' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/20 bg-surface-container-low'}`}
-                    onClick={() => setPaymentOption('cart')}
-                  >
-                    Add to Cart
-                  </button>
-                </div>
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold mb-4">Tour Request</h2>
+          <Card className="p-5">
+            <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={(event) => void handleRequestTour(event)}>
+              <div className="md:col-span-2">
+                <PropertySearchSelect
+                  label="Property"
+                  properties={properties}
+                  value={propertyId}
+                  loading={loadingProperties}
+                  onChange={(property) => setPropertyId(property?._id ?? '')}
+                  placeholder="Search available properties..."
+                  emptyMessage="No available properties found."
+                  helperText={propertyError ?? undefined}
+                />
               </div>
-            ) : null}
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Submitting...' : 'Request Tour'}
-            </Button>
-          </div>
-        </form>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Tour Type</label>
+                <select value={type} onChange={(e) => setType(e.target.value as TourType)} className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm">
+                  {TOUR_TYPES.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Mode</label>
+                <select value={mode} onChange={(e) => setMode(e.target.value as TourMode)} className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm">
+                  {TOUR_MODES.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Scheduled At</label>
+                <input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Notes</label>
+                <input
+                  type="text"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm outline-none"
+                  placeholder="Need a virtual walkthrough"
+                />
+              </div>
+              <div className="md:col-span-2">
+                {type === 'virtual_paid' ? (
+                  <div className="mb-4">
+                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Payment Option</label>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        className={`rounded-lg border px-4 py-3 text-sm font-bold ${paymentOption === 'pay_now' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/20 bg-surface-container-low'}`}
+                        onClick={() => setPaymentOption('pay_now')}
+                      >
+                        Pay Now
+                      </button>
+                      <button
+                        type="button"
+                        className={`rounded-lg border px-4 py-3 text-sm font-bold ${paymentOption === 'cart' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/20 bg-surface-container-low'}`}
+                        onClick={() => setPaymentOption('cart')}
+                      >
+                        Add to Cart
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                <Button type="submit" disabled={submitting} className="w-full">
+                  {submitting ? 'Submitting...' : 'Request Tour'}
+                </Button>
+                <p className="text-xs text-secondary mt-2">
+                  Virtual paid tours will redirect to Paystack when the backend returns a payment URL.
+                </p>
+              </div>
+            </form>
+          </Card>
+        </div>
       ) : null}
 
       {loading ? <LoadingState label="Loading tours..." /> : null}
@@ -280,7 +334,7 @@ const Tours = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                   <div>
                     <p className="text-[10px] uppercase tracking-widest text-secondary">Property</p>
-                    <p className="font-semibold">{formatPropertyRef(tour.propertyId)}</p>
+                    <p className="font-semibold">{formatPropertyRef(tour.property ?? tour.propertyId, propertyLookup)}</p>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-widest text-secondary">Scheduled</p>

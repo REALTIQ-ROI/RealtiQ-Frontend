@@ -13,6 +13,11 @@ interface PropertySearchSelectProps {
   helperText?: string;
 }
 
+const propertyMatchesValue = (property: Property, value: string) =>
+  [propertyRouteReference(property), property._id, property.id, property.publicReference]
+    .filter(Boolean)
+    .includes(value);
+
 const PropertySearchSelect = ({
   label,
   properties,
@@ -28,7 +33,7 @@ const PropertySearchSelect = ({
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  const selectedProperty = useMemo(() => properties.find((property) => propertyRouteReference(property) === value) ?? null, [properties, value]);
+  const selectedProperty = useMemo(() => properties.find((property) => propertyMatchesValue(property, value)) ?? null, [properties, value]);
 
   const filteredProperties = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -107,7 +112,7 @@ const PropertySearchSelect = ({
                     setOpen(false);
                   }}
                   className={`w-full px-4 py-3 text-left hover:bg-surface-container-low transition-colors border-b border-outline-variant/10 last:border-b-0 ${
-                    propertyRouteReference(property) === value ? 'bg-primary/5' : ''
+                    propertyMatchesValue(property, value) ? 'bg-primary/5' : ''
                   }`}
                 >
                   <span className="block font-semibold text-sm text-on-surface">{property.title}</span>

@@ -360,6 +360,8 @@ export const resolveInquiryProperty = (property: ApiInquiry['property']): Inquir
 
 export interface TourPropertySummary {
   _id: string;
+  id?: string;
+  publicReference?: string | null;
   title?: string;
   location?: string;
   propertyType?: PropertyType | string;
@@ -375,7 +377,8 @@ export interface TourParticipant {
 
 export interface Tour {
   _id: string;
-  propertyId: string | TourPropertySummary;
+  property?: string | TourPropertySummary;
+  propertyId?: string | TourPropertySummary;
   buyerId?: string | TourParticipant;
   ownerId?: string | TourParticipant;
   type: TourType;

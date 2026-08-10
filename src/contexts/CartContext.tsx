@@ -12,7 +12,7 @@ interface CartContextValue {
   addItem: (body: AddCartItemRequest) => Promise<CartResponse>;
   removeItem: (itemId: string) => Promise<CartResponse>;
   clearCart: () => Promise<CartResponse>;
-  setCartFromResponse: (cart: CartResponse) => void;
+  setCartFromResponse: (cart: CartResponse | null) => void;
 }
 
 const CartContext = createContext<CartContextValue | undefined>(undefined);
@@ -40,7 +40,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(false);
 
   const refreshCart = useCallback(async () => {
-    if (!isAuthenticated || user?.role !== 'buyer') {
+    if (isAuthenticated && user?.role !== 'buyer') {
       setCart(null);
       return null;
     }
@@ -49,6 +49,9 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       const next = await cartService.getCart();
       setCart(next);
       return next;
+    } catch {
+      setCart(null);
+      return null;
     } finally {
       setLoading(false);
     }

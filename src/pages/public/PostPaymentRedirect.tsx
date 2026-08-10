@@ -2,6 +2,7 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import PublicLayout from "../../components/layout/PublicLayout";
+import { useAuth } from "../../contexts/AuthContext";
 import { useCart } from "../../contexts/CartContext";
 import { cartService } from "../../services/cartService";
 import { escrowService } from "../../services/escrowService";
@@ -17,6 +18,7 @@ const wait = (milliseconds: number) =>
 const PostPaymentRedirect = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuth();
   const pendingTitlePayment = titleDocumentService.getPendingPayment();
   const queryReference =
     searchParams.get("reference") ?? searchParams.get("trxref");
@@ -48,7 +50,8 @@ const PostPaymentRedirect = () => {
       ? null
       : "No payment reference was found. Return to your escrow or payment history to retry.",
   );
-  const { refreshCart } = useCart();
+  const { refreshCart, setCartFromResponse } = useCart();
+  const isBuyer = isAuthenticated && user?.role === "buyer";
 
   const verify = useCallback(async () => {
     if (!reference) return;
@@ -70,7 +73,8 @@ const PostPaymentRedirect = () => {
         }
         setCartCheckout(checkout);
         cartService.clearPendingCheckout();
-        void refreshCart().catch(() => undefined);
+        setCartFromResponse(null);
+        window.setTimeout(() => void refreshCart().catch(() => undefined), 1000);
         if (!sessionStorage.getItem(`realtiq.cartPaymentNotified.${reference}`)) {
           toast.success("Cart payment verified.");
           sessionStorage.setItem(`realtiq.cartPaymentNotified.${reference}`, "1");
@@ -129,7 +133,7 @@ const PostPaymentRedirect = () => {
         error instanceof Error ? error.message : "Unable to verify payment.",
       );
     }
-  }, [escrowId, isEscrow, pendingTitlePayment.documentId, pendingTitlePayment.propertyId, reference, refreshCart]);
+  }, [escrowId, isEscrow, pendingTitlePayment.documentId, pendingTitlePayment.propertyId, reference, refreshCart, setCartFromResponse]);
 
   const openTitleViewer = async () => {
     if (!titleDocumentId || openingViewer) return;
@@ -215,10 +219,10 @@ const PostPaymentRedirect = () => {
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               {cartCheckout ? (
                 <Link
-                  to={`/dashboard/buyer/cart-checkouts/${cartCheckout.checkoutId}`}
+                  to={isBuyer ? `/dashboard/buyer/cart-checkouts/${cartCheckout.checkoutId}` : "/cart"}
                   className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary"
                 >
-                  View Service Receipt
+                  {isBuyer ? "View Service Receipt" : "Back to Service Cart"}
                 </Link>
               ) : isTitleDocumentPayment && titleAccessReady && titleDocumentId ? (
                 <button

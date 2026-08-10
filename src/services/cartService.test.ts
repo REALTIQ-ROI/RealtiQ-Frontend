@@ -55,6 +55,21 @@ describe('cartService', () => {
     expect(cartService.getPendingCheckout()).toEqual({ checkoutId: 'checkout1', reference: 'ref1' });
   });
 
+  it('sends guest email when initializing guest cart checkout', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      data: {
+        checkoutId: 'checkout1',
+        reference: 'ref1',
+        redirectUrl: 'https://checkout.paystack.com/ref1',
+        authorizationUrl: 'https://checkout.paystack.com/ref1',
+        totalAmount: 55000,
+        currency: 'NGN',
+      },
+    });
+    await cartService.initializeCartCheckout({ email: 'guest@example.com' });
+    expect(api.post).toHaveBeenCalledWith('/cart/checkout/initialize', { email: 'guest@example.com' });
+  });
+
   it('uses user and admin cart checkout audit routes', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { checkouts: [], total: 0, page: 1, limit: 20 } });
     await cartService.listCartCheckouts({ page: 1, limit: 20, status: 'completed' });
