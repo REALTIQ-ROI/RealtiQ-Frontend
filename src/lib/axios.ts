@@ -19,7 +19,7 @@ export class ApiRequestError extends Error {
     this.name = 'ApiRequestError';
     Object.assign(this, details);
   }
-}
+} 
 
 const defaultBaseURL = import.meta.env.DEV ? '/api' : 'https://api.realtiq.com.ng/api';
 // const defaultBaseURL = import.meta.env.DEV ? '/api' : 'http://localhost:5000/api';
