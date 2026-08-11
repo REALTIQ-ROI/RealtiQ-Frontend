@@ -10,6 +10,7 @@ import {
 import { paymentService } from '../services/paymentService';
 import type { Property } from '../types';
 import { normalizePropertyPaymentTypes } from '../utils/propertyPaymentTypes';
+import { isPublicPropertyVisible } from '../utils/projectPublication';
 
 interface UsePropertiesOptions {
   autoFetch?: boolean;
@@ -39,8 +40,9 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
           limit,
         });
         if (requestId === requestSequence.current) {
-          setProperties(res.properties);
-          setTotal(res.total);
+          const visibleProperties = res.properties.filter(isPublicPropertyVisible);
+          setProperties(visibleProperties);
+          setTotal(visibleProperties.length === res.properties.length ? res.total : visibleProperties.length);
         }
       } catch (err) {
         if (requestId === requestSequence.current) {

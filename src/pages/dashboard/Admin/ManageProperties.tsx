@@ -7,6 +7,7 @@ import MapListLayout from '../../../components/property/map/MapListLayout';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import type { Property } from '../../../types';
 import { propertyDisplayReference, propertyRouteReference } from '../../../types';
+import { labelize } from '../../../utils/projectFormatters';
 
 type FilterType = 'all' | 'available' | 'sold';
 
@@ -56,6 +57,13 @@ const ManageProperties = () => {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'price-desc' | 'price-asc'>('recent');
   const [query, setQuery] = useState('');
+  const [listingType, setListingType] = useState('');
+  const [developmentStatus, setDevelopmentStatus] = useState('');
+  const [projectId, setProjectId] = useState('');
+  const [minProgress, setMinProgress] = useState('');
+  const [maxProgress, setMaxProgress] = useState('');
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
   const filtered = [...properties]
@@ -63,7 +71,13 @@ const ManageProperties = () => {
       const matchesStatus = activeFilter === 'all' || p.status === activeFilter;
       const needle = query.trim().toLowerCase();
       const matchesQuery = !needle || `${p.title} ${p.location} ${p.propertyType}`.toLowerCase().includes(needle);
-      return matchesStatus && matchesQuery;
+      const matchesListingType = !listingType || p.listingType === listingType;
+      const matchesDevelopmentStatus = !developmentStatus || p.offPlanSummary?.developmentStatus === developmentStatus || p.offPlan?.developmentStatus === developmentStatus;
+      const matchesProject = !projectId.trim() || p.project?._id === projectId.trim() || p.project?.slug === projectId.trim();
+      const progress = p.offPlanSummary?.constructionProgress ?? p.offPlan?.constructionProgress;
+      const matchesMinProgress = !minProgress || (typeof progress === 'number' && progress >= Number(minProgress));
+      const matchesMaxProgress = !maxProgress || (typeof progress === 'number' && progress <= Number(maxProgress));
+      return matchesStatus && matchesQuery && matchesListingType && matchesDevelopmentStatus && matchesProject && matchesMinProgress && matchesMaxProgress;
     })
     .sort((a, b) => {
       if (sortBy === 'price-desc') return b.price - a.price;
@@ -81,7 +95,20 @@ const ManageProperties = () => {
     if (reference) void navigate(`/dashboard/admin/property-details/${reference}`);
   };
 
+  const handleFeature = async (property: Property) => {
+    const reference = propertyRouteReference(property);
+    if (!reference || updatingId) return;
+    setUpdatingId(reference);
+    try {
+      await updateProperty(reference, { featured: !property.featured });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handleDelete = async (property: Property) => {
+    const reference = propertyRouteReference(property);
+    if (!reference || deletingId) return;
     const confirmed = await Swal.fire({
       title: 'Delete this property?',
       text: 'This action cannot be undone.',
@@ -94,7 +121,12 @@ const ManageProperties = () => {
       reverseButtons: true,
     });
     if (confirmed.isConfirmed) {
-      await deleteProperty(propertyRouteReference(property));
+      setDeletingId(reference);
+      try {
+        await deleteProperty(reference);
+      } finally {
+        setDeletingId(null);
+      }
     }
   };
 
@@ -173,6 +205,21 @@ const ManageProperties = () => {
           </div>
         </div>
 
+        <div className="mb-8 grid gap-3 rounded-xl bg-surface-container-lowest p-4 md:grid-cols-5">
+          <select value={listingType} onChange={(event) => { setListingType(event.target.value); setPage(1); }} className="rounded-lg bg-surface-container-low px-3 py-2 text-sm outline-none">
+            <option value="">Any listing type</option>
+            <option value="ready">Ready</option>
+            <option value="off_plan">Off-plan</option>
+          </select>
+          <select value={developmentStatus} onChange={(event) => { setDevelopmentStatus(event.target.value); setPage(1); }} className="rounded-lg bg-surface-container-low px-3 py-2 text-sm outline-none">
+            <option value="">Any construction stage</option>
+            {['planned', 'pre_construction', 'foundation', 'structural', 'roofing', 'finishing', 'completed'].map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
+          </select>
+          <input value={projectId} onChange={(event) => { setProjectId(event.target.value); setPage(1); }} placeholder="Project id or slug" className="rounded-lg bg-surface-container-low px-3 py-2 text-sm outline-none" />
+          <input type="number" min={0} max={100} value={minProgress} onChange={(event) => { setMinProgress(event.target.value); setPage(1); }} placeholder="Min progress" className="rounded-lg bg-surface-container-low px-3 py-2 text-sm outline-none" />
+          <input type="number" min={0} max={100} value={maxProgress} onChange={(event) => { setMaxProgress(event.target.value); setPage(1); }} placeholder="Max progress" className="rounded-lg bg-surface-container-low px-3 py-2 text-sm outline-none" />
+        </div>
+
         <MapListLayout
           properties={filtered}
           detailsPath={(property) => {
@@ -181,10 +228,34 @@ const ManageProperties = () => {
           }}
           actions={(property) => (
             <>
-              <button type="button" className="rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold text-primary" onClick={() => void updateProperty(propertyRouteReference(property), { featured: !property.featured })} disabled={!propertyRouteReference(property)}>
-                {property.featured ? 'Unfeature' : 'Feature'}
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void handleFeature(property)}
+                disabled={!propertyRouteReference(property) || Boolean(updatingId)}
+                aria-busy={updatingId === propertyRouteReference(property) || undefined}
+              >
+                {updatingId === propertyRouteReference(property) ? (
+                  <>
+                    <span className="material-symbols-outlined animate-spin text-sm" aria-hidden="true">progress_activity</span>
+                    Updating...
+                  </>
+                ) : property.featured ? 'Unfeature' : 'Feature'}
               </button>
-              <button type="button" className="rounded-lg bg-error-container px-3 py-2 text-xs font-bold text-error" onClick={() => void handleDelete(property)}>Delete</button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-lg bg-error-container px-3 py-2 text-xs font-bold text-error disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void handleDelete(property)}
+                disabled={!propertyRouteReference(property) || Boolean(deletingId)}
+                aria-busy={deletingId === propertyRouteReference(property) || undefined}
+              >
+                {deletingId === propertyRouteReference(property) ? (
+                  <>
+                    <span className="material-symbols-outlined animate-spin text-sm" aria-hidden="true">progress_activity</span>
+                    Deleting...
+                  </>
+                ) : 'Delete'}
+              </button>
             </>
           )}
         >
@@ -270,22 +341,27 @@ const ManageProperties = () => {
                                 : 'text-secondary hover:text-primary hover:bg-slate-100'
                             }`}
                             title={property.featured ? 'Unfeature' : 'Feature Listing'}
-                            disabled={!propertyReference}
-                            onClick={() => void updateProperty(propertyReference, { featured: !property.featured })}
+                            disabled={!propertyReference || Boolean(updatingId)}
+                            aria-busy={updatingId === propertyReference || undefined}
+                            onClick={() => void handleFeature(property)}
                           >
                             <span
-                              className="material-symbols-outlined text-lg"
+                              className={`material-symbols-outlined text-lg ${updatingId === propertyReference ? 'animate-spin' : ''}`}
                               style={property.featured ? { fontVariationSettings: "'FILL' 1" } : undefined}
                             >
-                              star
+                              {updatingId === propertyReference ? 'progress_activity' : 'star'}
                             </span>
                           </button>
                           <button
-                            className="p-2 text-secondary hover:text-error hover:bg-error-container rounded-lg transition-all"
+                            className="p-2 text-secondary hover:text-error hover:bg-error-container rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-60"
                             title="Delete"
+                            disabled={!propertyReference || Boolean(deletingId)}
+                            aria-busy={deletingId === propertyReference || undefined}
                             onClick={() => void handleDelete(property)}
                           >
-                            <span className="material-symbols-outlined text-lg">delete</span>
+                            <span className={`material-symbols-outlined text-lg ${deletingId === propertyReference ? 'animate-spin' : ''}`}>
+                              {deletingId === propertyReference ? 'progress_activity' : 'delete'}
+                            </span>
                           </button>
                         </div>
                       </td>
@@ -348,6 +424,7 @@ const ManageProperties = () => {
             </div>
           </div>
         </div>
+
           );
         }}
         </MapListLayout>

@@ -8,6 +8,7 @@ import Button from '../ui/Button';
 const navItems = [
   { to: '/', label: 'Home' },
   { to: '/properties', label: 'Properties' },
+  { to: '/projects', label: 'Projects' },
   { to: '/proxy-inspectors', label: 'Verified Property Agents' },
   { to: '/about', label: 'About' },
   { to: '/contact', label: 'Contact' },

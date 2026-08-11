@@ -242,16 +242,28 @@ const ManagePayments = () => {
                                 <button
                                   disabled={isBusy}
                                   onClick={() => void handleVerify(payment)}
-                                  className="whitespace-nowrap px-3 py-1.5 text-xs font-bold bg-primary text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50 transition-all"
+                                  aria-busy={verifying === payment._id || undefined}
+                                  className="inline-flex items-center gap-1 whitespace-nowrap px-3 py-1.5 text-xs font-bold bg-primary text-on-primary rounded-lg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
                                 >
-                                  {isBusy ? '…' : 'Verify'}
+                                  {verifying === payment._id ? (
+                                    <>
+                                      <span className="material-symbols-outlined animate-spin text-sm" aria-hidden="true">progress_activity</span>
+                                      Verifying...
+                                    </>
+                                  ) : 'Verify'}
                                 </button>
                                 <button
                                   disabled={isBusy}
                                   onClick={() => void handleCancel(payment)}
-                                  className="whitespace-nowrap px-3 py-1.5 text-xs font-bold border border-rose-200 text-rose-700 rounded-lg hover:bg-rose-50 disabled:opacity-50 transition-all"
+                                  aria-busy={canceling === payment._id || undefined}
+                                  className="inline-flex items-center gap-1 whitespace-nowrap px-3 py-1.5 text-xs font-bold border border-rose-200 text-rose-700 rounded-lg hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
                                 >
-                                  {canceling === payment._id ? '…' : 'Cancel payment'}
+                                  {canceling === payment._id ? (
+                                    <>
+                                      <span className="material-symbols-outlined animate-spin text-sm" aria-hidden="true">progress_activity</span>
+                                      Canceling...
+                                    </>
+                                  ) : 'Cancel payment'}
                                 </button>
                                 <button
                                   disabled={isBusy}

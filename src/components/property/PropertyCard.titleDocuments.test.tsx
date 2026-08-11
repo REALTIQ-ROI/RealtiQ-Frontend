@@ -87,4 +87,36 @@ describe('PropertyCard title-document summary', () => {
     expect(await screen.findByText('2 of 3 Title Documents Verified')).toBeInTheDocument();
     expect(titleDocumentService.listPublic).toHaveBeenCalledWith('RTQ-PROP-1');
   });
+
+  it('renders project and off-plan listing badges', () => {
+    render(
+      <MemoryRouter>
+        <PropertyCard
+          property={{
+            ...property,
+            listingType: 'off_plan',
+            project: {
+              _id: 'project-1',
+              name: 'Palm Heights Estate',
+              slug: 'palm-heights-estate',
+              projectType: 'estate',
+              status: 'ongoing',
+            },
+            offPlanSummary: {
+              developmentStatus: 'foundation',
+              constructionProgress: 15,
+              expectedCompletionDate: '2027-12-01T00:00:00.000Z',
+              installmentAvailable: true,
+              minimumInitialDeposit: 13_000_000,
+            },
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Off-Plan')).toBeInTheDocument();
+    expect(screen.getByText('Foundation')).toBeInTheDocument();
+    expect(screen.getByText('15% complete')).toBeInTheDocument();
+    expect(screen.getByText('Palm Heights Estate')).toBeInTheDocument();
+  });
 });

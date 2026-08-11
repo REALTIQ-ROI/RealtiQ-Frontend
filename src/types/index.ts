@@ -5,6 +5,30 @@ export type PropertyPaymentType = 'outright' | 'installment' | 'escrow';
 export type PropertyCategory = 'residential' | 'commercial' | 'mixed_use' | string;
 export type PropertyCompletionStage = 'off_plan' | 'unfinished' | 'finished' | 'renovation' | string;
 export type PropertyCurrency = 'NGN' | 'USD' | 'GBP' | string;
+export type ProjectType =
+  | 'estate'
+  | 'apartment_development'
+  | 'residential'
+  | 'commercial'
+  | 'mixed_use'
+  | 'housing_project'
+  | 'other';
+export type ProjectStatus =
+  | 'draft'
+  | 'upcoming'
+  | 'ongoing'
+  | 'completed'
+  | 'sold_out'
+  | 'suspended';
+export type ListingType = 'ready' | 'off_plan';
+export type OffPlanDevelopmentStatus =
+  | 'planned'
+  | 'pre_construction'
+  | 'foundation'
+  | 'structural'
+  | 'roofing'
+  | 'finishing'
+  | 'completed';
 export type TourType = 'open_house' | 'virtual_paid' | 'staging_view';
 export type TourMode = 'physical' | 'virtual';
 export type TourStatus = 'pending' | 'approved' | 'rejected' | 'completed';
@@ -45,6 +69,154 @@ export interface MediaItem {
   resourceType?: 'image' | 'video' | 'raw' | string;
   type: 'image' | 'video' | 'raw';
   _id?: string;
+}
+
+export interface ProjectUnit {
+  unitName?: string;
+  unitNumber?: string;
+  block?: string;
+  phase?: string;
+  floor?: string;
+  plotNumber?: string;
+}
+
+export interface ProjectMedia {
+  url: string;
+  public_id?: string;
+  publicId?: string;
+  type: 'image' | 'video';
+  caption?: string;
+  isCover?: boolean;
+}
+
+export interface OffPlanPaymentMilestone {
+  sequence: number;
+  title?: string;
+  description?: string;
+  percentage?: number;
+  amount?: number;
+  dueDate?: string;
+  constructionStage?: string;
+}
+
+export interface OffPlan {
+  developmentStatus?: OffPlanDevelopmentStatus;
+  constructionProgress?: number;
+  expectedCompletionDate?: string;
+  constructionStartDate?: string;
+  handoverDate?: string;
+  completedAt?: string;
+  reservationAmount?: number;
+  minimumInitialDeposit?: number;
+  installmentAvailable?: boolean;
+  installmentDurationMonths?: number;
+  paymentPlanDescription?: string;
+  paymentMilestones?: OffPlanPaymentMilestone[];
+  totalUnitsPlanned?: number;
+  unitsAvailable?: number;
+  unitType?: string;
+  floorPlanAvailable?: boolean;
+  showUnitAvailable?: boolean;
+  constructionUpdatesEnabled?: boolean;
+  lastConstructionUpdateAt?: string;
+  developerGuaranteeInformation?: string;
+  refundPolicy?: string;
+  riskDisclosure?: string;
+}
+
+export interface OffPlanSummary {
+  developmentStatus?: OffPlanDevelopmentStatus;
+  constructionProgress?: number;
+  expectedCompletionDate?: string;
+  installmentAvailable?: boolean;
+  minimumInitialDeposit?: number;
+}
+
+export interface ProjectSummary {
+  _id: string;
+  name: string;
+  slug: string;
+  projectType: ProjectType;
+  status: ProjectStatus;
+  isPublished?: boolean;
+  coverImage?: { url: string } | null;
+}
+
+export interface ProjectCard extends ProjectSummary {
+  shortDescription?: string;
+  location: { state?: string; city?: string; area?: string };
+  minimumPrice?: number;
+  maximumPrice?: number;
+  totalUnits: number;
+  availableUnits: number;
+  soldUnits?: number;
+  isFeatured: boolean;
+  developer?: { name?: string };
+  offPlanSummary?: {
+    totalOffPlanUnits: number;
+    availableOffPlanUnits: number;
+    minimumOffPlanPrice?: number;
+    maximumOffPlanPrice?: number;
+  };
+}
+
+export interface ProjectLocationLandmark {
+  name: string;
+  distance?: string;
+  type?: string;
+}
+
+export interface ProjectOwnerSummary {
+  id?: string;
+  _id?: string;
+  name?: string;
+  landlordVerified?: boolean;
+  ratingAverage?: number;
+}
+
+export interface ProjectDetail extends ProjectCard {
+  description?: string;
+  address?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  area?: string;
+  coordinates?: PropertyCoordinates | null;
+  media?: ProjectMedia[];
+  amenities?: string[];
+  features?: string[];
+  nearbyLandmarks?: ProjectLocationLandmark[];
+  currency?: string;
+  completionDate?: string;
+  launchDate?: string;
+  isPublished?: boolean;
+  publishedAt?: string;
+  owner?: ProjectOwnerSummary;
+  propertyPreview?: Property[];
+  propertyCount?: number;
+  availablePropertyCount?: number;
+  verifiedPropertyCount?: number;
+}
+
+export interface ConstructionUpdate {
+  _id: string;
+  property?: string;
+  project?: string;
+  createdBy?: string;
+  developmentStatus: OffPlanDevelopmentStatus;
+  progressPercentage: number;
+  title: string;
+  description?: string;
+  media?: ProjectMedia[];
+  updateDate?: string;
+  createdAt?: string;
+}
+
+export interface ConstructionUpdateListResponse {
+  updates: ConstructionUpdate[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export interface PropertyCoordinates {
@@ -123,6 +295,11 @@ export interface Property {
     score: number;
     periodDays: number;
   };
+  project?: ProjectSummary | null;
+  projectUnit?: ProjectUnit;
+  listingType?: ListingType;
+  offPlan?: OffPlan;
+  offPlanSummary?: OffPlanSummary;
 }
 
 export const propertyPublicReference = (property?: Pick<Property, 'publicReference' | '_id'> | null): string =>
@@ -293,6 +470,16 @@ export interface PropertyFilters {
   currency?: PropertyCurrency;
   featured?: boolean;
   status?: PropertyStatus;
+  projectId?: string;
+  projectSlug?: string;
+  hasProject?: boolean;
+  listingType?: ListingType;
+  developmentStatus?: OffPlanDevelopmentStatus;
+  minConstructionProgress?: number;
+  maxConstructionProgress?: number;
+  completionBefore?: string;
+  completionAfter?: string;
+  installmentAvailable?: boolean;
   north?: number;
   south?: number;
   east?: number;

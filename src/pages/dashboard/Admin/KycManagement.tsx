@@ -256,15 +256,19 @@ const ManageKyc = () => {
                         <div className="flex items-center justify-end gap-2">
                           <Button
                             type="button"
-                            disabled={processingId === landlord._id || kyc?.status !== 'pending'}
+                            loading={processingId === landlord._id}
+                            loadingLabel="Approving..."
+                            disabled={kyc?.status !== 'pending'}
                             onClick={() => void handleReview(landlord, true)}
                           >
-                            {processingId === landlord._id ? 'Processing...' : 'Approve'}
+                            Approve
                           </Button>
                           <Button
                             type="button"
                             variant="secondary"
-                            disabled={processingId === landlord._id || kyc?.status !== 'pending'}
+                            loading={processingId === landlord._id}
+                            loadingLabel="Rejecting..."
+                            disabled={kyc?.status !== 'pending'}
                             onClick={() => void handleReview(landlord, false)}
                           >
                             Reject

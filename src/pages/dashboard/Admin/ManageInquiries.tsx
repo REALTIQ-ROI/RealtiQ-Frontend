@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import Button from '../../../components/ui/Button';
@@ -16,17 +17,22 @@ const formatDate = (date: string) =>
   });
 
 const ManageInquiries = () => {
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const { data, loading, error, execute } = useAsync(() => inquiryService.getInquiries(), true);
   const inquiries = data ?? [];
   const openCount = inquiries.filter((inquiry) => inquiry.status === 'open').length;
 
   const toggleStatus = async (id: string, status: 'open' | 'closed') => {
+    if (updatingId) return;
+    setUpdatingId(id);
     try {
       await inquiryService.updateInquiryStatus(id, status === 'open' ? 'closed' : 'open');
       toast.success(status === 'open' ? 'Inquiry closed.' : 'Inquiry reopened.');
       await execute();
     } catch {
       toast.error('Unable to update inquiry status.');
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -119,7 +125,13 @@ const ManageInquiries = () => {
                           <Link to={`/dashboard/admin/inquiry-details/${inquiry._id}`} className="self-center text-primary font-bold text-sm hover:underline">
                             View
                           </Link>
-                          <Button variant="secondary" onClick={() => void toggleStatus(inquiry._id, inquiry.status)}>
+                          <Button
+                            variant="secondary"
+                            loading={updatingId === inquiry._id}
+                            loadingLabel={inquiry.status === 'open' ? 'Closing...' : 'Reopening...'}
+                            disabled={Boolean(updatingId)}
+                            onClick={() => void toggleStatus(inquiry._id, inquiry.status)}
+                          >
                             {inquiry.status === 'open' ? 'Close' : 'Reopen'}
                           </Button>
                         </div>

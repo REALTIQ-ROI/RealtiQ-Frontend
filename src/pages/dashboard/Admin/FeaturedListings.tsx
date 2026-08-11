@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
@@ -15,15 +16,20 @@ const formatNGN = (value: number) =>
 
 const FeaturedListings = () => {
   const { properties, loading, error, refreshProperties, updateProperty } = useProperties();
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const candidates = properties.filter((property) => property.status === 'available');
   const featured = candidates.filter((property) => property.featured);
 
   const toggleFeatured = async (id: string, featuredState: boolean) => {
+    if (updatingId) return;
+    setUpdatingId(id);
     try {
       await updateProperty(id, { featured: !featuredState });
       toast.success(featuredState ? 'Listing removed from featured.' : 'Listing marked as featured.');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to update featured listing.');
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -123,14 +129,21 @@ const FeaturedListings = () => {
                           View
                         </Link>
                         <button
+                          disabled={Boolean(updatingId)}
+                          aria-busy={updatingId === property._id || undefined}
                           onClick={() => void toggleFeatured(property._id, Boolean(property.featured))}
-                          className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors ${
+                          className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                             property.featured
                               ? 'bg-surface-container-low text-secondary hover:bg-surface-container'
                               : 'bg-primary text-on-primary hover:opacity-90'
                           }`}
                         >
-                          {property.featured ? 'Remove' : 'Feature'}
+                          {updatingId === property._id ? (
+                            <>
+                              <span className="material-symbols-outlined animate-spin text-base" aria-hidden="true">progress_activity</span>
+                              Updating...
+                            </>
+                          ) : property.featured ? 'Remove' : 'Feature'}
                         </button>
                       </div>
                     </article>

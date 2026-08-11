@@ -6,6 +6,7 @@ import useHasScrolled from '../../hooks/useHasScrolled';
 type LandlordNavKey =
   | 'overview'
   | 'my-properties'
+  | 'projects'
   | 'add-property'
   | 'verification'
   | 'title-verifications'
@@ -28,6 +29,7 @@ interface LandlordPortalLayoutProps {
 const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: string }> = [
   { key: 'overview', to: '/dashboard/landlord', icon: 'dashboard', label: 'Overview' },
   { key: 'my-properties', to: '/dashboard/landlord/my-properties', icon: 'domain', label: 'My Properties' },
+  { key: 'projects', to: '/dashboard/landlord/projects', icon: 'business', label: 'Projects' },
   { key: 'add-property', to: '/dashboard/landlord/add-property', icon: 'add_circle', label: 'Add Property' },
   { key: 'verification', to: '/dashboard/landlord/settings/verification', icon: 'verified_user', label: 'Verification' },
   { key: 'title-verifications', to: '/dashboard/landlord/title-verifications', icon: 'verified', label: 'Title Verification' },

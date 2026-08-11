@@ -4,6 +4,7 @@ import MediaPreview from '../../../components/property/MediaPreview';
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
 import TitleDocumentManagement from '../../../components/title/TitleDocumentManagement';
 import PaymentTypeBadges from '../../../components/property/PaymentTypeBadges';
+import ConstructionUpdateManager from '../../../components/property/ConstructionUpdateManager';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
@@ -251,6 +252,7 @@ const LandlordPropertyDetails = () => {
             </div>
           </div>
         </div>
+        {property ? <ConstructionUpdateManager property={property} /> : null}
         {property ? <TitleDocumentManagement propertyId={propertyReference} sold={property.status === 'sold'} /> : null}
       </div>
     </LandlordPortalLayout>

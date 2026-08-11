@@ -4,6 +4,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
   variant?: 'primary' | 'secondary' | 'ghost';
   fullWidth?: boolean;
+  loading?: boolean;
+  loadingLabel?: ReactNode;
 }
 
 const variantClasses: Record<NonNullable<ButtonProps['variant']>, string> = {
@@ -12,15 +14,31 @@ const variantClasses: Record<NonNullable<ButtonProps['variant']>, string> = {
   ghost: 'bg-transparent text-on-surface hover:bg-surface-container-low',
 };
 
-const Button = ({ children, variant = 'primary', fullWidth = false, className = '', ...props }: ButtonProps) => {
+const Button = ({
+  children,
+  variant = 'primary',
+  fullWidth = false,
+  className = '',
+  loading = false,
+  loadingLabel,
+  disabled,
+  ...props
+}: ButtonProps) => {
   return (
     <button
-      className={`px-6 py-3 rounded-lg font-label font-semibold text-sm transition-all active:scale-95 ${variantClasses[variant]} ${
+      className={`inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-label font-semibold text-sm transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 ${variantClasses[variant]} ${
         fullWidth ? 'w-full' : ''
       } ${className}`.trim()}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
     >
-      {children}
+      {loading ? (
+        <>
+          <span className="material-symbols-outlined animate-spin text-base" aria-hidden="true">progress_activity</span>
+          {loadingLabel ?? children}
+        </>
+      ) : children}
     </button>
   );
 };

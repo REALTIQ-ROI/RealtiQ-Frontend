@@ -1,6 +1,10 @@
 import api from '../lib/axios';
 import type {
   MediaItem,
+  ConstructionUpdate,
+  ConstructionUpdateListResponse,
+  ListingType,
+  OffPlan,
   Property,
   PropertyApprovalStatus,
   PropertyCategory,
@@ -11,6 +15,7 @@ import type {
   PropertyPaymentType,
   PropertyStatus,
   PropertyType,
+  ProjectUnit,
   TitleDocumentRecord,
   TitleDocumentPolicyMode,
   TitleDocumentType,
@@ -47,6 +52,10 @@ export interface CreatePropertyPayload {
   status?: PropertyStatus;
   titleDocuments?: TitleDocumentUploadMetadata[];
   priceChangeReason?: string;
+  projectId?: string;
+  projectUnit?: ProjectUnit;
+  listingType?: ListingType;
+  offPlan?: OffPlan;
 }
 
 export interface UpdatePropertyPayload extends Partial<CreatePropertyPayload> {
@@ -115,6 +124,16 @@ export interface PropertyMapFilters extends PropertyMapBounds {
   bedrooms?: number;
   bathrooms?: number;
   status?: string;
+  projectId?: string;
+  projectSlug?: string;
+  hasProject?: boolean;
+  listingType?: ListingType;
+  developmentStatus?: string;
+  minConstructionProgress?: number;
+  maxConstructionProgress?: number;
+  completionBefore?: string;
+  completionAfter?: string;
+  installmentAvailable?: boolean;
   verified?: boolean;
   activityMetric?: 'market_interest' | 'views' | 'saves' | 'inquiries' | 'purchases';
   activityLevel?: 'low' | 'medium' | 'high' | 'very_high';
@@ -214,6 +233,15 @@ export interface PropertyApprovalInput {
   rejectionReason?: string;
 }
 
+export interface ConstructionUpdateRequest {
+  developmentStatus: string;
+  progressPercentage: number;
+  title: string;
+  description?: string;
+  reason?: string;
+  media?: MediaItem[];
+}
+
 const normalizeProperty = (property: Property): Property => ({
   ...property,
   paymentTypes: normalizePropertyPaymentTypes(property.paymentTypes, property.price),
@@ -278,6 +306,37 @@ export const propertyService = {
   async deleteProperty(id: string): Promise<{ message: string }> {
     const { data } = await api.delete<{ message: string }>(`/properties/${id}`);
     return data;
+  },
+
+  async attachPropertyToProject(propertyId: string, body: { projectId: string; projectUnit?: ProjectUnit }): Promise<{ property: Property }> {
+    const { data } = await api.patch<{ property: Property }>(`/properties/${propertyId}/project`, body);
+    return { property: normalizeProperty(data.property) };
+  },
+
+  async detachPropertyFromProject(propertyId: string): Promise<{ property: Property }> {
+    const { data } = await api.delete<{ property: Property }>(`/properties/${propertyId}/project`);
+    return { property: normalizeProperty(data.property) };
+  },
+
+  async createConstructionUpdate(propertyId: string, body: ConstructionUpdateRequest): Promise<{ update: ConstructionUpdate; property: Property }> {
+    const { data } = await api.post<{ update: ConstructionUpdate; property: Property }>(
+      `/properties/${propertyId}/construction-updates`,
+      body,
+    );
+    return { ...data, property: normalizeProperty(data.property) };
+  },
+
+  async listConstructionUpdates(
+    propertyId: string,
+    query?: { page?: number; limit?: number; sort?: 'asc' | 'desc' },
+  ): Promise<ConstructionUpdateListResponse> {
+    const { data } = await api.get<ConstructionUpdateListResponse>(`/properties/${propertyId}/construction-updates`, { params: query });
+    return data;
+  },
+
+  async completeOffPlanProperty(propertyId: string, body?: { convertToReady?: boolean }): Promise<{ property: Property }> {
+    const { data } = await api.patch<{ property: Property }>(`/properties/${propertyId}/off-plan/complete`, body ?? {});
+    return { property: normalizeProperty(data.property) };
   },
 
   async getPropertyOwnerDetail(id: string): Promise<PropertyOwnerDetailResponse> {

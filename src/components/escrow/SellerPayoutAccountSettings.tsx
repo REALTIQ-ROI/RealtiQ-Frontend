@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { useAsync } from '../../hooks/useAsync';
 import { escrowErrorDetails, escrowService } from '../../services/escrowService';
+import Button from '../ui/Button';
 import LoadingState from '../ui/LoadingState';
 
 const SellerPayoutAccountSettings = () => {
@@ -58,7 +59,9 @@ const SellerPayoutAccountSettings = () => {
             <label className="text-sm font-bold">Bank code<input value={bankCode} onChange={(event) => setBankCode(event.target.value)} autoComplete="off" className="mt-1 w-full rounded-lg border border-outline-variant/30 p-3 font-normal" required /></label>
             <label className="text-sm font-bold sm:col-span-2">Bank name<input value={bankName} onChange={(event) => setBankName(event.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant/30 p-3 font-normal" required /></label>
             {formError ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800 sm:col-span-2">{formError}</p> : null}
-            <button type="submit" disabled={pending} className="rounded-lg bg-primary px-4 py-3 font-bold text-on-primary disabled:opacity-50 sm:col-span-2">{pending ? 'Verifying...' : data?.configured ? 'Update payout account' : 'Configure payout account'}</button>
+            <Button type="submit" loading={pending} loadingLabel="Verifying..." className="sm:col-span-2">
+              {data?.configured ? 'Update payout account' : 'Configure payout account'}
+            </Button>
           </form>
           <p className="mt-3 text-xs text-secondary">Only the masked, backend-verified account is displayed after submission. The full account number is cleared from this form.</p>
         </>

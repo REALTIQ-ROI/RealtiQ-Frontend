@@ -3,8 +3,9 @@ import { toast } from 'sonner';
 import { ApiRequestError } from '../../lib/axios';
 import MediaUploader from './MediaUploader';
 import { documentService } from '../../services/documentService';
+import { projectService } from '../../services/projectService';
 import type { CreatePropertyPayload, TitleDocumentUploadMetadata } from '../../services/propertyService';
-import type { MediaItem, Property, PropertyPaymentType, TitleDocumentPolicyMode, TitleDocumentType } from '../../types';
+import type { ListingType, MediaItem, OffPlanDevelopmentStatus, OffPlanPaymentMilestone, ProjectCard, Property, PropertyPaymentType, TitleDocumentPolicyMode, TitleDocumentType } from '../../types';
 import { documentTypeLabel, titleDocumentTypeOptions } from '../../utils/titleVerification';
 import {
   INSTALLMENT_THRESHOLD_NGN,
@@ -15,7 +16,7 @@ import {
 } from '../../utils/propertyPaymentTypes';
 
 interface PropertyFormProps {
-  initialData?: Partial<CreatePropertyPayload & { status: string }>;
+  initialData?: Partial<CreatePropertyPayload & Pick<Property, 'project'> & { status: string }>;
   onSubmit: (data: CreatePropertyPayload & { status?: string }) => Promise<Property | void>;
   isLoading?: boolean;
   submitLabel?: string;
@@ -36,6 +37,11 @@ const LAND_CATEGORY_OPTIONS = ['residential_land', 'commercial_land', 'agricultu
 const STAGE_OPTIONS = ['off_plan', 'unfinished', 'finished', 'renovation'];
 const CURRENCY_OPTIONS = ['NGN', 'USD', 'GBP'];
 const STATUS_OPTIONS = ['available', 'sold'];
+const LISTING_TYPE_OPTIONS: Array<{ value: ListingType; label: string }> = [
+  { value: 'ready', label: 'Ready' },
+  { value: 'off_plan', label: 'Off-Plan' },
+];
+const DEVELOPMENT_STATUS_OPTIONS: OffPlanDevelopmentStatus[] = ['planned', 'pre_construction', 'foundation', 'structural', 'roofing', 'finishing', 'completed'];
 const TITLE_DOCUMENT_ACCEPT = '.pdf,image/jpeg,image/png,image/webp';
 const MAX_TITLE_DOCUMENT_BYTES = 50 * 1024 * 1024;
 
@@ -96,6 +102,30 @@ const validate = (data: CreatePropertyPayload & { status?: string }): Record<str
   if (data.priceChangeReason && data.priceChangeReason.length > 500) {
     errs.priceChangeReason = 'Reason must be 500 characters or fewer';
   }
+  if (data.offPlan) {
+    const progress = Number(data.offPlan.constructionProgress ?? 0);
+    if (progress < 0 || progress > 100) errs.constructionProgress = 'Progress must be between 0 and 100';
+    if (!data.offPlan.expectedCompletionDate) errs.expectedCompletionDate = 'Expected completion date is required';
+    if ((data.offPlan.reservationAmount ?? 0) < 0) errs.reservationAmount = 'Reservation cannot be negative';
+    if ((data.offPlan.minimumInitialDeposit ?? 0) < 0) errs.minimumInitialDeposit = 'Deposit cannot be negative';
+    if ((data.offPlan.reservationAmount ?? 0) > data.price) errs.reservationAmount = 'Reservation cannot exceed property price';
+    if ((data.offPlan.minimumInitialDeposit ?? 0) > data.price) errs.minimumInitialDeposit = 'Deposit cannot exceed property price';
+    if ((data.offPlan.unitsAvailable ?? 0) > (data.offPlan.totalUnitsPlanned ?? Number.MAX_SAFE_INTEGER)) errs.unitsAvailable = 'Available units cannot exceed planned units';
+    if (!data.offPlan.riskDisclosure?.trim()) errs.riskDisclosure = 'Risk disclosure is required for off-plan listings';
+    const milestones = data.offPlan.paymentMilestones ?? [];
+    const sequences = new Set(milestones.map((item) => item.sequence));
+    if (sequences.size !== milestones.length) errs.paymentMilestones = 'Milestone sequence values must be unique';
+    const percentageMilestones = milestones.filter((item) => typeof item.percentage === 'number');
+    if (percentageMilestones.length) {
+      const total = percentageMilestones.reduce((sum, item) => sum + Number(item.percentage ?? 0), 0);
+      if (Math.round(total) !== 100) errs.paymentMilestones = 'Milestone percentages must sum to 100';
+    }
+    const amountMilestones = milestones.filter((item) => typeof item.amount === 'number');
+    if (amountMilestones.length) {
+      const total = amountMilestones.reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+      if (Math.round(total) !== Math.round(data.price)) errs.paymentMilestones = 'Milestone amounts must sum to property price';
+    }
+  }
   return errs;
 };
 
@@ -106,6 +136,9 @@ const PropertyForm = ({
   submitLabel = 'Save Property',
   mode = 'create',
 }: PropertyFormProps) => {
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const initialProject = initialData?.project;
+  const initialProjectId = searchParams.get('projectId') ?? initialProject?._id ?? '';
   const [title, setTitle] = useState(initialData?.title ?? '');
   const [price, setPrice] = useState(initialData?.price?.toString() ?? '');
   const [location, setLocation] = useState(initialData?.location ?? '');
@@ -132,6 +165,35 @@ const PropertyForm = ({
         )
       : [],
   );
+  const [projects, setProjects] = useState<ProjectCard[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectId, setProjectId] = useState(initialProjectId);
+  const [unitName, setUnitName] = useState(initialData?.projectUnit?.unitName ?? '');
+  const [unitNumber, setUnitNumber] = useState(initialData?.projectUnit?.unitNumber ?? '');
+  const [block, setBlock] = useState(initialData?.projectUnit?.block ?? '');
+  const [phase, setPhase] = useState(initialData?.projectUnit?.phase ?? '');
+  const [floor, setFloor] = useState(initialData?.projectUnit?.floor ?? '');
+  const [plotNumber, setPlotNumber] = useState(initialData?.projectUnit?.plotNumber ?? '');
+  const [listingType, setListingType] = useState<ListingType>(initialData?.listingType ?? 'ready');
+  const [developmentStatus, setDevelopmentStatus] = useState<OffPlanDevelopmentStatus>(initialData?.offPlan?.developmentStatus ?? 'planned');
+  const [constructionProgress, setConstructionProgress] = useState(initialData?.offPlan?.constructionProgress?.toString() ?? '0');
+  const [expectedCompletionDate, setExpectedCompletionDate] = useState(initialData?.offPlan?.expectedCompletionDate?.slice(0, 10) ?? '');
+  const [constructionStartDate, setConstructionStartDate] = useState(initialData?.offPlan?.constructionStartDate?.slice(0, 10) ?? '');
+  const [handoverDate, setHandoverDate] = useState(initialData?.offPlan?.handoverDate?.slice(0, 10) ?? '');
+  const [reservationAmount, setReservationAmount] = useState(initialData?.offPlan?.reservationAmount?.toString() ?? '');
+  const [minimumInitialDeposit, setMinimumInitialDeposit] = useState(initialData?.offPlan?.minimumInitialDeposit?.toString() ?? '');
+  const [offPlanInstallmentAvailable, setOffPlanInstallmentAvailable] = useState(Boolean(initialData?.offPlan?.installmentAvailable));
+  const [installmentDurationMonths, setInstallmentDurationMonths] = useState(initialData?.offPlan?.installmentDurationMonths?.toString() ?? '');
+  const [paymentPlanDescription, setPaymentPlanDescription] = useState(initialData?.offPlan?.paymentPlanDescription ?? '');
+  const [totalUnitsPlanned, setTotalUnitsPlanned] = useState(initialData?.offPlan?.totalUnitsPlanned?.toString() ?? '');
+  const [unitsAvailable, setUnitsAvailable] = useState(initialData?.offPlan?.unitsAvailable?.toString() ?? '');
+  const [unitType, setUnitType] = useState(initialData?.offPlan?.unitType ?? '');
+  const [floorPlanAvailable, setFloorPlanAvailable] = useState(Boolean(initialData?.offPlan?.floorPlanAvailable));
+  const [showUnitAvailable, setShowUnitAvailable] = useState(Boolean(initialData?.offPlan?.showUnitAvailable));
+  const [developerGuaranteeInformation, setDeveloperGuaranteeInformation] = useState(initialData?.offPlan?.developerGuaranteeInformation ?? '');
+  const [refundPolicy, setRefundPolicy] = useState(initialData?.offPlan?.refundPolicy ?? '');
+  const [riskDisclosure, setRiskDisclosure] = useState(initialData?.offPlan?.riskDisclosure ?? '');
+  const [milestones, setMilestones] = useState<OffPlanPaymentMilestone[]>(initialData?.offPlan?.paymentMilestones ?? []);
   const [titleDocumentRows, setTitleDocumentRows] = useState<TitleDocumentRow[]>([]);
   const [uploadingTitleDocument, setUploadingTitleDocument] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -145,6 +207,15 @@ const PropertyForm = ({
   const initialPrice = Number(initialData?.price ?? 0);
   const priceChanged = mode === 'edit' && Number.isFinite(parsedPrice) && initialPrice > 0 && parsedPrice !== initialPrice;
   const installmentForced = parsedPrice > INSTALLMENT_THRESHOLD_NGN;
+
+  useEffect(() => {
+    setProjectsLoading(true);
+    projectService
+      .listMyProjects({ page: 1, limit: 100 })
+      .then((response) => setProjects(response.projects ?? []))
+      .catch(() => undefined)
+      .finally(() => setProjectsLoading(false));
+  }, []);
 
   useEffect(() => {
     if (!categoryOptions.includes(category)) {
@@ -218,6 +289,41 @@ const PropertyForm = ({
       }),
       ...(mode === 'edit' && { status }),
       ...(priceChanged && priceChangeReason.trim() ? { priceChangeReason: priceChangeReason.trim().slice(0, 500) } : {}),
+      ...(projectId ? {
+        projectId,
+        projectUnit: {
+          unitName: unitName.trim() || undefined,
+          unitNumber: unitNumber.trim() || undefined,
+          block: block.trim() || undefined,
+          phase: phase.trim() || undefined,
+          floor: floor.trim() || undefined,
+          plotNumber: plotNumber.trim() || undefined,
+        },
+      } : {}),
+      listingType,
+      ...(listingType === 'off_plan' ? {
+        offPlan: {
+          developmentStatus,
+          constructionProgress: Number(constructionProgress || 0),
+          expectedCompletionDate: expectedCompletionDate || undefined,
+          constructionStartDate: constructionStartDate || undefined,
+          handoverDate: handoverDate || undefined,
+          reservationAmount: reservationAmount ? Number(reservationAmount) : undefined,
+          minimumInitialDeposit: minimumInitialDeposit ? Number(minimumInitialDeposit) : undefined,
+          installmentAvailable: offPlanInstallmentAvailable,
+          installmentDurationMonths: installmentDurationMonths ? Number(installmentDurationMonths) : undefined,
+          paymentPlanDescription: paymentPlanDescription.trim() || undefined,
+          paymentMilestones: milestones,
+          totalUnitsPlanned: totalUnitsPlanned ? Number(totalUnitsPlanned) : undefined,
+          unitsAvailable: unitsAvailable ? Number(unitsAvailable) : undefined,
+          unitType: unitType.trim() || undefined,
+          floorPlanAvailable,
+          showUnitAvailable,
+          developerGuaranteeInformation: developerGuaranteeInformation.trim() || undefined,
+          refundPolicy: refundPolicy.trim() || undefined,
+          riskDisclosure: riskDisclosure.trim() || undefined,
+        },
+      } : {}),
     };
     if (latProvided !== lngProvided) {
       setErrors({
@@ -330,6 +436,10 @@ const PropertyForm = ({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const updateMilestone = (index: number, patch: Partial<OffPlanPaymentMilestone>) => {
+    setMilestones((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   };
 
   return (
@@ -524,6 +634,141 @@ const PropertyForm = ({
           </div>
         </div>
       </div>
+
+      <div className="bg-white rounded-2xl p-6 space-y-5 border border-outline-variant/10">
+        <h2 className="text-base font-black text-on-surface tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
+          Project and listing mode
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div>
+            <label className={labelClass}>Listing type</label>
+            <select value={listingType} onChange={(event) => setListingType(event.target.value as ListingType)} className={inputClass}>
+              {LISTING_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Project</label>
+            <select value={projectId} onChange={(event) => setProjectId(event.target.value)} className={inputClass} disabled={projectsLoading}>
+              <option value="">{projectsLoading ? 'Loading projects...' : 'Standalone property'}</option>
+              {projects.map((project) => (
+                <option key={project._id} value={project._id}>{project.name}</option>
+              ))}
+            </select>
+          </div>
+          {projectId ? (
+            <>
+              <input value={unitName} onChange={(event) => setUnitName(event.target.value)} placeholder="Unit name" className={inputClass} />
+              <input value={unitNumber} onChange={(event) => setUnitNumber(event.target.value)} placeholder="Unit number" className={inputClass} />
+              <input value={phase} onChange={(event) => setPhase(event.target.value)} placeholder="Phase" className={inputClass} />
+              <input value={block} onChange={(event) => setBlock(event.target.value)} placeholder="Block" className={inputClass} />
+              <input value={floor} onChange={(event) => setFloor(event.target.value)} placeholder="Floor" className={inputClass} />
+              <input value={plotNumber} onChange={(event) => setPlotNumber(event.target.value)} placeholder="Plot number" className={inputClass} />
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      {listingType === 'off_plan' ? (
+        <div className="bg-white rounded-2xl p-6 space-y-5 border border-outline-variant/10">
+          <h2 className="text-base font-black text-on-surface tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
+            Off-plan terms
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div>
+              <label className={labelClass}>Development status</label>
+              <select value={developmentStatus} onChange={(event) => setDevelopmentStatus(event.target.value as OffPlanDevelopmentStatus)} className={inputClass}>
+                {DEVELOPMENT_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option.replaceAll('_', ' ')}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Progress %</label>
+              <input type="number" min={0} max={100} value={constructionProgress} onChange={(event) => setConstructionProgress(event.target.value)} className={inputClass} />
+              {errors.constructionProgress ? <p className={errorClass}>{errors.constructionProgress}</p> : null}
+            </div>
+            <div>
+              <label className={labelClass}>Expected completion</label>
+              <input type="date" value={expectedCompletionDate} onChange={(event) => setExpectedCompletionDate(event.target.value)} className={inputClass} />
+              {errors.expectedCompletionDate ? <p className={errorClass}>{errors.expectedCompletionDate}</p> : null}
+            </div>
+            <div>
+              <label className={labelClass}>Construction start</label>
+              <input type="date" value={constructionStartDate} onChange={(event) => setConstructionStartDate(event.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Handover date</label>
+              <input type="date" value={handoverDate} onChange={(event) => setHandoverDate(event.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Unit type</label>
+              <input value={unitType} onChange={(event) => setUnitType(event.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Reservation amount</label>
+              <input type="number" min={0} value={reservationAmount} onChange={(event) => setReservationAmount(event.target.value)} className={inputClass} />
+              {errors.reservationAmount ? <p className={errorClass}>{errors.reservationAmount}</p> : null}
+            </div>
+            <div>
+              <label className={labelClass}>Minimum deposit</label>
+              <input type="number" min={0} value={minimumInitialDeposit} onChange={(event) => setMinimumInitialDeposit(event.target.value)} className={inputClass} />
+              {errors.minimumInitialDeposit ? <p className={errorClass}>{errors.minimumInitialDeposit}</p> : null}
+            </div>
+            <div>
+              <label className={labelClass}>Installment duration months</label>
+              <input type="number" min={0} value={installmentDurationMonths} onChange={(event) => setInstallmentDurationMonths(event.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Total units planned</label>
+              <input type="number" min={0} value={totalUnitsPlanned} onChange={(event) => setTotalUnitsPlanned(event.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Units available</label>
+              <input type="number" min={0} value={unitsAvailable} onChange={(event) => setUnitsAvailable(event.target.value)} className={inputClass} />
+              {errors.unitsAvailable ? <p className={errorClass}>{errors.unitsAvailable}</p> : null}
+            </div>
+            <label className="flex items-center gap-2 rounded-lg bg-surface-container-low px-4 py-3 text-sm font-bold">
+              <input type="checkbox" checked={offPlanInstallmentAvailable} onChange={(event) => setOffPlanInstallmentAvailable(event.target.checked)} />
+              Installment available
+            </label>
+            <label className="flex items-center gap-2 rounded-lg bg-surface-container-low px-4 py-3 text-sm font-bold">
+              <input type="checkbox" checked={floorPlanAvailable} onChange={(event) => setFloorPlanAvailable(event.target.checked)} />
+              Floor plan available
+            </label>
+            <label className="flex items-center gap-2 rounded-lg bg-surface-container-low px-4 py-3 text-sm font-bold">
+              <input type="checkbox" checked={showUnitAvailable} onChange={(event) => setShowUnitAvailable(event.target.checked)} />
+              Show unit availability
+            </label>
+            <textarea value={paymentPlanDescription} onChange={(event) => setPaymentPlanDescription(event.target.value)} rows={3} placeholder="Payment plan description" className={`${inputClass} md:col-span-3 resize-none`} />
+            <textarea value={developerGuaranteeInformation} onChange={(event) => setDeveloperGuaranteeInformation(event.target.value)} rows={3} placeholder="Developer guarantee information" className={`${inputClass} md:col-span-3 resize-none`} />
+            <textarea value={refundPolicy} onChange={(event) => setRefundPolicy(event.target.value)} rows={3} placeholder="Refund policy" className={`${inputClass} md:col-span-3 resize-none`} />
+            <div className="md:col-span-3">
+              <textarea value={riskDisclosure} onChange={(event) => setRiskDisclosure(event.target.value)} rows={4} placeholder="Risk disclosure (required)" className={`${inputClass} resize-none`} />
+              {errors.riskDisclosure ? <p className={errorClass}>{errors.riskDisclosure}</p> : null}
+            </div>
+          </div>
+          <div className="rounded-xl border border-outline-variant/10 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-black">Payment milestones</h3>
+              <button type="button" onClick={() => setMilestones((current) => [...current, { sequence: current.length + 1, title: '' }])} className="rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold">
+                Add milestone
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {milestones.map((milestone, index) => (
+                <div key={index} className="grid gap-2 rounded-lg bg-surface-container-low p-3 md:grid-cols-5">
+                  <input type="number" value={milestone.sequence} onChange={(event) => updateMilestone(index, { sequence: Number(event.target.value) })} className={inputClass} />
+                  <input value={milestone.title ?? ''} onChange={(event) => updateMilestone(index, { title: event.target.value })} placeholder="Title" className={inputClass} />
+                  <input type="number" value={milestone.percentage ?? ''} onChange={(event) => updateMilestone(index, { percentage: event.target.value ? Number(event.target.value) : undefined })} placeholder="%" className={inputClass} />
+                  <input type="number" value={milestone.amount ?? ''} onChange={(event) => updateMilestone(index, { amount: event.target.value ? Number(event.target.value) : undefined })} placeholder="Amount" className={inputClass} />
+                  <button type="button" onClick={() => setMilestones((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-error">
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+            {errors.paymentMilestones ? <p className={errorClass}>{errors.paymentMilestones}</p> : null}
+          </div>
+        </div>
+      ) : null}
 
       <fieldset
         aria-describedby={errors.paymentTypes ? 'payment-types-error' : 'payment-types-help'}

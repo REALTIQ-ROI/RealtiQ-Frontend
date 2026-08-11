@@ -47,6 +47,23 @@ const CURRENCY_OPTIONS = [
   { value: 'GBP', label: 'GBP' },
 ];
 
+const LISTING_TYPE_OPTIONS = [
+  { value: '', label: 'Any Listing Type' },
+  { value: 'ready', label: 'Ready' },
+  { value: 'off_plan', label: 'Off-Plan' },
+];
+
+const DEVELOPMENT_STATUS_OPTIONS = [
+  { value: '', label: 'Any Construction Stage' },
+  { value: 'planned', label: 'Planned' },
+  { value: 'pre_construction', label: 'Pre-construction' },
+  { value: 'foundation', label: 'Foundation' },
+  { value: 'structural', label: 'Structural' },
+  { value: 'roofing', label: 'Roofing' },
+  { value: 'finishing', label: 'Finishing' },
+  { value: 'completed', label: 'Completed' },
+];
+
 const PropertyFiltersPanel = ({ initialFilters = {}, onApply }: PropertyFiltersProps) => {
   const [search, setSearch] = useState(initialFilters.search ?? '');
   const [minPrice, setMinPrice] = useState(initialFilters.minPrice?.toString() ?? '');
@@ -58,7 +75,36 @@ const PropertyFiltersPanel = ({ initialFilters = {}, onApply }: PropertyFiltersP
   const [currency, setCurrency] = useState(initialFilters.currency ?? '');
   const [status, setStatus] = useState(initialFilters.status ?? '');
   const [featured, setFeatured] = useState(initialFilters.featured === true ? 'true' : '');
+  const [listingType, setListingType] = useState(initialFilters.listingType ?? '');
+  const [developmentStatus, setDevelopmentStatus] = useState(initialFilters.developmentStatus ?? '');
+  const [projectSlug, setProjectSlug] = useState(initialFilters.projectSlug ?? '');
+  const [minConstructionProgress, setMinConstructionProgress] = useState(initialFilters.minConstructionProgress?.toString() ?? '');
+  const [maxConstructionProgress, setMaxConstructionProgress] = useState(initialFilters.maxConstructionProgress?.toString() ?? '');
+  const [completionBefore, setCompletionBefore] = useState(initialFilters.completionBefore ?? '');
+  const [completionAfter, setCompletionAfter] = useState(initialFilters.completionAfter ?? '');
+  const [installmentAvailable, setInstallmentAvailable] = useState(initialFilters.installmentAvailable === true ? 'true' : '');
   const initialSearchRender = useRef(true);
+
+  const buildFilters = (): PropertyFilters => ({
+    search: search.trim() || undefined,
+    minPrice: minPrice ? Number(minPrice) : undefined,
+    maxPrice: maxPrice ? Number(maxPrice) : undefined,
+    propertyType: propertyType || undefined,
+    bedrooms: bedrooms ? Number(bedrooms) : undefined,
+    category: category || undefined,
+    completionStage: completionStage || undefined,
+    currency: currency || undefined,
+    status: (status as PropertyFilters['status']) || undefined,
+    featured: featured === '' ? undefined : featured === 'true',
+    listingType: (listingType as PropertyFilters['listingType']) || undefined,
+    developmentStatus: (developmentStatus as PropertyFilters['developmentStatus']) || undefined,
+    projectSlug: projectSlug.trim() || undefined,
+    minConstructionProgress: minConstructionProgress ? Number(minConstructionProgress) : undefined,
+    maxConstructionProgress: maxConstructionProgress ? Number(maxConstructionProgress) : undefined,
+    completionBefore: completionBefore || undefined,
+    completionAfter: completionAfter || undefined,
+    installmentAvailable: installmentAvailable === '' ? undefined : installmentAvailable === 'true',
+  });
 
   useEffect(() => {
     if (initialSearchRender.current) {
@@ -66,18 +112,7 @@ const PropertyFiltersPanel = ({ initialFilters = {}, onApply }: PropertyFiltersP
       return;
     }
     const timer = window.setTimeout(() => {
-      onApply({
-        search: search.trim() || undefined,
-        minPrice: minPrice ? Number(minPrice) : undefined,
-        maxPrice: maxPrice ? Number(maxPrice) : undefined,
-        propertyType: propertyType || undefined,
-        bedrooms: bedrooms ? Number(bedrooms) : undefined,
-        category: category || undefined,
-        completionStage: completionStage || undefined,
-        currency: currency || undefined,
-        status: (status as PropertyFilters['status']) || undefined,
-        featured: featured === '' ? undefined : featured === 'true',
-      });
+      onApply(buildFilters());
     }, 400);
     return () => window.clearTimeout(timer);
     // Search is intentionally the only live API trigger; other filters retain Apply behavior.
@@ -85,18 +120,7 @@ const PropertyFiltersPanel = ({ initialFilters = {}, onApply }: PropertyFiltersP
   }, [search]);
 
   const apply = () => {
-    onApply({
-      search: search.trim() || undefined,
-      minPrice: minPrice ? Number(minPrice) : undefined,
-      maxPrice: maxPrice ? Number(maxPrice) : undefined,
-      propertyType: propertyType || undefined,
-      bedrooms: bedrooms ? Number(bedrooms) : undefined,
-      category: category || undefined,
-      completionStage: completionStage || undefined,
-      currency: currency || undefined,
-      status: (status as PropertyFilters['status']) || undefined,
-      featured: featured === '' ? undefined : featured === 'true',
-    });
+    onApply(buildFilters());
   };
 
   const clear = () => {
@@ -110,6 +134,14 @@ const PropertyFiltersPanel = ({ initialFilters = {}, onApply }: PropertyFiltersP
     setCurrency('');
     setStatus('');
     setFeatured('');
+    setListingType('');
+    setDevelopmentStatus('');
+    setProjectSlug('');
+    setMinConstructionProgress('');
+    setMaxConstructionProgress('');
+    setCompletionBefore('');
+    setCompletionAfter('');
+    setInstallmentAvailable('');
     onApply({});
   };
 
@@ -197,6 +229,60 @@ const PropertyFiltersPanel = ({ initialFilters = {}, onApply }: PropertyFiltersP
                 {option.label}
               </option>
             ))}
+          </select>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Listing Type</label>
+          <select value={listingType} onChange={(e) => setListingType(e.target.value)} className={inputClass}>
+            {LISTING_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Construction Stage</label>
+          <select value={developmentStatus} onChange={(e) => setDevelopmentStatus(e.target.value)} className={inputClass}>
+            {DEVELOPMENT_STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Project Slug</label>
+          <input value={projectSlug} onChange={(event) => setProjectSlug(event.target.value)} placeholder="palm-heights-estate" className={inputClass} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Min Progress</label>
+            <input type="number" min={0} max={100} value={minConstructionProgress} onChange={(event) => setMinConstructionProgress(event.target.value)} className={inputClass} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Max Progress</label>
+            <input type="number" min={0} max={100} value={maxConstructionProgress} onChange={(event) => setMaxConstructionProgress(event.target.value)} className={inputClass} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Completion After</label>
+            <input type="date" value={completionAfter} onChange={(event) => setCompletionAfter(event.target.value)} className={inputClass} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Before</label>
+            <input type="date" value={completionBefore} onChange={(event) => setCompletionBefore(event.target.value)} className={inputClass} />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Payment Plan</label>
+          <select value={installmentAvailable} onChange={(e) => setInstallmentAvailable(e.target.value)} className={inputClass}>
+            <option value="">Any</option>
+            <option value="true">Available</option>
+            <option value="false">Not available</option>
           </select>
         </div>
 

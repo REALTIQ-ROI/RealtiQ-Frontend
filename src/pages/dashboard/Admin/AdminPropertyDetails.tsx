@@ -17,6 +17,7 @@ const AdminPropertyDetails = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const [adminNote, setAdminNote] = useState('');
+  const [updatingFeatured, setUpdatingFeatured] = useState(false);
 
   const propertyId = id ?? (location.state as { propertyId?: string } | null)?.propertyId;
   const property = propertyId
@@ -43,6 +44,16 @@ const AdminPropertyDetails = () => {
     .map((part) => part[0]?.toUpperCase())
     .join('') || 'NA';
 
+  const toggleFeatured = async () => {
+    if (!propertyReference || updatingFeatured) return;
+    setUpdatingFeatured(true);
+    try {
+      await updateProperty(propertyReference, { featured: !property.featured });
+    } finally {
+      setUpdatingFeatured(false);
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="min-h-screen px-4 pb-12 pt-6 sm:px-8 lg:px-12 lg:pb-20 lg:pt-8">
@@ -68,17 +79,27 @@ const AdminPropertyDetails = () => {
           <div className="flex items-center gap-4">
             <div className="flex items-center bg-surface-container-low p-1 rounded-lg">
               <button
-                onClick={() => void updateProperty(propertyReference, { featured: !property.featured })}
-                disabled={!propertyReference}
-                className="px-4 py-2 text-sm font-semibold rounded-md transition-all bg-white text-primary shadow-sm flex items-center gap-2"
+                onClick={() => void toggleFeatured()}
+                disabled={!propertyReference || updatingFeatured}
+                aria-busy={updatingFeatured || undefined}
+                className="px-4 py-2 text-sm font-semibold rounded-md transition-all bg-white text-primary shadow-sm flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <span
-                  className="material-symbols-outlined text-sm"
-                  style={property.featured ? { fontVariationSettings: "'FILL' 1" } : undefined}
-                >
-                  star
-                </span>
-                {property.featured ? 'Unfeature' : 'Mark as Featured'}
+                {updatingFeatured ? (
+                  <>
+                    <span className="material-symbols-outlined animate-spin text-sm" aria-hidden="true">progress_activity</span>
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <span
+                      className="material-symbols-outlined text-sm"
+                      style={property.featured ? { fontVariationSettings: "'FILL' 1" } : undefined}
+                    >
+                      star
+                    </span>
+                    {property.featured ? 'Unfeature' : 'Mark as Featured'}
+                  </>
+                )}
               </button>
             </div>
             <button

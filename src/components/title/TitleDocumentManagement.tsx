@@ -225,8 +225,8 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
                   <option value="paid_view_once">Paid — one view</option>
                   <option value="paid_view_multiple">Paid — multiple views</option>
                 </select>
-                <Button type="button" variant="secondary" disabled={busyId === document.id} onClick={() => void loadAnalytics(document.id)}>Inspect analytics</Button>
-                <Button type="button" variant="secondary" disabled={busyId === document.id || document.verificationStatus === 'revoked'} onClick={() => void openPrivilegedViewer(document)}>Open protected viewer</Button>
+                <Button type="button" variant="secondary" loading={busyId === document.id} loadingLabel="Loading analytics..." onClick={() => void loadAnalytics(document.id)}>Inspect analytics</Button>
+                <Button type="button" variant="secondary" loading={busyId === document.id} loadingLabel="Opening..." disabled={document.verificationStatus === 'revoked'} onClick={() => void openPrivilegedViewer(document)}>Open protected viewer</Button>
                 {document.publicVerificationId ? <Link className="text-xs font-bold text-primary underline" to={`/title-verification/${document.publicVerificationId}`}>Registry record</Link> : null}
                 {rejected && !sold ? (
                   <button

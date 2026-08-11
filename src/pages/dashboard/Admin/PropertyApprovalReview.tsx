@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import PaymentTypeBadges from '../../../components/property/PaymentTypeBadges';
+import PropertyGallery from '../../../components/property/PropertyGallery';
 import Button from '../../../components/ui/Button';
 import LoadingState from '../../../components/ui/LoadingState';
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
@@ -9,6 +10,7 @@ import { ApiRequestError } from '../../../lib/axios';
 import { propertyService, type PropertyApprovalDetailResponse } from '../../../services/propertyService';
 import { propertyDisplayReference, type Property } from '../../../types';
 import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
+import { formatDate, labelize } from '../../../utils/projectFormatters';
 
 const resolveOwnerName = (property?: Property | null) => {
   const owner = property?.ownerId;
@@ -138,13 +140,53 @@ const PropertyApprovalReview = () => {
                 </span>
               </div>
 
-              <dl className="grid gap-4 rounded-xl bg-surface-container-low p-4 text-sm sm:grid-cols-2">
+              <PropertyGallery property={selectedProperty} />
+
+              <dl className="grid gap-4 rounded-xl bg-surface-container-low p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
                 <div><dt className="text-xs font-bold uppercase text-secondary">Owner</dt><dd className="mt-1">{resolveOwnerName(selectedProperty)}</dd></div>
                 <div><dt className="text-xs font-bold uppercase text-secondary">Type</dt><dd className="mt-1">{selectedProperty.propertyType}</dd></div>
-                <div><dt className="text-xs font-bold uppercase text-secondary">Price</dt><dd className="mt-1">{selectedProperty.price?.toLocaleString()}</dd></div>
+                <div><dt className="text-xs font-bold uppercase text-secondary">Price</dt><dd className="mt-1">{selectedProperty.currency ?? 'NGN'} {selectedProperty.price?.toLocaleString()}</dd></div>
+                <div><dt className="text-xs font-bold uppercase text-secondary">Category</dt><dd className="mt-1">{labelize(selectedProperty.category)}</dd></div>
+                <div><dt className="text-xs font-bold uppercase text-secondary">Status</dt><dd className="mt-1">{labelize(selectedProperty.status)}</dd></div>
+                <div><dt className="text-xs font-bold uppercase text-secondary">Listing Type</dt><dd className="mt-1">{labelize(selectedProperty.listingType ?? 'ready')}</dd></div>
+                <div><dt className="text-xs font-bold uppercase text-secondary">Bedrooms</dt><dd className="mt-1">{selectedProperty.bedrooms ?? 'N/A'}</dd></div>
+                <div><dt className="text-xs font-bold uppercase text-secondary">Bathrooms</dt><dd className="mt-1">{selectedProperty.bathrooms ?? 'N/A'}</dd></div>
+                <div><dt className="text-xs font-bold uppercase text-secondary">Area</dt><dd className="mt-1">{selectedProperty.squareFeet ? `${selectedProperty.squareFeet.toLocaleString()} sqft` : 'N/A'}</dd></div>
                 <div><dt className="text-xs font-bold uppercase text-secondary">Title Document Status</dt><dd className="mt-1">{detail?.titleDocumentStatus || 'not_submitted'}</dd></div>
                 <div><dt className="text-xs font-bold uppercase text-secondary">Title Verification</dt><dd className="mt-1"><TitleVerificationBadge summary={selectedProperty.titleVerification} context="admin" /></dd></div>
+                {selectedProperty.project ? <div><dt className="text-xs font-bold uppercase text-secondary">Project</dt><dd className="mt-1">{selectedProperty.project.name}</dd></div> : null}
+                {selectedProperty.projectUnit ? <div><dt className="text-xs font-bold uppercase text-secondary">Project Unit</dt><dd className="mt-1">{[selectedProperty.projectUnit.unitName, selectedProperty.projectUnit.unitNumber, selectedProperty.projectUnit.block, selectedProperty.projectUnit.phase, selectedProperty.projectUnit.floor].filter(Boolean).join(' - ') || 'N/A'}</dd></div> : null}
               </dl>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                <section className="rounded-xl border border-outline-variant/20 p-4">
+                  <h3 className="font-bold">Description</h3>
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-on-surface-variant">{selectedProperty.description || 'No description provided.'}</p>
+                </section>
+                <section className="rounded-xl border border-outline-variant/20 p-4">
+                  <h3 className="font-bold">Amenities</h3>
+                  {selectedProperty.amenities?.length ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {selectedProperty.amenities.map((amenity) => <span key={amenity} className="rounded-full bg-surface-container-low px-3 py-1 text-xs font-bold">{amenity}</span>)}
+                    </div>
+                  ) : <p className="mt-3 text-sm text-secondary">No amenities provided.</p>}
+                </section>
+              </div>
+
+              {selectedProperty.offPlan ? (
+                <section className="rounded-xl border border-primary/10 bg-primary/5 p-4">
+                  <h3 className="font-bold text-primary">Off-plan details</h3>
+                  <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                    <div><dt className="text-xs font-bold uppercase text-secondary">Stage</dt><dd>{labelize(selectedProperty.offPlan.developmentStatus)}</dd></div>
+                    <div><dt className="text-xs font-bold uppercase text-secondary">Progress</dt><dd>{selectedProperty.offPlan.constructionProgress ?? 0}%</dd></div>
+                    <div><dt className="text-xs font-bold uppercase text-secondary">Expected completion</dt><dd>{formatDate(selectedProperty.offPlan.expectedCompletionDate)}</dd></div>
+                    <div><dt className="text-xs font-bold uppercase text-secondary">Initial deposit</dt><dd>{selectedProperty.offPlan.minimumInitialDeposit?.toLocaleString() ?? 'N/A'}</dd></div>
+                    <div><dt className="text-xs font-bold uppercase text-secondary">Installment</dt><dd>{selectedProperty.offPlan.installmentAvailable ? 'Available' : 'Not available'}</dd></div>
+                    <div><dt className="text-xs font-bold uppercase text-secondary">Units</dt><dd>{selectedProperty.offPlan.unitsAvailable ?? 'N/A'} / {selectedProperty.offPlan.totalUnitsPlanned ?? 'N/A'}</dd></div>
+                  </dl>
+                  {selectedProperty.offPlan.riskDisclosure ? <p className="mt-3 rounded-lg bg-white p-3 text-sm text-on-surface-variant">{selectedProperty.offPlan.riskDisclosure}</p> : null}
+                </section>
+              ) : null}
 
               <div>
                 <h3 className="font-bold">Payment options</h3>
@@ -189,10 +231,10 @@ const PropertyApprovalReview = () => {
                   />
                 </label>
                 <div className="mt-4 flex flex-wrap gap-3">
-                  <Button type="button" onClick={() => void review('approve')} disabled={reviewing}>
-                    {reviewing ? 'Reviewing...' : 'Approve Listing'}
+                  <Button type="button" onClick={() => void review('approve')} loading={reviewing} loadingLabel="Approving...">
+                    Approve Listing
                   </Button>
-                  <Button type="button" variant="secondary" onClick={() => void review('reject')} disabled={reviewing}>
+                  <Button type="button" variant="secondary" onClick={() => void review('reject')} loading={reviewing} loadingLabel="Rejecting...">
                     Reject Listing
                   </Button>
                 </div>

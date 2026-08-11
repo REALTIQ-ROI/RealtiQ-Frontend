@@ -54,8 +54,8 @@ const AdminCartCheckoutDetail = () => {
                     {checkoutStatusLabel(data.checkout.status)}
                   </span>
                   {canRetry(data) ? (
-                    <Button type="button" disabled={retrying} onClick={() => void retry()}>
-                      {retrying ? 'Retrying...' : 'Retry failed allocations'}
+                    <Button type="button" loading={retrying} loadingLabel="Retrying..." onClick={() => void retry()}>
+                      Retry failed allocations
                     </Button>
                   ) : null}
                 </div>

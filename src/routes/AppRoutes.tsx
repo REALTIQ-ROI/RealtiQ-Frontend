@@ -17,6 +17,10 @@ import Redirecting from '../pages/public/Redirecting';
 import Listings from '../pages/public/Listings';
 import PropertyDetails from '../pages/public/PropertyDetails';
 import PropertyPriceHistory from '../pages/public/PropertyPriceHistory';
+import Projects from '../pages/public/Projects';
+import ProjectDetails from '../pages/public/ProjectDetails';
+import ProjectProperties from '../pages/public/ProjectProperties';
+import ProjectsMap from '../pages/public/ProjectsMap';
 import TitleVerificationRegistry from '../pages/public/TitleVerificationRegistry';
 import TitleRegistrySnapshots from '../pages/public/TitleRegistrySnapshots';
 import ProtectedTitleViewer from '../pages/public/ProtectedTitleViewer';
@@ -49,6 +53,8 @@ import ManageInquiries from '../pages/dashboard/Admin/ManageInquiries';
 import ManageLandlords from '../pages/dashboard/Admin/ManageLandlords';
 import ManagePayments from '../pages/dashboard/Admin/ManagePayments';
 import ManageProperties from '../pages/dashboard/Admin/ManageProperties';
+import AdminProjects from '../pages/dashboard/Admin/Projects';
+import AdminProjectDetails from '../pages/dashboard/Admin/ProjectDetails';
 import ManageUsers from '../pages/dashboard/Admin/ManageUsers';
 import FeaturedListings from '../pages/dashboard/Admin/FeaturedListings';
 import AdminPaymentDetails from '../pages/dashboard/Admin/AdminPaymentDetails';
@@ -71,6 +77,9 @@ import InquiriesList from '../pages/dashboard/Landlord/InquiriesList';
 import LandlordDashboard from '../pages/dashboard/Landlord/LandlordDashboard';
 import LandlordInquiryDetails from '../pages/dashboard/Landlord/LandlordInquiryDetails';
 import LandlordMyProperties from '../pages/dashboard/Landlord/LandlordMyProperties';
+import LandlordProjects from '../pages/dashboard/Landlord/Projects';
+import ProjectEditor from '../pages/dashboard/Landlord/ProjectEditor';
+import ProjectManage from '../pages/dashboard/Landlord/ProjectManage';
 import LandlordPaymentHistory from '../pages/dashboard/Landlord/LandlordPaymentHistory';
 import LandlordPropertyDetails from '../pages/dashboard/Landlord/LandlordPropertyDetails';
 import LandlordSettings from '../pages/dashboard/Landlord/LandlordSettings';
@@ -108,6 +117,10 @@ const AppRoutes = () => {
         <Route path="/" element={<Home />} />
 
         <Route path="/properties" element={<Listings />} />
+        <Route path="/projects" element={<Projects />} />
+        <Route path="/projects/map" element={<ProjectsMap />} />
+        <Route path="/projects/:slug" element={<ProjectDetails />} />
+        <Route path="/projects/:slug/properties" element={<ProjectProperties />} />
         <Route path="/proxy-inspectors" element={<PublicInspectorDirectory />} />
         <Route path="/proxy-inspectors/register" element={<InspectorRegistration />} />
         <Route path="/proxy-inspectors/:profileId" element={<PublicInspectorProfile />} />
@@ -201,6 +214,10 @@ const AppRoutes = () => {
         <Route element={<ProtectedRoute allowedRoles={['landlord']} />}>
           <Route path="/dashboard/landlord" element={<LandlordDashboard />} />
           <Route path="/dashboard/landlord/my-properties" element={<LandlordMyProperties />} />
+          <Route path="/dashboard/landlord/projects" element={<LandlordProjects />} />
+          <Route path="/dashboard/landlord/projects/new" element={<ProjectEditor />} />
+          <Route path="/dashboard/landlord/projects/:id" element={<ProjectManage />} />
+          <Route path="/dashboard/landlord/projects/:id/edit" element={<ProjectEditor />} />
           <Route path="/dashboard/landlord/tours" element={<Tours />} />
           <Route path="/dashboard/landlord/installments" element={<Installments />} />
           <Route path="/dashboard/landlord/installments/:id" element={<Installments />} />
@@ -238,6 +255,8 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/users/:id" element={<UserDetails />} />
           <Route path="/dashboard/admin/property-approvals" element={<PropertyApprovalReview />} />
           <Route path="/dashboard/admin/manage-properties" element={<ManageProperties />} />
+          <Route path="/dashboard/admin/projects" element={<AdminProjects />} />
+          <Route path="/dashboard/admin/projects/:id" element={<AdminProjectDetails />} />
           <Route path="/dashboard/admin/property-details" element={<AdminPropertyDetails />} />
           <Route path="/dashboard/admin/property-details/:id" element={<AdminPropertyDetails />} />
           <Route path="/dashboard/admin/manage-payments" element={<ManagePayments />} />

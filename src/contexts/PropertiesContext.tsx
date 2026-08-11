@@ -4,6 +4,7 @@ import { propertyService, type CreatePropertyPayload, type CreatePropertyRespons
 import { paymentService } from '../services/paymentService';
 import type { Property, User } from '../types';
 import { normalizePropertyPaymentTypes } from '../utils/propertyPaymentTypes';
+import { isPublicPropertyVisible } from '../utils/projectPublication';
 
 interface PropertiesContextValue {
   properties: Property[];
@@ -37,7 +38,7 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
         : 'properties' in res && Array.isArray(res.properties)
           ? res.properties
           : [];
-      setProperties(nextProperties);
+      setProperties(user?.role ? nextProperties : nextProperties.filter(isPublicPropertyVisible));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch properties.';
       setError(message);

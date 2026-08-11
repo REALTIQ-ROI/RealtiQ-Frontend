@@ -9,14 +9,20 @@ import {
 } from '../../types';
 import TitleVerificationBadge from '../title/TitleVerificationBadge';
 import PaymentTypeBadges from './PaymentTypeBadges';
+import OffPlanBadges from './OffPlanBadges';
 import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-NG', {
-    style: 'currency',
-    currency: 'NGN',
-    maximumFractionDigits: 0,
-  }).format(value);
+const formatCurrency = (value?: number, currency = 'NGN') =>
+  typeof value === 'number' && Number.isFinite(value)
+    ? new Intl.NumberFormat('en-NG', {
+        style: 'currency',
+        currency,
+        maximumFractionDigits: 0,
+      }).format(value)
+    : 'Price unavailable';
+
+const formatCount = (value?: number, label = '') =>
+  typeof value === 'number' && Number.isFinite(value) ? `${value.toLocaleString()}${label}` : 'N/A';
 
 const PropertyCard = ({
   property,
@@ -31,7 +37,9 @@ const PropertyCard = ({
   const coverUrl = cover?.url;
   const isVideo = cover?.type === 'video';
   const routeReference = propertyPublicReference(property);
-  const paymentTypes = normalizePropertyPaymentTypes(property.paymentTypes, property.price);
+  const title = property.title || property.publicReference || 'Untitled property';
+  const location = property.location || [property.projectUnit?.block, property.projectUnit?.phase, property.projectUnit?.unitNumber].filter(Boolean).join(' - ') || 'Location unavailable';
+  const paymentTypes = normalizePropertyPaymentTypes(property.paymentTypes, property.price ?? 0);
   const [fetchedTitleDocuments, setFetchedTitleDocuments] = useState<{
     propertyReference: string;
     documents: PublicTitleDocument[];
@@ -77,7 +85,7 @@ const PropertyCard = ({
           ) : (
             <img
               src={coverUrl}
-              alt={property.title}
+              alt={title}
               className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
             />
           )
@@ -101,10 +109,12 @@ const PropertyCard = ({
             className={`px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wide shadow ${
               property.status === 'available'
                 ? 'bg-green-500 text-white'
-                : 'bg-red-500 text-white'
+                : property.status === 'sold'
+                  ? 'bg-red-500 text-white'
+                  : 'bg-surface-container-lowest text-on-surface'
             }`}
           >
-            {property.status}
+              {property.status || 'status pending'}
           </span>
           {property.currency ? (
             <span className="px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wide shadow bg-surface-container-lowest text-on-surface">
@@ -132,22 +142,23 @@ const PropertyCard = ({
               className="font-bold text-base leading-tight text-on-surface truncate"
               style={{ fontFamily: 'Manrope, sans-serif' }}
             >
-              {property.title}
+              {title}
             </h3>
             <p className="text-secondary text-xs mt-1 flex items-center gap-1 truncate">
               <span className="material-symbols-outlined text-xs shrink-0">location_on</span>
-              {property.location}
+              {location}
             </p>
           </div>
           <span
             className="font-black text-base text-on-surface shrink-0"
             style={{ fontFamily: 'Manrope, sans-serif' }}
           >
-            {formatCurrency(property.price)}
+            {formatCurrency(property.price, property.currency)}
           </span>
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {property.listingType === 'off_plan' ? <OffPlanBadges summary={property.offPlanSummary ?? property.offPlan} /> : null}
           <TitleVerificationBadge
             summary={property.titleVerification}
             context="public"
@@ -168,21 +179,26 @@ const PropertyCard = ({
               {property.completionStage}
             </span>
           ) : null}
+          {property.project ? (
+            <span className="px-2 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-wide">
+              {property.project.name}
+            </span>
+          ) : null}
         </div>
         <PaymentTypeBadges paymentTypes={paymentTypes} />
 
         <div className="flex items-center gap-3 text-xs text-on-surface-variant pt-3 border-t border-outline-variant/20">
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-xs">bed</span>
-            {property.bedrooms} Beds
+            {formatCount(property.bedrooms)} Beds
           </span>
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-xs">bathtub</span>
-            {property.bathrooms} Baths
+            {formatCount(property.bathrooms)} Baths
           </span>
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-xs">square_foot</span>
-            {property.squareFeet.toLocaleString()} sqft
+            {formatCount(property.squareFeet, ' sqft')}
           </span>
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-xs">visibility</span>

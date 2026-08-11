@@ -7,6 +7,7 @@ import PropertyGallery from '../../components/property/PropertyGallery';
 import PropertyMeta from '../../components/property/PropertyMeta';
 import PriceHistorySection from '../../components/property/PriceHistorySection';
 import PaymentTypeBadges from '../../components/property/PaymentTypeBadges';
+import OffPlanBadges from '../../components/property/OffPlanBadges';
 import TitleVerificationBadge from '../../components/title/TitleVerificationBadge';
 import PublicTitleDocuments from '../../components/title/PublicTitleDocuments';
 import PublicLayout from '../../components/layout/PublicLayout';
@@ -24,6 +25,7 @@ import { propertyService, type NearbyPropertySummary } from '../../services/prop
 import { tourService } from '../../services/tourService';
 import { titleVerificationService } from '../../services/titleVerificationService';
 import {
+  type ConstructionUpdate,
   propertyRouteReference,
   resolvePropertyOwnerId,
   type PropertyTitleVerificationSummary,
@@ -37,6 +39,7 @@ import {
   resolveInstallmentProperty,
 } from '../../utils/installment';
 import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
+import { formatDate, formatNgn, labelize } from '../../utils/projectFormatters';
 
 const formatCurrency = (value: number, currency = 'NGN') =>
   new Intl.NumberFormat('en-NG', {
@@ -89,6 +92,8 @@ const PropertyDetails = () => {
   const [installmentFrequency, setInstallmentFrequency] = useState<(typeof INSTALLMENT_FREQUENCIES)[number]['value']>('monthly');
   const [titleSummary, setTitleSummary] = useState<PropertyTitleVerificationSummary | null>(null);
   const [publicTitleDocuments, setPublicTitleDocuments] = useState<PublicTitleDocument[]>([]);
+  const [constructionUpdates, setConstructionUpdates] = useState<ConstructionUpdate[]>([]);
+  const [constructionUpdatesLoading, setConstructionUpdatesLoading] = useState(false);
   const propertyReference = property ? propertyRouteReference(property) : '';
 
   useEffect(() => {
@@ -126,6 +131,19 @@ const PropertyDetails = () => {
       .then((response) => setTitleSummary(response.titleVerification))
       .catch(() => setTitleSummary(null));
   }, [property]);
+
+  useEffect(() => {
+    if (!propertyReference || property?.listingType !== 'off_plan') {
+      setConstructionUpdates([]);
+      return;
+    }
+    setConstructionUpdatesLoading(true);
+    propertyService
+      .listConstructionUpdates(propertyReference, { page: 1, limit: 5, sort: 'desc' })
+      .then((response) => setConstructionUpdates(response.updates ?? []))
+      .catch(() => setConstructionUpdates([]))
+      .finally(() => setConstructionUpdatesLoading(false));
+  }, [property?.listingType, propertyReference]);
 
   useEffect(() => {
     if (hasMounted.current) {
@@ -385,6 +403,11 @@ const PropertyDetails = () => {
               <h1 className="text-4xl md:text-5xl font-extrabold tracking-tighter text-primary mb-2">
                 {property.title}
               </h1>
+              {property.listingType === 'off_plan' ? (
+                <div className="mb-4">
+                  <OffPlanBadges summary={property.offPlanSummary ?? property.offPlan} />
+                </div>
+              ) : null}
               <p className="text-lg text-secondary font-body mb-6 flex items-center gap-1">
                 <span className="material-symbols-outlined text-lg">location_on</span>
                 {property.location}
@@ -398,6 +421,109 @@ const PropertyDetails = () => {
             </div>
 
             <PriceHistorySection propertyId={propertyReference} />
+
+            {property.project ? (
+              <div className="rounded-xl border border-primary/10 bg-primary/5 p-5">
+                <p className="text-xs font-bold uppercase tracking-widest text-secondary">Part of Project</p>
+                <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-xl font-black text-primary">{property.project.name}</h2>
+                    <p className="text-sm text-secondary">{labelize(property.project.projectType)} - {labelize(property.project.status)}</p>
+                    {property.projectUnit ? (
+                      <p className="mt-2 text-sm text-on-surface-variant">
+                        {[property.projectUnit.phase, property.projectUnit.block, property.projectUnit.floor, property.projectUnit.unitNumber || property.projectUnit.plotNumber]
+                          .filter(Boolean)
+                          .join(' / ')}
+                      </p>
+                    ) : null}
+                  </div>
+                  <Button type="button" variant="secondary" onClick={() => navigate(`/projects/${property.project?.slug || property.project?._id}`)}>
+                    View Project
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {property.listingType === 'off_plan' && property.offPlan ? (
+              <div>
+                <h2 className="text-2xl font-bold mb-4">Off-Plan Details</h2>
+                <Card className="p-5 space-y-5">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-widest text-secondary">Development Status</p>
+                      <p className="mt-1 font-black">{labelize(property.offPlan.developmentStatus)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-widest text-secondary">Progress</p>
+                      <p className="mt-1 font-black">{property.offPlan.constructionProgress ?? 0}%</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-widest text-secondary">Expected Completion</p>
+                      <p className="mt-1 font-black">{formatDate(property.offPlan.expectedCompletionDate)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-widest text-secondary">Reservation</p>
+                      <p className="mt-1 font-black">{formatNgn(property.offPlan.reservationAmount, currency)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-widest text-secondary">Initial Deposit</p>
+                      <p className="mt-1 font-black">{formatNgn(property.offPlan.minimumInitialDeposit, currency)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-widest text-secondary">Installment Terms</p>
+                      <p className="mt-1 font-black">{property.offPlan.installmentAvailable ? `${property.offPlan.installmentDurationMonths ?? 'Custom'} months` : 'Not offered'}</p>
+                    </div>
+                  </div>
+                  {property.offPlan.paymentPlanDescription ? <p className="text-sm text-secondary">{property.offPlan.paymentPlanDescription}</p> : null}
+                  {property.offPlan.paymentMilestones?.length ? (
+                    <div>
+                      <h3 className="font-bold">Listing payment milestones</h3>
+                      <div className="mt-3 divide-y divide-outline-variant/10 rounded-xl border border-outline-variant/10">
+                        {property.offPlan.paymentMilestones.map((milestone) => (
+                          <div key={milestone.sequence} className="grid gap-2 p-4 text-sm md:grid-cols-[80px_1fr_120px]">
+                            <span className="font-black">#{milestone.sequence}</span>
+                            <span><strong>{milestone.title || 'Milestone'}</strong>{milestone.description ? <p className="text-secondary">{milestone.description}</p> : null}</span>
+                            <span className="font-semibold">{milestone.percentage ? `${milestone.percentage}%` : formatNgn(milestone.amount, currency)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {property.offPlan.riskDisclosure ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                      <p className="font-bold">Risk disclosure</p>
+                      <p className="mt-1">{property.offPlan.riskDisclosure}</p>
+                    </div>
+                  ) : null}
+                  {property.offPlan.developerGuaranteeInformation ? <p className="text-sm text-secondary"><strong>Developer guarantee:</strong> {property.offPlan.developerGuaranteeInformation}</p> : null}
+                  {property.offPlan.refundPolicy ? <p className="text-sm text-secondary"><strong>Refund policy:</strong> {property.offPlan.refundPolicy}</p> : null}
+                </Card>
+              </div>
+            ) : null}
+
+            {property.listingType === 'off_plan' ? (
+              <div>
+                <h2 className="text-2xl font-bold mb-4">Construction Updates</h2>
+                <Card className="p-5">
+                  {constructionUpdatesLoading ? <LoadingState label="Loading construction updates..." /> : null}
+                  {!constructionUpdatesLoading && constructionUpdates.length ? (
+                    <div className="space-y-4">
+                      {constructionUpdates.map((update) => (
+                        <article key={update._id} className="border-l-4 border-primary pl-4">
+                          <p className="text-xs font-bold uppercase tracking-widest text-secondary">{formatDate(update.updateDate || update.createdAt)}</p>
+                          <h3 className="mt-1 font-black">{update.title}</h3>
+                          <p className="text-sm text-secondary">{labelize(update.developmentStatus)} - {update.progressPercentage}% complete</p>
+                          {update.description ? <p className="mt-2 text-sm text-on-surface-variant">{update.description}</p> : null}
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
+                  {!constructionUpdatesLoading && !constructionUpdates.length ? (
+                    <p className="text-sm text-secondary">No construction updates have been published yet.</p>
+                  ) : null}
+                </Card>
+              </div>
+            ) : null}
 
             {property.amenities?.length ? (
               <div>

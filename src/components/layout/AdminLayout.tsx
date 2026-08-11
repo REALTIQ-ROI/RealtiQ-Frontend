@@ -11,6 +11,7 @@ const navLinks = [
   { to: '/dashboard/admin', label: 'Dashboard', icon: 'dashboard', end: true },
   { to: '/dashboard/admin/property-approvals', label: 'Listing Approval', icon: 'fact_check' },
   { to: '/dashboard/admin/manage-properties', label: 'Manage Properties', icon: 'home_work' },
+  { to: '/dashboard/admin/projects', label: 'Projects', icon: 'business' },
   { to: '/dashboard/admin/manage-landlords', label: 'Manage Landlords', icon: 'person_pin' },
   { to: '/dashboard/admin/manage-users', label: 'Manage Users', icon: 'group' },
   { to: '/dashboard/admin/manage-inquiries', label: 'Inquiries', icon: 'mail' },
