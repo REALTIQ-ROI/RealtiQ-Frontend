@@ -219,6 +219,93 @@ export interface ConstructionUpdateListResponse {
   limit: number;
 }
 
+export type ImportRowStatus = 'valid' | 'invalid' | 'removed' | 'imported' | 'failed';
+export type ImportSessionStatus =
+  | 'uploaded'
+  | 'parsed'
+  | 'ready'
+  | 'importing'
+  | 'completed'
+  | 'partially_completed'
+  | 'failed'
+  | 'cancelled'
+  | 'expired';
+
+export interface ImportMessage {
+  field?: string;
+  code?: string;
+  message: string;
+}
+
+export interface ProjectImportRow {
+  rowNumber: number;
+  status: ImportRowStatus;
+  data?: Record<string, unknown>;
+  errors: ImportMessage[];
+  warnings: ImportMessage[];
+  property?: string | null;
+  failureReason?: string;
+}
+
+export interface ProjectImportSession {
+  importSessionId: string;
+  _id?: string;
+  project: {
+    id: string;
+    name?: string;
+  };
+  status: ImportSessionStatus;
+  originalFileName?: string;
+  fileType?: 'csv' | 'xlsx';
+  uploadedAt?: string;
+  expiresAt?: string;
+  completedAt?: string;
+  summary: {
+    totalRows: number;
+    validRows: number;
+    invalidRows: number;
+    removedRows: number;
+    importedRows: number;
+    failedRows: number;
+  };
+  rows: ProjectImportRow[];
+}
+
+export interface ProjectImportListItem {
+  _id: string;
+  project: string;
+  landlord?: string;
+  originalFileName?: string;
+  fileType?: 'csv' | 'xlsx';
+  status: ImportSessionStatus;
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  removedRows: number;
+  importedRows: number;
+  failedRows: number;
+  uploadedAt?: string;
+  completedAt?: string;
+}
+
+export interface ProjectImportSchemaField {
+  name: string;
+  required: boolean;
+  allowedValues?: string[];
+}
+
+export interface ProjectImportSchema {
+  limits: {
+    maxRows: number;
+    maxFileMB: number;
+    expiryHours: number;
+  };
+  requiredFields: string[];
+  delimiter: string;
+  fields: ProjectImportSchemaField[];
+  unsupportedFields: string[];
+}
+
 export interface PropertyCoordinates {
   lat: number;
   lng: number;

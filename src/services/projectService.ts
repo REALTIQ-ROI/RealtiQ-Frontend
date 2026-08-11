@@ -4,6 +4,9 @@ import type {
   OffPlanDevelopmentStatus,
   ProjectCard,
   ProjectDetail,
+  ProjectImportListItem,
+  ProjectImportSchema,
+  ProjectImportSession,
   ProjectMedia,
   ProjectStatus,
   ProjectType,
@@ -135,6 +138,21 @@ export interface CreateProjectRequest {
 export type UpdateProjectRequest = Partial<CreateProjectRequest> & { publish?: boolean; isPublished?: boolean };
 export type MyProjectQuery = Pick<ProjectSearchQuery, 'search' | 'status' | 'publicationState' | 'page' | 'limit' | 'sort'>;
 
+export interface ProjectImportListResponse {
+  imports: ProjectImportListItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface AdminPropertyImportListQuery {
+  project?: string;
+  landlord?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
+}
+
 export const projectService = {
   async listProjects(query?: ProjectSearchQuery): Promise<ProjectListResponse> {
     const { data } = await api.get<ProjectListResponse>('/projects', { params: compact(query) });
@@ -215,6 +233,73 @@ export const projectService = {
 
   async adminSetProjectFeatured(id: string, body: { featured: boolean }): Promise<{ project: ProjectDetail }> {
     const { data } = await api.patch<{ project: ProjectDetail }>(`/admin/projects/${encodeURIComponent(id)}/featured`, body);
+    return data;
+  },
+
+  async uploadProjectPropertyImport(projectId: string, file: File): Promise<ProjectImportSession> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const { data } = await api.post<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports`, formData);
+    return data;
+  },
+
+  async listProjectPropertyImports(projectId: string, params?: { page?: number; limit?: number }): Promise<ProjectImportListResponse> {
+    const { data } = await api.get<ProjectImportListResponse>(`/projects/${encodeURIComponent(projectId)}/property-imports`, { params: compact(params) });
+    return data;
+  },
+
+  async downloadProjectPropertyImportTemplate(projectId: string): Promise<Blob> {
+    const { data } = await api.get<Blob>(`/projects/${encodeURIComponent(projectId)}/property-imports/template`, { responseType: 'blob' });
+    return data;
+  },
+
+  async getProjectPropertyImportSchema(projectId: string): Promise<ProjectImportSchema> {
+    const { data } = await api.get<ProjectImportSchema>(`/projects/${encodeURIComponent(projectId)}/property-imports/schema`);
+    return data;
+  },
+
+  async getProjectPropertyImport(projectId: string, importId: string, params?: { page?: number; limit?: number }): Promise<ProjectImportSession> {
+    const { data } = await api.get<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports/${encodeURIComponent(importId)}`, { params: compact(params) });
+    return data;
+  },
+
+  async editProjectPropertyImportRow(projectId: string, importId: string, rowNumber: number, data: Record<string, unknown>): Promise<ProjectImportSession> {
+    const { data: response } = await api.patch<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports/${encodeURIComponent(importId)}/rows/${rowNumber}`, data);
+    return response;
+  },
+
+  async removeProjectPropertyImportRow(projectId: string, importId: string, rowNumber: number): Promise<ProjectImportSession> {
+    const { data } = await api.delete<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports/${encodeURIComponent(importId)}/rows/${rowNumber}`);
+    return data;
+  },
+
+  async restoreProjectPropertyImportRow(projectId: string, importId: string, rowNumber: number): Promise<ProjectImportSession> {
+    const { data } = await api.post<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports/${encodeURIComponent(importId)}/rows/${rowNumber}/restore`);
+    return data;
+  },
+
+  async confirmProjectPropertyImport(projectId: string, importId: string): Promise<ProjectImportSession> {
+    const { data } = await api.post<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports/${encodeURIComponent(importId)}/confirm`);
+    return data;
+  },
+
+  async retryFailedProjectPropertyImportRows(projectId: string, importId: string): Promise<ProjectImportSession> {
+    const { data } = await api.post<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports/${encodeURIComponent(importId)}/retry-failed`);
+    return data;
+  },
+
+  async cancelProjectPropertyImport(projectId: string, importId: string): Promise<ProjectImportSession> {
+    const { data } = await api.patch<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports/${encodeURIComponent(importId)}/cancel`);
+    return data;
+  },
+
+  async listAdminPropertyImports(params?: AdminPropertyImportListQuery): Promise<ProjectImportListResponse> {
+    const { data } = await api.get<ProjectImportListResponse>('/admin/property-imports', { params: compact(params) });
+    return data;
+  },
+
+  async getAdminPropertyImport(importId: string): Promise<ProjectImportSession> {
+    const { data } = await api.get<ProjectImportSession>(`/admin/property-imports/${encodeURIComponent(importId)}`);
     return data;
   },
 };

@@ -64,4 +64,29 @@ describe('projectService', () => {
     await projectService.adminSetProjectFeatured('project-1', { featured: true });
     expect(api.patch).toHaveBeenCalledWith('/admin/projects/project-1/featured', { featured: true });
   });
+
+  it('uploads project property imports as multipart file field', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { importSessionId: 'import-1', project: { id: 'project-1' }, status: 'ready', summary: {}, rows: [] } });
+    const file = new File(['title,price,propertyType'], 'units.csv', { type: 'text/csv' });
+    await projectService.uploadProjectPropertyImport('project-1', file);
+    expect(api.post).toHaveBeenCalledWith('/projects/project-1/property-imports', expect.any(FormData));
+    const formData = vi.mocked(api.post).mock.calls[0][1] as FormData;
+    expect(formData.get('file')).toBe(file);
+  });
+
+  it('downloads project import template as a blob', async () => {
+    const blob = new Blob(['title,price,propertyType'], { type: 'text/csv' });
+    vi.mocked(api.get).mockResolvedValue({ data: blob });
+    await expect(projectService.downloadProjectPropertyImportTemplate('project-1')).resolves.toBe(blob);
+    expect(api.get).toHaveBeenCalledWith('/projects/project-1/property-imports/template', { responseType: 'blob' });
+  });
+
+  it('edits import rows and strips empty import list params', async () => {
+    vi.mocked(api.patch).mockResolvedValue({ data: { importSessionId: 'import-1', project: { id: 'project-1' }, status: 'ready', summary: {}, rows: [] } });
+    vi.mocked(api.get).mockResolvedValue({ data: { imports: [], total: 0, page: 1, limit: 20 } });
+    await projectService.editProjectPropertyImportRow('project-1', 'import-1', 2, { title: 'Unit A', price: 1000 });
+    expect(api.patch).toHaveBeenCalledWith('/projects/project-1/property-imports/import-1/rows/2', { title: 'Unit A', price: 1000 });
+    await projectService.listProjectPropertyImports('project-1', { page: 1, limit: undefined });
+    expect(api.get).toHaveBeenCalledWith('/projects/project-1/property-imports', { params: { page: 1 } });
+  });
 });

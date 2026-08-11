@@ -641,14 +641,14 @@ const PropertyForm = ({
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
-            <label className={labelClass}>Listing type</label>
-            <select value={listingType} onChange={(event) => setListingType(event.target.value as ListingType)} className={inputClass}>
+            <label htmlFor="property-listing-type" className={labelClass}>Listing type</label>
+            <select id="property-listing-type" value={listingType} onChange={(event) => setListingType(event.target.value as ListingType)} className={inputClass}>
               {LISTING_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </div>
           <div>
-            <label className={labelClass}>Project</label>
-            <select value={projectId} onChange={(event) => setProjectId(event.target.value)} className={inputClass} disabled={projectsLoading}>
+            <label htmlFor="property-project" className={labelClass}>Project</label>
+            <select id="property-project" value={projectId} onChange={(event) => setProjectId(event.target.value)} className={inputClass} disabled={projectsLoading}>
               <option value="">{projectsLoading ? 'Loading projects...' : 'Standalone property'}</option>
               {projects.map((project) => (
                 <option key={project._id} value={project._id}>{project.name}</option>
@@ -657,12 +657,30 @@ const PropertyForm = ({
           </div>
           {projectId ? (
             <>
-              <input value={unitName} onChange={(event) => setUnitName(event.target.value)} placeholder="Unit name" className={inputClass} />
-              <input value={unitNumber} onChange={(event) => setUnitNumber(event.target.value)} placeholder="Unit number" className={inputClass} />
-              <input value={phase} onChange={(event) => setPhase(event.target.value)} placeholder="Phase" className={inputClass} />
-              <input value={block} onChange={(event) => setBlock(event.target.value)} placeholder="Block" className={inputClass} />
-              <input value={floor} onChange={(event) => setFloor(event.target.value)} placeholder="Floor" className={inputClass} />
-              <input value={plotNumber} onChange={(event) => setPlotNumber(event.target.value)} placeholder="Plot number" className={inputClass} />
+              <div>
+                <label htmlFor="property-project-unit-name" className={labelClass}>Unit name</label>
+                <input id="property-project-unit-name" value={unitName} onChange={(event) => setUnitName(event.target.value)} placeholder="e.g. 3 Bedroom Terrace" className={inputClass} />
+              </div>
+              <div>
+                <label htmlFor="property-project-unit-number" className={labelClass}>Unit number</label>
+                <input id="property-project-unit-number" value={unitNumber} onChange={(event) => setUnitNumber(event.target.value)} placeholder="e.g. B12" className={inputClass} />
+              </div>
+              <div>
+                <label htmlFor="property-project-phase" className={labelClass}>Phase</label>
+                <input id="property-project-phase" value={phase} onChange={(event) => setPhase(event.target.value)} placeholder="e.g. Phase 1" className={inputClass} />
+              </div>
+              <div>
+                <label htmlFor="property-project-block" className={labelClass}>Block</label>
+                <input id="property-project-block" value={block} onChange={(event) => setBlock(event.target.value)} placeholder="e.g. Block B" className={inputClass} />
+              </div>
+              <div>
+                <label htmlFor="property-project-floor" className={labelClass}>Floor</label>
+                <input id="property-project-floor" value={floor} onChange={(event) => setFloor(event.target.value)} placeholder="e.g. 2" className={inputClass} />
+              </div>
+              <div>
+                <label htmlFor="property-project-plot-number" className={labelClass}>Plot number</label>
+                <input id="property-project-plot-number" value={plotNumber} onChange={(event) => setPlotNumber(event.target.value)} placeholder="e.g. Plot 14" className={inputClass} />
+              </div>
             </>
           ) : null}
         </div>

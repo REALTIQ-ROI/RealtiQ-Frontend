@@ -55,6 +55,7 @@ import ManagePayments from '../pages/dashboard/Admin/ManagePayments';
 import ManageProperties from '../pages/dashboard/Admin/ManageProperties';
 import AdminProjects from '../pages/dashboard/Admin/Projects';
 import AdminProjectDetails from '../pages/dashboard/Admin/ProjectDetails';
+import AdminPropertyImports from '../pages/dashboard/Admin/PropertyImports';
 import ManageUsers from '../pages/dashboard/Admin/ManageUsers';
 import FeaturedListings from '../pages/dashboard/Admin/FeaturedListings';
 import AdminPaymentDetails from '../pages/dashboard/Admin/AdminPaymentDetails';
@@ -80,6 +81,7 @@ import LandlordMyProperties from '../pages/dashboard/Landlord/LandlordMyProperti
 import LandlordProjects from '../pages/dashboard/Landlord/Projects';
 import ProjectEditor from '../pages/dashboard/Landlord/ProjectEditor';
 import ProjectManage from '../pages/dashboard/Landlord/ProjectManage';
+import ProjectPropertyImports from '../pages/dashboard/Landlord/ProjectPropertyImports';
 import LandlordPaymentHistory from '../pages/dashboard/Landlord/LandlordPaymentHistory';
 import LandlordPropertyDetails from '../pages/dashboard/Landlord/LandlordPropertyDetails';
 import LandlordSettings from '../pages/dashboard/Landlord/LandlordSettings';
@@ -218,6 +220,8 @@ const AppRoutes = () => {
           <Route path="/dashboard/landlord/projects/new" element={<ProjectEditor />} />
           <Route path="/dashboard/landlord/projects/:id" element={<ProjectManage />} />
           <Route path="/dashboard/landlord/projects/:id/edit" element={<ProjectEditor />} />
+          <Route path="/dashboard/landlord/projects/:id/imports" element={<ProjectPropertyImports />} />
+          <Route path="/dashboard/landlord/projects/:id/imports/:importId" element={<ProjectPropertyImports />} />
           <Route path="/dashboard/landlord/tours" element={<Tours />} />
           <Route path="/dashboard/landlord/installments" element={<Installments />} />
           <Route path="/dashboard/landlord/installments/:id" element={<Installments />} />
@@ -257,6 +261,8 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/manage-properties" element={<ManageProperties />} />
           <Route path="/dashboard/admin/projects" element={<AdminProjects />} />
           <Route path="/dashboard/admin/projects/:id" element={<AdminProjectDetails />} />
+          <Route path="/dashboard/admin/property-imports" element={<AdminPropertyImports />} />
+          <Route path="/dashboard/admin/property-imports/:importId" element={<AdminPropertyImports />} />
           <Route path="/dashboard/admin/property-details" element={<AdminPropertyDetails />} />
           <Route path="/dashboard/admin/property-details/:id" element={<AdminPropertyDetails />} />
           <Route path="/dashboard/admin/manage-payments" element={<ManagePayments />} />

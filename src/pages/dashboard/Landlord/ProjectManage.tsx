@@ -76,6 +76,7 @@ const ProjectManage = () => {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Link to={`/dashboard/landlord/projects/${project._id}/edit`} className="rounded-lg bg-surface-container-low px-4 py-3 text-sm font-bold text-primary">Edit</Link>
+                <Link to={`/dashboard/landlord/projects/${project._id}/imports`} className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary">Bulk Upload Properties</Link>
                 {!project.isPublished ? <Button type="button" loading={publishing} loadingLabel="Publishing..." onClick={() => void publish()}>Publish</Button> : null}
                 <Button type="button" variant="secondary" loading={deleting} loadingLabel="Deleting..." onClick={() => void remove()}>Delete</Button>
               </div>
