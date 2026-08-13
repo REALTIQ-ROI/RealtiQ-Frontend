@@ -12,6 +12,8 @@ interface Props {
   onVisiblePropertiesChange?: (properties: Property[]) => void;
   onViewportChange?: (bounds: { north: number; south: number; east: number; west: number; zoom: number }) => void;
   onSelectProperty?: (property: Property) => void;
+  resolveProperty?: (property: Property) => Promise<Property>;
+  onDetailsNavigate?: () => void;
 }
 
 const isMappable = (property: Property) => {
@@ -22,22 +24,22 @@ const isMappable = (property: Property) => {
 };
 
 const priceLabel = (price: number) => {
+  if (!Number.isFinite(price) || price <= 0) return 'View';
   if (price >= 1_000_000_000) return `₦${(price / 1_000_000_000).toFixed(1)}B`;
   if (price >= 1_000_000) return `₦${(price / 1_000_000).toFixed(1)}M`;
   if (price >= 1_000) return `₦${Math.round(price / 1_000)}K`;
   return `₦${price}`;
 };
 
-const PropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, onSelectProperty }: Props) => {
+const PropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, onSelectProperty, resolveProperty, onDetailsNavigate }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
-  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
+  const [selectedPreview, setSelectedPreview] = useState<Property | null>(null);
   const [mapError, setMapError] = useState(false);
   const mappable = useMemo(() => properties.filter(isMappable), [properties]);
   // The preview is intentionally map-owned: selecting or hovering a card may
   // synchronize the highlighted property, but must not open this map preview.
-  const selected = useMemo(() => mappable.find((property) => propertyRouteReference(property) === internalSelectedId) ?? null, [mappable, internalSelectedId]);
   const initialFit = useRef(false);
   const missingCount = properties.length - mappable.length;
 
@@ -79,12 +81,21 @@ const PropertyMap = ({ properties, detailsPath, actions, className = '', onVisib
         }),
         title: property.title,
       });
-      marker.on('click', () => { setInternalSelectedId(propertyRouteReference(property)); onSelectProperty?.(property); });
+      marker.on('click', () => {
+        const reference = propertyRouteReference(property);
+        setSelectedPreview(property);
+        onSelectProperty?.(property);
+        if (resolveProperty) {
+          void resolveProperty(property).then((resolved) => {
+            if (resolved && propertyRouteReference(resolved) === reference) setSelectedPreview(resolved);
+          }).catch(() => undefined);
+        }
+      });
       cluster.addLayer(marker);
       bounds.extend([lat, lng]);
     });
     if (bounds.isValid() && !initialFit.current) { initialFit.current = true; map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 }); }
-  }, [mappable, onSelectProperty]);
+  }, [mappable, onSelectProperty, resolveProperty]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -114,7 +125,7 @@ const PropertyMap = ({ properties, detailsPath, actions, className = '', onVisib
       ) : null}
       {mapError ? <div className="absolute left-3 right-3 top-3 z-[1000] rounded-lg bg-error-container p-3 text-sm text-on-error-container">The map tiles could not be loaded. List results are still available.</div> : null}
       {missingCount > 0 ? <div className="absolute left-3 top-3 z-[900] rounded-lg bg-white/95 px-3 py-2 text-xs font-medium text-secondary shadow">{missingCount} {missingCount === 1 ? 'property is' : 'properties are'} list-only (no coordinates).</div> : null}
-      {selected ? <PropertyMapPreviewCard property={selected} detailsPath={detailsPath} actions={actions} onClose={() => setInternalSelectedId(null)} /> : null}
+      {selectedPreview ? <PropertyMapPreviewCard property={selectedPreview} detailsPath={detailsPath} actions={actions} onClose={() => setSelectedPreview(null)} onDetailsNavigate={onDetailsNavigate} /> : null}
     </section>
   );
 };

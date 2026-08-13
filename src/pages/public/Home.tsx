@@ -4,13 +4,21 @@ import PropertyCard from '../../components/property/PropertyCard';
 import MediaPreview from '../../components/property/MediaPreview';
 import Button from '../../components/ui/Button';
 import { useProperties } from '../../contexts/PropertiesContext';
+import { useAuth } from '../../contexts/AuthContext';
 import LoadingState from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
 import { propertyRouteReference } from '../../types';
 
 const Home = () => {
   const { properties, loading, error, refreshProperties } = useProperties();
-  const featuredProperty = properties[0] ?? null;
+  const { user } = useAuth();
+  const canViewMediaMissingProperties = user?.role === 'admin' || user?.role === 'landlord';
+  const homepageProperties = canViewMediaMissingProperties
+    ? properties
+    : properties.filter((property) => property.media?.some((media) =>
+      (media.type === 'image' || media.type === 'video') && Boolean(media.url?.trim()),
+    ));
+  const featuredProperty = homepageProperties[0] ?? null;
 
   return (
     <PublicLayout>
@@ -64,7 +72,7 @@ const Home = () => {
 
         {!loading && !error ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {properties.slice(0, 3).map((property) => (
+            {homepageProperties.slice(0, 3).map((property) => (
               <PropertyCard key={propertyRouteReference(property)} property={property} />
             ))}
           </div>

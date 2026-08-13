@@ -10,16 +10,18 @@ interface Props {
   detailsPath: (property: Property) => string;
   actions?: (property: Property) => ReactNode;
   onClose: () => void;
+  onDetailsNavigate?: () => void;
 }
 
-const formatPrice = (property: Property) =>
-  new Intl.NumberFormat('en-NG', {
+const formatPrice = (property: Property) => property.price > 0
+  ? new Intl.NumberFormat('en-NG', {
     style: 'currency',
     currency: property.currency || 'NGN',
     maximumFractionDigits: 0,
-  }).format(property.price);
+  }).format(property.price)
+  : 'Price unavailable';
 
-const PropertyMapPreviewCard = ({ property, detailsPath, actions, onClose }: Props) => (
+const PropertyMapPreviewCard = ({ property, detailsPath, actions, onClose, onDetailsNavigate }: Props) => (
   <article className="absolute bottom-4 left-4 right-4 z-[1000] overflow-hidden rounded-xl bg-white shadow-2xl sm:left-auto sm:w-80">
     <button
       type="button"
@@ -52,7 +54,7 @@ const PropertyMapPreviewCard = ({ property, detailsPath, actions, onClose }: Pro
       )}
       <PaymentTypeBadges paymentTypes={normalizePropertyPaymentTypes(property.paymentTypes, property.price)} />
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        <Link className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-on-primary" to={detailsPath(property)}>
+        <Link className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-on-primary" to={detailsPath(property)} onClick={onDetailsNavigate}>
           View Details
         </Link>
         {actions?.(property)}

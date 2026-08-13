@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 import InquiryForm from '../../components/forms/InquiryForm';
 import PropertyGallery from '../../components/property/PropertyGallery';
+import PropertyMap from '../../components/property/map/PropertyMap';
 import PropertyMeta from '../../components/property/PropertyMeta';
 import PriceHistorySection from '../../components/property/PriceHistorySection';
 import PaymentTypeBadges from '../../components/property/PaymentTypeBadges';
@@ -30,6 +31,7 @@ import {
   resolvePropertyOwnerId,
   type PropertyTitleVerificationSummary,
   type PublicTitleDocument,
+  type Property,
 } from '../../types';
 import {
   calculateInstallmentAmount,
@@ -94,7 +96,32 @@ const PropertyDetails = () => {
   const [publicTitleDocuments, setPublicTitleDocuments] = useState<PublicTitleDocument[]>([]);
   const [constructionUpdates, setConstructionUpdates] = useState<ConstructionUpdate[]>([]);
   const [constructionUpdatesLoading, setConstructionUpdatesLoading] = useState(false);
+  const [nearbyMapOpen, setNearbyMapOpen] = useState(false);
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+  const [showStickySummary, setShowStickySummary] = useState(false);
+  const mediaSectionRef = useRef<HTMLDivElement>(null);
   const propertyReference = property ? propertyRouteReference(property) : '';
+
+  const selectMedia = useCallback((index: number, scrollToMedia = false) => {
+    const mediaLength = property?.media?.length ?? 0;
+    if (!mediaLength) return;
+    setActiveMediaIndex((index + mediaLength) % mediaLength);
+    if (scrollToMedia) mediaSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [property?.media?.length]);
+  const resolveNearbyProperty = useCallback(
+    (nearbyProperty: Property) => propertyService.getPropertyById(propertyRouteReference(nearbyProperty)),
+    [],
+  );
+
+  useEffect(() => {
+    const mediaSection = mediaSectionRef.current;
+    if (!mediaSection) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      setShowStickySummary(!entry.isIntersecting);
+    }, { threshold: 0 });
+    observer.observe(mediaSection);
+    return () => observer.disconnect();
+  }, [propertyReference]);
 
   useEffect(() => {
     if (!property) return;
@@ -362,14 +389,44 @@ const PropertyDetails = () => {
   const currency = property.currency ?? 'NGN';
   const ownerName = owner?.name ?? 'RealtiQ Agent';
   const ownerEmail = owner?.email ?? 'support@realtiq.com';
-  const mapLink = property.coordinates
-    ? `https://www.google.com/maps?q=${property.coordinates.lat},${property.coordinates.lng}`
-    : `https://www.google.com/maps/search/${encodeURIComponent(property.location)}`;
+  const nearbyMapProperties = nearby
+    .map((item) => {
+      const reference = item.publicReference || item._id;
+      if (!reference || !item.coordinates) return null;
+      return {
+        _id: reference,
+        publicReference: item.publicReference,
+        title: item.title,
+        price: 0,
+        location: 'Nearby property',
+        propertyType: 'property',
+        bedrooms: 0,
+        bathrooms: 0,
+        description: '',
+        squareFeet: 0,
+        paymentTypes: item.paymentTypes ?? [],
+        coordinates: item.coordinates,
+        media: [],
+        status: 'available',
+      } satisfies Property;
+    })
+    .filter((item): item is Property => Boolean(item));
 
   return (
     <PublicLayout>
       <section className="max-w-7xl mx-auto px-8 space-y-10">
-        <PropertyGallery property={property} />
+        <PropertyGallery property={property} activeIndex={activeMediaIndex} onActiveIndexChange={(index) => selectMedia(index)} mediaSectionRef={mediaSectionRef} />
+
+        {showStickySummary ? <div className="sticky top-20 z-30 -mx-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest/95 p-3 shadow-lg backdrop-blur sm:top-24 md:-mx-4 md:px-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="flex min-w-0 gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Sticky property media thumbnails">{(property.media ?? []).map((item, index) => <button key={item.public_id || item.url} type="button" aria-label={`View property ${item.type} ${index + 1}`} aria-current={index === activeMediaIndex ? 'true' : undefined} onClick={() => selectMedia(index, true)} className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border-2 ${index === activeMediaIndex ? 'border-primary ring-2 ring-primary/20' : 'border-transparent opacity-60'}`}>{item.type === 'video' ? <div className="flex h-full w-full items-center justify-center bg-surface-container-low"><span className="material-symbols-outlined text-base text-secondary">play_circle</span></div> : <img src={item.url} alt={`Sticky thumbnail ${index + 1}`} className="h-full w-full object-cover" />}</button>)}</div>
+              <div className="hidden min-w-0 sm:block"><p className="truncate text-sm font-black text-primary">{formatCurrency(property.price, currency)}</p><div className="mt-1 flex flex-wrap gap-2 text-[11px] font-semibold text-secondary"><span>{property.bedrooms ?? '—'} Beds</span><span>{property.bathrooms ?? '—'} Baths</span><span>{property.squareFeet?.toLocaleString() ?? '—'} sq ft</span></div></div>
+            </div>
+            <div className="flex items-center gap-2"><div className="sm:hidden"><p className="text-sm font-black text-primary">{formatCurrency(property.price, currency)}</p><p className="text-[11px] font-semibold text-secondary">{property.bedrooms ?? '—'} Beds · {property.bathrooms ?? '—'} Baths · {property.squareFeet?.toLocaleString() ?? '—'} sq ft</p></div><button type="button" aria-label="Save property" onClick={() => void handleSaveProperty()} disabled={savingProperty} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-container-low text-primary disabled:opacity-50"><span className="material-symbols-outlined">bookmark_add</span></button>
+              {canPurchase && hasActiveInstallment && propertyInstallment ? <Button onClick={handleContinueInstallment} disabled={installmentLoading}>Continue Installment</Button> : canPurchase && hasOutrightPayment ? <Button onClick={() => void handleBuyProperty()} disabled={installmentLoading}>{installmentLoading ? 'Checking...' : 'Buy Property'}</Button> : canPurchase && hasInstallmentPayment ? <Button onClick={() => void handleCreateInstallment()} disabled={creatingInstallment}>{creatingInstallment ? 'Creating...' : 'Create Plan'}</Button> : hasEscrowPayment && canPurchase ? <Button variant="secondary" onClick={() => { const escrowPath = `/dashboard/buyer/escrows/create/${propertyReference}`; if (!user) navigate('/login-to-purchase', { state: { redirectTo: escrowPath } }); else navigate(escrowPath); }}>{user ? 'Create Escrow' : 'Login for Escrow'}</Button> : <Button disabled>Unavailable</Button>}</div>
+          </div>
+        </div> : null}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           <div className="lg:col-span-2 space-y-10">
@@ -556,40 +613,29 @@ const PropertyDetails = () => {
 
             <div>
               <h2 className="text-2xl font-bold mb-4">Nearby Properties</h2>
-              <Card className="p-5 space-y-4">
+              <Card className="space-y-4 p-5">
                 {loadingNearby ? (
                   <LoadingState label="Loading nearby properties..." />
                 ) : nearby.length > 0 ? (
-                  nearby.map((item) => (
-                    <div key={item._id} className="flex items-center justify-between gap-3 py-2 border-b border-outline-variant/10 last:border-b-0">
-                      <div>
-                        <p className="font-semibold text-sm">{item.title}</p>
-                        <p className="text-xs text-secondary">
-                          {item.coordinates
-                            ? `${item.coordinates.lat.toFixed(2)}, ${item.coordinates.lng.toFixed(2)}`
-                            : 'Coordinates unavailable'}
-                        </p>
-                      </div>
-                      <Link to={`/properties/${item._id}`} className="text-xs font-bold text-primary hover:underline">
-                        View
-                      </Link>
-                    </div>
-                  ))
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {nearby.map((item, index) => {
+                      const reference = item.publicReference || item._id;
+                      return <article key={reference || `${item.title}-${index}`} className="rounded-xl border border-outline-variant/15 bg-surface-container-lowest p-4 transition-shadow hover:shadow-md">
+                        <div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><span className="material-symbols-outlined">location_on</span></div><div className="min-w-0 flex-1"><h3 className="truncate font-bold text-on-surface">{item.title}</h3><p className="mt-1 text-xs text-secondary">{item.coordinates ? `${item.coordinates.lat.toFixed(3)}, ${item.coordinates.lng.toFixed(3)}` : 'Location unavailable'}</p></div></div>
+                        <div className="mt-4 flex items-center justify-between gap-2"><span className="text-[11px] font-bold uppercase tracking-wider text-secondary">Nearby listing</span>{reference ? <Link to={`/properties/${reference}`} className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline">View details <span className="material-symbols-outlined text-sm">arrow_forward</span></Link> : <span className="text-xs text-secondary">Reference unavailable</span>}</div>
+                      </article>;
+                    })}
+                  </div>
                 ) : (
                   <div className="text-sm text-secondary">
                     No nearby properties found for this location.
                   </div>
                 )}
                 {property.coordinates ? (
-                  <a
-                    href={mapLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline"
-                  >
+                  <button type="button" onClick={() => setNearbyMapOpen(true)} className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline">
                     <span className="material-symbols-outlined text-sm">map</span>
-                    Open in Maps
-                  </a>
+                    Open in Map
+                  </button>
                 ) : (
                   <p className="text-xs text-secondary">No coordinates available yet. Search is based on the saved address.</p>
                 )}
@@ -783,6 +829,14 @@ const PropertyDetails = () => {
                 )}
               </Card>
             </div>
+
+            {nearbyMapOpen ? <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Nearby properties map" onClick={() => setNearbyMapOpen(false)}>
+              <div className="relative h-[min(80vh,720px)] w-full max-w-6xl overflow-hidden rounded-2xl bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}>
+                <div className="absolute left-4 right-16 top-4 z-[1100] rounded-xl bg-white/95 px-4 py-3 shadow"><p className="font-bold text-on-surface">Nearby properties</p><p className="text-xs text-secondary">Select a marker to view its property details.</p></div>
+                <button type="button" aria-label="Close nearby properties map" onClick={() => setNearbyMapOpen(false)} className="absolute right-4 top-4 z-[1200] flex h-10 w-10 items-center justify-center rounded-full bg-white text-on-surface shadow"><span className="material-symbols-outlined">close</span></button>
+                <PropertyMap properties={nearbyMapProperties} detailsPath={(nearbyProperty) => `/properties/${propertyRouteReference(nearbyProperty)}`} className="h-full min-h-0 rounded-none" resolveProperty={resolveNearbyProperty} onDetailsNavigate={() => setNearbyMapOpen(false)} />
+              </div>
+            </div> : null}
           </div>
 
           <div className="space-y-6">
