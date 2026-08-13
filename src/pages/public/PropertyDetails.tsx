@@ -390,7 +390,7 @@ const PropertyDetails = () => {
   const ownerName = owner?.name ?? 'RealtiQ Agent';
   const ownerEmail = owner?.email ?? 'support@realtiq.com';
   const nearbyMapProperties = nearby
-    .map((item) => {
+    .map((item): Property | null => {
       const reference = item.publicReference || item._id;
       if (!reference || !item.coordinates) return null;
       return {
@@ -408,9 +408,9 @@ const PropertyDetails = () => {
         coordinates: item.coordinates,
         media: [],
         status: 'available',
-      } satisfies Property;
+      };
     })
-    .filter((item): item is Property => Boolean(item));
+    .filter((item): item is Property => item !== null);
 
   return (
     <PublicLayout>
