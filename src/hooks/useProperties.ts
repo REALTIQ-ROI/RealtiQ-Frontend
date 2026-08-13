@@ -19,7 +19,7 @@ interface UsePropertiesOptions {
 }
 
 export const useProperties = (options: UsePropertiesOptions = {}) => {
-  const { autoFetch = false, initialFilters = {}, limit = 12 } = options;
+  const { autoFetch = false, initialFilters = {}, limit = 10 } = options;
   const [properties, setProperties] = useState<Property[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

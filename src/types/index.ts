@@ -551,6 +551,7 @@ export interface PropertyFilters {
   maxPrice?: number;
   propertyType?: string;
   bedrooms?: number;
+  bathrooms?: number;
   ownerId?: string;
   category?: PropertyCategory;
   completionStage?: PropertyCompletionStage;

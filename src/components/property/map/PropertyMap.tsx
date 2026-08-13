@@ -10,6 +10,8 @@ interface Props {
   actions?: (property: Property) => ReactNode;
   className?: string;
   onVisiblePropertiesChange?: (properties: Property[]) => void;
+  onViewportChange?: (bounds: { north: number; south: number; east: number; west: number; zoom: number }) => void;
+  onSelectProperty?: (property: Property) => void;
 }
 
 const isMappable = (property: Property) => {
@@ -26,14 +28,17 @@ const priceLabel = (price: number) => {
   return `₦${price}`;
 };
 
-const PropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange }: Props) => {
+const PropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, onSelectProperty }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
   const [mapError, setMapError] = useState(false);
   const mappable = useMemo(() => properties.filter(isMappable), [properties]);
-  const selected = useMemo(() => mappable.find((property) => propertyRouteReference(property) === selectedId) ?? null, [mappable, selectedId]);
+  // The preview is intentionally map-owned: selecting or hovering a card may
+  // synchronize the highlighted property, but must not open this map preview.
+  const selected = useMemo(() => mappable.find((property) => propertyRouteReference(property) === internalSelectedId) ?? null, [mappable, internalSelectedId]);
+  const initialFit = useRef(false);
   const missingCount = properties.length - mappable.length;
 
   useEffect(() => {
@@ -74,39 +79,42 @@ const PropertyMap = ({ properties, detailsPath, actions, className = '', onVisib
         }),
         title: property.title,
       });
-      marker.on('click', () => setSelectedId(propertyRouteReference(property)));
+      marker.on('click', () => { setInternalSelectedId(propertyRouteReference(property)); onSelectProperty?.(property); });
       cluster.addLayer(marker);
       bounds.extend([lat, lng]);
     });
-    if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
-  }, [mappable]);
+    if (bounds.isValid() && !initialFit.current) { initialFit.current = true; map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 }); }
+  }, [mappable, onSelectProperty]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !onVisiblePropertiesChange) return;
+    if (!map || (!onVisiblePropertiesChange && !onViewportChange)) return;
     const updateVisible = () => {
       const bounds = map.getBounds();
-      onVisiblePropertiesChange(mappable.filter((property) => bounds.contains([property.coordinates!.lat, property.coordinates!.lng])));
+      onVisiblePropertiesChange?.(mappable.filter((property) => bounds.contains([property.coordinates!.lat, property.coordinates!.lng])));
+      onViewportChange?.({ north: bounds.getNorth(), south: bounds.getSouth(), east: bounds.getEast(), west: bounds.getWest(), zoom: map.getZoom() });
     };
-    const timer = window.setTimeout(updateVisible, 0);
-    map.on('moveend zoomend', updateVisible);
+    let timer = 0;
+    const settled = () => { window.clearTimeout(timer); timer = window.setTimeout(updateVisible, 300); };
+    const first = window.setTimeout(updateVisible, 0);
+    map.on('moveend zoomend', settled);
     return () => {
-      window.clearTimeout(timer);
-      map.off('moveend zoomend', updateVisible);
+      window.clearTimeout(first); window.clearTimeout(timer);
+      map.off('moveend zoomend', settled);
     };
-  }, [mappable, onVisiblePropertiesChange]);
+  }, [mappable, onVisiblePropertiesChange, onViewportChange]);
 
   return (
     <section className={`relative min-h-[55vh] overflow-hidden rounded-xl bg-surface-container-low sm:min-h-[420px] ${className}`} aria-label="Property map">
       <div ref={containerRef} className="absolute inset-0" />
       {mappable.length === 0 && !mapError ? (
-        <div className="absolute inset-0 z-[500] flex items-center justify-center bg-surface-container-low/90 p-8 text-center">
-          <div><span className="material-symbols-outlined mb-2 block text-4xl text-secondary">location_off</span><p className="font-bold">No map locations available</p><p className="mt-1 text-sm text-secondary">These properties remain available in list view.</p></div>
+        <div className="absolute left-3 top-3 z-[900] rounded-lg bg-white/95 px-3 py-2 text-xs font-medium text-secondary shadow">
+          No property markers in this area
         </div>
       ) : null}
       {mapError ? <div className="absolute left-3 right-3 top-3 z-[1000] rounded-lg bg-error-container p-3 text-sm text-on-error-container">The map tiles could not be loaded. List results are still available.</div> : null}
       {missingCount > 0 ? <div className="absolute left-3 top-3 z-[900] rounded-lg bg-white/95 px-3 py-2 text-xs font-medium text-secondary shadow">{missingCount} {missingCount === 1 ? 'property is' : 'properties are'} list-only (no coordinates).</div> : null}
-      {selected ? <PropertyMapPreviewCard property={selected} detailsPath={detailsPath} actions={actions} onClose={() => setSelectedId(null)} /> : null}
+      {selected ? <PropertyMapPreviewCard property={selected} detailsPath={detailsPath} actions={actions} onClose={() => setInternalSelectedId(null)} /> : null}
     </section>
   );
 };

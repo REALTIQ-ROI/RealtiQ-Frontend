@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { PropertyFilters } from '../../types';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -6,329 +6,48 @@ import Input from '../ui/Input';
 interface PropertyFiltersProps {
   initialFilters?: PropertyFilters;
   onApply: (filters: PropertyFilters) => void;
+  onSearchChange?: (search: string) => void;
 }
+const options = {
+  propertyType: [['', 'Type'], ['house', 'House'], ['apartment', 'Apartment'], ['land', 'Land'], ['commercial', 'Commercial'], ['villa', 'Villa'], ['penthouse', 'Penthouse'], ['estate', 'Estate']],
+  category: [['', 'All Categories'], ['residential', 'Residential'], ['commercial', 'Commercial'], ['mixed_use', 'Mixed Use']],
+  completionStage: [['', 'Any Stage'], ['off_plan', 'Off Plan'], ['unfinished', 'Unfinished'], ['finished', 'Finished'], ['renovation', 'Renovation']],
+  currency: [['', 'Any Currency'], ['NGN', 'NGN'], ['USD', 'USD'], ['GBP', 'GBP']],
+  listingType: [['', 'Any Listing Type'], ['ready', 'Ready'], ['off_plan', 'Off-Plan']],
+  status: [['', 'Any Status'], ['available', 'Available'], ['sold', 'Sold']],
+} as const;
 
-const PROPERTY_TYPES = [
-  { value: '', label: 'All Types' },
-  { value: 'house', label: 'House' },
-  { value: 'apartment', label: 'Apartment' },
-  { value: 'land', label: 'Land' },
-  { value: 'commercial', label: 'Commercial' },
-  { value: 'villa', label: 'Villa' },
-  { value: 'penthouse', label: 'Penthouse' },
-  { value: 'estate', label: 'Estate' },
-];
-
-const CATEGORY_OPTIONS = [
-  { value: '', label: 'All Categories' },
-  { value: 'residential', label: 'Residential' },
-  { value: 'commercial', label: 'Commercial' },
-  { value: 'mixed_use', label: 'Mixed Use' },
-];
-
-const STATUS_OPTIONS = [
-  { value: '', label: 'Any Status' },
-  { value: 'available', label: 'Available' },
-  { value: 'sold', label: 'Sold' },
-];
-
-const STAGE_OPTIONS = [
-  { value: '', label: 'Any Stage' },
-  { value: 'off_plan', label: 'Off Plan' },
-  { value: 'unfinished', label: 'Unfinished' },
-  { value: 'finished', label: 'Finished' },
-  { value: 'renovation', label: 'Renovation' },
-];
-
-const CURRENCY_OPTIONS = [
-  { value: '', label: 'Any Currency' },
-  { value: 'NGN', label: 'NGN' },
-  { value: 'USD', label: 'USD' },
-  { value: 'GBP', label: 'GBP' },
-];
-
-const LISTING_TYPE_OPTIONS = [
-  { value: '', label: 'Any Listing Type' },
-  { value: 'ready', label: 'Ready' },
-  { value: 'off_plan', label: 'Off-Plan' },
-];
-
-const DEVELOPMENT_STATUS_OPTIONS = [
-  { value: '', label: 'Any Construction Stage' },
-  { value: 'planned', label: 'Planned' },
-  { value: 'pre_construction', label: 'Pre-construction' },
-  { value: 'foundation', label: 'Foundation' },
-  { value: 'structural', label: 'Structural' },
-  { value: 'roofing', label: 'Roofing' },
-  { value: 'finishing', label: 'Finishing' },
-  { value: 'completed', label: 'Completed' },
-];
-
-const PropertyFiltersPanel = ({ initialFilters = {}, onApply }: PropertyFiltersProps) => {
-  const [search, setSearch] = useState(initialFilters.search ?? '');
-  const [minPrice, setMinPrice] = useState(initialFilters.minPrice?.toString() ?? '');
-  const [maxPrice, setMaxPrice] = useState(initialFilters.maxPrice?.toString() ?? '');
-  const [propertyType, setPropertyType] = useState(initialFilters.propertyType ?? '');
-  const [bedrooms, setBedrooms] = useState(initialFilters.bedrooms?.toString() ?? '');
-  const [category, setCategory] = useState(initialFilters.category ?? '');
-  const [completionStage, setCompletionStage] = useState(initialFilters.completionStage ?? '');
-  const [currency, setCurrency] = useState(initialFilters.currency ?? '');
-  const [status, setStatus] = useState(initialFilters.status ?? '');
-  const [featured, setFeatured] = useState(initialFilters.featured === true ? 'true' : '');
-  const [listingType, setListingType] = useState(initialFilters.listingType ?? '');
-  const [developmentStatus, setDevelopmentStatus] = useState(initialFilters.developmentStatus ?? '');
-  const [projectSlug, setProjectSlug] = useState(initialFilters.projectSlug ?? '');
-  const [minConstructionProgress, setMinConstructionProgress] = useState(initialFilters.minConstructionProgress?.toString() ?? '');
-  const [maxConstructionProgress, setMaxConstructionProgress] = useState(initialFilters.maxConstructionProgress?.toString() ?? '');
-  const [completionBefore, setCompletionBefore] = useState(initialFilters.completionBefore ?? '');
-  const [completionAfter, setCompletionAfter] = useState(initialFilters.completionAfter ?? '');
-  const [installmentAvailable, setInstallmentAvailable] = useState(initialFilters.installmentAvailable === true ? 'true' : '');
-  const initialSearchRender = useRef(true);
-
-  const buildFilters = (): PropertyFilters => ({
-    search: search.trim() || undefined,
-    minPrice: minPrice ? Number(minPrice) : undefined,
-    maxPrice: maxPrice ? Number(maxPrice) : undefined,
-    propertyType: propertyType || undefined,
-    bedrooms: bedrooms ? Number(bedrooms) : undefined,
-    category: category || undefined,
-    completionStage: completionStage || undefined,
-    currency: currency || undefined,
-    status: (status as PropertyFilters['status']) || undefined,
-    featured: featured === '' ? undefined : featured === 'true',
-    listingType: (listingType as PropertyFilters['listingType']) || undefined,
-    developmentStatus: (developmentStatus as PropertyFilters['developmentStatus']) || undefined,
-    projectSlug: projectSlug.trim() || undefined,
-    minConstructionProgress: minConstructionProgress ? Number(minConstructionProgress) : undefined,
-    maxConstructionProgress: maxConstructionProgress ? Number(maxConstructionProgress) : undefined,
-    completionBefore: completionBefore || undefined,
-    completionAfter: completionAfter || undefined,
-    installmentAvailable: installmentAvailable === '' ? undefined : installmentAvailable === 'true',
+const PropertyFiltersPanel = ({ initialFilters = {}, onApply, onSearchChange }: PropertyFiltersProps) => {
+  const [values, setValues] = useState<Record<string, string>>({
+    search: initialFilters.search ?? '', minPrice: initialFilters.minPrice?.toString() ?? '', maxPrice: initialFilters.maxPrice?.toString() ?? '', propertyType: initialFilters.propertyType ?? '', bedrooms: initialFilters.bedrooms?.toString() ?? '', bathrooms: initialFilters.bathrooms?.toString() ?? '', category: initialFilters.category ?? '', completionStage: initialFilters.completionStage ?? '', currency: initialFilters.currency ?? '', status: initialFilters.status ?? '', featured: initialFilters.featured === undefined ? '' : String(initialFilters.featured), listingType: initialFilters.listingType ?? '', completionBefore: initialFilters.completionBefore ?? '', completionAfter: initialFilters.completionAfter ?? '', installmentAvailable: initialFilters.installmentAvailable === undefined ? '' : String(initialFilters.installmentAvailable),
   });
-
-  useEffect(() => {
-    if (initialSearchRender.current) {
-      initialSearchRender.current = false;
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      onApply(buildFilters());
-    }, 400);
-    return () => window.clearTimeout(timer);
-    // Search is intentionally the only live API trigger; other filters retain Apply behavior.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
-
-  const apply = () => {
-    onApply(buildFilters());
-  };
-
-  const clear = () => {
-    setSearch('');
-    setMinPrice('');
-    setMaxPrice('');
-    setPropertyType('');
-    setBedrooms('');
-    setCategory('');
-    setCompletionStage('');
-    setCurrency('');
-    setStatus('');
-    setFeatured('');
-    setListingType('');
-    setDevelopmentStatus('');
-    setProjectSlug('');
-    setMinConstructionProgress('');
-    setMaxConstructionProgress('');
-    setCompletionBefore('');
-    setCompletionAfter('');
-    setInstallmentAvailable('');
-    onApply({});
-  };
-
-  const inputClass =
-    'w-full bg-surface-container-low rounded-lg px-3 py-2.5 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all';
-
-  return (
-    <aside className="w-full lg:w-80">
-      <div className="sticky top-28 bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-5 space-y-5">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-secondary">Search & Filter</p>
-          <h3 className="font-headline font-bold text-xl mt-1">Listings</h3>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Search</label>
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Title, location, type..."
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Min Price</label>
-            <input
-              type="number"
-              min={0}
-              value={minPrice}
-              onChange={(event) => setMinPrice(event.target.value)}
-              className={inputClass}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Max Price</label>
-            <input
-              type="number"
-              min={0}
-              value={maxPrice}
-              onChange={(event) => setMaxPrice(event.target.value)}
-              className={inputClass}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Property Type</label>
-          <select value={propertyType} onChange={(e) => setPropertyType(e.target.value)} className={inputClass}>
-            {PROPERTY_TYPES.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Bedrooms</label>
-          <input
-            type="number"
-            min={0}
-            value={bedrooms}
-            onChange={(event) => setBedrooms(event.target.value)}
-            className={inputClass}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Category</label>
-          <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
-            {CATEGORY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Completion Stage</label>
-          <select value={completionStage} onChange={(e) => setCompletionStage(e.target.value)} className={inputClass}>
-            {STAGE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Listing Type</label>
-          <select value={listingType} onChange={(e) => setListingType(e.target.value)} className={inputClass}>
-            {LISTING_TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Construction Stage</label>
-          <select value={developmentStatus} onChange={(e) => setDevelopmentStatus(e.target.value)} className={inputClass}>
-            {DEVELOPMENT_STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Project Slug</label>
-          <input value={projectSlug} onChange={(event) => setProjectSlug(event.target.value)} placeholder="palm-heights-estate" className={inputClass} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Min Progress</label>
-            <input type="number" min={0} max={100} value={minConstructionProgress} onChange={(event) => setMinConstructionProgress(event.target.value)} className={inputClass} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Max Progress</label>
-            <input type="number" min={0} max={100} value={maxConstructionProgress} onChange={(event) => setMaxConstructionProgress(event.target.value)} className={inputClass} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Completion After</label>
-            <input type="date" value={completionAfter} onChange={(event) => setCompletionAfter(event.target.value)} className={inputClass} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Before</label>
-            <input type="date" value={completionBefore} onChange={(event) => setCompletionBefore(event.target.value)} className={inputClass} />
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Payment Plan</label>
-          <select value={installmentAvailable} onChange={(e) => setInstallmentAvailable(e.target.value)} className={inputClass}>
-            <option value="">Any</option>
-            <option value="true">Available</option>
-            <option value="false">Not available</option>
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Currency</label>
-          <select value={currency} onChange={(e) => setCurrency(e.target.value)} className={inputClass}>
-            {CURRENCY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Status</label>
-            <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass}>
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Featured</label>
-            <select value={featured} onChange={(e) => setFeatured(e.target.value)} className={inputClass}>
-              <option value="">Any</option>
-              <option value="true">Featured</option>
-              <option value="false">Not Featured</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-2 pt-2">
-          <Button fullWidth onClick={apply}>
-            Apply Filters
-          </Button>
-          <Button fullWidth variant="secondary" onClick={clear}>
-            Clear All
-          </Button>
-        </div>
-      </div>
-    </aside>
-  );
+  const [moreOpen, setMoreOpen] = useState(false);
+  const set = (key: string, value: string) => setValues((current) => ({ ...current, [key]: value }));
+  const buildFilters = (): PropertyFilters => ({
+    minPrice: values.minPrice ? Number(values.minPrice) : undefined, maxPrice: values.maxPrice ? Number(values.maxPrice) : undefined, propertyType: values.propertyType || undefined, bedrooms: values.bedrooms ? Number(values.bedrooms) : undefined, bathrooms: values.bathrooms ? Number(values.bathrooms) : undefined, category: values.category as PropertyFilters['category'] || undefined, completionStage: values.completionStage as PropertyFilters['completionStage'] || undefined, currency: values.currency as PropertyFilters['currency'] || undefined, status: values.status as PropertyFilters['status'] || undefined, featured: values.featured === '' ? undefined : values.featured === 'true', listingType: values.listingType as PropertyFilters['listingType'] || undefined, completionBefore: values.completionBefore || undefined, completionAfter: values.completionAfter || undefined, installmentAvailable: values.installmentAvailable === '' ? undefined : values.installmentAvailable === 'true',
+  });
+  const clear = () => { setValues({ search: '', minPrice: '', maxPrice: '', propertyType: '', bedrooms: '', bathrooms: '', category: '', completionStage: '', currency: '', status: '', featured: '', listingType: '', completionBefore: '', completionAfter: '', installmentAvailable: '' }); onSearchChange?.(''); onApply({}); };
+  const selectClass = 'rounded-full border border-outline-variant/30 bg-surface-container-lowest px-4 py-2.5 text-sm font-bold text-on-surface outline-none focus:ring-2 focus:ring-primary/20';
+  const fieldClass = 'w-full rounded-lg bg-surface-container-low px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20';
+  const renderSelect = (name: string, label: string, items: readonly (readonly [string, string])[]) => <label className="space-y-1 text-xs font-bold text-secondary"><span>{label}</span><select value={values[name] ?? ''} onChange={(e) => set(name, e.target.value)} className={fieldClass}>{items.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>;
+  return <div className="relative z-20 border-b border-outline-variant/20 bg-surface-container-lowest px-4 py-3 sm:px-6">
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="min-w-[min(100%,280px)] flex-1 sm:min-w-[300px]"><label htmlFor="property-search" className="sr-only">Search loaded properties</label><Input id="property-search" value={values.search} onChange={(e) => { set('search', e.target.value); onSearchChange?.(e.target.value); }} placeholder="Search loaded properties" /></div>
+      <select aria-label="Property type" value={values.propertyType} onChange={(e) => { set('propertyType', e.target.value); onApply({ ...buildFilters(), propertyType: e.target.value || undefined }); }} className={selectClass}>{options.propertyType.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select>
+      <button type="button" className={selectClass} onClick={() => setMoreOpen(true)}>Price{values.minPrice || values.maxPrice ? ' · Set' : ''} <span className="material-symbols-outlined text-base">expand_more</span></button>
+      <button type="button" className={selectClass} onClick={() => setMoreOpen(true)}>Beds & Baths{values.bedrooms || values.bathrooms ? ' · Set' : ''} <span className="material-symbols-outlined text-base">expand_more</span></button>
+      <button type="button" className={`${selectClass} inline-flex items-center gap-1`} onClick={() => setMoreOpen((open) => !open)} aria-expanded={moreOpen}>More Filters <span className="material-symbols-outlined text-base">tune</span></button>
+      <Button variant="secondary" onClick={clear}>Clear</Button>
+    </div>
+    {moreOpen ? <div className="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-outline-variant/20 bg-surface p-4 shadow-lg sm:grid-cols-2 lg:grid-cols-4">
+      <label className="space-y-1 text-xs font-bold text-secondary"><span>Min / Max Price</span><div className="grid grid-cols-2 gap-2"><input type="number" min="0" value={values.minPrice} onChange={(e) => set('minPrice', e.target.value)} className={fieldClass} placeholder="Min" /><input type="number" min="0" value={values.maxPrice} onChange={(e) => set('maxPrice', e.target.value)} className={fieldClass} placeholder="Max" /></div></label>
+      <label className="space-y-1 text-xs font-bold text-secondary"><span>Beds / Baths</span><div className="grid grid-cols-2 gap-2"><input type="number" min="0" value={values.bedrooms} onChange={(e) => set('bedrooms', e.target.value)} className={fieldClass} placeholder="Beds" /><input type="number" min="0" value={values.bathrooms} onChange={(e) => set('bathrooms', e.target.value)} className={fieldClass} placeholder="Baths" /></div></label>
+      {renderSelect('category', 'Category', options.category)}{renderSelect('completionStage', 'Completion Stage', options.completionStage)}{renderSelect('listingType', 'Listing Type', options.listingType)}{renderSelect('currency', 'Currency', options.currency)}{renderSelect('status', 'Status', options.status)}
+      {renderSelect('featured', 'Featured', [['', 'Any'], ['true', 'Featured'], ['false', 'Not Featured']])}
+      {renderSelect('installmentAvailable', 'Installment plan', [['', 'Any installment plan'], ['true', 'Has installment plan'], ['false', 'No installment plan']])}
+      <label className="space-y-1 text-xs font-bold text-secondary"><span>Completion window</span><div className="grid grid-cols-2 gap-2"><input type="date" value={values.completionAfter} onChange={(e) => set('completionAfter', e.target.value)} className={fieldClass} /><input type="date" value={values.completionBefore} onChange={(e) => set('completionBefore', e.target.value)} className={fieldClass} /></div></label>
+      <div className="flex items-end gap-2"><Button onClick={() => { onApply(buildFilters()); setMoreOpen(false); }}>Apply Filters</Button><Button variant="secondary" onClick={() => setMoreOpen(false)}>Close</Button></div>
+    </div> : null}
+  </div>;
 };
-
 export default PropertyFiltersPanel;
