@@ -95,6 +95,8 @@ import PropertyROICalculatorPage from '../pages/dashboard/ROI/PropertyROICalcula
 import MyROIScenarios from '../pages/dashboard/ROI/MyROIScenarios';
 import ROIAssumptions from '../pages/dashboard/Admin/ROIAssumptions';
 import AdminSettings from '../pages/dashboard/Admin/AdminSettings';
+import AdminVirtualTours from '../pages/dashboard/Admin/AdminVirtualTours';
+import AdminVirtualTourDetail from '../pages/dashboard/Admin/AdminVirtualTourDetail';
 import AdminWallet from '../pages/dashboard/Admin/AdminWallet';
 import AdminEscrowDisputes from '../pages/dashboard/Admin/AdminEscrowDisputes';
 import AdminEscrowDisputeDetails from '../pages/dashboard/Admin/AdminEscrowDisputeDetails';
@@ -293,6 +295,8 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />
           <Route path="/dashboard/admin/roi-assumptions" element={<ROIAssumptions />} />
           <Route path="/dashboard/admin/settings" element={<AdminSettings />} />
+          <Route path="/dashboard/admin/virtual-tours" element={<AdminVirtualTours />} />
+          <Route path="/dashboard/admin/virtual-tours/:propertyId" element={<AdminVirtualTourDetail />} />
           <Route path="/dashboard/admin/wallet" element={<AdminWallet />} />
           <Route path="/dashboard/admin/escrows" element={<EscrowList />} />
           <Route path="/dashboard/admin/escrows/:id" element={<EscrowDetails />} />

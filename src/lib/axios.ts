@@ -2,6 +2,8 @@ import axios, { type AxiosError } from 'axios';
 
 export class ApiRequestError extends Error {
   status?: number;
+  code?: string;
+  provider?: string;
   missing?: string[];
   missingRules?: unknown;
   eligibleAt?: string;
@@ -14,7 +16,7 @@ export class ApiRequestError extends Error {
   invalidItems?: unknown;
   fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }>;
 
-  constructor(message: string, details?: { status?: number; missing?: string[]; missingRules?: unknown; eligibleAt?: string; existingPayment?: unknown; details?: unknown; requiresAccountDetails?: boolean; requiresSellerAccount?: boolean; reconciliationRequired?: boolean; existingAccess?: boolean; invalidItems?: unknown; fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }> }) {
+  constructor(message: string, details?: { status?: number; code?: string; provider?: string; missing?: string[]; missingRules?: unknown; eligibleAt?: string; existingPayment?: unknown; details?: unknown; requiresAccountDetails?: boolean; requiresSellerAccount?: boolean; reconciliationRequired?: boolean; existingAccess?: boolean; invalidItems?: unknown; fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }> }) {
     super(message);
     this.name = 'ApiRequestError';
     Object.assign(this, details);
@@ -59,9 +61,11 @@ api.interceptors.response.use(
         : '';
 
     if (message.trim()) {
-      const details = responseData as { missing?: unknown; missingRules?: unknown; eligibleAt?: string; payment?: unknown; details?: unknown; requiresAccountDetails?: boolean; requiresSellerAccount?: boolean; reconciliationRequired?: boolean; existingAccess?: boolean; invalidItems?: unknown; errors?: Array<{ path?: string; msg?: string; value?: unknown }> };
+      const details = responseData as { code?: string; provider?: string; missing?: unknown; missingRules?: unknown; eligibleAt?: string; payment?: unknown; details?: unknown; requiresAccountDetails?: boolean; requiresSellerAccount?: boolean; reconciliationRequired?: boolean; existingAccess?: boolean; invalidItems?: unknown; errors?: Array<{ path?: string; msg?: string; value?: unknown }> };
       return Promise.reject(new ApiRequestError(message, {
         status,
+        code: details.code,
+        provider: details.provider,
         missing: Array.isArray(details.missing) ? details.missing.map(String) : undefined,
         missingRules: details.missingRules,
         eligibleAt: details.eligibleAt,

@@ -1,4 +1,7 @@
 ﻿export type UserRole = 'buyer' | 'landlord' | 'proxy_inspector' | 'admin';
+export * from './virtualTour';
+import type { VirtualTourProvider, VirtualTourSummary } from './virtualTour';
+
 export type PropertyType = 'house' | 'apartment' | 'land' | 'commercial' | 'villa' | 'penthouse' | 'estate';
 export type PropertyStatus = 'available' | 'sold';
 export type PropertyPaymentType = 'outright' | 'installment' | 'escrow';
@@ -140,6 +143,7 @@ export interface ProjectSummary {
   status: ProjectStatus;
   isPublished?: boolean;
   coverImage?: { url: string } | null;
+  virtualTourProviderOverride: VirtualTourProvider | null;
 }
 
 export interface ProjectCard extends ProjectSummary {
@@ -387,6 +391,16 @@ export interface Property {
   listingType?: ListingType;
   offPlan?: OffPlan;
   offPlanSummary?: OffPlanSummary;
+  virtualTour?: VirtualTourSummary;
+  virtualTourProviderOverride?: VirtualTourProvider | null;
+}
+
+export interface PropertyDetail extends Property {
+  virtualTour: VirtualTourSummary;
+}
+
+export interface ManagedPropertyDetail extends PropertyDetail {
+  virtualTourProviderOverride: VirtualTourProvider | null;
 }
 
 export const propertyPublicReference = (property?: Pick<Property, 'publicReference' | '_id'> | null): string =>

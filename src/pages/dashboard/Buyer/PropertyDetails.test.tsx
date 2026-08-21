@@ -65,6 +65,18 @@ describe('purchased property title documents', () => {
         squareFeet: 2500,
         media: [],
         status: 'sold',
+        virtualTourProviderOverride: null,
+        virtualTour: {
+          available: false,
+          resolvedProvider: null,
+          preferredProvider: null,
+          fallbackUsed: false,
+          providers: {
+            realsee: { configured: false, available: false, enabled: false, status: 'not_configured' },
+            matterport: { configured: false, available: false, enabled: false, status: 'not_configured' },
+          },
+          capabilities: { panorama: false, model3D: false, floorPlan: false, measurements: false, roomLabels: false, guidedTour: false, tags: false },
+        },
         titleDocumentReferences: [{
           publicReference: 'RTQ-DOC-1',
           documentType: 'survey_plan',

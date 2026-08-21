@@ -5,6 +5,7 @@ import TitleVerificationBadge from '../../../components/title/TitleVerificationB
 import TitleDocumentManagement from '../../../components/title/TitleDocumentManagement';
 import PaymentTypeBadges from '../../../components/property/PaymentTypeBadges';
 import ConstructionUpdateManager from '../../../components/property/ConstructionUpdateManager';
+import VirtualTourManagement from '../../../components/virtualTour/VirtualTourManagement';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
@@ -23,7 +24,7 @@ const formatRelativeDate = (date?: string) => {
 
 const LandlordPropertyDetails = () => {
   const { user } = useAuth();
-  const { properties } = useProperties();
+  const { properties, refreshProperties } = useProperties();
   const { id } = useParams<{ id: string }>();
   const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
   const { data: payments } = useAsync(() => paymentService.getPayments(), true);
@@ -253,6 +254,7 @@ const LandlordPropertyDetails = () => {
           </div>
         </div>
         {property ? <ConstructionUpdateManager property={property} /> : null}
+        {property ? <VirtualTourManagement propertyId={propertyReference} summary={property.virtualTour} providerOverride={property.virtualTourProviderOverride} onUpdated={() => refreshProperties()} /> : null}
         {property ? <TitleDocumentManagement propertyId={propertyReference} sold={property.status === 'sold'} /> : null}
       </div>
     </LandlordPortalLayout>

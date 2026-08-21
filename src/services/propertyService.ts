@@ -12,6 +12,8 @@ import type {
   PropertyCoordinates,
   PropertyCurrency,
   PropertyFilters,
+  PropertyDetail,
+  ManagedPropertyDetail,
   PropertyPaymentType,
   PropertyStatus,
   PropertyType,
@@ -216,7 +218,7 @@ export interface PropertyPriceHistoryChartResponse {
 }
 
 export interface PropertyOwnerDetailResponse {
-  property: Property;
+  property: ManagedPropertyDetail;
   titleDocuments?: TitleDocumentRecord[];
   titleDocumentEditPolicy?: string;
 }
@@ -242,10 +244,10 @@ export interface ConstructionUpdateRequest {
   media?: MediaItem[];
 }
 
-const normalizeProperty = (property: Property): Property => ({
+const normalizeProperty = <T extends Property>(property: T): T => ({
   ...property,
   paymentTypes: normalizePropertyPaymentTypes(property.paymentTypes, property.price),
-});
+}) as T;
 
 const normalizePropertiesResponse = (response: PropertiesResponse): PropertiesResponse => ({
   ...response,
@@ -275,8 +277,9 @@ export const propertyService = {
     return normalizeProperty(data);
   },
 
-  async getPublicProperty(publicReference: string): Promise<Property> {
-    return propertyService.getPropertyById(publicReference);
+  async getPublicProperty(publicReference: string): Promise<PropertyDetail> {
+    const { data } = await api.get<PropertyDetail>(`/properties/${publicReference}`);
+    return normalizeProperty(data);
   },
 
   async createProperty(payload: CreatePropertyPayload): Promise<Property> {

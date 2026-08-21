@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Property } from '../../types';
 import PropertyDetails from './PropertyDetails';
 
@@ -22,7 +22,20 @@ const property: Property = {
   status: 'available',
   approvalStatus: 'approved',
   owner: { _id: 'landlord-1', name: 'Ada Landlord' },
+  virtualTour: {
+    available: true,
+    resolvedProvider: 'realsee',
+    preferredProvider: 'realsee',
+    fallbackUsed: false,
+    providers: {
+      realsee: { configured: true, available: true, enabled: true, status: 'ready' },
+      matterport: { configured: false, available: false, enabled: false, status: 'not_configured' },
+    },
+    capabilities: { panorama: true, model3D: true, floorPlan: false, measurements: false, roomLabels: false, guidedTour: false, tags: false },
+  },
 };
+
+let currentProperty = property;
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('sweetalert2', () => ({ default: { fire: vi.fn() } }));
@@ -45,7 +58,7 @@ vi.mock('../../contexts/PropertiesContext', () => ({
 }));
 vi.mock('../../hooks/useAsync', () => ({
   useAsync: (_operation: unknown, executeImmediately: boolean) => executeImmediately
-    ? { data: property, loading: false, error: null, execute: vi.fn() }
+    ? { data: currentProperty, loading: false, error: null, execute: vi.fn() }
     : { data: null, loading: false, error: null, execute: vi.fn() },
 }));
 
@@ -56,6 +69,9 @@ const LoginDestination = () => {
 };
 
 describe('public property escrow action for guests', () => {
+  beforeEach(() => {
+    currentProperty = property;
+  });
   it('shows a buyer login CTA and preserves the escrow creation destination', async () => {
     render(
       <MemoryRouter initialEntries={['/properties/RTQ-PROP-1']}>
@@ -74,5 +90,51 @@ describe('public property escrow action for guests', () => {
     expect(await screen.findByText(
       'Buyer login destination: /dashboard/buyer/escrows/create/RTQ-PROP-1',
     )).toBeInTheDocument();
+  });
+
+  it('forces and locks virtual mode while the paid virtual tour type is selected', async () => {
+    render(
+      <MemoryRouter initialEntries={['/properties/RTQ-PROP-1']}>
+        <Routes>
+          <Route path="/properties/:id" element={<PropertyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const tourType = screen.getByLabelText('Tour Type');
+    const tourMode = screen.getByLabelText('Mode');
+    expect(tourMode).toHaveValue('physical');
+    expect(tourMode).toBeEnabled();
+
+    await userEvent.selectOptions(tourType, 'virtual_paid');
+    expect(tourMode).toHaveValue('virtual');
+    expect(tourMode).toBeDisabled();
+    expect(screen.getByText('Virtual mode is required for this tour type.')).toBeInTheDocument();
+
+    await userEvent.selectOptions(tourType, 'open_house');
+    expect(tourMode).toBeEnabled();
+  });
+
+  it('prevents selecting a paid virtual tour when the Property has no available virtual tour', () => {
+    currentProperty = {
+      ...property,
+      virtualTour: {
+        ...property.virtualTour!,
+        available: false,
+        resolvedProvider: null,
+        capabilities: { panorama: false, model3D: false, floorPlan: false, measurements: false, roomLabels: false, guidedTour: false, tags: false },
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/properties/RTQ-PROP-1']}>
+        <Routes>
+          <Route path="/properties/:id" element={<PropertyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('option', { name: 'Virtual Paid (Unavailable)' })).toBeDisabled();
+    expect(screen.getByText('This property does not currently have a virtual tour available.')).toBeInTheDocument();
   });
 });

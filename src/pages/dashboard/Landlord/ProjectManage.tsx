@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import PropertyCard from '../../../components/property/PropertyCard';
@@ -8,7 +8,8 @@ import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { projectService } from '../../../services/projectService';
-import type { ProjectDetail, Property } from '../../../types';
+import { virtualTourService } from '../../../services/virtualTourService';
+import type { ProjectDetail, Property, VirtualTourProvider } from '../../../types';
 import { formatPriceRange, labelize } from '../../../utils/projectFormatters';
 
 interface LandlordProjectManageData {
@@ -25,10 +26,25 @@ const loadLandlordProjectManage = async (id: string): Promise<LandlordProjectMan
 const ProjectManage = () => {
   const [publishing, setPublishing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [savingTourPreference, setSavingTourPreference] = useState(false);
   const { id = '' } = useParams();
   const { data, loading, error, execute } = useAsync(() => loadLandlordProjectManage(id), Boolean(id));
   const project = data?.project;
   const units = data?.units ?? [];
+  const [tourPreference, setTourPreference] = useState<VirtualTourProvider | ''>('');
+  useEffect(() => setTourPreference(project?.virtualTourProviderOverride ?? ''), [project?.virtualTourProviderOverride]);
+
+  const saveTourPreference = async () => {
+    if (!project) return;
+    setSavingTourPreference(true);
+    try {
+      await virtualTourService.setProjectVirtualTourProvider(project._id, { provider: tourPreference || null });
+      toast.success(tourPreference ? 'Project virtual-tour preference saved.' : 'Project now inherits the global default.');
+      await execute();
+    } catch (raw) {
+      toast.error(raw instanceof Error ? raw.message : 'Unable to update the Project preference.');
+    } finally { setSavingTourPreference(false); }
+  };
 
   const publish = async () => {
     if (!project || publishing) return;
@@ -95,6 +111,17 @@ const ProjectManage = () => {
                 </div>
               ))}
             </div>
+
+            <section className="rounded-xl border border-outline-variant/10 bg-white p-5">
+              <h2 className="text-xl font-black">Virtual-tour provider preference</h2>
+              <p className="mt-1 text-sm text-secondary">A preference for child Properties only. It does not configure a tour or rewrite child records.</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <select aria-label="Project virtual tour provider preference" className="rounded-lg border border-outline-variant/20 px-3 py-2" value={tourPreference} onChange={(event) => setTourPreference(event.target.value as VirtualTourProvider | '')}>
+                  <option value="">Inherit global default</option><option value="realsee">Realsee</option><option value="matterport">Matterport</option>
+                </select>
+                <Button type="button" loading={savingTourPreference} onClick={() => void saveTourPreference()}>Save preference</Button>
+              </div>
+            </section>
 
             <section className="rounded-xl border border-outline-variant/10 bg-white p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

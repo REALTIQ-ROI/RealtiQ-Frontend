@@ -101,6 +101,7 @@ describe('PropertyCard title-document summary', () => {
               slug: 'palm-heights-estate',
               projectType: 'estate',
               status: 'ongoing',
+              virtualTourProviderOverride: null,
             },
             offPlanSummary: {
               developmentStatus: 'foundation',

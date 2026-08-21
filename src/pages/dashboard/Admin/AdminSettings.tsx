@@ -7,6 +7,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
+import AdminVirtualTourSettings from '../../../components/virtualTour/AdminVirtualTourSettings';
 
 const phoneRegex = /^(\+234|234|0)[789][01]\d{8}$/;
 
@@ -156,6 +157,7 @@ const AdminSettings = () => {
             </div>
           </form>
         )}
+        <AdminVirtualTourSettings />
       </section>
     </AdminLayout>
   );

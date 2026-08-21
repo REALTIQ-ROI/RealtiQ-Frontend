@@ -11,6 +11,7 @@ import PaymentTypeBadges from '../../components/property/PaymentTypeBadges';
 import OffPlanBadges from '../../components/property/OffPlanBadges';
 import TitleVerificationBadge from '../../components/title/TitleVerificationBadge';
 import PublicTitleDocuments from '../../components/title/PublicTitleDocuments';
+import VirtualTourExperience from '../../components/virtualTour/VirtualTourExperience';
 import PublicLayout from '../../components/layout/PublicLayout';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
@@ -74,7 +75,7 @@ const PropertyDetails = () => {
   const { user, isAuthenticated } = useAuth();
   const { addItem } = useCart();
   const { buyProperty, refreshProperties } = useProperties();
-  const { data: property, loading, error, execute } = useAsync(() => propertyService.getPropertyById(id), true);
+  const { data: property, loading, error, execute } = useAsync(() => propertyService.getPublicProperty(id), true);
   const {
     data: installmentData,
     loading: installmentLoading,
@@ -101,6 +102,7 @@ const PropertyDetails = () => {
   const [showStickySummary, setShowStickySummary] = useState(false);
   const mediaSectionRef = useRef<HTMLDivElement>(null);
   const propertyReference = property ? propertyRouteReference(property) : '';
+  const virtualTourRequestAvailable = Boolean(property?.virtualTour?.available);
 
   const selectMedia = useCallback((index: number, scrollToMedia = false) => {
     const mediaLength = property?.media?.length ?? 0;
@@ -112,6 +114,13 @@ const PropertyDetails = () => {
     (nearbyProperty: Property) => propertyService.getPropertyById(propertyRouteReference(nearbyProperty)),
     [],
   );
+
+  useEffect(() => {
+    if (tourType === 'virtual_paid' && property && !virtualTourRequestAvailable) {
+      setTourType('open_house');
+      setTourMode('physical');
+    }
+  }, [property, tourType, virtualTourRequestAvailable]);
 
   useEffect(() => {
     const mediaSection = mediaSectionRef.current;
@@ -285,6 +294,11 @@ const PropertyDetails = () => {
     event.preventDefault();
     if (!propertyReference) return;
 
+    if (tourType === 'virtual_paid' && !virtualTourRequestAvailable) {
+      toast.error('A virtual tour is not available for this property.');
+      return;
+    }
+
     if (!user) {
       navigate('/login');
       return;
@@ -299,7 +313,7 @@ const PropertyDetails = () => {
       const response = await tourService.requestTour({
         propertyId: propertyReference,
         type: tourType,
-        mode: tourMode,
+        mode: tourType === 'virtual_paid' ? 'virtual' : tourMode,
         scheduledAt: tourDate ? new Date(tourDate).toISOString() : undefined,
         notes: tourNotes.trim() || undefined,
         paymentOption: tourType === 'virtual_paid' && tourPaymentOption === 'cart' ? 'cart' : undefined,
@@ -416,6 +430,11 @@ const PropertyDetails = () => {
     <PublicLayout>
       <section className="max-w-7xl mx-auto px-8 space-y-10">
         <PropertyGallery property={property} activeIndex={activeMediaIndex} onActiveIndexChange={(index) => selectMedia(index)} mediaSectionRef={mediaSectionRef} />
+        <VirtualTourExperience
+          propertyId={propertyReference}
+          summary={property.virtualTour}
+          onPhotosSelected={() => mediaSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        />
 
         {showStickySummary ? <div className="sticky top-20 z-30 -mx-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest/95 p-3 shadow-lg backdrop-blur sm:top-24 md:-mx-4 md:px-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -647,24 +666,32 @@ const PropertyDetails = () => {
               <Card className="p-5">
                 <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={(event) => void handleTourRequest(event)}>
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Tour Type</label>
+                    <label htmlFor="tour-request-type" className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Tour Type</label>
                     <select
+                      id="tour-request-type"
                       className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm"
                       value={tourType}
-                      onChange={(e) => setTourType(e.target.value as (typeof PROPERTY_TOUR_TYPES)[number]['value'])}
+                      onChange={(event) => {
+                        const nextType = event.target.value as (typeof PROPERTY_TOUR_TYPES)[number]['value'];
+                        setTourType(nextType);
+                        if (nextType === 'virtual_paid') setTourMode('virtual');
+                      }}
                     >
                       {PROPERTY_TOUR_TYPES.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
+                        <option key={option.value} value={option.value} disabled={option.value === 'virtual_paid' && !virtualTourRequestAvailable}>
+                          {option.value === 'virtual_paid' && !virtualTourRequestAvailable ? `${option.label} (Unavailable)` : option.label}
                         </option>
                       ))}
                     </select>
+                    {!virtualTourRequestAvailable ? <p className="mt-1 text-xs text-secondary">This property does not currently have a virtual tour available.</p> : null}
                   </div>
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Mode</label>
+                    <label htmlFor="tour-request-mode" className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Mode</label>
                     <select
+                      id="tour-request-mode"
                       className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm"
                       value={tourMode}
+                      disabled={tourType === 'virtual_paid'}
                       onChange={(e) => setTourMode(e.target.value as (typeof PROPERTY_TOUR_MODES)[number]['value'])}
                     >
                       {PROPERTY_TOUR_MODES.map((option) => (
@@ -673,6 +700,7 @@ const PropertyDetails = () => {
                         </option>
                       ))}
                     </select>
+                    {tourType === 'virtual_paid' ? <p className="mt-1 text-xs text-secondary">Virtual mode is required for this tour type.</p> : null}
                   </div>
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Scheduled At</label>
