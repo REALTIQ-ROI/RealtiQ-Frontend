@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { propertyService } from '../../services/propertyService';
 import type { Property } from '../../types';
 import PropertyDetails from './PropertyDetails';
 
@@ -70,7 +71,28 @@ const LoginDestination = () => {
 
 describe('public property escrow action for guests', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     currentProperty = property;
+  });
+
+  it('uses mobile-safe Nearby Properties cards and full-width touch actions', async () => {
+    currentProperty = { ...property, coordinates: { lat: 6.447, lng: 3.473 } };
+    vi.spyOn(propertyService, 'getNearbyProperties').mockResolvedValue([
+      { _id: 'nearby-1', publicReference: 'RTQ-PROP-2', title: 'Nearby Apartment With A Long Property Name', coordinates: { lat: 6.448, lng: 3.474 }, paymentTypes: [] },
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={['/properties/RTQ-PROP-1']}>
+        <Routes>
+          <Route path="/properties/:id" element={<PropertyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const detailsLink = await screen.findByRole('link', { name: /View details/i });
+    expect(detailsLink.closest('article')).toHaveClass('min-w-0');
+    expect(detailsLink).toHaveClass('w-full', 'sm:w-auto');
+    expect(screen.getByRole('button', { name: 'Open in Map' })).toHaveClass('w-full', 'sm:w-auto');
   });
   it('shows a buyer login CTA and preserves the escrow creation destination', async () => {
     render(

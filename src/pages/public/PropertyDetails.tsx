@@ -428,7 +428,7 @@ const PropertyDetails = () => {
 
   return (
     <PublicLayout>
-      <section className="max-w-7xl mx-auto px-8 space-y-10">
+      <section className="mx-auto max-w-7xl space-y-8 px-4 sm:space-y-10 sm:px-6 lg:px-8">
         <PropertyGallery property={property} activeIndex={activeMediaIndex} onActiveIndexChange={(index) => selectMedia(index)} mediaSectionRef={mediaSectionRef} />
         <VirtualTourExperience
           propertyId={propertyReference}
@@ -447,8 +447,8 @@ const PropertyDetails = () => {
           </div>
         </div> : null}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-          <div className="lg:col-span-2 space-y-10">
+        <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-3 lg:gap-12">
+          <div className="min-w-0 space-y-10 lg:col-span-2">
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <span className="bg-primary/10 text-primary text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest">
@@ -630,18 +630,18 @@ const PropertyDetails = () => {
               />
             </div>
 
-            <div>
-              <h2 className="text-2xl font-bold mb-4">Nearby Properties</h2>
-              <Card className="space-y-4 p-5">
+            <div className="min-w-0">
+              <h2 className="mb-4 text-xl font-bold sm:text-2xl">Nearby Properties</h2>
+              <Card className="min-w-0 space-y-4 overflow-hidden p-3 sm:p-5">
                 {loadingNearby ? (
                   <LoadingState label="Loading nearby properties..." />
                 ) : nearby.length > 0 ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
                     {nearby.map((item, index) => {
                       const reference = item.publicReference || item._id;
-                      return <article key={reference || `${item.title}-${index}`} className="rounded-xl border border-outline-variant/15 bg-surface-container-lowest p-4 transition-shadow hover:shadow-md">
-                        <div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><span className="material-symbols-outlined">location_on</span></div><div className="min-w-0 flex-1"><h3 className="truncate font-bold text-on-surface">{item.title}</h3><p className="mt-1 text-xs text-secondary">{item.coordinates ? `${item.coordinates.lat.toFixed(3)}, ${item.coordinates.lng.toFixed(3)}` : 'Location unavailable'}</p></div></div>
-                        <div className="mt-4 flex items-center justify-between gap-2"><span className="text-[11px] font-bold uppercase tracking-wider text-secondary">Nearby listing</span>{reference ? <Link to={`/properties/${reference}`} className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline">View details <span className="material-symbols-outlined text-sm">arrow_forward</span></Link> : <span className="text-xs text-secondary">Reference unavailable</span>}</div>
+                      return <article key={reference || `${item.title}-${index}`} className="min-w-0 rounded-xl border border-outline-variant/15 bg-surface-container-lowest p-3 transition-shadow hover:shadow-md sm:p-4">
+                        <div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><span className="material-symbols-outlined" aria-hidden="true">location_on</span></div><div className="min-w-0 flex-1"><h3 className="truncate font-bold text-on-surface">{item.title}</h3><p className="mt-1 text-xs text-secondary">{item.coordinates ? `${item.coordinates.lat.toFixed(3)}, ${item.coordinates.lng.toFixed(3)}` : 'Location unavailable'}</p></div></div>
+                        <div className="mt-4 flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between"><span className="text-[11px] font-bold uppercase tracking-wider text-secondary">Nearby listing</span>{reference ? <Link to={`/properties/${reference}`} className="inline-flex min-h-10 w-full items-center justify-between gap-1 rounded-lg bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 sm:min-h-0 sm:w-auto sm:bg-transparent sm:p-0 sm:hover:bg-transparent sm:hover:underline">View details <span className="material-symbols-outlined text-sm" aria-hidden="true">arrow_forward</span></Link> : <span className="break-words text-xs text-secondary">Reference unavailable</span>}</div>
                       </article>;
                     })}
                   </div>
@@ -651,8 +651,8 @@ const PropertyDetails = () => {
                   </div>
                 )}
                 {property.coordinates ? (
-                  <button type="button" onClick={() => setNearbyMapOpen(true)} className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline">
-                    <span className="material-symbols-outlined text-sm">map</span>
+                  <button type="button" onClick={() => setNearbyMapOpen(true)} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary/5 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/10 sm:min-h-0 sm:w-auto sm:justify-start sm:bg-transparent sm:px-0 sm:hover:bg-transparent sm:hover:underline">
+                    <span className="material-symbols-outlined text-sm" aria-hidden="true">map</span>
                     Open in Map
                   </button>
                 ) : (
@@ -858,10 +858,10 @@ const PropertyDetails = () => {
               </Card>
             </div>
 
-            {nearbyMapOpen ? <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Nearby properties map" onClick={() => setNearbyMapOpen(false)}>
-              <div className="relative h-[min(80vh,720px)] w-full max-w-6xl overflow-hidden rounded-2xl bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}>
-                <div className="absolute left-4 right-16 top-4 z-[1100] rounded-xl bg-white/95 px-4 py-3 shadow"><p className="font-bold text-on-surface">Nearby properties</p><p className="text-xs text-secondary">Select a marker to view its property details.</p></div>
-                <button type="button" aria-label="Close nearby properties map" onClick={() => setNearbyMapOpen(false)} className="absolute right-4 top-4 z-[1200] flex h-10 w-10 items-center justify-center rounded-full bg-white text-on-surface shadow"><span className="material-symbols-outlined">close</span></button>
+            {nearbyMapOpen ? <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-0 sm:p-4" role="dialog" aria-modal="true" aria-label="Nearby properties map" onClick={() => setNearbyMapOpen(false)}>
+              <div className="relative h-full w-full max-w-6xl overflow-hidden bg-surface shadow-2xl sm:h-[min(80vh,720px)] sm:rounded-2xl" onClick={(event) => event.stopPropagation()}>
+                <div className="absolute left-3 right-14 top-3 z-[1100] rounded-xl bg-white/95 px-3 py-2 shadow sm:left-4 sm:right-16 sm:top-4 sm:px-4 sm:py-3"><p className="font-bold text-on-surface">Nearby properties</p><p className="hidden text-xs text-secondary sm:block">Select a marker to view its property details.</p></div>
+                <button type="button" aria-label="Close nearby properties map" onClick={() => setNearbyMapOpen(false)} className="absolute right-3 top-3 z-[1200] flex h-10 w-10 items-center justify-center rounded-full bg-white text-on-surface shadow sm:right-4 sm:top-4"><span className="material-symbols-outlined">close</span></button>
                 <PropertyMap properties={nearbyMapProperties} detailsPath={(nearbyProperty) => `/properties/${propertyRouteReference(nearbyProperty)}`} className="h-full min-h-0 rounded-none" resolveProperty={resolveNearbyProperty} onDetailsNavigate={() => setNearbyMapOpen(false)} />
               </div>
             </div> : null}
