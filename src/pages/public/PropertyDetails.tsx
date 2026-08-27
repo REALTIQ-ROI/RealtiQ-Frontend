@@ -17,6 +17,9 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
+import FavouriteButton from '../../components/phase2/FavouriteButton';
+import { useRecordRecentProperty } from '../../hooks/useRecordRecentProperty';
+import { messageService } from '../../services/messageService';
 import { useCart } from '../../contexts/CartContext';
 import { useProperties } from '../../contexts/PropertiesContext';
 import { useAsync } from '../../hooks/useAsync';
@@ -82,7 +85,6 @@ const PropertyDetails = () => {
     error: installmentError,
   } = useAsync(() => installmentService.getInstallments(), Boolean(isAuthenticated && user?.role === 'buyer'));
   const hasMounted = useRef(false);
-  const [savingProperty, setSavingProperty] = useState(false);
   const [requestingTour, setRequestingTour] = useState(false);
   const [creatingInstallment, setCreatingInstallment] = useState(false);
   const [nearby, setNearby] = useState<NearbyPropertySummary[]>([]);
@@ -103,6 +105,12 @@ const PropertyDetails = () => {
   const mediaSectionRef = useRef<HTMLDivElement>(null);
   const propertyReference = property ? propertyRouteReference(property) : '';
   const virtualTourRequestAvailable = Boolean(property?.virtualTour?.available);
+  useRecordRecentProperty(propertyReference);
+  const startConversation = async () => {
+    if (!isAuthenticated) { navigate('/auth/login', { state: { redirectTo: `/properties/${propertyReference}` } }); return; }
+    try { const conversation = await messageService.start(propertyReference); navigate(`/messages/${conversation._id}`); }
+    catch (nextError) { toast.error(nextError instanceof Error ? nextError.message : 'Unable to start a conversation.'); }
+  };
 
   const selectMedia = useCallback((index: number, scrollToMedia = false) => {
     const mediaLength = property?.media?.length ?? 0;
@@ -214,25 +222,6 @@ const PropertyDetails = () => {
   const hasOutrightPayment = paymentTypes.includes('outright');
   const hasInstallmentPayment = paymentTypes.includes('installment');
   const hasEscrowPayment = paymentTypes.includes('escrow');
-
-  const handleSaveProperty = async () => {
-    if (!propertyReference) return;
-    if (!user) {
-      navigate('/login-required');
-      return;
-    }
-
-    setSavingProperty(true);
-    try {
-      await propertyService.saveProperty(propertyReference);
-      toast.success('Property saved to your profile.');
-      await refreshProperties();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Unable to save property.');
-    } finally {
-      setSavingProperty(false);
-    }
-  };
 
   const handleBuyProperty = async () => {
     if (!propertyReference) {
@@ -442,7 +431,7 @@ const PropertyDetails = () => {
               <div className="flex min-w-0 gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Sticky property media thumbnails">{(property.media ?? []).map((item, index) => <button key={item.public_id || item.url} type="button" aria-label={`View property ${item.type} ${index + 1}`} aria-current={index === activeMediaIndex ? 'true' : undefined} onClick={() => selectMedia(index, true)} className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border-2 ${index === activeMediaIndex ? 'border-primary ring-2 ring-primary/20' : 'border-transparent opacity-60'}`}>{item.type === 'video' ? <div className="flex h-full w-full items-center justify-center bg-surface-container-low"><span className="material-symbols-outlined text-base text-secondary">play_circle</span></div> : <img src={item.url} alt={`Sticky thumbnail ${index + 1}`} className="h-full w-full object-cover" />}</button>)}</div>
               <div className="hidden min-w-0 sm:block"><p className="truncate text-sm font-black text-primary">{formatCurrency(property.price, currency)}</p><div className="mt-1 flex flex-wrap gap-2 text-[11px] font-semibold text-secondary"><span>{property.bedrooms ?? '—'} Beds</span><span>{property.bathrooms ?? '—'} Baths</span><span>{property.squareFeet?.toLocaleString() ?? '—'} sq ft</span></div></div>
             </div>
-            <div className="flex items-center gap-2"><div className="sm:hidden"><p className="text-sm font-black text-primary">{formatCurrency(property.price, currency)}</p><p className="text-[11px] font-semibold text-secondary">{property.bedrooms ?? '—'} Beds · {property.bathrooms ?? '—'} Baths · {property.squareFeet?.toLocaleString() ?? '—'} sq ft</p></div><button type="button" aria-label="Save property" onClick={() => void handleSaveProperty()} disabled={savingProperty} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-container-low text-primary disabled:opacity-50"><span className="material-symbols-outlined">bookmark_add</span></button>
+            <div className="flex items-center gap-2"><div className="sm:hidden"><p className="text-sm font-black text-primary">{formatCurrency(property.price, currency)}</p><p className="text-[11px] font-semibold text-secondary">{property.bedrooms ?? '—'} Beds · {property.bathrooms ?? '—'} Baths · {property.squareFeet?.toLocaleString() ?? '—'} sq ft</p></div>
               {canPurchase && hasActiveInstallment && propertyInstallment ? <Button onClick={handleContinueInstallment} disabled={installmentLoading}>Continue Installment</Button> : canPurchase && hasOutrightPayment ? <Button onClick={() => void handleBuyProperty()} disabled={installmentLoading}>{installmentLoading ? 'Checking...' : 'Buy Property'}</Button> : canPurchase && hasInstallmentPayment ? <Button onClick={() => void handleCreateInstallment()} disabled={creatingInstallment}>{creatingInstallment ? 'Creating...' : 'Create Plan'}</Button> : hasEscrowPayment && canPurchase ? <Button variant="secondary" onClick={() => { const escrowPath = `/dashboard/buyer/escrows/create/${propertyReference}`; if (!user) navigate('/login-to-purchase', { state: { redirectTo: escrowPath } }); else navigate(escrowPath); }}>{user ? 'Create Escrow' : 'Login for Escrow'}</Button> : <Button disabled>Unavailable</Button>}</div>
           </div>
         </div> : null}
@@ -489,6 +478,7 @@ const PropertyDetails = () => {
                 {property.location}
               </p>
               <PropertyMeta property={property} />
+              {user?.role === 'buyer' && <div className='mt-5 flex flex-wrap gap-3'><FavouriteButton propertyReference={propertyReference} /><Button onClick={() => void startConversation()}>Message seller</Button></div>}
             </div>
 
             <div>
@@ -950,10 +940,6 @@ const PropertyDetails = () => {
               >
                 <span className="material-symbols-outlined text-sm mr-1">monitoring</span>
                 Analyze ROI
-              </Button>
-              <Button fullWidth variant="ghost" onClick={() => void handleSaveProperty()} disabled={savingProperty}>
-                <span className="material-symbols-outlined text-sm mr-1">bookmark_add</span>
-                {savingProperty ? 'Saving...' : 'Save Property'}
               </Button>
             </Card>
 

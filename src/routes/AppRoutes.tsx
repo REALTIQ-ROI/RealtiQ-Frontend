@@ -115,6 +115,10 @@ import { BuyerProxyWorkspace, InspectorProxyWorkspace, AdminProxyWorkspace } fro
 import ProxyPaymentReturn from '../pages/proxyNetwork/ProxyPaymentReturn';
 import { AdminInspectorDetailPage, AdminInspectorList } from '../pages/proxyNetwork/AdminInspectors';
 import PropertyMarketAnalytics from '../pages/analytics/PropertyMarketAnalytics';
+import Messages from '../pages/dashboard/Messages';
+import Personalisation from '../pages/dashboard/Personalisation';
+import Notifications from '../pages/dashboard/Notifications';
+import MessageModeration from '../pages/dashboard/Admin/MessageModeration';
 
 const ScrollToTop = () => {
   const { pathname, search } = useLocation();
@@ -188,6 +192,10 @@ const AppRoutes = () => {
         <Route path="/properties/:propertyId/roi" element={<PropertyROICalculatorPage />} />
 
         <Route element={<ProtectedRoute />}>
+          <Route path='/messages' element={<Messages />} />
+          <Route path='/messages/:conversationId' element={<Messages />} />
+          <Route path='/dashboard/personalisation' element={<Personalisation />} />
+          <Route path='/dashboard/notifications' element={<Notifications />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/analytics/property-market" element={<PropertyMarketAnalytics />} />
           <Route path="/analytics/property-market/access" element={<PropertyMarketAnalytics />} />
@@ -259,6 +267,7 @@ const AppRoutes = () => {
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route path='/dashboard/admin/message-moderation' element={<MessageModeration />} />
           <Route path="/admin/proxy-inspectors" element={<AdminInspectorList />} />
           <Route path="/admin/proxy-inspectors/:profileId" element={<AdminInspectorDetailPage />} />
           <Route path="/admin/proxy-inspections" element={<AdminProxyInspections />} />

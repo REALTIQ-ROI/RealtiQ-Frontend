@@ -1,5 +1,6 @@
 ﻿export type UserRole = 'buyer' | 'landlord' | 'proxy_inspector' | 'admin';
 export * from './virtualTour';
+export * from './phase2';
 import type { VirtualTourProvider, VirtualTourSummary } from './virtualTour';
 
 export type PropertyType = 'house' | 'apartment' | 'commercial' | 'villa' | 'penthouse' | 'estate';
@@ -618,6 +619,7 @@ export interface CreateInquiryPayload {
 
 export interface InquiryProperty {
   _id: string;
+  publicReference?: string;
   title: string;
   price: number;
   location: string;

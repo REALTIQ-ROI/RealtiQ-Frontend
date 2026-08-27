@@ -4,6 +4,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
 
 type LandlordNavKey =
+  | 'messages'
+  | 'notifications'
   | 'overview'
   | 'my-properties'
   | 'projects'
@@ -31,13 +33,15 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
   { key: 'my-properties', to: '/dashboard/landlord/my-properties', icon: 'domain', label: 'My Properties' },
   { key: 'projects', to: '/dashboard/landlord/projects', icon: 'business', label: 'Projects' },
   { key: 'add-property', to: '/dashboard/landlord/add-property', icon: 'add_circle', label: 'Add Property' },
+  { key: 'inquiries', to: '/dashboard/landlord/inquiries', icon: 'chat_bubble', label: 'Inquiries' },
+  { key: 'messages', to: '/messages', icon: 'chat', label: 'Messages' },
+  { key: 'notifications', to: '/dashboard/notifications', icon: 'notifications', label: 'Notifications' },
   { key: 'verification', to: '/dashboard/landlord/settings/verification', icon: 'verified_user', label: 'Verification' },
   { key: 'title-verifications', to: '/dashboard/landlord/title-verifications', icon: 'verified', label: 'Title Verification' },
   { key: 'tours', to: '/dashboard/landlord/tours', icon: 'tour', label: 'Tours' },
   { key: 'installments', to: '/dashboard/landlord/installments', icon: 'payments', label: 'Installments' },
-  { key: 'inquiries', to: '/dashboard/landlord/inquiries', icon: 'chat_bubble', label: 'Inquiries' },
-  { key: 'payment-history', to: '/dashboard/landlord/payment-history', icon: 'payments', label: 'Payment History' },
   { key: 'escrows', to: '/dashboard/landlord/escrows', icon: 'shield_lock', label: 'Property Escrows' },
+  { key: 'payment-history', to: '/dashboard/landlord/payment-history', icon: 'payments', label: 'Payment History' },
   { key: 'roi', to: '/tools/roi-calculator', icon: 'monitoring', label: 'ROI Calculator' },
   { key: 'settings', to: '/dashboard/landlord/settings', icon: 'settings', label: 'Settings' },
 ];

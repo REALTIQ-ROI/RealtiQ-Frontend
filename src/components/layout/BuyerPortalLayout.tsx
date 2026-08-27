@@ -15,14 +15,17 @@ interface BuyerPortalLayoutProps {
 const navItems = [
   { to: '/dashboard/buyer', icon: 'dashboard', label: 'Overview' },
   { to: '/dashboard/buyer/my-properties', icon: 'domain', label: 'My Properties' },
+  { to: '/dashboard/personalisation', icon: 'favorite', label: 'Saved Activity' },
+  { to: '/dashboard/buyer/inquiry-history', icon: 'chat_bubble', label: 'Inquiry History' },
+  { to: '/messages', icon: 'chat', label: 'Messages' },
+  { to: '/dashboard/notifications', icon: 'notifications', label: 'Notifications' },
   { to: '/buyer/proxy-inspections', icon: 'fact_check', label: 'Proxy Inspections' },
   { to: '/dashboard/buyer/tours', icon: 'tour', label: 'Tours' },
   { to: '/dashboard/buyer/installments', icon: 'schedule', label: 'Installments' },
+  { to: '/dashboard/buyer/escrows', icon: 'shield_lock', label: 'My Escrows' },
   { to: '/dashboard/buyer/payment-history', icon: 'payments', label: 'Payment History' },
   { to: '/dashboard/buyer/cart', icon: 'shopping_cart', label: 'Service Cart' },
   { to: '/dashboard/buyer/cart-checkouts', icon: 'receipt_long', label: 'Cart Checkouts' },
-  { to: '/dashboard/buyer/escrows', icon: 'shield_lock', label: 'My Escrows' },
-  { to: '/dashboard/buyer/inquiry-history', icon: 'chat_bubble', label: 'Inquiry History' },
   { to: '/dashboard/roi-scenarios', icon: 'monitoring', label: 'ROI Scenarios' },
   { to: '/dashboard/buyer/profile-settings', icon: 'settings', label: 'Settings' },
 ] as const;
@@ -59,6 +62,7 @@ const BuyerPortalLayout = ({
                 }`
               }
               to={item.to}
+              end={item.to === '/dashboard/buyer'}
               onClick={() => setMenuOpen(false)}
             >
               <span className="material-symbols-outlined">{item.icon}</span>
