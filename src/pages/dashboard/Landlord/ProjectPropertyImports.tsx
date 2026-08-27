@@ -30,6 +30,7 @@ const validateRowEdit = (values: Record<string, string>) => {
   if (!values.title?.trim()) errors.push('Title is required.');
   if (!values.price?.trim()) errors.push('Price is required.');
   if (!values.propertyType?.trim()) errors.push('Property type is required.');
+  if (values.propertyType?.trim().toLowerCase() === 'land') errors.push('Land listings are not supported.');
   if (values.listingType === 'off_plan') {
     if (!values.developmentStatus?.trim()) errors.push('Development status is required for off-plan rows.');
     if (!values.expectedCompletionDate?.trim()) errors.push('Expected completion date is required for off-plan rows.');
@@ -275,7 +276,7 @@ const ProjectPropertyImports = () => {
                   <table className="w-full text-left text-xs">
                     <thead><tr className="border-b"><th className="py-2">Column</th><th className="py-2">Allowed values</th></tr></thead>
                     <tbody>{(schema?.fields ?? importTemplateColumns.map((name) => ({ name, required: ['title', 'price', 'propertyType'].includes(name), allowedValues: undefined }))).map((field) => (
-                      <tr key={field.name} className="border-b border-outline-variant/10"><td className="py-2 font-bold">{field.name}{field.required ? ' *' : ''}</td><td className="py-2 text-secondary">{field.allowedValues?.join(', ') ?? 'Text/value'}</td></tr>
+                      <tr key={field.name} className="border-b border-outline-variant/10"><td className="py-2 font-bold">{field.name}{field.required ? ' *' : ''}</td><td className="py-2 text-secondary">{field.allowedValues?.filter((value) => field.name !== 'propertyType' || value.toLowerCase() !== 'land').join(', ') || 'Text/value'}</td></tr>
                     ))}</tbody>
                   </table>
                 </div>

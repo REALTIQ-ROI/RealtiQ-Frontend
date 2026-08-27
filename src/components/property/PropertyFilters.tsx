@@ -10,7 +10,6 @@ const PROPERTY_TYPES = [
   { value: '', label: 'All Types' },
   { value: 'house', label: 'House' },
   { value: 'apartment', label: 'Apartment' },
-  { value: 'land', label: 'Land' },
   { value: 'commercial', label: 'Commercial' },
   { value: 'villa', label: 'Villa' },
   { value: 'penthouse', label: 'Penthouse' },

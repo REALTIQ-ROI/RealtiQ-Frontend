@@ -90,7 +90,6 @@ const PropertyForm = ({ initialValue, submitLabel, onSubmit }: PropertyFormProps
           >
             <option value="house">House</option>
             <option value="apartment">Apartment</option>
-            <option value="land">Land</option>
             <option value="commercial">Commercial</option>
             <option value="villa">Villa</option>
             <option value="penthouse">Penthouse</option>

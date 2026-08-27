@@ -2,7 +2,7 @@
 export * from './virtualTour';
 import type { VirtualTourProvider, VirtualTourSummary } from './virtualTour';
 
-export type PropertyType = 'house' | 'apartment' | 'land' | 'commercial' | 'villa' | 'penthouse' | 'estate';
+export type PropertyType = 'house' | 'apartment' | 'commercial' | 'villa' | 'penthouse' | 'estate';
 export type PropertyStatus = 'available' | 'sold';
 export type PropertyPaymentType = 'outright' | 'installment' | 'escrow';
 export type PropertyCategory = 'residential' | 'commercial' | 'mixed_use' | string;
@@ -880,7 +880,6 @@ export type TitleDocumentType =
   | 'deed_of_assignment'
   | 'governors_consent'
   | 'allocation_letter'
-  | 'land_purchase_agreement'
   | 'approved_building_plan'
   | 'gazette'
   | 'excision_document'

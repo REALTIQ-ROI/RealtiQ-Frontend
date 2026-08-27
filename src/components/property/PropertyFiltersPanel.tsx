@@ -9,7 +9,7 @@ interface PropertyFiltersProps {
   onSearchChange?: (search: string) => void;
 }
 const options = {
-  propertyType: [['', 'Type'], ['house', 'House'], ['apartment', 'Apartment'], ['land', 'Land'], ['commercial', 'Commercial'], ['villa', 'Villa'], ['penthouse', 'Penthouse'], ['estate', 'Estate']],
+  propertyType: [['', 'Type'], ['house', 'House'], ['apartment', 'Apartment'], ['commercial', 'Commercial'], ['villa', 'Villa'], ['penthouse', 'Penthouse'], ['estate', 'Estate']],
   category: [['', 'All Categories'], ['residential', 'Residential'], ['commercial', 'Commercial'], ['mixed_use', 'Mixed Use']],
   completionStage: [['', 'Any Stage'], ['off_plan', 'Off Plan'], ['unfinished', 'Unfinished'], ['finished', 'Finished'], ['renovation', 'Renovation']],
   currency: [['', 'Any Currency'], ['NGN', 'NGN'], ['USD', 'USD'], ['GBP', 'GBP']],

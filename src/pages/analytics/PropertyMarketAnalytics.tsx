@@ -396,7 +396,6 @@ const PropertyMarketAnalytics = () => {
                   <option value="">All</option>
                   <option value="house">House</option>
                   <option value="apartment">Apartment</option>
-                  <option value="land">Land</option>
                   <option value="commercial">Commercial</option>
                 </select>
               </label>

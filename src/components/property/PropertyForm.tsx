@@ -26,14 +26,12 @@ interface PropertyFormProps {
 const PROPERTY_TYPES = [
   'house',
   'apartment',
-  // 'land', // Temporarily unavailable for new landlord listings.
   'commercial',
   'villa',
   'penthouse',
   'estate',
 ];
 const CATEGORY_OPTIONS = ['residential', 'commercial', 'mixed_use'];
-const LAND_CATEGORY_OPTIONS = ['residential_land', 'commercial_land', 'agricultural_land', 'industrial_land', 'mixed_use_land'];
 const STAGE_OPTIONS = ['off_plan', 'unfinished', 'finished', 'renovation'];
 const CURRENCY_OPTIONS = ['NGN', 'USD', 'GBP'];
 const STATUS_OPTIONS = ['available', 'sold'];
@@ -80,11 +78,10 @@ const validate = (data: CreatePropertyPayload & { status?: string }): Record<str
   if (!Number.isFinite(data.price)) errs.price = 'Price must be a valid number';
   if (!data.location.trim()) errs.location = 'Location is required';
   if (!data.propertyType) errs.propertyType = 'Property type is required';
-  if (data.propertyType !== 'land') {
-    if (!data.bedrooms || data.bedrooms < 1) errs.bedrooms = 'At least 1 bedroom required';
-    if (!data.bathrooms || data.bathrooms < 1) errs.bathrooms = 'At least 1 bathroom required';
-    if (!data.completionStage) errs.completionStage = 'Completion stage is required';
-  }
+  else if (!PROPERTY_TYPES.includes(data.propertyType)) errs.propertyType = 'Select a supported property type';
+  if (!data.bedrooms || data.bedrooms < 1) errs.bedrooms = 'At least 1 bedroom required';
+  if (!data.bathrooms || data.bathrooms < 1) errs.bathrooms = 'At least 1 bathroom required';
+  if (!data.completionStage) errs.completionStage = 'Completion stage is required';
   if (!data.squareFeet || data.squareFeet <= 0) errs.squareFeet = 'Square footage must be greater than 0';
   if (!data.description.trim()) errs.description = 'Description is required';
   if (!data.media || data.media.length === 0) errs.media = 'At least one media file is required';
@@ -199,10 +196,8 @@ const PropertyForm = ({
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const saving = isLoading || uploadingTitleDocument || submitting;
-  const isLandProperty = propertyType === 'land';
-  const categoryOptions = isLandProperty ? LAND_CATEGORY_OPTIONS : CATEGORY_OPTIONS;
-  const propertyTypeOptions =
-    mode === 'edit' && propertyType === 'land' ? ['land', ...PROPERTY_TYPES] : PROPERTY_TYPES;
+  const categoryOptions = CATEGORY_OPTIONS;
+  const propertyTypeOptions = PROPERTY_TYPES;
   const parsedPrice = Number(price) || 0;
   const initialPrice = Number(initialData?.price ?? 0);
   const priceChanged = mode === 'edit' && Number.isFinite(parsedPrice) && initialPrice > 0 && parsedPrice !== initialPrice;
@@ -282,11 +277,9 @@ const PropertyForm = ({
         latProvided && lngProvided
           ? { lat: Number(coordinatesLat), lng: Number(coordinatesLng) }
           : undefined,
-      ...(!isLandProperty && {
-        bedrooms: Number(bedrooms),
-        bathrooms: Number(bathrooms),
-        completionStage,
-      }),
+      bedrooms: Number(bedrooms),
+      bathrooms: Number(bathrooms),
+      completionStage,
       ...(mode === 'edit' && { status }),
       ...(priceChanged && priceChangeReason.trim() ? { priceChangeReason: priceChangeReason.trim().slice(0, 500) } : {}),
       ...(projectId ? {
@@ -539,21 +532,17 @@ const PropertyForm = ({
             {errors.location && <p className={errorClass}>{errors.location}</p>}
           </div>
 
-          {!isLandProperty ? (
-            <>
-              <div>
-                <label className={labelClass}>Bedrooms</label>
-                <input type="number" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} min={1} className={inputClass} />
-                {errors.bedrooms && <p className={errorClass}>{errors.bedrooms}</p>}
-              </div>
+          <div>
+            <label className={labelClass}>Bedrooms</label>
+            <input type="number" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} min={1} className={inputClass} />
+            {errors.bedrooms && <p className={errorClass}>{errors.bedrooms}</p>}
+          </div>
 
-              <div>
-                <label className={labelClass}>Bathrooms</label>
-                <input type="number" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} min={1} className={inputClass} />
-                {errors.bathrooms && <p className={errorClass}>{errors.bathrooms}</p>}
-              </div>
-            </>
-          ) : null}
+          <div>
+            <label className={labelClass}>Bathrooms</label>
+            <input type="number" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} min={1} className={inputClass} />
+            {errors.bathrooms && <p className={errorClass}>{errors.bathrooms}</p>}
+          </div>
 
           <div>
             <label className={labelClass}>Square Feet</label>
@@ -568,19 +557,17 @@ const PropertyForm = ({
             {errors.squareFeet && <p className={errorClass}>{errors.squareFeet}</p>}
           </div>
 
-          {!isLandProperty ? (
-            <div>
-              <label className={labelClass}>Completion Stage</label>
-              <select value={completionStage} onChange={(e) => setCompletionStage(e.target.value)} className={inputClass}>
-                {STAGE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option.replace('_', ' ')}
-                  </option>
-                ))}
-              </select>
-              {errors.completionStage && <p className={errorClass}>{errors.completionStage}</p>}
-            </div>
-          ) : null}
+          <div>
+            <label className={labelClass}>Completion Stage</label>
+            <select value={completionStage} onChange={(e) => setCompletionStage(e.target.value)} className={inputClass}>
+              {STAGE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option.replace('_', ' ')}
+                </option>
+              ))}
+            </select>
+            {errors.completionStage && <p className={errorClass}>{errors.completionStage}</p>}
+          </div>
 
           <div>
             <label className={labelClass}>Latitude</label>

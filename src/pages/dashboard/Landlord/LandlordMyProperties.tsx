@@ -221,7 +221,7 @@ const LandlordMyProperties = () => {
                 <tr className="bg-surface-container-low">
                   <th className="px-6 py-4 text-label text-secondary font-bold text-[11px] uppercase tracking-widest">Property Details</th>
                   <th className="px-6 py-4 text-label text-secondary font-bold text-[11px] uppercase tracking-widest">Status</th>
-                  <th className="px-6 py-4 text-label text-secondary font-bold text-[11px] uppercase tracking-widest">Monthly Rent</th>
+                  <th className="px-6 py-4 text-label text-secondary font-bold text-[11px] uppercase tracking-widest">Asking Price</th>
                   <th className="px-6 py-4 text-label text-secondary font-bold text-[11px] uppercase tracking-widest">Performance</th>
                   <th className="px-6 py-4 text-label text-secondary font-bold text-[11px] uppercase tracking-widest text-right">Actions</th>
                 </tr>
@@ -260,7 +260,7 @@ const LandlordMyProperties = () => {
                         </td>
                         <td className="px-6 py-5">
                           <span className="font-black text-slate-900">₦{property.price.toLocaleString()}</span>
-                          <p className="text-[10px] text-secondary font-medium uppercase mt-0.5">NGN / Month</p>
+                          <p className="text-[10px] text-secondary font-medium uppercase mt-0.5">Total sale price</p>
                         </td>
                         <td className="px-6 py-5">
                           <div className="w-24 bg-surface-container h-1.5 rounded-full overflow-hidden">

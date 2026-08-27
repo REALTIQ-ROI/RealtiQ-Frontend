@@ -12,7 +12,6 @@ export const titleDocumentTypeOptions: Array<{ value: TitleDocumentType; label: 
   { value: 'deed_of_assignment', label: 'Deed of Assignment' },
   { value: 'governors_consent', label: "Governor's Consent" },
   { value: 'allocation_letter', label: 'Allocation Letter' },
-  { value: 'land_purchase_agreement', label: 'Land Purchase Agreement' },
   { value: 'approved_building_plan', label: 'Approved Building Plan' },
   { value: 'gazette', label: 'Gazette' },
   { value: 'excision_document', label: 'Excision Document' },
