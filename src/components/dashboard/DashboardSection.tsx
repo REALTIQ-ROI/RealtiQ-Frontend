@@ -15,7 +15,7 @@ const DashboardSection = ({ title, subtitle, children }: DashboardSectionProps) 
       </header>
       {children ?? (
         <div className="bg-surface-container-low rounded-xl p-5 border border-outline-variant/20">
-          <p className="text-on-surface-variant">This screen is API-ready and waiting for backend integration.</p>
+          <p className="text-on-surface-variant">This feature is not available yet.</p>
         </div>
       )}
     </section>

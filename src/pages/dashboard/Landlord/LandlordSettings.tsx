@@ -8,6 +8,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
+import SellerTrustBadge from '../../../components/trust/SellerTrustBadge';
 import SellerPayoutAccountSettings from '../../../components/escrow/SellerPayoutAccountSettings';
 
 const phoneRegex = /^(\+234|234|0)[789][01]\d{8}$/;
@@ -168,7 +169,7 @@ const LandlordSettings = () => {
                 </div>
                 <div className="rounded-xl bg-white/70 p-4 border border-outline-variant/10">
                   <p className="text-[11px] uppercase tracking-wider text-secondary font-bold">Trust Badge</p>
-                  <p className="mt-2 text-base font-semibold capitalize">{formatLabel(account?.trustBadge)}</p>
+                  <div className="mt-2 flex items-center gap-2"><p className="text-base font-semibold capitalize">{formatLabel(account?.trustBadge)}</p><SellerTrustBadge badge={account?.trustBadge as import('../../../types/phase45').TrustBadge} compact /></div>
                 </div>
                 <div className="rounded-xl bg-white/70 p-4 border border-outline-variant/10">
                   <p className="text-[11px] uppercase tracking-wider text-secondary font-bold">KYC Status</p>

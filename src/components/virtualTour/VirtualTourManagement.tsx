@@ -92,13 +92,13 @@ const VirtualTourManagement = ({ propertyId, summary, providerOverride, onUpdate
         <h3 className="font-black">Matterport Showcase</h3>
         <input aria-label="Matterport model SID" className="w-full rounded-lg border border-outline-variant/20 bg-white px-3 py-2" placeholder="Model SID (required)" value={modelSid} onChange={(event) => setModelSid(event.target.value)} minLength={8} maxLength={20} />
         <input aria-label="Matterport Showcase URL" className="w-full rounded-lg border border-outline-variant/20 bg-white px-3 py-2" placeholder="Showcase URL (optional)" value={showcaseUrl} onChange={(event) => setShowcaseUrl(event.target.value)} type="url" />
-        <p className="text-xs text-secondary">Validation may remain processing when this deployment has no server-side Model API credentials.</p>
+        <p className="text-xs text-secondary">Validation may remain in progress while the tour provider connection is unavailable.</p>
         <div className="flex gap-2"><Button type="submit" loading={saving === 'matterport'}>Save Matterport</Button><Button type="button" variant="secondary" loading={saving === 'disable-matterport'} onClick={() => void disable('matterport')}>Disable</Button></div>
       </form>
     </div>
     <div className="mt-6 rounded-xl border border-outline-variant/10 p-5">
       <h3 className="font-black">Property provider preference</h3>
-      <p className="mb-3 text-xs text-secondary">This preference does not configure a tour. Backend resolution and fallback remain authoritative.</p>
+      <p className="mb-3 text-xs text-secondary">This preference does not configure a tour. RealTIQ selects the best available tour option.</p>
       <div className="flex flex-wrap gap-2"><select aria-label="Property virtual tour provider preference" value={override} onChange={(event) => setOverride(event.target.value as VirtualTourProvider | '')} className="rounded-lg border border-outline-variant/20 px-3 py-2"><option value="">Inherit Project / global default</option><option value="realsee" disabled={!canChoose('realsee')}>Realsee</option><option value="matterport" disabled={!canChoose('matterport')}>Matterport</option></select><Button type="button" loading={saving === 'override'} onClick={() => void saveOverride()}>Save preference</Button></div>
     </div>
   </section>;

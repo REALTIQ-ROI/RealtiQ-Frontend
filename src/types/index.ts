@@ -1,6 +1,8 @@
 ﻿export type UserRole = 'buyer' | 'landlord' | 'proxy_inspector' | 'admin';
 export * from './virtualTour';
 export * from './phase2';
+export type { StructuredPropertyFacts } from './phase45';
+import type { StructuredPropertyFacts } from './phase45';
 import type { VirtualTourProvider, VirtualTourSummary } from './virtualTour';
 
 export type PropertyType = 'house' | 'apartment' | 'commercial' | 'villa' | 'penthouse' | 'estate';
@@ -177,6 +179,7 @@ export interface ProjectOwnerSummary {
   name?: string;
   landlordVerified?: boolean;
   ratingAverage?: number;
+  trustBadge?: import('./phase45').TrustBadge;
 }
 
 export interface ProjectDetail extends ProjectCard {
@@ -325,6 +328,7 @@ export interface PropertyOwner {
   selfieUrl?: string;
   landlordVerified?: boolean;
   ratingAverage?: number;
+  trustBadge?: import('./phase45').TrustBadge;
 }
 
 export type KycStatus = 'pending' | 'approved' | 'rejected' | string;
@@ -353,6 +357,7 @@ export interface Property {
   bathrooms: number;
   description: string;
   squareFeet: number;
+  structuredFacts?: StructuredPropertyFacts;
   category?: PropertyCategory;
   completionStage?: PropertyCompletionStage;
   currency?: PropertyCurrency;

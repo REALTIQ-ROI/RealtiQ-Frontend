@@ -1,10 +1,12 @@
 ﻿import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import AdminLayout from '../../../components/layout/AdminLayout';
+import SellerTrustBadge from '../../../components/trust/SellerTrustBadge';
 import MediaPreview from '../../../components/property/MediaPreview';
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
 import TitleDocumentManagement from '../../../components/title/TitleDocumentManagement';
 import PaymentTypeBadges from '../../../components/property/PaymentTypeBadges';
+import StructuredFactsPanel from '../../../components/property/StructuredFactsPanel';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { propertyDisplayReference, propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
 import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
@@ -123,6 +125,7 @@ const AdminPropertyDetails = () => {
         </div>
 
         {/* Bento Grid */}
+        <div className={'mb-8'}><StructuredFactsPanel facts={property.structuredFacts} titleLink={'/dashboard/admin/title-verifications'} /></div>
         <div className="grid grid-cols-12 gap-8">
           {/* Gallery & Description – Left */}
           <div className="col-span-12 lg:col-span-8 space-y-8">
@@ -323,7 +326,7 @@ const AdminPropertyDetails = () => {
                 </div>
                 <div>
                   <span className="block font-bold text-primary">
-                    {ownerName}
+                    <span className="inline-flex flex-wrap items-center gap-2">{ownerName}<SellerTrustBadge badge={owner?.trustBadge} compact /></span>
                   </span>
                   <span className="text-xs text-secondary">
                     {owner?.email || (ownerId ? `...${ownerId.slice(-10)}` : 'Unknown')}

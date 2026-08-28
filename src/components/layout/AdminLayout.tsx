@@ -26,6 +26,7 @@ const navLinks = [
   { to: '/dashboard/admin/virtual-tours', label: 'Virtual Tours', icon: 'view_in_ar' },
   { to: '/dashboard/admin/tours', label: 'Tours', icon: 'tour' },
   { to: '/dashboard/admin/title-verifications', label: 'Title Review', icon: 'verified' },
+  { to: '/dashboard/admin/trust-appeals', label: 'Trust Appeals', icon: 'balance' },
   { to: '/dashboard/admin/manage-payments', label: 'Payments', icon: 'payments' },
   { to: '/dashboard/admin/cart-checkouts', label: 'Cart Checkouts', icon: 'receipt_long' },
   { to: '/dashboard/admin/wallet', label: 'Platform Ledger', icon: 'account_balance_wallet' },

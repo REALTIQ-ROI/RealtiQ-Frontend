@@ -430,7 +430,7 @@ const InstallmentCreateForm = ({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
             <Stat label="Property price" value={selectedProperty ? formatCurrency(price) : 'Select property'} />
             <Stat label="Principal total" value={selectedProperty ? formatCurrency(price) : 'Select property'} />
-            <Stat label="Principal scheduled" value={mode === 'custom' ? formatCurrency(scheduled) : 'Backend generated'} />
+            <Stat label="Principal scheduled" value={mode === 'custom' ? formatCurrency(scheduled) : 'Calculated automatically'} />
             <Stat label="Difference" value={mode === 'custom' ? formatCurrency(scheduled - price) : formatCurrency(0)} tone={mode === 'custom' && scheduled !== price ? 'text-error' : ''} />
             <Stat label="Grace period" value={`${DEFAULT_GRACE_PERIOD_HOURS} hours`} />
           </div>
@@ -802,7 +802,7 @@ const InstallmentDetail = ({
           <Stat label="Grace period" value={`${installment.gracePeriodHours ?? DEFAULT_GRACE_PERIOD_HOURS} hours`} />
           <Stat label="Default thresholds" value={`${installment.defaultAfterDays ?? 30} days / ${installment.maximumMissedPayments ?? 3} missed`} />
         </div>
-        <p className="mt-4 text-sm text-secondary">Due begins at the exact due datetime. Overdue begins after due date plus grace period. Default is handled by backend thresholds, not by one missed due date.</p>
+        <p className="mt-4 text-sm text-secondary">A payment becomes due at the stated date and time, and overdue after the grace period. Default status is based on RealTIQ's payment policy, not a single missed due date.</p>
       </section>
 
       {role === 'buyer' ? <PaymentPanel installment={installment} onRefresh={onRefresh} /> : null}

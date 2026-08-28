@@ -63,7 +63,7 @@ const SellerPayoutAccountSettings = () => {
               {data?.configured ? 'Update payout account' : 'Configure payout account'}
             </Button>
           </form>
-          <p className="mt-3 text-xs text-secondary">Only the masked, backend-verified account is displayed after submission. The full account number is cleared from this form.</p>
+          <p className="mt-3 text-xs text-secondary">Only the masked, verified account is displayed after submission. The full account number is cleared from this form.</p>
         </>
       )}
     </section>

@@ -15,6 +15,7 @@ import {
 import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
 import Button from '../../../components/ui/Button';
+import SellerTrustBadge from '../../../components/trust/SellerTrustBadge';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -45,19 +46,25 @@ const AllocationSummary = ({
   difference: number;
   currency?: string;
 }) => (
-  <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
-    <dl className="space-y-2 text-sm">
-      <div className="flex items-center justify-between gap-4">
+  <div className='rounded-xl border border-outline-variant/20 bg-surface-container-low p-4'>
+    <dl className='space-y-2 text-sm'>
+      <div className='flex items-center justify-between gap-4'>
         <dt>Escrow amount</dt>
-        <dd className="font-bold">{formatEscrowMoney(escrowAmount, currency)}</dd>
+        <dd className='font-bold'>
+          {formatEscrowMoney(escrowAmount, currency)}
+        </dd>
       </div>
-      <div className="flex items-center justify-between gap-4">
+      <div className='flex items-center justify-between gap-4'>
         <dt>Total milestone allocation</dt>
-        <dd className="font-bold">{formatEscrowMoney(totalAllocated, currency)}</dd>
+        <dd className='font-bold'>
+          {formatEscrowMoney(totalAllocated, currency)}
+        </dd>
       </div>
-      <div className="border-t border-outline-variant/20 pt-2">
-        <div className="flex items-center justify-between gap-4">
-          <dt>{difference < 0 ? 'Overallocated amount' : 'Unallocated amount'}</dt>
+      <div className='border-t border-outline-variant/20 pt-2'>
+        <div className='flex items-center justify-between gap-4'>
+          <dt>
+            {difference < 0 ? 'Overallocated amount' : 'Unallocated amount'}
+          </dt>
           <dd
             className={`font-black ${
               difference === 0
@@ -73,11 +80,11 @@ const AllocationSummary = ({
       </div>
     </dl>
     <p
-      id="escrow-allocation-status"
+      id='escrow-allocation-status'
       className={`mt-3 text-xs font-bold ${
         difference === 0 ? 'text-emerald-700' : 'text-amber-800'
       }`}
-      role="status"
+      role='status'
     >
       {difference === 0
         ? 'Allocation complete. The milestones exactly match the escrow amount.'
@@ -85,7 +92,7 @@ const AllocationSummary = ({
           ? `Allocate the remaining ${formatEscrowMoney(difference, currency)} before continuing.`
           : `Reduce milestone allocations by ${formatEscrowMoney(Math.abs(difference), currency)} before continuing.`}
     </p>
-    <p className="mt-3 text-xs text-secondary">
+    <p className='mt-3 text-xs text-secondary'>
       The full escrow amount is funded upfront. Milestone amounts are accounting
       allocations only and are released together after every required milestone
       and final administrator approval.
@@ -115,7 +122,9 @@ const CreateEscrow = () => {
   const owner = useMemo(
     () =>
       property?.owner ??
-      (property && typeof property.ownerId !== 'string' ? property.ownerId : null),
+      (property && typeof property.ownerId !== 'string'
+        ? property.ownerId
+        : null),
     [property],
   );
   const reference = property ? propertyRouteReference(property) : propertyId;
@@ -127,7 +136,9 @@ const CreateEscrow = () => {
     : false;
   const unavailable =
     property?.status !== 'available' ||
-    Boolean(property?.approvalStatus && property.approvalStatus !== 'approved') ||
+    Boolean(
+      property?.approvalStatus && property.approvalStatus !== 'approved',
+    ) ||
     Boolean(property && resolvePropertyOwnerId(property) === user?._id) ||
     !escrowOffered;
   const allocation = useMemo(
@@ -217,21 +228,21 @@ const CreateEscrow = () => {
 
   return (
     <BuyerPortalLayout
-      pageTitle="Create Escrow"
-      pageSubtitle="Secure your payment until the agreed property conditions are complete and an administrator approves release."
+      pageTitle='Create Escrow'
+      pageSubtitle='Secure your payment until the agreed property conditions are complete and an administrator approves release.'
     >
       {duplicateConflict ? (
         <div
-          role="alert"
-          className="mb-6 rounded-xl bg-amber-100 p-4 text-sm text-amber-900"
+          role='alert'
+          className='mb-6 rounded-xl bg-amber-100 p-4 text-sm text-amber-900'
         >
           <strong>You already have an active escrow for this property.</strong>
-          <p className="mt-1">
+          <p className='mt-1'>
             Open your escrow list to continue with the existing transaction.
           </p>
           <Link
-            to="/dashboard/buyer/escrows"
-            className="mt-3 inline-block font-bold underline"
+            to='/dashboard/buyer/escrows'
+            className='mt-3 inline-block font-bold underline'
           >
             View my escrows
           </Link>
@@ -239,34 +250,36 @@ const CreateEscrow = () => {
       ) : null}
 
       {loading ? (
-        <LoadingState label="Loading property..." />
+        <LoadingState label='Loading property...' />
       ) : error || !property ? (
         <ErrorState
           message={error ?? 'Property not found.'}
           onRetry={() => void execute()}
         />
       ) : unavailable ? (
-        <div className="rounded-xl bg-white p-10 text-center">
-          <h2 className="text-xl font-bold">Escrow is unavailable</h2>
-          <p className="mt-2 text-sm text-secondary">
+        <div className='rounded-xl bg-white p-10 text-center'>
+          <h2 className='text-xl font-bold'>Escrow is unavailable</h2>
+          <p className='mt-2 text-sm text-secondary'>
             {!escrowOffered
               ? 'The landlord has not offered escrow for this property.'
               : 'Only available, approved properties owned by another user can be purchased through escrow.'}
           </p>
           <Link
             to={`/properties/${reference}`}
-            className="mt-5 inline-block text-sm font-bold text-primary"
+            className='mt-5 inline-block text-sm font-bold text-primary'
           >
             Return to property
           </Link>
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <section className="rounded-xl bg-white p-5 sm:p-8">
-            <div className="mb-6 flex items-center gap-3 text-xs font-bold uppercase tracking-widest">
+        <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]'>
+          <section className='rounded-xl bg-white p-5 sm:p-8'>
+            <div className='mb-6 flex items-center gap-3 text-xs font-bold uppercase tracking-widest'>
               <span
                 className={`rounded-full px-3 py-1 ${
-                  !review ? 'bg-primary text-on-primary' : 'bg-surface-container'
+                  !review
+                    ? 'bg-primary text-on-primary'
+                    : 'bg-surface-container'
                 }`}
               >
                 1 Milestones
@@ -282,8 +295,8 @@ const CreateEscrow = () => {
 
             {submissionError ? (
               <p
-                role="alert"
-                className="mb-5 rounded-lg bg-red-50 p-4 text-sm font-semibold text-red-800"
+                role='alert'
+                className='mb-5 rounded-lg bg-red-50 p-4 text-sm font-semibold text-red-800'
               >
                 {submissionError}
               </p>
@@ -291,8 +304,8 @@ const CreateEscrow = () => {
 
             {!review ? (
               <>
-                <div className="rounded-xl bg-primary/5 p-4 text-sm text-on-surface-variant">
-                  <strong className="block text-primary">
+                <div className='rounded-xl bg-primary/5 p-4 text-sm text-on-surface-variant'>
+                  <strong className='block text-primary'>
                     How escrow protects the transaction
                   </strong>
                   Paystack funds the complete property price upfront. Satisfying
@@ -301,8 +314,8 @@ const CreateEscrow = () => {
                   every required milestone and administrator approval.
                 </div>
 
-                <fieldset className="mt-6 space-y-3">
-                  <legend className="font-bold">Release milestones</legend>
+                <fieldset className='mt-6 space-y-3'>
+                  <legend className='font-bold'>Release milestones</legend>
                   <label
                     className={`block cursor-pointer rounded-xl border p-4 ${
                       !custom
@@ -311,16 +324,16 @@ const CreateEscrow = () => {
                     }`}
                   >
                     <input
-                      type="radio"
+                      type='radio'
                       checked={!custom}
                       onChange={() => {
                         setCustom(false);
                         setSubmissionError(null);
                       }}
-                      className="mr-3"
+                      className='mr-3'
                     />
                     Use RealtiQ default milestones
-                    <p className="ml-7 mt-1 text-xs text-secondary">
+                    <p className='ml-7 mt-1 text-xs text-secondary'>
                       Buyer confirmation, administrator approval, and document
                       verification. Legacy default milestones do not use custom
                       allocations.
@@ -334,20 +347,20 @@ const CreateEscrow = () => {
                     }`}
                   >
                     <input
-                      type="radio"
+                      type='radio'
                       checked={custom}
                       onChange={() => {
                         setCustom(true);
                         setSubmissionError(null);
                       }}
-                      className="mr-3"
+                      className='mr-3'
                     />
                     Define custom milestone allocations
                   </label>
                 </fieldset>
 
                 {custom ? (
-                  <div className="mt-5 space-y-5">
+                  <div className='mt-5 space-y-5'>
                     <CustomRuleEditor
                       rules={rules}
                       errors={errors}
@@ -365,9 +378,11 @@ const CreateEscrow = () => {
                 ) : null}
 
                 <Button
-                  className="mt-8"
+                  className='mt-8'
                   disabled={custom && (!rules.length || !allocation.exact)}
-                  aria-describedby={custom ? 'escrow-allocation-status' : undefined}
+                  aria-describedby={
+                    custom ? 'escrow-allocation-status' : undefined
+                  }
                   onClick={continueToReview}
                 >
                   Review Escrow
@@ -375,54 +390,54 @@ const CreateEscrow = () => {
               </>
             ) : (
               <>
-                <h2 className="text-xl font-bold">Confirm escrow terms</h2>
-                <p className="mt-2 text-sm text-secondary">
+                <h2 className='text-xl font-bold'>Confirm escrow terms</h2>
+                <p className='mt-2 text-sm text-secondary'>
                   Payment will not start automatically. After creation, Paystack
                   will still charge the full escrow amount in one funding
                   transaction.
                 </p>
-                <dl className="mt-6 grid gap-4 rounded-xl bg-surface-container-low p-5 sm:grid-cols-2">
+                <dl className='mt-6 grid gap-4 rounded-xl bg-surface-container-low p-5 sm:grid-cols-2'>
                   <div>
-                    <dt className="text-xs font-bold uppercase text-secondary">
+                    <dt className='text-xs font-bold uppercase text-secondary'>
                       Fixed escrow amount
                     </dt>
-                    <dd className="mt-1 font-black">
+                    <dd className='mt-1 font-black'>
                       {formatEscrowMoney(property.price, property.currency)}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-bold uppercase text-secondary">
+                    <dt className='text-xs font-bold uppercase text-secondary'>
                       Seller
                     </dt>
-                    <dd className="mt-1 font-semibold">
-                      {owner?.name ?? 'Property seller'}
+                    <dd className='mt-1 font-semibold'>
+                      <span className='inline-flex flex-wrap items-center gap-2'>{owner?.name ?? 'Property seller'}<SellerTrustBadge badge={owner?.trustBadge} compact /></span>
                     </dd>
                   </div>
                 </dl>
 
-                <div className="mt-6">
-                  <h3 className="font-bold">Milestones</h3>
+                <div className='mt-6'>
+                  <h3 className='font-bold'>Milestones</h3>
                   {custom ? (
                     <>
-                      <ol className="mt-3 space-y-2">
+                      <ol className='mt-3 space-y-2'>
                         {rules.map((rule, index) => (
                           <li
                             key={rule.clientId}
-                            className="rounded-lg border border-outline-variant/20 p-3 text-sm"
+                            className='rounded-lg border border-outline-variant/20 p-3 text-sm'
                           >
-                            <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className='flex flex-wrap items-start justify-between gap-3'>
                               <div>
                                 <strong>
                                   {index + 1}. {RULE_LABELS[rule.type]}
                                 </strong>
-                                <p className="mt-1 text-secondary">
+                                <p className='mt-1 text-secondary'>
                                   {rule.description}{' '}
                                   <span>
                                     ({rule.required ? 'Required' : 'Optional'})
                                   </span>
                                 </p>
                               </div>
-                              <strong className="text-primary">
+                              <strong className='text-primary'>
                                 {formatEscrowMoney(
                                   rule.amount ?? 0,
                                   property.currency,
@@ -432,7 +447,7 @@ const CreateEscrow = () => {
                           </li>
                         ))}
                       </ol>
-                      <div className="mt-4">
+                      <div className='mt-4'>
                         <AllocationSummary
                           escrowAmount={allocation.escrowAmount}
                           totalAllocated={allocation.totalAllocated}
@@ -442,33 +457,31 @@ const CreateEscrow = () => {
                       </div>
                     </>
                   ) : (
-                    <p className="mt-2 rounded-lg bg-surface-container-low p-4 text-sm">
-                      RealtiQ default milestones will be created by the backend.
+                    <p className='mt-2 rounded-lg bg-surface-container-low p-4 text-sm'>
+                      RealTIQ's standard milestones will be added automatically.
                     </p>
                   )}
                 </div>
 
-                <label className="mt-6 flex items-start gap-3 rounded-lg border border-outline-variant/20 p-4 text-sm">
+                <label className='mt-6 flex items-start gap-3 rounded-lg border border-outline-variant/20 p-4 text-sm'>
                   <input
                     required
-                    type="checkbox"
+                    type='checkbox'
                     checked={confirmed}
                     onChange={(event) => setConfirmed(event.target.checked)}
-                    className="mt-1"
+                    className='mt-1'
                   />
                   I understand that the full property price is funded upfront,
                   milestone satisfaction does not release money, and final
                   ownership requires administrator release.
                 </label>
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <Button variant="secondary" onClick={() => setReview(false)}>
+                <div className='mt-6 flex flex-wrap gap-3'>
+                  <Button variant='secondary' onClick={() => setReview(false)}>
                     Back
                   </Button>
                   <Button
                     disabled={
-                      submitting ||
-                      !confirmed ||
-                      (custom && !allocation.exact)
+                      submitting || !confirmed || (custom && !allocation.exact)
                     }
                     onClick={() => void create()}
                   >
@@ -479,20 +492,20 @@ const CreateEscrow = () => {
             )}
           </section>
 
-          <aside className="h-fit rounded-xl bg-white p-5">
-            <div className="h-44 overflow-hidden rounded-lg">
+          <aside className='h-fit rounded-xl bg-white p-5'>
+            <div className='h-44 overflow-hidden rounded-lg'>
               <MediaPreview
                 media={property.media?.[0]}
                 alt={property.title}
-                className="h-full w-full object-cover"
+                className='h-full w-full object-cover'
               />
             </div>
-            <h2 className="mt-4 text-lg font-bold">{property.title}</h2>
-            <p className="text-sm text-secondary">{property.location}</p>
-            <p className="mt-4 text-2xl font-black text-primary">
+            <h2 className='mt-4 text-lg font-bold'>{property.title}</h2>
+            <p className='text-sm text-secondary'>{property.location}</p>
+            <p className='mt-4 text-2xl font-black text-primary'>
               {formatEscrowMoney(property.price, property.currency)}
             </p>
-            <p className="mt-2 text-xs text-secondary">
+            <p className='mt-2 text-xs text-secondary'>
               The escrow amount is fixed to the property price and is funded in
               full through the existing Paystack flow.
             </p>

@@ -290,7 +290,7 @@ const LandlordTitleVerifications = () => {
             </div>
             <div className="mt-5 rounded-lg border border-outline-variant/20 bg-surface-container-low p-4">
               <p className="text-sm font-bold">Upload a restricted title document</p>
-              <p className="mt-1 text-xs text-secondary">The backend stores the file as a restricted Document Vault record and creates the title review automatically.</p>
+              <p className="mt-1 text-xs text-secondary">RealTIQ stores the file securely in the Document Vault and creates the title review automatically.</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                 <select className="rounded-lg bg-white px-3 py-2 text-sm" value={uploadTitle} onChange={(event) => setUploadTitle(event.target.value)}>
                   {titleDocumentTypeOptions.map((option) => <option key={option.value} value={option.label}>{option.label}</option>)}

@@ -4,6 +4,7 @@ import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
+import SellerTrustBadge from '../../../components/trust/SellerTrustBadge';
 
 const formatDate = (date?: string) =>
   date ? new Date(date).toLocaleString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
@@ -45,7 +46,7 @@ const UserDetails = () => {
                   {initials(user.name)}
                 </div>
                 <div>
-                  <h2 className="text-2xl font-extrabold">{user.name}</h2>
+                  <h2 className="flex flex-wrap items-center gap-2 text-2xl font-extrabold">{user.name}{user.role === 'landlord' ? <SellerTrustBadge badge={user.trustBadge as import('../../../types/phase45').TrustBadge} compact /> : null}</h2>
                   <p className="text-secondary">{user.email}</p>
                 </div>
               </div>

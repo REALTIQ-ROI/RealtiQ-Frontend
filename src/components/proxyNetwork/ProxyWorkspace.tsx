@@ -963,7 +963,7 @@ const AdminResolution = ({
             setConfirm({
               title: "Confirm dispute resolution",
               description:
-                "Provider processing actions are not terminal until webhook-confirmed. The backend remains authoritative after this action.",
+                "Provider processing actions remain in progress until RealTIQ receives final confirmation.",
               confirmLabel: "Submit resolution",
               tone: choice === "resume_service" ? "primary" : "danger",
               onConfirm: () => {
@@ -1073,7 +1073,7 @@ const CompletionActions = ({
             ))}
           </ul>
           <p className="mt-3 text-xs text-secondary">
-            Submit completion is enabled only after the requested service requirements are satisfied. The backend validates the saved report and uploaded evidence again.
+            Submit completion is enabled only after the requested service requirements are satisfied. RealTIQ checks the saved report and uploaded evidence before completion.
           </p>
           {frontendMissing.length ? (
             <div role="alert" className="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
@@ -1388,7 +1388,7 @@ const ProxyWorkspace = ({
       } else {
         toast.error(
           result.message ||
-            "Payment was initialized, but the backend did not return a checkout link.",
+            "Payment was initialized, but a checkout link is not available. Please try again.",
         );
       }
     } catch (raw) {
@@ -1693,7 +1693,7 @@ const ProxyWorkspace = ({
             ) : initializedPayment ? (
               <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
                 {initializedPayment.message ||
-                  "Payment was initialized, but the backend did not return pricing. Refresh this job before continuing."}
+                  "Payment was initialized, but pricing is not available. Refresh this job before continuing."}
               </p>
             ) : null}
           </div>
@@ -1853,7 +1853,7 @@ const ProxyWorkspace = ({
               setConfirm({
                 title: "Initiate Property Agent payout",
                 description:
-                  "This starts Paystack transfer processing. Do not treat the payout as paid or completed until the provider webhook updates the backend state.",
+                  "This starts Paystack transfer processing. The payout remains in progress until RealTIQ receives confirmation from Paystack.",
                 confirmLabel: "Initiate payout",
                 tone: "danger",
                 onConfirm: () => {

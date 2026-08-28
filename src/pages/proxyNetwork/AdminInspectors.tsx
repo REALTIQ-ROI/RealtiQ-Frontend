@@ -730,7 +730,7 @@ export const AdminInspectorDetailPage = () => {
                 </p>
               )}
               <p className="mt-3 text-xs text-secondary">
-                An uploaded credential is unverified unless its own backend
+                An uploaded credential remains unverified unless its own RealTIQ
                 status is “verified”.
               </p>
             </section>
@@ -810,7 +810,7 @@ export const AdminInspectorDetailPage = () => {
                   setTextAction({
                     title: "Reactivate Property Agent",
                     description:
-                      "Reactivation returns this profile to approved/searchable state after the backend confirms the action.",
+                      "Reactivation returns this profile to an approved and searchable state after RealTIQ confirms the action.",
                     label: "Reactivation notes",
                     confirmLabel: "Reactivate Property Agent",
                     requiredMessage: "Reactivation notes are required.",
@@ -833,7 +833,7 @@ export const AdminInspectorDetailPage = () => {
               </button>
             ) : null}
             <p className="mt-4 text-xs text-secondary">
-              Badges and public visibility update only after the backend
+              Badges and public visibility update only after RealTIQ
               confirms the action.
             </p>
           </aside>

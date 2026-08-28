@@ -118,6 +118,9 @@ import PropertyMarketAnalytics from '../pages/analytics/PropertyMarketAnalytics'
 import Messages from '../pages/dashboard/Messages';
 import Personalisation from '../pages/dashboard/Personalisation';
 import Notifications from '../pages/dashboard/Notifications';
+import ValuationPage from '../pages/dashboard/ValuationPage';
+import TrustAccount from '../pages/dashboard/TrustAccount';
+import TrustAppeals from '../pages/dashboard/Admin/TrustAppeals';
 import MessageModeration from '../pages/dashboard/Admin/MessageModeration';
 
 const ScrollToTop = () => {
@@ -196,6 +199,8 @@ const AppRoutes = () => {
           <Route path='/messages/:conversationId' element={<Messages />} />
           <Route path='/dashboard/personalisation' element={<Personalisation />} />
           <Route path='/dashboard/notifications' element={<Notifications />} />
+          <Route path='/dashboard/trust' element={<TrustAccount />} />
+          <Route path='/dashboard/valuations/:propertyReference' element={<ValuationPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/analytics/property-market" element={<PropertyMarketAnalytics />} />
           <Route path="/analytics/property-market/access" element={<PropertyMarketAnalytics />} />
@@ -267,6 +272,7 @@ const AppRoutes = () => {
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route path='/dashboard/admin/trust-appeals' element={<TrustAppeals />} />
           <Route path='/dashboard/admin/message-moderation' element={<MessageModeration />} />
           <Route path="/admin/proxy-inspectors" element={<AdminInspectorList />} />
           <Route path="/admin/proxy-inspectors/:profileId" element={<AdminInspectorDetailPage />} />

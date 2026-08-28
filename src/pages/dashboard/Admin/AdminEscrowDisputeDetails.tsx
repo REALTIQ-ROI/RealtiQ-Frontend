@@ -21,12 +21,12 @@ const actionCopy: Record<EscrowDisputeAction, { title: string; button: string; c
   refund_buyer: {
     title: 'Refund Buyer',
     button: 'Refund Buyer',
-    consequence: 'Starts a Paystack refund to the original successful transaction. Completion requires backend confirmation.',
+    consequence: 'Starts a Paystack refund to the original successful transaction. Completion requires confirmation from Paystack.',
   },
   release_seller: {
     title: 'Release Funds to Seller/Landlord',
     button: 'Release Funds to Seller/Landlord',
-    consequence: 'Starts the seller payout only when backend eligibility, milestones, and payout account requirements are satisfied.',
+    consequence: 'Starts the seller payout only when RealTIQ eligibility, milestone, and payout account requirements are satisfied.',
   },
   cancel_escrow: {
     title: 'Cancel Escrow',
@@ -112,13 +112,13 @@ const AdminEscrowDisputeDetails = () => {
       } else if (result.status === 202 || response.pending) {
         setNotice(
           action === 'refund_buyer'
-            ? 'Buyer refund processing has started. Completion is awaiting backend confirmation.'
+            ? 'Buyer refund processing has started. Completion is awaiting confirmation from Paystack.'
             : action === 'release_seller'
               ? 'Seller payout processing has started. Property ownership is unchanged until release is confirmed.'
               : 'Cancellation is pending confirmation of the buyer refund.',
         );
       } else {
-        setNotice(action === 'reopen' ? 'Escrow reopened using its preserved pre-dispute state.' : 'Resolution submitted and confirmed by the backend.');
+        setNotice(action === 'reopen' ? 'Escrow reopened using its preserved pre-dispute state.' : 'Resolution submitted and confirmed by RealTIQ.');
       }
       toast.success('Dispute resolution submitted.');
       await execute();
@@ -144,13 +144,13 @@ const AdminEscrowDisputeDetails = () => {
     ? `${groupedRules.outstanding.length} required milestone(s) remain outstanding.`
     : escrow.sellerPayoutStatus === 'processing'
       ? 'Seller payout is already processing.'
-      : 'The backend does not currently allow seller release.';
+      : 'Seller release is not available in the current escrow state.';
 
   const actions: Array<{ action: EscrowDisputeAction; enabled: boolean; disabledReason: string }> = [
-    { action: 'reopen', enabled: data.availableActions.reopen, disabledReason: 'The backend does not allow reopening in the current dispute state.' },
-    { action: 'refund_buyer', enabled: data.availableActions.refundBuyer, disabledReason: escrow.refundStatus === 'processing' ? 'Buyer refund is already processing.' : 'The backend does not allow a buyer refund in the current state.' },
+    { action: 'reopen', enabled: data.availableActions.reopen, disabledReason: 'Reopening is not available in the current dispute state.' },
+    { action: 'refund_buyer', enabled: data.availableActions.refundBuyer, disabledReason: escrow.refundStatus === 'processing' ? 'Buyer refund is already processing.' : 'A buyer refund is not available in the current state.' },
     { action: 'release_seller', enabled: data.availableActions.releaseSeller, disabledReason: releaseDisabledReason },
-    { action: 'cancel_escrow', enabled: data.availableActions.cancelEscrow, disabledReason: financialProcessing ? 'A financial resolution is already processing.' : 'The backend does not allow cancellation in the current state.' },
+    { action: 'cancel_escrow', enabled: data.availableActions.cancelEscrow, disabledReason: financialProcessing ? 'A financial resolution is already processing.' : 'Cancellation is not available in the current state.' },
   ];
 
   return (

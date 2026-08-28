@@ -156,7 +156,7 @@ const FeaturedListings = () => {
           {/* <section className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-amber-800">
             <h3 className="font-bold mb-1">Ordering and auto-rotation are not live yet</h3>
             <p className="text-sm">
-              The current backend supports the featured flag only. Rotation rules, manual ordering, and analytics are
+              Featured status is currently supported. Rotation rules, manual ordering, and analytics are
               documented in NOT_LIVE_FEATURES.md.
             </p>
           </section> */}

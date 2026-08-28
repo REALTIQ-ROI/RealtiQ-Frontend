@@ -117,7 +117,7 @@ const ServiceCart = () => {
           <div className="flex flex-col gap-3 border-b border-outline-variant/10 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-xl font-black">Cart items</h3>
-              <p className="text-sm text-secondary">{cart?.itemCount ?? 0} item{(cart?.itemCount ?? 0) === 1 ? '' : 's'} from backend cart state</p>
+              <p className="text-sm text-secondary">{cart?.itemCount ?? 0} item{(cart?.itemCount ?? 0) === 1 ? '' : 's'} in your cart</p>
             </div>
             <Button type="button" variant="secondary" disabled={loading} onClick={() => void refreshCart()}>
               Refresh
@@ -153,7 +153,7 @@ const ServiceCart = () => {
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-secondary">Subtotal</p>
             <p className="mt-1 text-3xl font-black">{formatNgn(cart?.subtotal ?? 0)}</p>
-            <p className="mt-1 text-xs text-secondary">Amount is supplied by the backend and revalidated at checkout.</p>
+            <p className="mt-1 text-xs text-secondary">The amount is securely confirmed again at checkout.</p>
           </div>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:min-w-80">
             {requiresGuestEmail ? (

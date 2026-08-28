@@ -18,7 +18,8 @@ type LandlordNavKey =
   | 'payment-history'
   | 'escrows'
   | 'roi'
-  | 'settings';
+  | 'settings'
+  | 'trust';
 
 interface LandlordPortalLayoutProps {
   active: LandlordNavKey;
@@ -36,6 +37,7 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
   { key: 'inquiries', to: '/dashboard/landlord/inquiries', icon: 'chat_bubble', label: 'Inquiries' },
   { key: 'messages', to: '/messages', icon: 'chat', label: 'Messages' },
   { key: 'notifications', to: '/dashboard/notifications', icon: 'notifications', label: 'Notifications' },
+  { key: 'trust', to: '/dashboard/trust', icon: 'workspace_premium', label: 'Trust & Badge' },
   { key: 'verification', to: '/dashboard/landlord/settings/verification', icon: 'verified_user', label: 'Verification' },
   { key: 'title-verifications', to: '/dashboard/landlord/title-verifications', icon: 'verified', label: 'Title Verification' },
   { key: 'tours', to: '/dashboard/landlord/tours', icon: 'tour', label: 'Tours' },

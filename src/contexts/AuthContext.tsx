@@ -33,6 +33,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const persistSession = (nextUser: User, nextToken: string) => {
+    window.dispatchEvent(new Event('realtiq:session-changed'));
     localStorage.setItem('token', nextToken);
     localStorage.setItem('user', JSON.stringify(nextUser));
     setUser(nextUser);
@@ -40,6 +41,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateUser = useCallback((nextUser: User) => {
+    const previous = parseUser(localStorage.getItem('user'));
+    if (previous?._id !== nextUser._id || previous?.role !== nextUser.role) window.dispatchEvent(new Event('realtiq:session-changed'));
     localStorage.setItem('user', JSON.stringify(nextUser));
     setUser(nextUser);
   }, []);
@@ -84,6 +87,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const logout = () => {
+    window.dispatchEvent(new Event('realtiq:session-changed'));
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
@@ -92,6 +96,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const expire = () => {
+      window.dispatchEvent(new Event('realtiq:session-changed'));
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       setUser(null);

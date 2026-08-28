@@ -31,7 +31,7 @@ const ProjectEditor = () => {
       <main className="mx-auto max-w-6xl p-8 lg:p-12">
         <header className="mb-8">
           <h1 className="text-4xl font-black tracking-tight">{isEdit ? 'Edit Project' : 'Create Project'}</h1>
-          <p className="mt-2 text-sm text-secondary">Owner is assigned by the backend from your authenticated landlord account.</p>
+          <p className="mt-2 text-sm text-secondary">RealTIQ automatically assigns this project to your signed-in landlord account.</p>
         </header>
         {loading ? <LoadingState label="Loading project..." /> : null}
         {error ? <ErrorState message={error} onRetry={() => void execute()} /> : null}

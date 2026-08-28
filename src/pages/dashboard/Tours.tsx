@@ -304,7 +304,7 @@ const Tours = () => {
                   {submitting ? 'Submitting...' : 'Request Tour'}
                 </Button>
                 <p className="text-xs text-secondary mt-2">
-                  Virtual paid tours will redirect to Paystack when the backend returns a payment URL.
+                  Virtual paid tours will redirect to Paystack when the secure payment link is ready.
                 </p>
               </div>
             </form>

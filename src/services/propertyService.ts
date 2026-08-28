@@ -22,6 +22,7 @@ import type {
   TitleDocumentPolicyMode,
   TitleDocumentType,
   TitleVerification,
+  StructuredPropertyFacts,
 } from '../types';
 import { normalizePropertyPaymentTypes } from '../utils/propertyPaymentTypes';
 
@@ -44,6 +45,7 @@ export interface CreatePropertyPayload {
   bedrooms?: number;
   bathrooms?: number;
   squareFeet: number;
+  structuredFacts?: StructuredPropertyFacts;
   description: string;
   amenities?: string[];
   media: MediaItem[];

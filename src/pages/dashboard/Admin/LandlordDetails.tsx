@@ -4,6 +4,7 @@ import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
+import SellerTrustBadge from '../../../components/trust/SellerTrustBadge';
 
 const formatDate = (date?: string) =>
   date
@@ -41,7 +42,7 @@ const LandlordDetails = () => {
               <span className="material-symbols-outlined text-sm">chevron_right</span>
               <span className="text-on-background font-medium">{user?.name ?? 'Profile'}</span>
             </nav>
-            <h1 className="font-headline text-5xl font-extrabold tracking-tighter">{user?.name ?? 'Landlord Profile'}</h1>
+            <h1 className="flex flex-wrap items-center gap-3 font-headline text-5xl font-extrabold tracking-tighter">{user?.name ?? 'Landlord Profile'}{user?.role === 'landlord' ? <SellerTrustBadge badge={user?.trustBadge as import('../../../types/phase45').TrustBadge} /> : null}</h1>
             <p className="text-secondary mt-2 text-lg">User profile and account details</p>
           </div>
         </div>
@@ -62,6 +63,7 @@ const LandlordDetails = () => {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-bold text-xl">{user.name}</h3>
+                    {user.role === 'landlord' ? <SellerTrustBadge badge={user.trustBadge as import('../../../types/phase45').TrustBadge} compact /> : null}
                     {user.isVerified ? (
                       <span className="material-symbols-outlined text-blue-500 text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
                         verified

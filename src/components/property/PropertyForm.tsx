@@ -7,6 +7,9 @@ import { projectService } from '../../services/projectService';
 import type { CreatePropertyPayload, TitleDocumentUploadMetadata } from '../../services/propertyService';
 import type { ListingType, MediaItem, OffPlanDevelopmentStatus, OffPlanPaymentMilestone, ProjectCard, Property, PropertyPaymentType, TitleDocumentPolicyMode, TitleDocumentType } from '../../types';
 import { documentTypeLabel, titleDocumentTypeOptions } from '../../utils/titleVerification';
+import StructuredFactsFields from './StructuredFactsFields';
+import { sellerStructuredFacts, validateStructuredFacts } from '../../features/phase45/structuredFacts';
+import type { StructuredPropertyFacts } from '../../types/phase45';
 import {
   INSTALLMENT_THRESHOLD_NGN,
   normalizePaymentTypesForForm,
@@ -143,6 +146,7 @@ const PropertyForm = ({
   const [bedrooms, setBedrooms] = useState(initialData?.bedrooms?.toString() ?? '1');
   const [bathrooms, setBathrooms] = useState(initialData?.bathrooms?.toString() ?? '1');
   const [squareFeet, setSquareFeet] = useState(initialData?.squareFeet?.toString() ?? '');
+  const [structuredFacts, setStructuredFacts] = useState<StructuredPropertyFacts>(() => sellerStructuredFacts(initialData?.structuredFacts ?? {}));
   const [description, setDescription] = useState(initialData?.description ?? '');
   const [category, setCategory] = useState(initialData?.category ?? 'residential');
   const [completionStage, setCompletionStage] = useState(initialData?.completionStage ?? 'finished');
@@ -268,6 +272,7 @@ const PropertyForm = ({
       location: location.trim(),
       propertyType,
       squareFeet: Number(squareFeet),
+      structuredFacts: sellerStructuredFacts(structuredFacts),
       description: description.trim(),
       amenities,
       media,
@@ -325,7 +330,7 @@ const PropertyForm = ({
       });
       return;
     }
-    const errs = validate(basePayload);
+    const errs = { ...validate(basePayload), ...validateStructuredFacts(basePayload.structuredFacts) };
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
@@ -774,6 +779,8 @@ const PropertyForm = ({
           </div>
         </div>
       ) : null}
+
+      <StructuredFactsFields value={structuredFacts} onChange={setStructuredFacts} errors={errors} sellerMode />
 
       <fieldset
         aria-describedby={errors.paymentTypes ? 'payment-types-error' : 'payment-types-help'}

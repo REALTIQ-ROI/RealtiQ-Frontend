@@ -132,7 +132,7 @@ const ProjectPropertyImports = () => {
       downloadBlob(blob, 'project-property-import-template.csv');
     } catch {
       downloadBlob(new Blob([buildLocalProjectImportCsv()], { type: 'text/csv;charset=utf-8' }), 'project-property-import-template.csv');
-      toast.warning('Backend template was unavailable, so a local CSV template was generated.');
+      toast.warning('The standard template was unavailable, so a compatible CSV template was generated.');
     } finally {
       setTemplateLoading(false);
     }

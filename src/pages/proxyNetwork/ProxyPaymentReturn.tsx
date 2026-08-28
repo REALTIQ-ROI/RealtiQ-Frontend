@@ -30,7 +30,7 @@ const ProxyPaymentReturn = () => {
   );
   const [state, setState] = useState<ReturnState>(
     hasReference
-      ? { loading: true, message: 'Verifying payment with the backend...', error: false }
+      ? { loading: true, message: 'Verifying your payment...', error: false }
       : {
           loading: false,
           error: true,
