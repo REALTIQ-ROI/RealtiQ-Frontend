@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import mapboxgl from 'mapbox-gl';
 import L from 'leaflet';
 import { toast } from 'sonner';
 import PublicLayout from '../../components/layout/PublicLayout';
@@ -17,6 +18,8 @@ import {
 } from '../../services/propertyAnalyticsService';
 import { propertyService } from '../../services/propertyService';
 import type { Property } from '../../types';
+import { configureMapbox, fitCoordinates, MAPBOX_STYLE } from '../../lib/mapbox';
+import { MAP_PROVIDER } from '../../config/maps';
 
 const formatCurrency = (value: number, currency = 'NGN') =>
   new Intl.NumberFormat('en-NG', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value || 0);
@@ -34,8 +37,8 @@ const isMappable = (property: Property) => {
 const distanceScore = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) =>
   Math.abs(a.lat - b.lat) + Math.abs(a.lng - b.lng);
 
-const drawHeatmapCanvas = (map: L.Map, canvas: HTMLCanvasElement, points: PropertyHeatmapResponse['points']) => {
-  const size = map.getSize();
+const drawHeatmapCanvas = (map: mapboxgl.Map | L.Map, canvas: HTMLCanvasElement, points: PropertyHeatmapResponse['points']) => {
+  const size = map instanceof L.Map ? map.getSize() : { x: map.getCanvas().clientWidth, y: map.getCanvas().clientHeight };
   const ratio = window.devicePixelRatio || 1;
   canvas.width = size.x * ratio;
   canvas.height = size.y * ratio;
@@ -49,7 +52,7 @@ const drawHeatmapCanvas = (map: L.Map, canvas: HTMLCanvasElement, points: Proper
 
   const maxWeight = Math.max(...points.map((point) => point.weight), 1);
   points.forEach((point) => {
-    const pixel = map.latLngToContainerPoint([point.lat, point.lng]);
+    const pixel = map instanceof L.Map ? map.latLngToContainerPoint([point.lat, point.lng]) : map.project([point.lng, point.lat]);
     const intensity = Math.max(0.12, Math.min(1, point.weight / maxWeight));
     const radius = 34 + intensity * 58;
     const gradient = context.createRadialGradient(pixel.x, pixel.y, 0, pixel.x, pixel.y, radius);
@@ -73,24 +76,22 @@ const MarketHeatmap = ({
   matchingProperties: Property[];
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const layerRef = useRef<L.LayerGroup | null>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const leafletMapRef = useRef<L.Map | null>(null);
+  const leafletLayerRef = useRef<L.LayerGroup | null>(null);
   const heatCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current, { zoomControl: true }).setView([6.5244, 3.3792], 11);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    }).addTo(map);
-    layerRef.current = L.layerGroup().addTo(map);
+    if (MAP_PROVIDER !== 'mapbox' || !containerRef.current || mapRef.current || !configureMapbox()) return;
+    const map = new mapboxgl.Map({ container: containerRef.current, style: MAPBOX_STYLE, center: [3.3792, 6.5244], zoom: 10 });
+    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
     mapRef.current = map;
     const heatCanvas = document.createElement('canvas');
     heatCanvas.className = 'pointer-events-none absolute inset-0 z-[450] mix-blend-multiply';
     containerRef.current.appendChild(heatCanvas);
     heatCanvasRef.current = heatCanvas;
-    const resize = new ResizeObserver(() => map.invalidateSize());
+    const resize = new ResizeObserver(() => map.resize());
     resize.observe(containerRef.current);
     return () => {
       resize.disconnect();
@@ -98,43 +99,55 @@ const MarketHeatmap = ({
       heatCanvasRef.current = null;
       map.remove();
       mapRef.current = null;
-      layerRef.current = null;
+      markersRef.current = [];
     };
   }, []);
 
   useEffect(() => {
+    if (MAP_PROVIDER !== 'leaflet' || !containerRef.current || leafletMapRef.current) return;
+    const map = L.map(containerRef.current, { zoomControl: true }).setView([6.5244, 3.3792], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
+    leafletLayerRef.current = L.layerGroup().addTo(map); leafletMapRef.current = map;
+    const heatCanvas = document.createElement('canvas'); heatCanvas.className = 'pointer-events-none absolute inset-0 z-[450] mix-blend-multiply'; containerRef.current.appendChild(heatCanvas); heatCanvasRef.current = heatCanvas;
+    const resize = new ResizeObserver(() => map.invalidateSize()); resize.observe(containerRef.current);
+    return () => { resize.disconnect(); heatCanvas.remove(); heatCanvasRef.current = null; map.remove(); leafletMapRef.current = null; leafletLayerRef.current = null; };
+  }, []);
+
+  useEffect(() => {
     const map = mapRef.current;
-    const layer = layerRef.current;
     const heatCanvas = heatCanvasRef.current;
-    if (!map || !layer || !heatCanvas) return;
-    layer.clearLayers();
+    if (MAP_PROVIDER !== 'mapbox' || !map || !heatCanvas) return;
+    markersRef.current.forEach((marker) => marker.remove());
     const propertyPoints = matchingProperties.filter(isMappable);
     const points = data?.points ?? [];
-    const bounds = L.latLngBounds([]);
-
-    propertyPoints.forEach((property) => {
-      L.circleMarker([property.coordinates!.lat, property.coordinates!.lng], {
-        radius: 6,
-        fillColor: '#111827',
-        fillOpacity: 0.95,
-        color: '#ffffff',
-        weight: 2,
-      })
-        .bindPopup(`<strong>${property.title}</strong><br/>${property.location}<br/>${formatCurrency(property.price, property.currency)}`)
-        .addTo(layer);
-      bounds.extend([property.coordinates!.lat, property.coordinates!.lng]);
+    markersRef.current = propertyPoints.map((property) => {
+      const element = document.createElement('button'); element.type = 'button'; element.className = 'h-4 w-4 rounded-full border-2 border-white bg-gray-900 shadow'; element.title = property.title;
+      const popup = new mapboxgl.Popup({ offset: 12 }).setText(`${property.title} · ${property.location} · ${formatCurrency(property.price, property.currency)}`);
+      return new mapboxgl.Marker({ element }).setLngLat([property.coordinates!.lng, property.coordinates!.lat]).setPopup(popup).addTo(map);
     });
-
-    points.forEach((point) => {
-      bounds.extend([point.lat, point.lng]);
-    });
-    if (bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30], maxZoom: propertyPoints.length ? 15 : 13 });
+    const coordinates: Array<[number, number]> = [...propertyPoints.map((property) => [property.coordinates!.lng, property.coordinates!.lat] as [number, number]), ...points.map((point) => [point.lng, point.lat] as [number, number])];
+    fitCoordinates(map, coordinates, { padding: 30, maxZoom: propertyPoints.length ? 15 : 13 });
     const redraw = () => drawHeatmapCanvas(map, heatCanvas, points);
     window.setTimeout(redraw, 0);
-    map.on('moveend zoomend resize', redraw);
+    map.on('moveend', redraw); map.on('resize', redraw);
     return () => {
-      map.off('moveend zoomend resize', redraw);
+      map.off('moveend', redraw); map.off('resize', redraw);
     };
+  }, [data, matchingProperties]);
+
+  useEffect(() => {
+    const map = leafletMapRef.current; const layer = leafletLayerRef.current; const heatCanvas = heatCanvasRef.current;
+    if (MAP_PROVIDER !== 'leaflet' || !map || !layer || !heatCanvas) return;
+    layer.clearLayers(); const propertyPoints = matchingProperties.filter(isMappable); const points = data?.points ?? []; const bounds = L.latLngBounds([]);
+    propertyPoints.forEach((property) => {
+      L.circleMarker([property.coordinates!.lat, property.coordinates!.lng], { radius: 6, fillColor: '#111827', fillOpacity: 0.95, color: '#ffffff', weight: 2 })
+        .bindPopup(`<strong>${property.title}</strong><br/>${property.location}<br/>${formatCurrency(property.price, property.currency)}`).addTo(layer);
+      bounds.extend([property.coordinates!.lat, property.coordinates!.lng]);
+    });
+    points.forEach((point) => bounds.extend([point.lat, point.lng]));
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30], maxZoom: propertyPoints.length ? 15 : 13 });
+    const redraw = () => drawHeatmapCanvas(map, heatCanvas, points); window.setTimeout(redraw, 0); map.on('moveend zoomend resize', redraw);
+    return () => { map.off('moveend zoomend resize', redraw); };
   }, [data, matchingProperties]);
 
   return (

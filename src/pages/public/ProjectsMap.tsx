@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import mapboxgl from 'mapbox-gl';
 import L from 'leaflet';
 import { Link } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
@@ -6,30 +7,41 @@ import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import { projectService, type ProjectMapItem } from '../../services/projectService';
 import { formatPriceRange } from '../../utils/projectFormatters';
+import { MAP_PROVIDER } from '../../config/maps';
+import { configureMapbox, fitCoordinates, MAPBOX_STYLE, nigeriaCenter } from '../../lib/mapbox';
 
 const defaultBounds = { north: 14.5, south: 4.0, east: 14.7, west: 2.6, zoom: 6 };
 
 const ProjectsMap = () => {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const markersRef = useRef<L.LayerGroup | null>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const leafletMapRef = useRef<L.Map | null>(null);
+  const leafletMarkersRef = useRef<L.LayerGroup | null>(null);
   const [projects, setProjects] = useState<ProjectMapItem[]>([]);
   const [selected, setSelected] = useState<ProjectMapItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current).setView([9.082, 8.6753], 6);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
-    const markers = L.layerGroup().addTo(map);
+    if (MAP_PROVIDER !== 'mapbox' || !containerRef.current || mapRef.current || !configureMapbox()) return;
+    const map = new mapboxgl.Map({ container: containerRef.current, style: MAPBOX_STYLE, center: nigeriaCenter, zoom: 5.2 });
+    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
     mapRef.current = map;
-    markersRef.current = markers;
     return () => {
       map.remove();
       mapRef.current = null;
-      markersRef.current = null;
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
     };
+  }, []);
+
+  useEffect(() => {
+    if (MAP_PROVIDER !== 'leaflet' || !containerRef.current || leafletMapRef.current) return;
+    const map = L.map(containerRef.current).setView([9.082, 8.6753], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+    leafletMapRef.current = map; leafletMarkersRef.current = L.layerGroup().addTo(map);
+    return () => { map.remove(); leafletMapRef.current = null; leafletMarkersRef.current = null; };
   }, []);
 
   useEffect(() => {
@@ -42,25 +54,24 @@ const ProjectsMap = () => {
 
   useEffect(() => {
     const map = mapRef.current;
-    const markers = markersRef.current;
-    if (!map || !markers) return;
-    markers.clearLayers();
-    const bounds = L.latLngBounds([]);
-    projects.forEach((project) => {
-      if (!project.coordinates) return;
-      const marker = L.marker([project.coordinates.lat, project.coordinates.lng], {
-        title: project.name,
-        icon: L.divIcon({
-          className: 'realtiq-map-marker',
-          html: `<span>${project.availableUnits ?? 0} units</span>`,
-          iconSize: [86, 32],
-          iconAnchor: [43, 32],
-        }),
-      });
-      marker.on('click', () => setSelected(project));
-      markers.addLayer(marker);
-      bounds.extend([project.coordinates.lat, project.coordinates.lng]);
+    if (MAP_PROVIDER !== 'mapbox' || !map) return;
+    markersRef.current.forEach((marker) => marker.remove());
+    const mapped = projects.filter((project) => project.coordinates);
+    markersRef.current = mapped.map((project) => {
+      const element = document.createElement('button');
+      element.type = 'button'; element.className = 'realtiq-map-marker'; element.title = project.name;
+      const label = document.createElement('span'); label.textContent = `${project.availableUnits ?? 0} units`; element.appendChild(label);
+      element.addEventListener('click', () => setSelected(project));
+      return new mapboxgl.Marker({ element, anchor: 'bottom' }).setLngLat([project.coordinates!.lng, project.coordinates!.lat]).addTo(map);
     });
+    fitCoordinates(map, mapped.map((project) => [project.coordinates!.lng, project.coordinates!.lat]), { maxZoom: 13 });
+  }, [projects]);
+
+  useEffect(() => {
+    const map = leafletMapRef.current; const markers = leafletMarkersRef.current;
+    if (MAP_PROVIDER !== 'leaflet' || !map || !markers) return;
+    markers.clearLayers(); const bounds = L.latLngBounds([]);
+    projects.forEach((project) => { if (!project.coordinates) return; const marker = L.marker([project.coordinates.lat, project.coordinates.lng], { title: project.name, icon: L.divIcon({ className: 'realtiq-map-marker', html: `<span>${project.availableUnits ?? 0} units</span>`, iconSize: [86, 32], iconAnchor: [43, 32] }) }); marker.on('click', () => setSelected(project)); markers.addLayer(marker); bounds.extend([project.coordinates.lat, project.coordinates.lng]); });
     if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
   }, [projects]);
 
