@@ -71,7 +71,7 @@ const VerifyEmail = () => {
           className="text-2xl font-black tracking-tighter text-slate-900 mb-8 block"
           style={{ fontFamily: 'Manrope, sans-serif' }}
         >
-          RealtiQ
+          RealtIQ
         </Link>
 
         {status === 'success' ? (

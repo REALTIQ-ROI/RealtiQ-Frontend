@@ -5,12 +5,12 @@ const teamMembers = [
   {
     name: 'Adaobi Nwosu',
     role: 'Chief Executive Officer',
-    bio: 'With 15 years in Nigerian luxury real estate, Adaobi founded RealtiQ to bring institutional-grade curation to the premium property market.',
+    bio: 'With 15 years in Nigerian luxury real estate, Adaobi founded RealtIQ to bring institutional-grade curation to the premium property market.',
   },
   {
     name: 'Emeka Okonkwo',
     role: 'Head of Architecture & Curation',
-    bio: 'Former principal architect at a top Lagos firm, Emeka leads our property vetting process — ensuring every listing meets RealtiQ\'s architectural and quality standards.',
+    bio: 'Former principal architect at a top Lagos firm, Emeka leads our property vetting process — ensuring every listing meets RealtIQ\'s architectural and quality standards.',
   },
   {
     name: 'Fatima Aliyu',
@@ -23,7 +23,7 @@ const values = [
   {
     icon: 'verified',
     title: 'Rigorous Curation',
-    description: 'Every property on RealtiQ passes a multi-stage architectural and legal review before listing. We list fewer properties — and mean it.',
+    description: 'Every property on RealtIQ passes a multi-stage architectural and legal review before listing. We list fewer properties — and mean it.',
   },
   {
     icon: 'balance',
@@ -43,10 +43,10 @@ const values = [
 ];
 
 const milestones = [
-  { year: '2019', event: 'RealtiQ founded in Lagos with a mission to redefine luxury real estate curation in Nigeria.' },
+  { year: '2019', event: 'RealtIQ founded in Lagos with a mission to redefine luxury real estate curation in Nigeria.' },
   { year: '2020', event: 'Launched our proprietary property vetting framework, reviewed by leading architects and legal experts.' },
   { year: '2022', event: 'Expanded to cover Abuja and Port Harcourt markets; surpassed ₦100B in total property listings.' },
-  { year: '2024', event: 'Introduced the RealtiQ Digital Deed — a blockchain-anchored title verification system.' },
+  { year: '2024', event: 'Introduced the RealtIQ Digital Deed — a blockchain-anchored title verification system.' },
   { year: '2026', event: 'Over 500 successful transactions, 200+ verified landlords, and Nigeria\'s most trusted premium property platform.' },
 ];
 
@@ -60,7 +60,7 @@ const About = () => {
           Real estate elevated to an art form.
         </h1>
         <p className="text-xl text-on-surface-variant leading-relaxed max-w-2xl">
-          RealtiQ was built on a simple but radical belief: that finding your next home or investment property should feel
+          RealtIQ was built on a simple but radical belief: that finding your next home or investment property should feel
           as considered and premium as the properties themselves. We curate, verify, and champion Nigeria's finest
           residential and investment-grade real estate.
         </p>
@@ -104,7 +104,7 @@ const About = () => {
       <section className="bg-surface-container-low/50 py-16">
         <div className="max-w-7xl mx-auto px-8">
           <h2 className="text-3xl font-bold mb-2">Meet the Team</h2>
-          <p className="text-on-surface-variant mb-10 max-w-xl">The people behind RealtiQ's commitment to excellence.</p>
+          <p className="text-on-surface-variant mb-10 max-w-xl">The people behind RealtIQ's commitment to excellence.</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {teamMembers.map((member) => (
               <div key={member.name} className="bg-surface-container-lowest rounded-2xl p-8 border border-outline-variant/20">

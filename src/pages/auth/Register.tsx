@@ -70,7 +70,7 @@ const Register = ({ purchaseMode = false }: RegisterProps) => {
           className="text-2xl font-black tracking-tighter text-slate-900"
           style={{ fontFamily: 'Manrope, sans-serif' }}
         >
-          RealtiQ
+          RealtIQ
         </div>
         <Link
           to="/properties"
@@ -125,7 +125,7 @@ const Register = ({ purchaseMode = false }: RegisterProps) => {
               className="md:hidden text-2xl font-black tracking-tighter text-slate-900 mb-12 text-center"
               style={{ fontFamily: 'Manrope, sans-serif' }}
             >
-              RealtiQ
+              RealtIQ
             </div>
 
             <div className="mb-8 text-center md:text-left">

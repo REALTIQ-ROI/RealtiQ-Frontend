@@ -59,7 +59,7 @@ const AdminWallet = () => {
       setSummary(wallet);
       setTransactions(ledger);
     } catch (raw) {
-      setError(raw instanceof Error ? raw.message : 'Unable to load the RealtiQ platform ledger.');
+      setError(raw instanceof Error ? raw.message : 'Unable to load the RealtIQ platform ledger.');
     } finally {
       setLoading(false);
     }
@@ -106,7 +106,7 @@ const AdminWallet = () => {
     <AdminLayout>
       <main className="mx-auto max-w-[1500px] px-4 py-8 sm:px-8 lg:px-12">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-secondary">RealtiQ platform ledger</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-secondary">RealtIQ platform ledger</p>
           <h1 className="mt-1 text-3xl font-extrabold">Platform revenue</h1>
           <p className="mt-2 text-sm text-secondary">Internal accounting records, not a Paystack bank balance. Credits, refunds, and reversals remain as separate audit entries.</p>
         </div>
@@ -170,7 +170,7 @@ const AdminWallet = () => {
                         <td className="p-3 font-bold">{formatNaira(transaction.amount)}</td>
                         <td className="p-3 capitalize">{transaction.status}</td>
                         <td className="p-3 font-mono text-xs">{transaction.paymentReference || '—'}</td>
-                        <td className="p-3"><p>{transaction.property?.title || (transaction.inspectionRequest ? `Property Agent job · ${transaction.inspectionRequest.status || 'job'}` : '—')}</p><p className="text-xs text-secondary">{transaction.document?.title || transaction.property?.publicReference || (transaction.inspectionRequest?.agreedPrice ? formatNaira(transaction.inspectionRequest.agreedPrice) : '')}</p>{pricing ? <dl className="mt-2 grid gap-1 text-xs text-secondary"><div><dt className="inline font-bold">Agreed:</dt> <dd className="inline">{formatNaira(pricing.agreedPrice ?? 0)}</dd></div><div><dt className="inline font-bold">Buyer fee:</dt> <dd className="inline">{formatNaira(pricing.buyerFeeAmount)}</dd></div><div><dt className="inline font-bold">Buyer total:</dt> <dd className="inline">{formatNaira(pricing.buyerTotalAmount ?? 0)}</dd></div><div><dt className="inline font-bold">Inspector commission:</dt> <dd className="inline">{formatNaira(pricing.inspectorCommissionAmount ?? 0)}</dd></div><div><dt className="inline font-bold">Inspector payout:</dt> <dd className="inline">{formatNaira(pricing.inspectorPayoutAmount ?? 0)}</dd></div><div><dt className="inline font-bold">RealtiQ revenue:</dt> <dd className="inline">{formatNaira(pricing.totalPlatformRevenue ?? 0)}</dd></div><div><dt className="inline font-bold">Escrow:</dt> <dd className="inline capitalize">{transaction.serviceEscrow?.status || 'unknown'}</dd></div></dl> : null}</td>
+                        <td className="p-3"><p>{transaction.property?.title || (transaction.inspectionRequest ? `Property Agent job · ${transaction.inspectionRequest.status || 'job'}` : '—')}</p><p className="text-xs text-secondary">{transaction.document?.title || transaction.property?.publicReference || (transaction.inspectionRequest?.agreedPrice ? formatNaira(transaction.inspectionRequest.agreedPrice) : '')}</p>{pricing ? <dl className="mt-2 grid gap-1 text-xs text-secondary"><div><dt className="inline font-bold">Agreed:</dt> <dd className="inline">{formatNaira(pricing.agreedPrice ?? 0)}</dd></div><div><dt className="inline font-bold">Buyer fee:</dt> <dd className="inline">{formatNaira(pricing.buyerFeeAmount)}</dd></div><div><dt className="inline font-bold">Buyer total:</dt> <dd className="inline">{formatNaira(pricing.buyerTotalAmount ?? 0)}</dd></div><div><dt className="inline font-bold">Inspector commission:</dt> <dd className="inline">{formatNaira(pricing.inspectorCommissionAmount ?? 0)}</dd></div><div><dt className="inline font-bold">Inspector payout:</dt> <dd className="inline">{formatNaira(pricing.inspectorPayoutAmount ?? 0)}</dd></div><div><dt className="inline font-bold">RealtIQ revenue:</dt> <dd className="inline">{formatNaira(pricing.totalPlatformRevenue ?? 0)}</dd></div><div><dt className="inline font-bold">Escrow:</dt> <dd className="inline capitalize">{transaction.serviceEscrow?.status || 'unknown'}</dd></div></dl> : null}</td>
                         <td className="p-3">{transaction.user?.name || 'Guest'}{transaction.provider ? <p className="text-xs text-secondary">Inspector: {transaction.provider.name}</p> : null}</td>
                         <td className="p-3">{transaction.description || '—'}</td>
                       </tr>

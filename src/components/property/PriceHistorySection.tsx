@@ -59,7 +59,7 @@ const PriceHistorySection = ({ propertyId }: { propertyId: string }) => {
     <section className="space-y-5" aria-label="Price history">
       <div>
         <h2 className="text-2xl font-bold">Price History</h2>
-        <p className="mt-1 text-sm text-secondary">Public listing-price changes recorded by RealtiQ.</p>
+        <p className="mt-1 text-sm text-secondary">Public listing-price changes recorded by RealtIQ.</p>
       </div>
 
       {history ? (

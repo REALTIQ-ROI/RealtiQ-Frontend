@@ -122,6 +122,7 @@ import ValuationPage from '../pages/dashboard/ValuationPage';
 import TrustAccount from '../pages/dashboard/TrustAccount';
 import TrustAppeals from '../pages/dashboard/Admin/TrustAppeals';
 import MessageModeration from '../pages/dashboard/Admin/MessageModeration';
+import NotFound from '../pages/public/NotFound';
 
 const ScrollToTop = () => {
   const { pathname, search } = useLocation();
@@ -319,7 +320,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/escrow-disputes/:disputeId" element={<AdminEscrowDisputeDetails />} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   );

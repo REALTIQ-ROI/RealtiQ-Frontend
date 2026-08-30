@@ -46,7 +46,7 @@ describe('PublicTitleDocuments', () => {
     });
     render(<MemoryRouter><PublicTitleDocuments propertyId="prop1" /></MemoryRouter>);
     expect(await screen.findByRole('button', { name: 'Open protected viewer' })).toBeInTheDocument();
-    expect(screen.getByText(/₦5,000 set by RealtiQ/i)).toBeInTheDocument();
+    expect(screen.getByText(/₦5,000 set by RealtIQ/i)).toBeInTheDocument();
     expect(titleDocumentService.initializePayment).not.toHaveBeenCalled();
     expect(titleDocumentService.openViewer).not.toHaveBeenCalled();
   });

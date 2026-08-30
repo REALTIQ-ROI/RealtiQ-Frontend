@@ -393,7 +393,7 @@ const LandlordMyProperties = () => {
       </main>
 
       <footer className="mt-auto p-8 text-center">
-        <p className="text-[10px] text-secondary font-medium uppercase tracking-[0.2em]">RealtiQ © 2026</p>
+        <p className="text-[10px] text-secondary font-medium uppercase tracking-[0.2em]">RealtIQ © 2026</p>
       </footer>
 
       <Link

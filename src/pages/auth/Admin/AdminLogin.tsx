@@ -1,4 +1,4 @@
-﻿import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 
@@ -38,7 +38,7 @@ const AdminLogin = () => {
                 architecture
               </span>
             </div>
-            <span className="font-headline text-3xl font-extrabold tracking-tighter text-on-primary">RealtiQ</span>
+            <span className="font-headline text-3xl font-extrabold tracking-tighter text-on-primary">RealtIQ</span>
           </div>
 
           <div className="max-w-xl">
@@ -81,7 +81,7 @@ const AdminLogin = () => {
         <div className="w-full max-w-md space-y-12">
           <div className="space-y-4">
             <div className="lg:hidden flex items-center gap-2 mb-8">
-              <span className="font-headline text-3xl font-extrabold tracking-tighter text-primary">RealtiQ</span>
+              <span className="font-headline text-3xl font-extrabold tracking-tighter text-primary">RealtIQ</span>
             </div>
             <h2 className="font-headline text-4xl font-bold tracking-tight text-on-surface">Login to Admin Console</h2>
             <p className="text-secondary font-body">Welcome back. Enter your credentials to manage the portfolio.</p>

@@ -35,7 +35,7 @@ const CreateProxyInspection = () => {
     const controller = new AbortController();
     proxyNetworkService.getPublicInspector(inspectorId, controller.signal)
       .then((profile) => {
-        setInspectorName(typeof profile.user === 'string' ? 'RealtiQ Verified Property Agent' : profile.user.name);
+        setInspectorName(typeof profile.user === 'string' ? 'RealtIQ Verified Property Agent' : profile.user.name);
         setInspectorLookupError('');
       })
       .catch(() => setInspectorLookupError('The selected Property Agent could not be loaded. Choose an agent again from the directory.'));
@@ -104,7 +104,7 @@ const CreateProxyInspection = () => {
   };
 
   const agentDirectoryPath = `/proxy-inspectors${propertyId ? `?propertyId=${encodeURIComponent(propertyId)}` : ''}`;
-  const agentDisplayName = inspectorName || 'RealtiQ Verified Property Agent';
+  const agentDisplayName = inspectorName || 'RealtIQ Verified Property Agent';
 
   return (
     <BuyerPortalLayout pageTitle="Request a Property Agent Inspection" pageSubtitle="Recorded evidence and an observational condition report from an independent professional.">
@@ -134,7 +134,7 @@ const CreateProxyInspection = () => {
                 <dd>{requirements || 'None'}</dd>
               </div>
             </dl>
-            <p className="text-sm text-secondary">The selected professional is an independent third party, not a RealtiQ employee. Payment is protected after both parties independently confirm the same price.</p>
+            <p className="text-sm text-secondary">The selected professional is an independent third party, not a RealtIQ employee. Payment is protected after both parties independently confirm the same price.</p>
           </>
         ) : (
           <>

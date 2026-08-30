@@ -58,7 +58,7 @@ const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: La
       {menuOpen ? <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMenuOpen(false)} /> : null}
       <aside className={`h-screen w-64 fixed left-0 top-0 flex flex-col bg-slate-50 border-r border-slate-200 z-50 overflow-y-auto overscroll-contain transition-transform lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6">
-          <h1 className="text-xl font-black text-slate-900 tracking-tight">RealtiQ</h1>
+          <h1 className="text-xl font-black text-slate-900 tracking-tight">RealtIQ</h1>
           <p className="text-xs text-secondary font-medium uppercase tracking-widest mt-1">Landlord Portal</p>
         </div>
 

@@ -439,7 +439,7 @@ export interface User {
   phone?: string;
   emailVerified?: boolean;
   landlordVerified?: boolean;
-  trustBadge?: string;
+  trustBadge?: import('./phase45').TrustBadge;
   favourites?: string[];
   ratingAverage?: number;
   ratingCount?: number;

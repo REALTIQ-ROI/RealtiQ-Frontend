@@ -61,7 +61,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       {menuOpen ? <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMenuOpen(false)} /> : null}
       <aside className={`h-screen w-64 fixed left-0 top-0 bg-slate-50 flex flex-col p-4 z-50 overflow-y-auto overscroll-contain transition-transform lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="mb-10 px-4">
-          <h1 className="text-2xl font-bold tracking-tighter text-slate-900 font-headline">RealtiQ</h1>
+          <h1 className="text-2xl font-bold tracking-tighter text-slate-900 font-headline">RealtIQ</h1>
           <p className="text-xs text-secondary font-medium uppercase tracking-widest mt-1">Admin Console</p>
         </div>
 

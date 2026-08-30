@@ -220,7 +220,7 @@ const PaymentDetails = () => {
           <div className="flex justify-between items-start mb-10 relative">
             <div>
               <div className="text-2xl font-black mb-1">
-                RealtiQ <span className="text-secondary font-medium">| Payments</span>
+                RealtIQ <span className="text-secondary font-medium">| Payments</span>
               </div>
               <p className="text-secondary text-sm">
                 Reference: <span className="text-on-surface font-mono font-bold tracking-tight">{payment.reference}</span>

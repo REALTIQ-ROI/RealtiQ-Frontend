@@ -98,7 +98,7 @@ const VirtualTourManagement = ({ propertyId, summary, providerOverride, onUpdate
     </div>
     <div className="mt-6 rounded-xl border border-outline-variant/10 p-5">
       <h3 className="font-black">Property provider preference</h3>
-      <p className="mb-3 text-xs text-secondary">This preference does not configure a tour. RealTIQ selects the best available tour option.</p>
+      <p className="mb-3 text-xs text-secondary">This preference does not configure a tour. RealtIQ selects the best available tour option.</p>
       <div className="flex flex-wrap gap-2"><select aria-label="Property virtual tour provider preference" value={override} onChange={(event) => setOverride(event.target.value as VirtualTourProvider | '')} className="rounded-lg border border-outline-variant/20 px-3 py-2"><option value="">Inherit Project / global default</option><option value="realsee" disabled={!canChoose('realsee')}>Realsee</option><option value="matterport" disabled={!canChoose('matterport')}>Matterport</option></select><Button type="button" loading={saving === 'override'} onClick={() => void saveOverride()}>Save preference</Button></div>
     </div>
   </section>;

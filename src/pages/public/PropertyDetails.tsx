@@ -509,7 +509,7 @@ const PropertyDetails = () => {
   }
 
   const currency = property.currency ?? 'NGN';
-  const ownerName = owner?.name ?? 'RealtiQ Agent';
+  const ownerName = owner?.name ?? 'RealtIQ Agent';
   const ownerEmail = owner?.email ?? 'support@realtiq.com';
   const nearbyMapProperties = nearby
     .map((item): Property | null => {
@@ -1426,7 +1426,7 @@ const PropertyDetails = () => {
                       navigate(path);
                     }}
                   >
-                    Hire a RealtiQ Verified Property Agent
+                    Hire a RealtIQ Verified Property Agent
                   </Button>
                 )
               ) : null}

@@ -21,7 +21,7 @@ const Footer = () => {
     setMessage(null);
     try {
       const response = await newsletterService.subscribe(trimmedEmail);
-      setMessage({ type: 'success', text: response.message || 'You are subscribed to the RealtiQ newsletter.' });
+      setMessage({ type: 'success', text: response.message || 'You are subscribed to the RealtIQ newsletter.' });
       setEmail('');
     } catch (err) {
       setMessage({
@@ -37,7 +37,7 @@ const Footer = () => {
     <footer className="mt-12 w-full bg-slate-900 px-4 py-10 text-slate-100 sm:mt-20 sm:px-8 sm:py-16">
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 sm:grid-cols-2 md:grid-cols-4 md:gap-12">
         <div>
-          <div className="font-manrope font-black text-2xl mb-4">RealtiQ</div>
+          <div className="font-manrope font-black text-2xl mb-4">RealtIQ</div>
           <p className="text-slate-400 text-sm leading-relaxed">
             Excellence in real estate through intentional curation and architectural advocacy.
           </p>
@@ -91,7 +91,7 @@ const Footer = () => {
       </div>
 
       <div className="mx-auto mt-10 flex max-w-7xl flex-col items-start justify-between gap-3 border-t border-slate-800 pt-6 text-xs uppercase tracking-wide sm:flex-row sm:items-center">
-        <p className="text-slate-400">© 2026 RealtiQ. All rights reserved.</p>
+        <p className="text-slate-400">© 2026 RealtIQ. All rights reserved.</p>
         <p className="text-slate-200 font-bold">Design of Excellence</p>
       </div>
     </footer>

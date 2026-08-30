@@ -1,10 +1,10 @@
-# RealtiQ Frontend — Project Analysis
+# RealtIQ Frontend — Project Analysis
 
 ## Overview
 
 | Property | Value |
 |---|---|
-| **Name** | RealtiQ Frontend |
+| **Name** | RealtIQ Frontend |
 | **Type** | Real Estate Platform (Single Page Application) |
 | **Framework** | React 19 |
 | **Language** | TypeScript ~5.9.3 |
@@ -12,7 +12,7 @@
 | **Version** | 0.0.0 |
 | **Deployment** | Vercel |
 
-RealtiQ is a multi-role real estate platform where **Buyers** browse and purchase properties, **Landlords** list and manage their properties, and **Admins** oversee the entire platform.
+RealtIQ is a multi-role real estate platform where **Buyers** browse and purchase properties, **Landlords** list and manage their properties, and **Admins** oversee the entire platform.
 
 ---
 
@@ -144,7 +144,7 @@ realtiq-frontend/
 | `/` | Home | Landing page with hero, featured listings, and CTAs |
 | `/properties` | Listings | Browsable property listings with search and filters |
 | `/properties/:id` | PropertyDetails | Detailed view of a single property |
-| `/about` | About | About RealtiQ page |
+| `/about` | About | About RealtIQ page |
 | `/contact` | Contact | Contact page |
 | `/about-contact` | AboutContact | Combined about and contact page |
 | `/inquiry` | Inquiry | Property inquiry submission form |

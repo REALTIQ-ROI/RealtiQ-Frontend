@@ -69,7 +69,7 @@ const AdminEscrowDisputes = () => {
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-secondary">Escrow Management</p>
             <h1 className="mt-2 text-3xl font-extrabold text-primary">Escrow Disputes</h1>
-            <p className="mt-2 text-sm text-secondary">Review participant disputes and submit authorized RealTIQ resolutions.</p>
+            <p className="mt-2 text-sm text-secondary">Review participant disputes and submit authorized RealtIQ resolutions.</p>
           </div>
           <button type="button" onClick={() => void load()} className="rounded-lg border border-primary px-4 py-2 text-sm font-bold text-primary">Refresh</button>
         </header>

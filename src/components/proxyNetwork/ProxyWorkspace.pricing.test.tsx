@@ -80,7 +80,7 @@ describe('ProxyWorkspace pricing display', () => {
     expect(screen.getAllByText('₦40,000').length).toBeGreaterThan(0);
     expect(screen.getAllByText('₦4,000').length).toBeGreaterThan(0);
     expect(screen.getAllByText('₦44,000').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/RealtiQ adds a 10% Platform & Protection Fee/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/RealtIQ adds a 10% Platform & Protection Fee/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Platform & Protection Fee to your agreed inspection price/i)[0]).toHaveTextContent('10%');
   });
 
@@ -93,8 +93,8 @@ describe('ProxyWorkspace pricing display', () => {
 
     expect(screen.getAllByText('₦36,000').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/This supports client acquisition, secure payment collection, task coordination/i)[0]).toHaveTextContent('10%');
-    expect(screen.getAllByText(/RealtiQ deducts a/i)[0]).toHaveTextContent('10%');
-    expect(screen.getAllByText(/Payment processing charges are covered by RealtiQ/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/RealtIQ deducts a/i)[0]).toHaveTextContent('10%');
+    expect(screen.getAllByText(/Payment processing charges are covered by RealtIQ/i).length).toBeGreaterThan(0);
   });
 
   it('starts checkout from a fresh initialization redirect without forcing a workspace reload loop', async () => {

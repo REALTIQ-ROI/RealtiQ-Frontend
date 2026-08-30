@@ -21,10 +21,10 @@ export const titleDocumentTypeOptions: Array<{ value: TitleDocumentType; label: 
 export const allowedTitleMatchMimeTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
 export const titleVerificationDisclaimer =
-  'This record confirms RealtiQ legal review and document integrity. It is not independent government proof of ownership.';
+  'This record confirms RealtIQ legal review and document integrity. It is not independent government proof of ownership.';
 
 export const titleStatusLabel = (status?: TitleVerificationStatus | PropertyTitleVerificationStatus | string): string => {
-  if (status === 'published') return 'Title Published in RealtiQ Registry';
+  if (status === 'published') return 'Title Published in RealtIQ Registry';
   if (status === 'approved') return 'Title Legally Reviewed';
   if (status === 'revoked') return 'Title Verification Revoked';
   if (status === 'superseded') return 'Title Verification Superseded';

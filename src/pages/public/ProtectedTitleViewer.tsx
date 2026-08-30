@@ -72,7 +72,7 @@ const ProtectedTitleViewer = () => {
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-secondary">Short-lived protected session</p>
-            <h1 className="mt-1 text-2xl font-extrabold">RealtiQ title-document viewer</h1>
+            <h1 className="mt-1 text-2xl font-extrabold">RealtIQ title-document viewer</h1>
             {expiresAt ? <p className="mt-1 text-xs text-secondary">Session expires {new Date(expiresAt).toLocaleString()}.</p> : null}
           </div>
           <Link to={propertyPath} className="rounded-lg bg-primary px-5 py-3 text-sm font-bold text-on-primary">Close viewer</Link>

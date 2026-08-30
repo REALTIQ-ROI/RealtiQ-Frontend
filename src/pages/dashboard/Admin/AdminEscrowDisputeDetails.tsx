@@ -26,7 +26,7 @@ const actionCopy: Record<EscrowDisputeAction, { title: string; button: string; c
   release_seller: {
     title: 'Release Funds to Seller/Landlord',
     button: 'Release Funds to Seller/Landlord',
-    consequence: 'Starts the seller payout only when RealTIQ eligibility, milestone, and payout account requirements are satisfied.',
+    consequence: 'Starts the seller payout only when RealtIQ eligibility, milestone, and payout account requirements are satisfied.',
   },
   cancel_escrow: {
     title: 'Cancel Escrow',
@@ -108,7 +108,7 @@ const AdminEscrowDisputeDetails = () => {
       const response = result.data;
       setReconciliation(Boolean(response.reconciliationRequired));
       if (response.reconciliationRequired) {
-        setNotice('Provider confirmation is pending. Do not retry this financial action until RealtiQ receives confirmation.');
+        setNotice('Provider confirmation is pending. Do not retry this financial action until RealtIQ receives confirmation.');
       } else if (result.status === 202 || response.pending) {
         setNotice(
           action === 'refund_buyer'
@@ -118,7 +118,7 @@ const AdminEscrowDisputeDetails = () => {
               : 'Cancellation is pending confirmation of the buyer refund.',
         );
       } else {
-        setNotice(action === 'reopen' ? 'Escrow reopened using its preserved pre-dispute state.' : 'Resolution submitted and confirmed by RealTIQ.');
+        setNotice(action === 'reopen' ? 'Escrow reopened using its preserved pre-dispute state.' : 'Resolution submitted and confirmed by RealtIQ.');
       }
       toast.success('Dispute resolution submitted.');
       await execute();
@@ -166,7 +166,7 @@ const AdminEscrowDisputeDetails = () => {
 
         {notice ? <p role="status" className="rounded-xl bg-blue-50 p-4 text-sm font-semibold text-blue-900">{notice}</p> : null}
         {actionError ? <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-900">{actionError}</p> : null}
-        {reconciliation || financialProcessing ? <p role="status" className="rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-900">Provider confirmation is pending. Do not retry this financial action until RealtiQ receives confirmation.</p> : null}
+        {reconciliation || financialProcessing ? <p role="status" className="rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-900">Provider confirmation is pending. Do not retry this financial action until RealtIQ receives confirmation.</p> : null}
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
           <div className="space-y-6">

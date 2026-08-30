@@ -9,7 +9,7 @@ describe('TitleVerificationBadge', () => {
       <MemoryRouter>
         <TitleVerificationBadge
           context="public"
-          summary={{ status: 'published', publicVerificationId: 'RTQ-TV-2026-000001', badgeLabel: 'Title Published in RealtiQ Registry' }}
+          summary={{ status: 'published', publicVerificationId: 'RTQ-TV-2026-000001', badgeLabel: 'Title Published in RealtIQ Registry' }}
         />
       </MemoryRouter>,
     );

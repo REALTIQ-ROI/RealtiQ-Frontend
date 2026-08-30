@@ -78,7 +78,7 @@ const ConstructionUpdateManager = ({ property, onPropertyUpdated }: { property: 
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-xl font-black">Construction updates</h2>
-          <p className="text-sm text-secondary">Post updates without overwriting history. RealTIQ updates the current progress from each accepted entry.</p>
+          <p className="text-sm text-secondary">Post updates without overwriting history. RealtIQ updates the current progress from each accepted entry.</p>
         </div>
         <Button type="button" variant="secondary" disabled={completing} onClick={() => void completeOffPlan()}>
           {completing ? 'Completing...' : 'Complete Off-Plan'}

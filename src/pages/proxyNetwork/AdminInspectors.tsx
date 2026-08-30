@@ -492,7 +492,7 @@ export const AdminInspectorDetailPage = () => {
                     {formatLabel(profile.verificationStatus)}
                   </p>
                   <h1 className="mt-2 text-3xl font-black">
-                    {user?.name || "RealtiQ Verified Property Agent"}
+                    {user?.name || "RealtIQ Verified Property Agent"}
                   </h1>
                   <p className="mt-2 text-secondary">
                     {user?.email} · {user?.phone}
@@ -730,7 +730,7 @@ export const AdminInspectorDetailPage = () => {
                 </p>
               )}
               <p className="mt-3 text-xs text-secondary">
-                An uploaded credential remains unverified unless its own RealTIQ
+                An uploaded credential remains unverified unless its own RealtIQ
                 status is “verified”.
               </p>
             </section>
@@ -810,7 +810,7 @@ export const AdminInspectorDetailPage = () => {
                   setTextAction({
                     title: "Reactivate Property Agent",
                     description:
-                      "Reactivation returns this profile to an approved and searchable state after RealTIQ confirms the action.",
+                      "Reactivation returns this profile to an approved and searchable state after RealtIQ confirms the action.",
                     label: "Reactivation notes",
                     confirmLabel: "Reactivate Property Agent",
                     requiredMessage: "Reactivation notes are required.",
@@ -833,7 +833,7 @@ export const AdminInspectorDetailPage = () => {
               </button>
             ) : null}
             <p className="mt-4 text-xs text-secondary">
-              Badges and public visibility update only after RealTIQ
+              Badges and public visibility update only after RealtIQ
               confirms the action.
             </p>
           </aside>

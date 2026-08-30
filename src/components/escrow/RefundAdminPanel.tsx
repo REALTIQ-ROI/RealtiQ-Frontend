@@ -54,7 +54,7 @@ const RefundAdminPanel = ({
     <section className="rounded-xl bg-white p-5 sm:p-7" aria-labelledby="admin-refund-title">
       <h2 id="admin-refund-title" className="text-xl font-bold">Admin refund processing</h2>
       <p className="mt-2 text-sm text-secondary">
-        Refunds return through the original Paystack transaction first. Buyer bank details are requested only when RealTIQ indicates they are required.
+        Refunds return through the original Paystack transaction first. Buyer bank details are requested only when RealtIQ indicates they are required.
       </p>
       {attention ? <p role="alert" className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{attention}</p> : null}
       {escrow.refundStatus === 'needs_account_details' ? (
@@ -62,8 +62,8 @@ const RefundAdminPanel = ({
           Open refund detail request
         </a>
       ) : null}
-      {processing ? <p role="status" className="mt-4 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">Provider confirmation is pending. Do not retry this financial action until RealtiQ receives confirmation.</p> : null}
-      {terminal ? <p role="status" className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">RealTIQ has confirmed that the buyer refund is complete.</p> : null}
+      {processing ? <p role="status" className="mt-4 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">Provider confirmation is pending. Do not retry this financial action until RealtIQ receives confirmation.</p> : null}
+      {terminal ? <p role="status" className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">RealtIQ has confirmed that the buyer refund is complete.</p> : null}
       {!processing && !terminal ? (
         <button type="button" disabled={pending} onClick={() => void process()} className="mt-4 rounded-lg bg-red-700 px-4 py-3 font-bold text-white disabled:opacity-50">
           {pending ? 'Submitting...' : escrow.refundStatus === 'failed' ? 'Retry refund' : 'Process refund'}

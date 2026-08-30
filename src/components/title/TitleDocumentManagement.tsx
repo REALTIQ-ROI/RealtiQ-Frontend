@@ -176,7 +176,7 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
               <option value="paid_view_once">Paid — one view</option>
               <option value="paid_view_multiple">Paid — multiple views</option>
             </select>
-            {mode !== 'private' ? <p className="mt-2 text-xs text-secondary">₦5,000 set by RealtiQ. Price is not sent by this form.</p> : null}
+            {mode !== 'private' ? <p className="mt-2 text-xs text-secondary">₦5,000 set by RealtIQ. Price is not sent by this form.</p> : null}
           </div>
           <div className="md:col-span-2">
             <Button type="submit" disabled={busyId === 'upload'}>{busyId === 'upload' ? 'Submitting…' : 'Submit new vault record'}</Button>

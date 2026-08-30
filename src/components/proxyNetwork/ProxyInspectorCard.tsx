@@ -9,7 +9,7 @@ const ProxyInspectorCard = ({ inspector, propertyId }: { inspector: PublicInspec
       <div className="flex gap-4">
         {inspector.profilePhoto?.url ? <img src={inspector.profilePhoto.url} alt={`${name}'s profile`} className="h-16 w-16 rounded-full object-cover" /> : <div aria-hidden="true" className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-container-high text-xl font-black">{name[0]}</div>}
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-widest text-emerald-700">RealtiQ Verified Property Agent</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-emerald-700">RealtIQ Verified Property Agent</p>
           <h2 className="truncate text-xl font-extrabold">{name}</h2>
           <p className="text-sm text-secondary">{inspector.professionalTitle || formatLabel(inspector.professionalType)}</p>
         </div>

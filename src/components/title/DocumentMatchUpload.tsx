@@ -68,7 +68,7 @@ const DocumentMatchUpload = ({ onVerify, registeredHash }: DocumentMatchUploadPr
     <section className="rounded-xl border border-outline-variant/10 bg-white p-5">
       <div className="mb-4">
         <h2 className="text-lg font-bold">Document Match Check</h2>
-        <p className="mt-1 text-sm text-secondary">Compare one file against the SHA-256 hash RealtiQ recorded for this title verification.</p>
+        <p className="mt-1 text-sm text-secondary">Compare one file against the SHA-256 hash RealtIQ recorded for this title verification.</p>
       </div>
       <form className="space-y-4" onSubmit={(event) => void submit(event)}>
         <label className="block rounded-xl border border-dashed border-outline-variant/40 bg-surface-container-lowest p-5 text-sm">

@@ -104,7 +104,7 @@ const BuyerPricingBreakdown = ({ pricing, estimated = false }: { pricing: Normal
       </div>
     </dl>
     <p className="mt-3 text-xs text-secondary">
-      RealtiQ adds a {percentLabel(pricing.buyerFeePercentage)} Platform & Protection Fee to your agreed inspection price. This supports secure payment processing, service coordination, dispute assistance and refund protection. Your payment is held securely, and the inspector is only paid after the service is completed and approved.
+      RealtIQ adds a {percentLabel(pricing.buyerFeePercentage)} Platform & Protection Fee to your agreed inspection price. This supports secure payment processing, service coordination, dispute assistance and refund protection. Your payment is held securely, and the inspector is only paid after the service is completed and approved.
     </p>
   </div>
 );
@@ -121,7 +121,7 @@ const InspectorPricingBreakdown = ({ pricing, estimated = false }: { pricing: No
         <dd className="font-black">{formatNgn(pricing.agreedPrice)}</dd>
       </div>
       <div>
-        <dt className="text-xs font-bold text-secondary">RealtiQ commission ({percentLabel(pricing.inspectorCommissionPercentage)})<FeeInfo label="Supports client acquisition, payment collection, task coordination, dispute support, and secure payout processing." /></dt>
+        <dt className="text-xs font-bold text-secondary">RealtIQ commission ({percentLabel(pricing.inspectorCommissionPercentage)})<FeeInfo label="Supports client acquisition, payment collection, task coordination, dispute support, and secure payout processing." /></dt>
         <dd className="font-black">{formatNgn(pricing.inspectorCommissionAmount)}</dd>
       </div>
       <div>
@@ -130,7 +130,7 @@ const InspectorPricingBreakdown = ({ pricing, estimated = false }: { pricing: No
       </div>
     </dl>
     <p className="mt-3 text-xs text-secondary">
-      RealtiQ deducts a {percentLabel(pricing.inspectorCommissionPercentage)} commission from the agreed inspection fee. The commission supports client acquisition, secure payment collection, task coordination, dispute support and reliable payout processing. Payment processing charges are covered by RealtiQ and will not be deducted separately from your payout.
+      RealtIQ deducts a {percentLabel(pricing.inspectorCommissionPercentage)} commission from the agreed inspection fee. The commission supports client acquisition, secure payment collection, task coordination, dispute support and reliable payout processing. Payment processing charges are covered by RealtIQ and will not be deducted separately from your payout.
     </p>
   </div>
 );
@@ -142,7 +142,7 @@ const AdminPricingBreakdown = ({ pricing }: { pricing: NormalizedProxyPricing })
     <div><dt className="text-xs text-secondary">Buyer total paid</dt><dd className="font-bold">{formatNgn(pricing.buyerTotalAmount)}</dd></div>
     <div><dt className="text-xs text-secondary">Inspector commission ({percentLabel(pricing.inspectorCommissionPercentage)})</dt><dd className="font-bold">{formatNgn(pricing.inspectorCommissionAmount)}</dd></div>
     <div><dt className="text-xs text-secondary">Inspector payout</dt><dd className="font-bold">{formatNgn(pricing.inspectorPayoutAmount)}</dd></div>
-    <div><dt className="text-xs text-secondary">Total RealtiQ revenue</dt><dd className="font-bold">{formatNgn(pricing.totalPlatformRevenue)}</dd></div>
+    <div><dt className="text-xs text-secondary">Total RealtIQ revenue</dt><dd className="font-bold">{formatNgn(pricing.totalPlatformRevenue)}</dd></div>
   </dl>
 );
 
@@ -213,7 +213,7 @@ const ConversationPanel = ({
             >
               <p className="text-xs font-bold">
                 {message.kind === "administrative"
-                  ? "RealtiQ Admin"
+                  ? "RealtIQ Admin"
                   : message.kind === "system"
                     ? "System update"
                     : typeof message.sender === "string" || !message.sender
@@ -963,7 +963,7 @@ const AdminResolution = ({
             setConfirm({
               title: "Confirm dispute resolution",
               description:
-                "Provider processing actions remain in progress until RealTIQ receives final confirmation.",
+                "Provider processing actions remain in progress until RealtIQ receives final confirmation.",
               confirmLabel: "Submit resolution",
               tone: choice === "resume_service" ? "primary" : "danger",
               onConfirm: () => {
@@ -1073,7 +1073,7 @@ const CompletionActions = ({
             ))}
           </ul>
           <p className="mt-3 text-xs text-secondary">
-            Submit completion is enabled only after the requested service requirements are satisfied. RealTIQ checks the saved report and uploaded evidence before completion.
+            Submit completion is enabled only after the requested service requirements are satisfied. RealtIQ checks the saved report and uploaded evidence before completion.
           </p>
           {frontendMissing.length ? (
             <div role="alert" className="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
@@ -1104,7 +1104,7 @@ const CompletionActions = ({
               setConfirm({
                 title: "Submit completion",
                 description:
-                  "This sends the job to the Buyer for review and locks ordinary report editing. RealtiQ will validate the authoritative completion requirements.",
+                  "This sends the job to the Buyer for review and locks ordinary report editing. RealtIQ will validate the authoritative completion requirements.",
                 confirmLabel: "Submit completion",
                 onConfirm: () => {
                   if (!canSubmitCompletion) return;
@@ -1476,11 +1476,11 @@ const ProxyWorkspace = ({
           </div>
           <div>
             <p className="text-xs font-bold text-secondary">
-              Independent RealtiQ Verified Property Agent
+              Independent RealtIQ Verified Property Agent
             </p>
             <p>
               {typeof detail.request.inspector === "string"
-                ? "RealtiQ Verified Property Agent"
+                ? "RealtIQ Verified Property Agent"
                 : detail.request.inspector.name}
             </p>
           </div>
@@ -1500,18 +1500,18 @@ const ProxyWorkspace = ({
           </p>
         ) : null}
         <p className="mt-4 text-xs text-secondary">
-          The RealtiQ Verified Property Agent is an independent third party, not
-          a RealtiQ employee. This job uses uploaded recorded media and does not
+          The RealtIQ Verified Property Agent is an independent third party, not
+          a RealtIQ employee. This job uses uploaded recorded media and does not
           include live video or calls.
         </p>
         {role === "buyer" ? (
           <p className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">
-            RealtiQ adds a {percentNoticeLabel(pricing.buyerFeePercentage)} Platform & Protection Fee to your agreed inspection price. This supports secure payment processing, service coordination, dispute assistance and refund protection. Your payment is held securely, and the inspector is only paid after the service is completed and approved.
+            RealtIQ adds a {percentNoticeLabel(pricing.buyerFeePercentage)} Platform & Protection Fee to your agreed inspection price. This supports secure payment processing, service coordination, dispute assistance and refund protection. Your payment is held securely, and the inspector is only paid after the service is completed and approved.
           </p>
         ) : null}
         {role === "proxy_inspector" ? (
           <p className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">
-            RealtiQ deducts a {percentNoticeLabel(pricing.inspectorCommissionPercentage)} commission from the agreed inspection fee. This supports client acquisition, secure payment collection, task coordination, dispute support and reliable payout processing.
+            RealtIQ deducts a {percentNoticeLabel(pricing.inspectorCommissionPercentage)} commission from the agreed inspection fee. This supports client acquisition, secure payment collection, task coordination, dispute support and reliable payout processing.
           </p>
         ) : null}
       </section>
@@ -1853,7 +1853,7 @@ const ProxyWorkspace = ({
               setConfirm({
                 title: "Initiate Property Agent payout",
                 description:
-                  "This starts Paystack transfer processing. The payout remains in progress until RealTIQ receives confirmation from Paystack.",
+                  "This starts Paystack transfer processing. The payout remains in progress until RealtIQ receives confirmation from Paystack.",
                 confirmLabel: "Initiate payout",
                 tone: "danger",
                 onConfirm: () => {

@@ -35,7 +35,7 @@ describe('DocumentMatchUpload', () => {
       matches: false,
       uploadedDocumentHash: 'other',
       registeredDocumentHash: 'registered',
-      message: 'The uploaded file does not match the title document reviewed and registered by RealtiQ.',
+      message: 'The uploaded file does not match the title document reviewed and registered by RealtIQ.',
     });
     render(<DocumentMatchUpload onVerify={onVerify} registeredHash="registered" />);
 

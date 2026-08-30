@@ -92,7 +92,7 @@ const EscrowDisputePanel = ({
         <div>
           <h2 id="escrow-disputes-title" className="text-xl font-bold">Disputes</h2>
           <p className="mt-1 text-sm text-secondary">
-            A dispute pauses normal release while RealtiQ reviews the transaction. Completed milestone progress remains unchanged.
+            A dispute pauses normal release while RealtIQ reviews the transaction. Completed milestone progress remains unchanged.
           </p>
         </div>
         {canOpen ? (

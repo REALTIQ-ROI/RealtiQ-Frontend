@@ -49,7 +49,7 @@ const TitleRegistrySnapshots = () => {
       <main className="mx-auto max-w-5xl space-y-8 px-4 py-10 sm:px-8">
         <section>
           <h1 className="text-3xl font-extrabold tracking-tight text-primary">Title Registry Snapshot Proofs</h1>
-          <p className="mt-2 max-w-3xl text-sm text-secondary">Inspect daily RealtiQ registry snapshot hashes and manifests. Snapshots are separate from the main property purchase workflow.</p>
+          <p className="mt-2 max-w-3xl text-sm text-secondary">Inspect daily RealtIQ registry snapshot hashes and manifests. Snapshots are separate from the main property purchase workflow.</p>
         </section>
         <form className="flex flex-col gap-3 rounded-xl bg-white p-5 shadow-sm sm:flex-row sm:items-end" onSubmit={(event) => void loadSnapshot(event)}>
           <label className="flex-1 text-sm font-semibold">Snapshot date

@@ -12,11 +12,203 @@ import type { AvmPurpose, AvmValuation, Pagination } from '../../types/phase45';
 import type { Property } from '../../types';
 
 const ValuationPage = () => {
-  const { propertyReference = '' } = useParams(); const { user } = useAuth(); const [property, setProperty] = useState<Property | null>(null); const [valuation, setValuation] = useState<AvmValuation | null>(null); const [history, setHistory] = useState<AvmValuation[]>([]); const [pagination, setPagination] = useState<Pagination | null>(null); const [loading, setLoading] = useState(true); const [evaluating, setEvaluating] = useState(false); const [error, setError] = useState(''); const [historyNotice, setHistoryNotice] = useState(''); const retryKey = useRef<string | null>(null);
-  const purpose: AvmPurpose = user?.role === 'admin' ? 'admin_review' : user?.role === 'landlord' ? 'seller_research' : 'buyer_research';
-  const eligible = useMemo(() => property?.approvalStatus === 'approved' && property.listingType !== 'off_plan' && property.completionStage !== 'off_plan', [property]);
-  useEffect(() => { let active = true; setLoading(true); Promise.all([propertyService.getPropertyById(propertyReference), avmService.history(propertyReference).catch((raw) => { if (raw instanceof ApiRequestError && raw.status === 403) setHistoryNotice('Valuation history is available only to the property owner or an administrator.'); else setHistoryNotice(raw instanceof Error ? raw.message : 'History unavailable.'); return null; })]).then(([nextProperty, result]) => { if (!active) return; setProperty(nextProperty); if (result) { setHistory(result.valuations); setPagination(result.pagination); } }).catch((raw) => active && setError(raw instanceof Error ? raw.message : 'Unable to load property.')).finally(() => active && setLoading(false)); return () => { active = false; }; }, [propertyReference]);
-  const evaluate = async (newRequest: boolean) => { if (newRequest || !retryKey.current) retryKey.current = crypto.randomUUID(); setEvaluating(true); setError(''); try { const result = await avmService.evaluate({ propertyReference, purpose }, retryKey.current); setValuation(result); retryKey.current = null; if (user?.role === 'admin' || user?.role === 'landlord') { const next = await avmService.history(propertyReference); setHistory(next.valuations); setPagination(next.pagination); } } catch (raw) { setError(raw instanceof Error ? raw.message : 'Unable to estimate value.'); } finally { setEvaluating(false); } };
-  return <PublicLayout><main className={'mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-8'}><header><p className={'text-xs font-bold uppercase tracking-widest text-secondary'}>Authenticated valuation</p><h1 className={'mt-2 text-4xl font-black'}>{property?.title ?? 'Property valuation'}</h1><p className={'mt-2 text-sm text-secondary'}>Automated research estimate based only on evidence returned by RealTIQ. It is not a certified appraisal, offer, guarantee, or title opinion.</p></header>{loading ? <LoadingState label={'Loading valuation workspace...'} /> : null}{error ? <ErrorState message={error} onRetry={retryKey.current ? () => void evaluate(false) : undefined} /> : null}{!loading && property && !eligible ? <div className={'rounded-xl bg-surface-container-low p-5'}><strong>Not eligible for AVM evaluation</strong><p className={'mt-1 text-sm text-secondary'}>Only approved, completed built properties are currently eligible.</p></div> : null}{eligible ? <button type={'button'} disabled={evaluating} onClick={() => void evaluate(true)} className={'rounded-lg bg-primary px-5 py-3 font-bold text-on-primary disabled:opacity-60'}>{evaluating ? 'Estimating…' : valuation ? 'Run a new estimate' : 'Estimate value'}</button> : null}{valuation ? <ValuationResult valuation={valuation} /> : null}<section className={'rounded-2xl border border-outline-variant/10 bg-white p-6'}><h2 className={'text-xl font-black'}>Valuation history</h2>{historyNotice ? <p className={'mt-2 text-sm text-secondary'}>{historyNotice}</p> : history.length ? <div className={'mt-3 space-y-2'}>{history.map((item) => <div key={item.publicReference} className={'flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-container-low p-3'}><div><strong>{new Date(item.asOf).toLocaleString('en-NG')}</strong><p className={'text-xs text-secondary'}>{item.publicReference} · {item.status.replaceAll('_', ' ')}</p></div><span className={'font-bold'}>{item.status === 'completed' && item.estimate !== undefined ? new Intl.NumberFormat('en-NG', { style: 'currency', currency: item.currency, maximumFractionDigits: 0 }).format(item.estimate) : 'No estimate'}</span></div>)}</div> : <p className={'mt-2 text-sm text-secondary'}>No authorized valuation history is available.</p>}{pagination ? <p className={'mt-3 text-xs text-secondary'}>Page {pagination.page} of {Math.max(pagination.pages, 1)} · {pagination.total} snapshots</p> : null}</section><Link to={`/properties/${propertyReference}`} className={'inline-block font-bold text-primary underline'}>Back to property</Link></main></PublicLayout>;
+  const { propertyReference = '' } = useParams();
+  const { user } = useAuth();
+  const [property, setProperty] = useState<Property | null>(null);
+  const [valuation, setValuation] = useState<AvmValuation | null>(null);
+  const [history, setHistory] = useState<AvmValuation[]>([]);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [evaluating, setEvaluating] = useState(false);
+  const [error, setError] = useState('');
+  const [historyNotice, setHistoryNotice] = useState('');
+  const retryKey = useRef<string | null>(null);
+  const purpose: AvmPurpose =
+    user?.role === 'admin'
+      ? 'admin_review'
+      : user?.role === 'landlord'
+        ? 'seller_research'
+        : 'buyer_research';
+  const eligible = useMemo(
+    () =>
+      property?.approvalStatus === 'approved' &&
+      property.listingType !== 'off_plan' &&
+      property.completionStage !== 'off_plan',
+    [property],
+  );
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([
+      propertyService.getPropertyById(propertyReference),
+      avmService.history(propertyReference).catch((raw) => {
+        if (raw instanceof ApiRequestError && raw.status === 403)
+          setHistoryNotice(
+            'Valuation history is available only to the property owner or an administrator.',
+          );
+        else
+          setHistoryNotice(
+            raw instanceof Error ? raw.message : 'History unavailable.',
+          );
+        return null;
+      }),
+    ])
+      .then(([nextProperty, result]) => {
+        if (!active) return;
+        setProperty(nextProperty);
+        if (result) {
+          setHistory(result.valuations);
+          setPagination(result.pagination);
+        }
+      })
+      .catch(
+        (raw) =>
+          active &&
+          setError(
+            raw instanceof Error ? raw.message : 'Unable to load property.',
+          ),
+      )
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [propertyReference]);
+  const evaluate = async (newRequest: boolean) => {
+    if (newRequest || !retryKey.current) retryKey.current = crypto.randomUUID();
+    setEvaluating(true);
+    setError('');
+    try {
+      const result = await avmService.evaluate(
+        { propertyReference, purpose },
+        retryKey.current,
+      );
+      setValuation(result);
+      retryKey.current = null;
+      if (user?.role === 'admin' || user?.role === 'landlord') {
+        const next = await avmService.history(propertyReference);
+        setHistory(next.valuations);
+        setPagination(next.pagination);
+      }
+    } catch (raw) {
+      setError(
+        raw instanceof Error ? raw.message : 'Unable to estimate value.',
+      );
+    } finally {
+      setEvaluating(false);
+    }
+  };
+  return (
+    <PublicLayout>
+      <main className={'mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-8'}>
+        <header>
+          <p
+            className={
+              'text-xs font-bold uppercase tracking-widest text-secondary'
+            }
+          >
+            Authenticated valuation
+          </p>
+          <h1 className={'mt-2 text-4xl font-black'}>
+            {property?.title ?? 'Property valuation'}
+          </h1>
+          <p className={'mt-2 text-sm text-secondary'}>
+            Automated research estimate based only on evidence returned by
+            RealtIQ. It is not a certified appraisal, offer, guarantee, or title
+            opinion.
+          </p>
+        </header>
+        {loading ? (
+          <LoadingState label={'Loading valuation workspace...'} />
+        ) : null}
+        {error ? (
+          <ErrorState
+            message={error}
+            onRetry={retryKey.current ? () => void evaluate(false) : undefined}
+          />
+        ) : null}
+        {!loading && property && !eligible ? (
+          <div className={'rounded-xl bg-surface-container-low p-5'}>
+            <strong>Not eligible for AVM evaluation</strong>
+            <p className={'mt-1 text-sm text-secondary'}>
+              Only approved, completed built properties are currently eligible.
+            </p>
+          </div>
+        ) : null}
+        {eligible ? (
+          <button
+            type={'button'}
+            disabled={evaluating}
+            onClick={() => void evaluate(true)}
+            className={
+              'rounded-lg bg-primary px-5 py-3 font-bold text-on-primary disabled:opacity-60'
+            }
+          >
+            {evaluating
+              ? 'Estimating…'
+              : valuation
+                ? 'Run a new estimate'
+                : 'Estimate value'}
+          </button>
+        ) : null}
+        {valuation ? <ValuationResult valuation={valuation} /> : null}
+        <section
+          className={
+            'rounded-2xl border border-outline-variant/10 bg-white p-6'
+          }
+        >
+          <h2 className={'text-xl font-black'}>Valuation history</h2>
+          {historyNotice ? (
+            <p className={'mt-2 text-sm text-secondary'}>{historyNotice}</p>
+          ) : history.length ? (
+            <div className={'mt-3 space-y-2'}>
+              {history.map((item) => (
+                <div
+                  key={item.publicReference}
+                  className={
+                    'flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-container-low p-3'
+                  }
+                >
+                  <div>
+                    <strong>
+                      {new Date(item.asOf).toLocaleString('en-NG')}
+                    </strong>
+                    <p className={'text-xs text-secondary'}>
+                      {item.publicReference} ·{' '}
+                      {item.status.replaceAll('_', ' ')}
+                    </p>
+                  </div>
+                  <span className={'font-bold'}>
+                    {item.status === 'completed' && item.estimate !== undefined
+                      ? new Intl.NumberFormat('en-NG', {
+                          style: 'currency',
+                          currency: item.currency,
+                          maximumFractionDigits: 0,
+                        }).format(item.estimate)
+                      : 'No estimate'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className={'mt-2 text-sm text-secondary'}>
+              No authorized valuation history is available.
+            </p>
+          )}
+          {pagination ? (
+            <p className={'mt-3 text-xs text-secondary'}>
+              Page {pagination.page} of {Math.max(pagination.pages, 1)} ·{' '}
+              {pagination.total} snapshots
+            </p>
+          ) : null}
+        </section>
+        <Link
+          to={`/properties/${propertyReference}`}
+          className={'inline-block font-bold text-primary underline'}
+        >
+          Back to property
+        </Link>
+      </main>
+    </PublicLayout>
+  );
 };
 export default ValuationPage;

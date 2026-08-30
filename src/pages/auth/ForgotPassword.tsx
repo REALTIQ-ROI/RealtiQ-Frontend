@@ -58,7 +58,7 @@ const ForgotPassword = () => {
   return (
     <AuthLayout
       title="Reset your password"
-      subtitle="Enter the account email and role associated with your RealtiQ access."
+      subtitle="Enter the account email and role associated with your RealtIQ access."
       footerText="Remember your password?"
       footerLinkLabel="Sign in"
       footerLinkTo="/login"

@@ -1,13 +1,13 @@
-﻿import PublicLayout from '../../components/layout/PublicLayout';
+import PublicLayout from '../../components/layout/PublicLayout';
 
 const AboutAndContact = () => {
   return (
     <PublicLayout>
       <section className="max-w-5xl mx-auto px-8 py-10 space-y-12">
         <div>
-          <h1 className="text-5xl font-headline font-extrabold tracking-tighter mb-4">About RealtiQ</h1>
+          <h1 className="text-5xl font-headline font-extrabold tracking-tighter mb-4">About RealtIQ</h1>
           <p className="text-on-surface-variant leading-relaxed">
-            RealtiQ curates premium residential and investment properties with a focus on architecture, value, and long-term growth.
+            RealtIQ curates premium residential and investment properties with a focus on architecture, value, and long-term growth.
           </p>
         </div>
 

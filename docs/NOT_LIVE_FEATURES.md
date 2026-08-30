@@ -1,4 +1,4 @@
-# RealtiQ Frontend: Not-Live Features Audit
+# RealtIQ Frontend: Not-Live Features Audit
 
 Audit date: 2026-05-03
 

@@ -114,7 +114,7 @@ const TitleVerificationRegistry = () => {
     <PublicLayout>
       <main className="mx-auto max-w-5xl space-y-8 px-4 py-10 sm:px-8">
         <section className={`rounded-xl border p-6 ${titleStatusClasses(status === 'active' ? 'published' : status)}`}>
-          <p className="text-xs font-bold uppercase tracking-widest">RealtiQ Public Title Verification Registry</p>
+          <p className="text-xs font-bold uppercase tracking-widest">RealtIQ Public Title Verification Registry</p>
           <h1 className="mt-2 text-3xl font-extrabold tracking-tight">{record.publicVerificationId}</h1>
           <p className="mt-3 max-w-3xl text-sm">{record.disclaimer || titleVerificationDisclaimer}</p>
           {status === 'revoked' ? <p role="alert" className="mt-4 rounded-lg bg-red-100 p-3 text-sm font-bold text-red-900">This title verification has been revoked. The record remains visible for registry history.</p> : null}

@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 interface AuthLayoutProps {
@@ -16,7 +16,7 @@ const AuthLayout = ({ title, subtitle, children, footerText, footerLinkLabel, fo
       <header className="w-full border-b border-outline-variant/20">
         <div className="max-w-6xl mx-auto px-8 py-6 flex items-center justify-between">
           <Link to="/" className="text-2xl font-black tracking-tighter font-headline text-on-surface">
-            RealtiQ
+            RealtIQ
           </Link>
           <Link to="/properties" className="text-sm font-semibold text-on-surface-variant hover:text-on-surface">
             Back to Gallery

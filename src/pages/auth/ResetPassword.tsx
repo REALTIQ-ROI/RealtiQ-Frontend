@@ -62,7 +62,7 @@ const ResetPassword = () => {
   return (
     <AuthLayout
       title="Create new password"
-      subtitle="Choose a strong password for your RealtiQ account."
+      subtitle="Choose a strong password for your RealtIQ account."
       footerText="Already reset it?"
       footerLinkLabel="Sign in"
       footerLinkTo="/login"

@@ -802,7 +802,7 @@ const InstallmentDetail = ({
           <Stat label="Grace period" value={`${installment.gracePeriodHours ?? DEFAULT_GRACE_PERIOD_HOURS} hours`} />
           <Stat label="Default thresholds" value={`${installment.defaultAfterDays ?? 30} days / ${installment.maximumMissedPayments ?? 3} missed`} />
         </div>
-        <p className="mt-4 text-sm text-secondary">A payment becomes due at the stated date and time, and overdue after the grace period. Default status is based on RealTIQ's payment policy, not a single missed due date.</p>
+        <p className="mt-4 text-sm text-secondary">A payment becomes due at the stated date and time, and overdue after the grace period. Default status is based on RealtIQ's payment policy, not a single missed due date.</p>
       </section>
 
       {role === 'buyer' ? <PaymentPanel installment={installment} onRefresh={onRefresh} /> : null}

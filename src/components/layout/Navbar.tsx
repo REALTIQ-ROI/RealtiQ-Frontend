@@ -26,7 +26,7 @@ const Navbar = () => {
   return (
     <nav className={`fixed top-0 z-50 w-full border-b backdrop-blur-xl transition-all duration-200 ${hasScrolled ? 'bg-surface/95 border-outline-variant/20 shadow-md shadow-black/5' : 'bg-surface/80 border-transparent'}`}>
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 sm:py-4">
-        <Link to="/" className="font-headline text-xl font-black tracking-tighter text-on-surface">RealtiQ</Link>
+        <Link to="/" className="font-headline text-xl font-black tracking-tighter text-on-surface">RealtIQ</Link>
         <div className="hidden items-center space-x-8 md:flex">
           {navItems.map((item) => <NavLink key={item.to} to={item.to} className={({ isActive }) => `font-manrope text-sm font-bold tracking-tight transition-colors ${isActive ? 'border-b-2 border-on-surface pb-1 text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}>{item.label}</NavLink>)}
         </div>

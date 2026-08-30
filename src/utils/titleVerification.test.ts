@@ -6,7 +6,7 @@ describe('title verification helpers', () => {
     expect(titleStatusLabel('pending')).toBe('Title Review Pending');
     expect(titleStatusLabel('under_review')).toBe('Title Review Pending');
     expect(titleStatusLabel('approved')).toBe('Title Legally Reviewed');
-    expect(titleStatusLabel('published')).toBe('Title Published in RealtiQ Registry');
+    expect(titleStatusLabel('published')).toBe('Title Published in RealtIQ Registry');
     expect(titleStatusLabel('revoked')).toBe('Title Verification Revoked');
     expect(titleStatusLabel('superseded')).toBe('Title Verification Superseded');
     expect(titleStatusLabel('not_submitted')).toBe('Title Not Submitted');

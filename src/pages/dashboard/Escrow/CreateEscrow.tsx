@@ -332,7 +332,7 @@ const CreateEscrow = () => {
                       }}
                       className='mr-3'
                     />
-                    Use RealtiQ default milestones
+                    Use RealtIQ default milestones
                     <p className='ml-7 mt-1 text-xs text-secondary'>
                       Buyer confirmation, administrator approval, and document
                       verification. Legacy default milestones do not use custom
@@ -458,7 +458,7 @@ const CreateEscrow = () => {
                     </>
                   ) : (
                     <p className='mt-2 rounded-lg bg-surface-container-low p-4 text-sm'>
-                      RealTIQ's standard milestones will be added automatically.
+                      RealtIQ's standard milestones will be added automatically.
                     </p>
                   )}
                 </div>

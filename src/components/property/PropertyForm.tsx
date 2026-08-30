@@ -963,7 +963,7 @@ const PropertyForm = ({
                     <option value="paid_view_once">Paid — one view</option>
                     <option value="paid_view_multiple">Paid — multiple views</option>
                   </select>
-                  {row.mode !== 'private' ? <p className="mt-2 text-xs text-secondary">₦5,000 — set by RealtiQ.</p> : null}
+                  {row.mode !== 'private' ? <p className="mt-2 text-xs text-secondary">₦5,000 — set by RealtIQ.</p> : null}
                 </div>
                 <div>
                   <label className={labelClass}>Restricted file</label>

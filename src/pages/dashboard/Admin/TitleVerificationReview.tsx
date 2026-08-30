@@ -109,7 +109,7 @@ const TitleVerificationReview = () => {
         reviewNotes: decision === 'approve' ? result.value || 'Title documents reviewed and approved.' : undefined,
         rejectionReason: decision === 'reject' ? result.value : undefined,
       }, token);
-      toast.success(decision === 'approve' ? 'Title verification approved and published in the RealtiQ registry.' : 'Title verification rejected.');
+      toast.success(decision === 'approve' ? 'Title verification approved and published in the RealtIQ registry.' : 'Title verification rejected.');
       await refreshAll(response.verification.verificationId);
     } catch (raw) {
       const err = raw instanceof ApiRequestError ? raw : null;
@@ -165,7 +165,7 @@ const TitleVerificationReview = () => {
       <main className="min-h-screen space-y-6 p-4 sm:p-8 lg:p-10">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-primary">Title Verification Review</h1>
-          <p className="mt-2 text-sm text-secondary">Review legal title submissions, publish RealtiQ registry receipts, and manage revocations.</p>
+          <p className="mt-2 text-sm text-secondary">Review legal title submissions, publish RealtIQ registry receipts, and manage revocations.</p>
         </div>
         <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(340px,460px)]">
           <div className="min-w-0 rounded-xl bg-white p-4 shadow-sm sm:p-5">

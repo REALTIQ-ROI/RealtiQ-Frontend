@@ -275,7 +275,7 @@ const PaymentHistory = () => {
         <div className="order-2 md:order-1">
           <span className="font-bold text-secondary tracking-widest uppercase block mb-4 text-xs">Security First</span>
           <h3 className="text-3xl font-black text-primary mb-6 leading-tight">Your financial data is protected by bank-grade encryption.</h3>
-          <p className="text-on-surface-variant leading-relaxed mb-8">Every transaction through the RealtiQ platform is monitored and verified.</p>
+          <p className="text-on-surface-variant leading-relaxed mb-8">Every transaction through the RealtIQ platform is monitored and verified.</p>
           <div className="flex items-center gap-4">
             <span className="material-symbols-outlined text-4xl text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>
               verified_user

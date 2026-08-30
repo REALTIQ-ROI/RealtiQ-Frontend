@@ -70,7 +70,7 @@ const PublicInspectorDirectory = () => {
     <PublicLayout>
       <section className="mx-auto max-w-7xl px-4 py-12 sm:px-8">
         <div className="flex flex-wrap items-end justify-between gap-5">
-          <div><p className="text-xs font-bold uppercase tracking-[.2em] text-secondary">Independent professional network</p><h1 className="mt-2 text-4xl font-black">Find a RealtiQ Verified Property Agent</h1><p className="mt-3 max-w-3xl text-secondary">Hire a RealtiQ Verified Property Agent to record a walkthrough, photograph the property, and prepare an observational condition report. These agents are independent third parties, not RealtiQ employees.</p></div>
+          <div><p className="text-xs font-bold uppercase tracking-[.2em] text-secondary">Independent professional network</p><h1 className="mt-2 text-4xl font-black">Find a RealtIQ Verified Property Agent</h1><p className="mt-3 max-w-3xl text-secondary">Hire a RealtIQ Verified Property Agent to record a walkthrough, photograph the property, and prepare an observational condition report. These agents are independent third parties, not RealtIQ employees.</p></div>
           <Link to="/proxy-inspectors/register" className="rounded-lg bg-primary px-5 py-3 text-sm font-bold text-on-primary">Join as a professional</Link>
         </div>
         <form className="mt-8 grid gap-3 rounded-2xl bg-white p-5 shadow-sm sm:grid-cols-2 lg:grid-cols-4" onSubmit={(event) => { event.preventDefault(); update('search', search.trim()); }}>

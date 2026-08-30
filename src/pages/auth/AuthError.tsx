@@ -19,7 +19,7 @@ const AuthError = () => {
           className="text-2xl font-black tracking-tighter text-slate-900 mb-8 block"
           style={{ fontFamily: 'Manrope, sans-serif' }}
         >
-          RealtiQ
+          RealtIQ
         </Link>
 
         <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-6">

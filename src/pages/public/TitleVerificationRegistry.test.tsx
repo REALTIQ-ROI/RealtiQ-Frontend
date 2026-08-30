@@ -50,7 +50,7 @@ describe('TitleVerificationRegistry', () => {
         approvedAt: '2026-07-15T10:00:00.000Z',
         publishedAt: '2026-07-15T10:02:00.000Z',
         externalAnchor: { status: 'not_requested' },
-        disclaimer: 'This record confirms RealtiQ legal review and document integrity. It is not independent government proof of ownership.',
+        disclaimer: 'This record confirms RealtIQ legal review and document integrity. It is not independent government proof of ownership.',
       },
     });
     service.getRegistryIntegrity.mockResolvedValue({

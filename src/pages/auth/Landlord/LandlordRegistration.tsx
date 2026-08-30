@@ -49,7 +49,7 @@ const LandlordRegistration = () => {
           className="text-2xl font-black tracking-tighter text-slate-900"
           style={{ fontFamily: 'Manrope, sans-serif' }}
         >
-          RealtiQ
+          RealtIQ
         </Link>
         <Link
           to="/properties"
@@ -81,7 +81,7 @@ const LandlordRegistration = () => {
               Fine Living.
             </h1>
             <p className="text-on-primary-container text-lg max-w-md font-light leading-relaxed mb-12">
-              Join RealtiQ as a property seller and manage listings, buyer interest, and property workflows from a dedicated
+              Join RealtIQ as a property seller and manage listings, buyer interest, and property workflows from a dedicated
               portfolio dashboard.
             </p>
             <div className="flex items-center gap-4 text-white">
@@ -101,7 +101,7 @@ const LandlordRegistration = () => {
               className="md:hidden text-2xl font-black tracking-tighter text-slate-900 mb-12 text-center"
               style={{ fontFamily: 'Manrope, sans-serif' }}
             >
-              RealtiQ
+              RealtIQ
             </div>
 
             <div className="mb-8 text-center md:text-left">

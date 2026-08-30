@@ -183,7 +183,7 @@ const PublicTitleDocuments = ({
             </div>
             <div className="mt-4 flex flex-wrap gap-3 text-xs text-secondary">
               <span>{document.accessMode === 'private' ? 'Private' : document.accessMode === 'paid_view_once' ? 'Paid - one viewer session' : 'Paid - reusable access'}</span>
-              {document.price !== null ? <span>{formatNaira(document.price)} set by RealtiQ</span> : null}
+              {document.price !== null ? <span>{formatNaira(document.price)} set by RealtIQ</span> : null}
               {status?.viewCount !== undefined ? <span>{status.viewCount} viewer sessions started</span> : null}
             </div>
             {!available ? <p className="mt-4 text-sm text-secondary">Not available for viewing.</p> : null}

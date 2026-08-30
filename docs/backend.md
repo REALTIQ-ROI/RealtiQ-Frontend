@@ -1,6 +1,6 @@
-# RealtiQ Backend — Full Implementation Guide
+# RealtIQ Backend — Full Implementation Guide
 
-> Derived from frontend analysis. Covers every route, model, controller, middleware, and service needed to power the RealtiQ frontend. Copy each section into your `realtiq-backend/` project.
+> Derived from frontend analysis. Covers every route, model, controller, middleware, and service needed to power the RealtIQ frontend. Copy each section into your `realtiq-backend/` project.
 
 ---
 
@@ -74,7 +74,7 @@ EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
 EMAIL_USER=your_email@gmail.com
 EMAIL_PASS=your_gmail_app_password
-EMAIL_FROM="RealtiQ <noreply@realtiq.com>"
+EMAIL_FROM="RealtIQ <noreply@realtiq.com>"
 ```
 
 ---
@@ -447,10 +447,10 @@ const sendWelcomeEmail = async ({ to, name }) => {
   await transporter.sendMail({
     from: process.env.EMAIL_FROM,
     to,
-    subject: "Welcome to RealtiQ",
+    subject: "Welcome to RealtIQ",
     html: `
       <h2>Welcome, ${name}!</h2>
-      <p>Your RealtiQ account has been created. Start browsing premium properties today.</p>
+      <p>Your RealtIQ account has been created. Start browsing premium properties today.</p>
     `,
   });
 };

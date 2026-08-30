@@ -78,7 +78,7 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
             className="text-2xl font-black tracking-tighter text-slate-900"
             style={{ fontFamily: 'Manrope, sans-serif' }}
           >
-            RealtiQ
+            RealtIQ
           </Link>
           <Link
             to="/properties"
@@ -249,7 +249,7 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
             className="text-xl font-bold text-white tracking-tighter"
             style={{ fontFamily: 'Manrope, sans-serif' }}
           >
-            RealtiQ
+            RealtIQ
           </div>
           <div className="flex flex-wrap justify-center gap-8">
             <a className="text-slate-400 hover:text-white transition-colors text-sm tracking-wide" href="#">
@@ -259,7 +259,7 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
               Terms of Service
             </a>
           </div>
-          <p className="text-slate-500 text-xs tracking-wide">© 2024 RealtiQ Architectural Curation.</p>
+          <p className="text-slate-500 text-xs tracking-wide">© 2024 RealtIQ Architectural Curation.</p>
         </div>
       </footer>
     </div>
