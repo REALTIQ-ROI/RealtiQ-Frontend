@@ -1,10 +1,111 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import api from '../lib/axios'; import { avmService } from './avmService'; import { trustService } from './trustService'; import { phase45Cache } from '../features/phase45/cache';
-vi.mock('../lib/axios', () => ({ default: { get: vi.fn(), post: vi.fn(), patch: vi.fn() }, ApiRequestError: class ApiRequestError extends Error { status?: number } }));
-const valuation = { publicReference: 'RTQ-AVM-1', purpose: 'buyer_research', status: 'completed', asOf: '2026-08-28T10:30:00Z', currency: 'NGN', confidence: 'medium' } as const;
-describe('Phase 4–5 services', () => { beforeEach(() => { vi.clearAllMocks(); phase45Cache.clear(); localStorage.setItem('user', JSON.stringify({ _id: 'user-1', role: 'buyer' })); });
-  it('sends and reuses the caller-supplied idempotency key', async () => { vi.mocked(api.post).mockResolvedValue({ data: { valuation } }); await avmService.evaluate({ propertyReference: 'RTQ-PROP-1', purpose: 'buyer_research' }, 'stable-key'); await avmService.evaluate({ propertyReference: 'RTQ-PROP-1', purpose: 'buyer_research' }, 'stable-key'); expect(api.post).toHaveBeenNthCalledWith(2, '/avm/v1/valuations', { propertyReference: 'RTQ-PROP-1', purpose: 'buyer_research' }, { headers: { 'Idempotency-Key': 'stable-key' } }); });
-  it('preserves valuation history pagination and as-of params', async () => { vi.mocked(api.get).mockResolvedValue({ data: { valuations: [valuation], pagination: { page: 1, limit: 20, total: 1, pages: 1 } } }); const result = await avmService.history('RTQ-PROP-1', { page: 1, limit: 20, asOf: '2026-08-28T23:59:59Z' }); expect(api.get).toHaveBeenCalledWith('/avm/v1/properties/RTQ-PROP-1/valuations', { params: { page: 1, limit: 20, asOf: '2026-08-28T23:59:59Z' } }); expect(result.pagination.total).toBe(1); });
-  it('keeps user appeals and admin queues in separate stores', async () => { vi.mocked(api.get).mockResolvedValueOnce({ data: { appeals: [] } }).mockResolvedValueOnce({ data: { appeals: [], pagination: { page: 1, limit: 20, total: 0, pages: 0 } } }); await trustService.appeals(true); await trustService.adminQueue({ page: 1, limit: 20, status: 'open' }); expect(api.get).toHaveBeenNthCalledWith(1, '/trust/v1/appeals'); expect(api.get).toHaveBeenNthCalledWith(2, '/trust/v1/admin/appeals', { params: { page: 1, limit: 20, status: 'open' } }); });
-  it('uses only the current-user trust endpoint', async () => { vi.mocked(api.get).mockResolvedValue({ data: { trust: { publicReference: 'RTQ-TRUST-1', policyVersion: 'v1', score: 0, band: 'insufficient', badge: 'none', components: {}, insufficientHistory: true } } }); const result = await trustService.mine(true); expect(api.get).toHaveBeenCalledWith('/trust/v1/me'); expect(result.insufficientHistory).toBe(true); });
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import api from "../lib/axios";
+import { avmService } from "./avmService";
+import { trustService } from "./trustService";
+import { phase45Cache } from "../features/phase45/cache";
+vi.mock("../lib/axios", () => ({
+  default: { get: vi.fn(), post: vi.fn(), patch: vi.fn() },
+  ApiRequestError: class ApiRequestError extends Error {
+    status?: number;
+  },
+}));
+const valuation = {
+  publicReference: "RTQ-AVM-1",
+  purpose: "buyer_research",
+  status: "completed",
+  asOf: "2026-08-28T10:30:00Z",
+  currency: "NGN",
+  confidence: "medium",
+} as const;
+describe("Phase 4–5 services", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    phase45Cache.clear();
+    localStorage.setItem(
+      "user",
+      JSON.stringify({ _id: "user-1", role: "buyer" }),
+    );
+  });
+  it("sends and reuses the caller-supplied idempotency key", async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { valuation } });
+    await avmService.evaluate(
+      { propertyReference: "RTQ-PROP-1", purpose: "buyer_research" },
+      "stable-key",
+    );
+    await avmService.evaluate(
+      { propertyReference: "RTQ-PROP-1", purpose: "buyer_research" },
+      "stable-key",
+    );
+    expect(api.post).toHaveBeenNthCalledWith(
+      2,
+      "/avm/v1/valuations",
+      { propertyReference: "RTQ-PROP-1", purpose: "buyer_research" },
+      { headers: { "Idempotency-Key": "stable-key" } },
+    );
+  });
+  it("rejects a future as-of date before making an AVM request", async () => {
+    await expect(
+      avmService.evaluate(
+        {
+          propertyReference: "RTQ-PROP-1",
+          purpose: "buyer_research",
+          asOf: "2999-01-01T00:00:00Z",
+        },
+        "key",
+      ),
+    ).rejects.toThrow(/future/);
+    expect(api.post).not.toHaveBeenCalled();
+  });
+  it("preserves valuation history pagination and as-of params", async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      data: {
+        valuations: [valuation],
+        pagination: { page: 1, limit: 20, total: 1, pages: 1 },
+      },
+    });
+    const result = await avmService.history("RTQ-PROP-1", {
+      page: 1,
+      limit: 20,
+      asOf: "2026-08-28T23:59:59Z",
+    });
+    expect(api.get).toHaveBeenCalledWith(
+      "/avm/v1/properties/RTQ-PROP-1/valuations",
+      { params: { page: 1, limit: 20, asOf: "2026-08-28T23:59:59Z" } },
+    );
+    expect(result.pagination.total).toBe(1);
+  });
+  it("keeps user appeals and admin queues in separate stores", async () => {
+    vi.mocked(api.get)
+      .mockResolvedValueOnce({ data: { appeals: [] } })
+      .mockResolvedValueOnce({
+        data: {
+          appeals: [],
+          pagination: { page: 1, limit: 20, total: 0, pages: 0 },
+        },
+      });
+    await trustService.appeals(true);
+    await trustService.adminQueue({ page: 1, limit: 20, status: "open" });
+    expect(api.get).toHaveBeenNthCalledWith(1, "/trust/v1/appeals");
+    expect(api.get).toHaveBeenNthCalledWith(2, "/trust/v1/admin/appeals", {
+      params: { page: 1, limit: 20, status: "open" },
+    });
+  });
+  it("uses only the current-user trust endpoint", async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      data: {
+        trust: {
+          publicReference: "RTQ-TRUST-1",
+          policyVersion: "v1",
+          score: 0,
+          band: "insufficient",
+          badge: "none",
+          components: {},
+          insufficientHistory: true,
+        },
+      },
+    });
+    const result = await trustService.mine(true);
+    expect(api.get).toHaveBeenCalledWith("/trust/v1/me");
+    expect(result.insufficientHistory).toBe(true);
+  });
 });

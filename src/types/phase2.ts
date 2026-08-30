@@ -60,7 +60,7 @@ export interface MarketplaceConversation {
   lastMessage?: string;
   lastMessageAt?: string;
   lastMessageText?: string;
-  unreadCount?: number;
+  unreadCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,11 +79,7 @@ export interface ReadReceipt {
   unreadCount: number;
 }
 export type ReportReason =
-  | "spam"
-  | "harassment"
-  | "fraud"
-  | "inappropriate_content"
-  | "other";
+  "spam" | "harassment" | "fraud" | "inappropriate_content" | "other";
 export type ModerationAction =
   | "dismiss"
   | "warn"
@@ -158,11 +154,7 @@ export interface RealtiqNotification {
   updatedAt?: string;
 }
 export type PreferenceKey =
-  | "messages"
-  | "savedSearches"
-  | "listingChanges"
-  | "inquiries"
-  | "marketplace";
+  "messages" | "savedSearches" | "listingChanges" | "inquiries" | "marketplace";
 export type NotificationPreferenceValues = Record<
   PreferenceKey,
   { inApp: boolean; email: boolean }
