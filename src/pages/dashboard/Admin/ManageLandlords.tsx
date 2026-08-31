@@ -8,6 +8,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
 import type { User } from '../../../types';
+import { isUserVerified } from '../../../utils/userVerification';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -54,10 +55,10 @@ const LandlordRow = ({ landlord }: { landlord: User }) => (
     </td>
     <td className="px-6 py-5">
       <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-        landlord.isVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+        isUserVerified(landlord) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
       }`}>
         <span className="w-1.5 h-1.5 rounded-full bg-current" />
-        {landlord.isVerified ? 'Verified' : 'Unverified'}
+        {isUserVerified(landlord) ? 'Verified' : 'Unverified'}
       </span>
     </td>
     <td className="px-6 py-5 text-right">
@@ -84,7 +85,7 @@ const ManageLandlords = () => {
         landlord.email.toLowerCase().includes(needle);
       const matchesStatus =
         statusFilter === 'all' ||
-        (statusFilter === 'verified' ? landlord.isVerified : !landlord.isVerified);
+        (statusFilter === 'verified' ? isUserVerified(landlord) : !isUserVerified(landlord));
       return matchesQuery && matchesStatus;
     });
   }, [landlords, query, statusFilter]);
@@ -114,11 +115,11 @@ const ManageLandlords = () => {
             </div>
             <div className="bg-surface-container-low p-6 rounded-xl">
               <p className="text-secondary text-xs font-bold uppercase tracking-widest">Verified</p>
-              <span className="text-3xl font-extrabold text-primary font-headline">{landlords.filter((item) => item.isVerified).length}</span>
+              <span className="text-3xl font-extrabold text-primary font-headline">{landlords.filter(isUserVerified).length}</span>
             </div>
             <div className="bg-surface-container-low p-6 rounded-xl">
               <p className="text-secondary text-xs font-bold uppercase tracking-widest">Pending Verification</p>
-              <span className="text-3xl font-extrabold text-primary font-headline">{landlords.filter((item) => !item.isVerified).length}</span>
+              <span className="text-3xl font-extrabold text-primary font-headline">{landlords.filter((item) => !isUserVerified(item)).length}</span>
             </div>
             <div className="bg-primary-container p-6 rounded-xl">
               <p className="text-on-primary-container text-xs font-bold uppercase tracking-widest">Properties</p>

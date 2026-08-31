@@ -10,6 +10,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
 import type { User, UserRole } from '../../../types';
+import { isUserVerified } from '../../../utils/userVerification';
 
 const ITEMS_PER_PAGE = 10;
 const phoneRegex = /^(\+234|234|0)[789][01]\d{8}$/;
@@ -143,7 +144,7 @@ const ManageUsers = () => {
           </div>
           <div className="bg-primary-container p-6 rounded-xl">
             <p className="text-on-primary-container text-xs font-semibold uppercase tracking-wider mb-1">Verified</p>
-            <h3 className="font-headline text-3xl font-bold text-white">{users.filter((user) => user.isVerified).length}</h3>
+            <h3 className="font-headline text-3xl font-bold text-white">{users.filter(isUserVerified).length}</h3>
           </div>
         </section>
 
@@ -220,10 +221,10 @@ const ManageUsers = () => {
                       </td>
                       <td className="px-8 py-5">
                         <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                          user.isVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                          isUserVerified(user) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                         }`}>
                           <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                          {user.isVerified ? 'Verified' : 'Unverified'}
+                          {isUserVerified(user) ? 'Verified' : 'Unverified'}
                         </span>
                       </td>
                       <td className="px-8 py-5 text-sm text-on-surface-variant">{formatDate(user.createdAt)}</td>

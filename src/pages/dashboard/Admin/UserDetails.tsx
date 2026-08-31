@@ -5,6 +5,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
 import SellerTrustBadge from '../../../components/trust/SellerTrustBadge';
+import { isUserVerified } from '../../../utils/userVerification';
 
 const formatDate = (date?: string) =>
   date ? new Date(date).toLocaleString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
@@ -51,9 +52,9 @@ const UserDetails = () => {
                 </div>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                user.isVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                isUserVerified(user) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
               }`}>
-                {user.isVerified ? 'Verified' : 'Unverified'}
+                {isUserVerified(user) ? 'Verified' : 'Unverified'}
               </span>
             </div>
 

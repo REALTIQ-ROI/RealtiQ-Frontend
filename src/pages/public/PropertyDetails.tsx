@@ -1526,6 +1526,12 @@ const PropertyDetails = () => {
                 </span>
                 Analyze ROI
               </Button>
+              {isAuthenticated && property.approvalStatus === 'approved' && /^RTQ-PROP-[A-Za-z0-9-]+$/.test(propertyReference) ? (
+                <Button fullWidth variant='secondary' onClick={() => navigate(`/dashboard/roi-v1/properties/${propertyReference}/new`)}>
+                  <span className='material-symbols-outlined text-sm mr-1'>fact_check</span>
+                  Evidence-backed ROI
+                </Button>
+              ) : null}
               {isAuthenticated &&
               property.approvalStatus === 'approved' &&
               property.listingType !== 'off_plan' ? (

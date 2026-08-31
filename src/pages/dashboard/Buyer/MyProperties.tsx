@@ -145,7 +145,9 @@ const MyProperties = () => {
                 </h3>
                 <OwnershipReviewForm
                   ownership={ownership}
-                  onSuccess={() => refreshOwnerships()}
+                  onSuccess={async () => {
+                    await refreshOwnerships();
+                  }}
                 />
               </article>
             ))}

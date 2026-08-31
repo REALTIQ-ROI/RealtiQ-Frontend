@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
+import AdminGlobalSearch from '../admin/AdminGlobalSearch';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -116,16 +117,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         }`}
       >
         <button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-container-low lg:hidden" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><span className="material-symbols-outlined">menu</span></button>
-        <div className="hidden sm:flex items-center flex-1 max-w-xl min-w-0">
-          <div className="relative w-full">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-            <input
-              className="w-full bg-surface-container-low border-none rounded-full py-2 pl-10 pr-4 text-sm transition-all placeholder:text-slate-400 outline-none"
-              placeholder="Search admin records..."
-              type="search"
-            />
-          </div>
-        </div>
+        <AdminGlobalSearch />
 
         <div className="flex items-center gap-3 sm:gap-6 text-sm font-medium justify-end">
           <button className="hidden text-primary font-bold hover:underline sm:block" onClick={() => void navigate('/contact')}>

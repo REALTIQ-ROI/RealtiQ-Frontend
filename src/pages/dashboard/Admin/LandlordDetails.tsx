@@ -5,6 +5,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
 import SellerTrustBadge from '../../../components/trust/SellerTrustBadge';
+import { isUserVerified } from '../../../utils/userVerification';
 
 const formatDate = (date?: string) =>
   date
@@ -64,7 +65,7 @@ const LandlordDetails = () => {
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-bold text-xl">{user.name}</h3>
                     {user.role === 'landlord' ? <SellerTrustBadge badge={user.trustBadge as import('../../../types/phase45').TrustBadge} compact /> : null}
-                    {user.isVerified ? (
+                    {isUserVerified(user) ? (
                       <span className="material-symbols-outlined text-blue-500 text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
                         verified
                       </span>
@@ -72,7 +73,7 @@ const LandlordDetails = () => {
                   </div>
                   <p className="text-secondary text-sm capitalize">{user.role}</p>
                   <span className="inline-block mt-2 px-3 py-1 bg-secondary-fixed text-on-secondary-fixed text-[10px] font-bold uppercase tracking-wider rounded-full">
-                    {user.isVerified ? 'Verified Account' : 'Unverified Account'}
+                    {isUserVerified(user) ? 'Verified Account' : 'Unverified Account'}
                   </span>
                 </div>
               </div>
@@ -128,7 +129,7 @@ const LandlordDetails = () => {
                 <h3 className="text-xl font-bold mb-6">Account Summary</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <p><strong>User ID:</strong> {user._id}</p>
-                  <p><strong>Verification:</strong> {user.isVerified ? 'Verified' : 'Unverified'}</p>
+                  <p><strong>Verification:</strong> {isUserVerified(user) ? 'Verified' : 'Unverified'}</p>
                   <p><strong>Email:</strong> {user.email}</p>
                   <p><strong>Phone:</strong> {user.phone ?? 'N/A'}</p>
                 </div>

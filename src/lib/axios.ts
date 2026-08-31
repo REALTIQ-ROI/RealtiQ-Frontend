@@ -23,8 +23,8 @@ export class ApiRequestError extends Error {
   }
 } 
 
-// const defaultBaseURL = import.meta.env.DEV ? '/api' : 'https://api.realtiq.com.ng/api';
-const defaultBaseURL = import.meta.env.DEV ? '/api' : 'http://localhost:5000/api';
+const defaultBaseURL = import.meta.env.DEV ? '/api' : 'https://api.realtiq.com.ng/api';
+// const defaultBaseURL = import.meta.env.DEV ? '/api' : 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? defaultBaseURL,

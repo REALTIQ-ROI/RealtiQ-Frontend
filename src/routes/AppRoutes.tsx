@@ -1,4 +1,4 @@
-﻿import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -93,6 +93,9 @@ import ProtectedRoute from './ProtectedRoute';
 import ROICalculatorPage from '../pages/dashboard/ROI/ROICalculatorPage';
 import PropertyROICalculatorPage from '../pages/dashboard/ROI/PropertyROICalculatorPage';
 import MyROIScenarios from '../pages/dashboard/ROI/MyROIScenarios';
+import RoiV1EstimatePage from '../pages/dashboard/ROI/RoiV1EstimatePage';
+import RoiV1DetailPage from '../pages/dashboard/ROI/RoiV1DetailPage';
+import RoiV1HistoryPage from '../pages/dashboard/ROI/RoiV1HistoryPage';
 import ROIAssumptions from '../pages/dashboard/Admin/ROIAssumptions';
 import AdminSettings from '../pages/dashboard/Admin/AdminSettings';
 import AdminVirtualTours from '../pages/dashboard/Admin/AdminVirtualTours';
@@ -203,9 +206,15 @@ const AppRoutes = () => {
           <Route path='/dashboard/trust' element={<TrustAccount />} />
           <Route path='/dashboard/valuations/:propertyReference' element={<ValuationPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard/roi-v1/properties/:propertyReference/new" element={<RoiV1EstimatePage />} />
+          <Route path="/dashboard/roi-v1/estimates/:estimateReference" element={<RoiV1DetailPage />} />
           <Route path="/analytics/property-market" element={<PropertyMarketAnalytics />} />
           <Route path="/analytics/property-market/access" element={<PropertyMarketAnalytics />} />
           <Route path="/analytics/property-market/payment-return" element={<ProxyPaymentReturn />} />
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={['landlord', 'admin']} />}>
+          <Route path="/dashboard/roi-v1/properties/:propertyReference/history" element={<RoiV1HistoryPage />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['buyer']} />}>
