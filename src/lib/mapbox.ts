@@ -1,6 +1,6 @@
 import mapboxgl from 'mapbox-gl';
 
-export const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN?.trim() ?? '';
+export const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN?.trim() ?? ''; 
 export const MAPBOX_STYLE = import.meta.env.VITE_MAPBOX_STYLE?.trim() || 'mapbox://styles/mapbox/streets-v12';
 
 export const configureMapbox = () => {

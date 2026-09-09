@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
 import ProjectMediaGallery from '../../components/project/ProjectMediaGallery';
 import PropertyCard from '../../components/property/PropertyCard';
+import LocationMap from '../../components/property/map/LocationMap';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAsync } from '../../hooks/useAsync';
@@ -103,7 +104,7 @@ const ProjectDetails = () => {
                   <h2 className="text-xl font-black">Location</h2>
                   <p className="text-sm text-secondary">{project.address || [project.area, project.city, project.state].filter(Boolean).join(', ')}</p>
                 </div>
-                <iframe title={`${project.name} map`} src={`https://www.google.com/maps?q=${project.coordinates.lat},${project.coordinates.lng}&z=14&output=embed`} className="h-96 w-full border-0" loading="lazy" />
+                <div className="h-96 w-full"><LocationMap title={project.name} coordinates={project.coordinates} /></div>
               </section>
             ) : null}
 

@@ -62,11 +62,60 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
     map.on('error', () => setMapError(true));
     map.on('load', () => {
+      // Stretch the badge around its price without distorting the corners or tip.
+      const badge = document.createElement('canvas');
+      badge.width = 160;
+      badge.height = 88;
+      const context = badge.getContext('2d');
+      if (!context) { setMapError(true); return; }
+      context.shadowColor = 'rgba(15, 35, 28, 0.25)';
+      context.shadowBlur = 6;
+      context.shadowOffsetY = 3;
+      context.beginPath();
+      context.moveTo(22, 6);
+      context.lineTo(138, 6);
+      context.quadraticCurveTo(154, 6, 154, 22);
+      context.lineTo(154, 50);
+      context.quadraticCurveTo(154, 66, 138, 66);
+      context.lineTo(90, 66);
+      context.lineTo(80, 78);
+      context.lineTo(70, 66);
+      context.lineTo(22, 66);
+      context.quadraticCurveTo(6, 66, 6, 50);
+      context.lineTo(6, 22);
+      context.quadraticCurveTo(6, 6, 22, 6);
+      context.closePath();
+      context.fillStyle = '#173d32';
+      context.fill();
+      context.shadowColor = 'transparent';
+      context.strokeStyle = '#ffffff';
+      context.lineWidth = 3;
+      context.stroke();
+      map.addImage('property-price-pin', context.getImageData(0, 0, 160, 88), {
+        pixelRatio: 2,
+        content: [20, 12, 140, 60],
+        stretchX: [[32, 68], [92, 128]],
+        stretchY: [[26, 46]],
+      });
       map.addSource('properties', { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, cluster: true, clusterMaxZoom: 14, clusterRadius: 50 });
       map.addLayer({ id: 'property-clusters', type: 'circle', source: 'properties', filter: ['has', 'point_count'], paint: { 'circle-color': '#173d32', 'circle-radius': ['step', ['get', 'point_count'], 20, 25, 25, 100, 32], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
       map.addLayer({ id: 'property-cluster-count', type: 'symbol', source: 'properties', filter: ['has', 'point_count'], layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12 }, paint: { 'text-color': '#ffffff' } });
-      map.addLayer({ id: 'property-points', type: 'circle', source: 'properties', filter: ['!', ['has', 'point_count']], paint: { 'circle-color': '#173d32', 'circle-radius': 20, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
-      map.addLayer({ id: 'property-price-labels', type: 'symbol', source: 'properties', filter: ['!', ['has', 'point_count']], layout: { 'text-field': ['get', 'label'], 'text-size': 11 }, paint: { 'text-color': '#ffffff' } });
+      map.addLayer({
+        id: 'property-points', type: 'symbol', source: 'properties',
+        filter: ['!', ['has', 'point_count']],
+        layout: {
+          'icon-image': 'property-price-pin',
+          'icon-text-fit': 'both',
+          'icon-text-fit-padding': [7, 12, 7, 12],
+          'text-field': ['get', 'label'],
+          'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'],
+          'text-size': 12,
+          'text-offset': [0, -2],
+          'text-padding': 4,
+          'icon-padding': 4,
+        },
+        paint: { 'text-color': '#ffffff' },
+      });
       map.on('click', 'property-clusters', (event) => {
         const feature = map.queryRenderedFeatures(event.point, { layers: ['property-clusters'] })[0];
         const clusterId = Number(feature?.properties?.cluster_id); const coordinates = (feature?.geometry as GeoJSON.Point)?.coordinates;
@@ -130,7 +179,8 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
 
   return (
     <section className={`relative min-h-[55vh] overflow-hidden rounded-xl bg-surface-container-low sm:min-h-[420px] ${className}`} aria-label="Property map">
-      <div ref={containerRef} className="absolute inset-0" />
+      {/* Explicit positioning prevents the Mapbox stylesheet from collapsing the host. */}
+      <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
       {mappable.length === 0 && !mapError ? (
         <div className="absolute left-3 top-3 z-[900] rounded-lg bg-white/95 px-3 py-2 text-xs font-medium text-secondary shadow">
           No property markers in this area

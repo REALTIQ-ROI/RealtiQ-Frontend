@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import InquiryForm from '../../components/forms/InquiryForm';
 import PropertyGallery from '../../components/property/PropertyGallery';
 import PropertyMap from '../../components/property/map/PropertyMap';
+import LocationMap from '../../components/property/map/LocationMap';
 import PropertyMeta from '../../components/property/PropertyMeta';
 import PriceHistorySection from '../../components/property/PriceHistorySection';
 import PaymentTypeBadges from '../../components/property/PaymentTypeBadges';
@@ -1593,12 +1594,7 @@ const PropertyDetails = () => {
                 </p>
               </div>
               <div className='w-full h-[420px]'>
-                <iframe
-                  title={`${property.title} map`}
-                  src={`https://www.google.com/maps?q=${property.coordinates.lat},${property.coordinates.lng}&z=14&output=embed`}
-                  className='w-full h-full border-0'
-                  loading='lazy'
-                />
+                <LocationMap title={property.title} coordinates={property.coordinates} />
               </div>
             </Card>
           </section>
