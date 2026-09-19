@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import type { UserRole } from '../../types';
+import { clearMarketAccessIntent, marketAuthPath, useMarketAccessIntent } from '../../hooks/useMarketAccessIntent';
 
 type RegisterRole = Extract<UserRole, 'buyer' | 'landlord'>;
 
@@ -28,6 +29,7 @@ const Register = ({ purchaseMode = false }: RegisterProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { register, isLoading } = useAuth();
+  const marketRedirect = useMarketAccessIntent();
   const [role, setRole] = useState<RegisterRole>('buyer');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -53,7 +55,18 @@ const Register = ({ purchaseMode = false }: RegisterProps) => {
     setPasswordError(null);
 
     try {
-      await register({ name, email, password, role: purchaseMode ? 'buyer' : role });
+      const response = await register({ name, email, password, role: purchaseMode ? 'buyer' : role });
+      if (!purchaseMode && marketRedirect) {
+        if (response?.token) {
+          clearMarketAccessIntent();
+          toast.success('Account created. Continue to market analysis.');
+          navigate(marketRedirect, { replace: true });
+        } else {
+          toast.success('Please verify your email, then sign in to continue to payment.');
+          navigate(marketAuthPath('/registration-success', marketRedirect));
+        }
+        return;
+      }
       toast.success('Registration successful. Please check your email to verify your account.');
       navigate(purchaseMode ? buyerRedirect ?? '/checkout' : '/registration-success');
     } catch (err) {
@@ -135,7 +148,7 @@ const Register = ({ purchaseMode = false }: RegisterProps) => {
               >
                 Create Account
               </h2>
-              <p className="text-secondary font-medium">Elevate your property search in seconds.</p>
+              <p className="text-secondary font-medium">{!purchaseMode && marketRedirect ? 'Create your account to continue to Property Market Analysis payment.' : 'Elevate your property search in seconds.'}</p>
             </div>
 
             {/* Role Selection */}
@@ -237,7 +250,7 @@ const Register = ({ purchaseMode = false }: RegisterProps) => {
                 type="submit"
                 disabled={isLoading}
               >
-                {isLoading ? 'Creating Account...' : 'Start Curating'}
+                {isLoading ? 'Creating Account...' : !purchaseMode && marketRedirect ? 'Create Account & Continue' : 'Start Curating'}
                 <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">
                   chevron_right
                 </span>
@@ -248,7 +261,7 @@ const Register = ({ purchaseMode = false }: RegisterProps) => {
               Already have an account?{' '}
               <Link
                 className="text-primary font-bold hover:underline underline-offset-4 ml-1"
-                to={purchaseMode ? '/login-to-purchase' : '/login'}
+                to={purchaseMode ? '/login-to-purchase' : marketAuthPath('/login', marketRedirect)}
                 state={purchaseMode ? location.state : undefined}
               >
                 Sign In

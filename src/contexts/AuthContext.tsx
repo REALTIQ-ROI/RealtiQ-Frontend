@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { authService } from '../services/authService';
+import { authService, type RegisterResponse } from '../services/authService';
 import { userService } from '../services/userService';
 import type { LoginPayload, RegisterPayload, User } from '../types';
 
@@ -10,7 +10,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (payload: LoginPayload) => Promise<User>;
-  register: (payload: RegisterPayload) => Promise<void>;
+  register: (payload: RegisterPayload) => Promise<RegisterResponse>;
   updateUser: (nextUser: User) => void;
   refreshUser: () => Promise<User | null>;
   logout: () => void;
@@ -71,13 +71,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const register = useCallback(async (payload: RegisterPayload): Promise<void> => {
+  const register = useCallback(async (payload: RegisterPayload): Promise<RegisterResponse> => {
     setIsLoading(true);
     try {
       const response = await authService.register(payload);
       if (response.token) {
         persistSession(response.user, response.token);
       }
+      return response;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to register.';
       throw new Error(message);

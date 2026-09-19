@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { authService } from '../../services/authService';
 import AuthLoader from '../../components/common/AuthLoader';
+import { marketAuthPath, useMarketAccessIntent } from '../../hooks/useMarketAccessIntent';
 
 type Status = 'loading' | 'success' | 'error';
 
@@ -11,6 +12,8 @@ const VerifyEmail = () => {
   const token = searchParams.get('token') ?? pathToken;
   const proxyInspectorVerification = searchParams.get('role') === 'proxy_inspector';
   const navigate = useNavigate();
+  const marketRedirect = useMarketAccessIntent();
+  const loginPath = marketAuthPath(proxyInspectorVerification ? '/login?role=proxy_inspector' : '/login', marketRedirect);
   const [status, setStatus] = useState<Status>(token ? 'loading' : 'error');
   const [message, setMessage] = useState(token ? '' : 'Invalid verification link. No token provided.');
   const [countdown, setCountdown] = useState(3);
@@ -48,7 +51,7 @@ const VerifyEmail = () => {
       setCountdown((c) => {
         if (c <= 1) {
           clearInterval(interval);
-          navigate(proxyInspectorVerification ? '/login?role=proxy_inspector' : '/login', { replace: true });
+          navigate(loginPath, { replace: true });
           return 0;
         }
         return c - 1;
@@ -56,7 +59,7 @@ const VerifyEmail = () => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [status, navigate, proxyInspectorVerification]);
+  }, [status, navigate, loginPath]);
 
   if (status === 'loading') return <AuthLoader />;
 
@@ -92,7 +95,7 @@ const VerifyEmail = () => {
               Redirecting to login in {countdown}s…
             </p>
             <Link
-              to={proxyInspectorVerification ? '/login?role=proxy_inspector' : '/login'}
+              to={loginPath}
               className="inline-block w-full py-4 rounded-xl text-white font-bold text-sm tracking-tight hover:opacity-90 transition-opacity"
               style={{ background: 'linear-gradient(135deg, #000000 0%, #111c2d 100%)' }}
             >
@@ -115,14 +118,14 @@ const VerifyEmail = () => {
             </p>
             <div className="space-y-3">
               <Link
-                to="/login"
+                to={loginPath}
                 className="inline-block w-full py-4 rounded-xl text-white font-bold text-sm tracking-tight hover:opacity-90 transition-opacity"
                 style={{ background: 'linear-gradient(135deg, #000000 0%, #111c2d 100%)' }}
               >
                 Back to Login
               </Link>
               <Link
-                to="/register"
+                to={marketAuthPath('/register', marketRedirect)}
                 className="inline-block w-full py-4 rounded-xl bg-surface-container-low text-on-surface font-bold text-sm tracking-tight hover:bg-surface-container transition-colors"
               >
                 Create New Account

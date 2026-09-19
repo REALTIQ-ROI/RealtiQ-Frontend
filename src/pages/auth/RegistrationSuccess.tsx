@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
+import { marketAuthPath, useMarketAccessIntent } from '../../hooks/useMarketAccessIntent';
 
 const RegistrationSuccess = () => {
+  const marketRedirect = useMarketAccessIntent();
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center px-6"
@@ -28,6 +30,7 @@ const RegistrationSuccess = () => {
 
         <p className="text-slate-500 text-sm leading-relaxed mb-2">
           Registration successful. Please check your email to verify your account.
+          {marketRedirect ? ' After verification, sign in to continue to Property Market Analysis payment.' : ''}
         </p>
         <p className="text-slate-400 text-xs leading-relaxed mb-8">
           Didn't receive an email? Check your spam folder or try registering again.
@@ -35,7 +38,7 @@ const RegistrationSuccess = () => {
 
         <div className="space-y-3">
           <Link
-            to="/login"
+            to={marketAuthPath('/login', marketRedirect)}
             className="inline-block w-full py-4 rounded-xl text-white font-bold text-sm tracking-tight hover:opacity-90 transition-opacity"
             style={{ background: 'linear-gradient(135deg, #000000 0%, #111c2d 100%)' }}
           >

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import type { UserRole } from '../../types';
+import { clearMarketAccessIntent, marketAuthPath, useMarketAccessIntent } from '../../hooks/useMarketAccessIntent';
 
 type Role = Extract<UserRole, 'buyer' | 'landlord' | 'proxy_inspector'>;
 
@@ -27,6 +28,7 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { login, logout, isLoading } = useAuth();
+  const marketRedirect = useMarketAccessIntent();
   const [role, setRole] = useState<Role>(searchParams.get('role') === 'proxy_inspector' ? 'proxy_inspector' : 'buyer');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -52,6 +54,11 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
       }
 
       toast.success('Login successful');
+      if (!purchaseMode && marketRedirect) {
+        clearMarketAccessIntent();
+        navigate(marketRedirect, { replace: true });
+        return;
+      }
       const requested = (location.state as { redirectTo?: unknown } | null)?.redirectTo;
       const safeRoleRedirect =
         typeof requested === 'string' &&
@@ -134,7 +141,7 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
               <p className="text-secondary text-sm">
                 {purchaseMode
                   ? 'Sign in as a buyer to continue your property purchase.'
-                  : 'Please enter your details to access your collection.'}
+                  : marketRedirect ? 'Sign in to continue to Property Market Analysis payment.' : 'Please enter your details to access your collection.'}
               </p>
             </div>
 
@@ -231,7 +238,7 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
             <p className="mt-8 text-center text-secondary text-sm">
               Don't have an account?{' '}
               <Link
-                to={purchaseMode ? '/register-to-purchase' : '/register'}
+                to={purchaseMode ? '/register-to-purchase' : marketAuthPath('/register', marketRedirect)}
                 state={purchaseMode ? location.state : undefined}
                 className="text-primary font-bold hover:underline"
               >
