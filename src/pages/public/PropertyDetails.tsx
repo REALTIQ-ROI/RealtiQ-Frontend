@@ -59,6 +59,7 @@ import {
 } from '../../utils/installment';
 import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
 import { formatDate, formatNgn, labelize } from '../../utils/projectFormatters';
+import { hasPropertyMap, propertyGallerySlideCount } from '../../utils/propertyGallery';
 
 const formatCurrency = (value: number, currency = 'NGN') =>
   new Intl.NumberFormat('en-NG', {
@@ -137,6 +138,7 @@ const PropertyDetails = () => {
   const [ownerTrustBadge, setOwnerTrustBadge] = useState<import('../../types/phase45').TrustBadge | null>(null);
   const mediaSectionRef = useRef<HTMLDivElement>(null);
   const propertyReference = property ? propertyRouteReference(property) : '';
+  const gallerySlideCount = propertyGallerySlideCount(property);
   const virtualTourRequestAvailable = Boolean(property?.virtualTour?.available);
   useRecordRecentProperty(propertyReference);
   const startConversation = async () => {
@@ -160,16 +162,15 @@ const PropertyDetails = () => {
 
   const selectMedia = useCallback(
     (index: number, scrollToMedia = false) => {
-      const mediaLength = property?.media?.length ?? 0;
-      if (!mediaLength) return;
-      setActiveMediaIndex((index + mediaLength) % mediaLength);
+      if (!gallerySlideCount) return;
+      setActiveMediaIndex((index + gallerySlideCount) % gallerySlideCount);
       if (scrollToMedia)
         mediaSectionRef.current?.scrollIntoView({
           behavior: 'smooth',
           block: 'start',
         });
     },
-    [property?.media?.length],
+    [gallerySlideCount],
   );
   const resolveNearbyProperty = useCallback(
     (nearbyProperty: Property) =>
@@ -589,6 +590,18 @@ const PropertyDetails = () => {
                       )}
                     </button>
                   ))}
+                  {hasPropertyMap(property) ? (
+                    <button
+                      type='button'
+                      aria-label='View property map'
+                      aria-current={activeMediaIndex === (property.media?.length ?? 0) ? 'true' : undefined}
+                      onClick={() => selectMedia(property.media?.length ?? 0, true)}
+                      className={`flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-lg border-2 bg-surface-container-low ${activeMediaIndex === (property.media?.length ?? 0) ? 'border-primary ring-2 ring-primary/20' : 'border-transparent opacity-60'}`}
+                    >
+                      <span aria-hidden='true' className='material-symbols-outlined text-base'>map</span>
+                      <span className='text-[10px] font-bold'>Map</span>
+                    </button>
+                  ) : null}
                 </div>
                 <div className='hidden min-w-0 sm:block'>
                   <p className='truncate text-sm font-black text-primary'>
