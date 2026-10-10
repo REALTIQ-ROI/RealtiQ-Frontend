@@ -10,6 +10,10 @@ export default defineConfig({
     clearMocks: true,
   },
   server: {
+    fs: {
+      // Keep the source PDFs inaccessible on the dev server.
+      deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/REALTIQ*.pdf'],
+    },
     proxy: {
       "/api": {
         target: "https://api.realtiq.com.ng",

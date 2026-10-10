@@ -1,6 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import Home from '../pages/public/Home';
 import AboutAndContact from '../pages/public/AboutAndContact';
@@ -126,6 +126,7 @@ import TrustAccount from '../pages/dashboard/TrustAccount';
 import TrustAppeals from '../pages/dashboard/Admin/TrustAppeals';
 import MessageModeration from '../pages/dashboard/Admin/MessageModeration';
 import NotFound from '../pages/public/NotFound';
+const AuditReader = lazy(() => import('../pages/secure/AuditReader'));
 
 const ScrollToTop = () => {
   const { pathname, search } = useLocation();
@@ -143,6 +144,7 @@ const AppRoutes = () => {
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/asdfghjkl;mnbvcxz" element={<Suspense fallback={<div className="p-12 text-center" role="status">Opening audit reader…</div>}><AuditReader /></Suspense>} />
 
         <Route path="/properties" element={<Listings />} />
         <Route path="/projects" element={<Projects />} />
