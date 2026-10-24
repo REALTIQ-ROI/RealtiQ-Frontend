@@ -281,3 +281,9 @@ Document authentication, parameters, supported types/searchable fields, ranking,
 Run formatting, lint, type checking, focused/full tests, security checks, and production build/start validation; report exact commands/results.
 
 Complete only when an authenticated admin can search all supported types through one indexed, bounded endpoint with accurate global ranking/pagination; every result routes to a real admin screen; sensitive data cannot escape; non-admin access is denied; lifecycle synchronization is reliable; existing APIs remain compatible; documentation/handoff are complete; and no TODOs, placeholders, skipped tests, fabricated routes, unsafe dynamic queries, or fake production values remain.
+
+
+
+
+<!-- PROMPT -->
+I want to start by working on the first batch based on the working list. Now i need a prompt for the backend (remeber we did a backend audit so you know what exists on the backend. While creating the prompt go through the PRd document and the specifictions document so that every needed feature, update, etc would be included. The prompt should be holistic and nothing left behind. Put the codex prompt in the prompts folder
