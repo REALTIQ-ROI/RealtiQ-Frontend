@@ -4,7 +4,9 @@ import { useAsync } from '../../hooks/useAsync';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
 import { projectService, type UnitGridJob, type UnitGridJobRequest, type UnitGridMutation, type UnitGridOperation, type UnitGridQuery, type UnitGridRow } from '../../services/projectService';
 import { stepUpService } from '../../services/stepUpService';
-import { getCanonicalFields, parseCanonicalInput } from '../../utils/canonicalFieldRegistry';
+import { getCanonicalFields, parseCanonicalInput, reconcileCanonicalFieldRegistry, serializeCanonicalMutationDrafts, type CanonicalMutationDraft } from '../../utils/canonicalFieldRegistry';
+import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
+import CanonicalFieldMutationsEditor from '../canonical/CanonicalFieldMutationsEditor';
 import StepUpDialog from '../auth/StepUpDialog';
 import Button from '../ui/Button';
 
@@ -50,12 +52,14 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     currency: sort?.startsWith('price_') || priceBounds.minPrice !== undefined || priceBounds.maxPrice !== undefined ? currency : undefined,
   };
   const { data: grid, loading, error, execute } = useAsync(() => projectService.getUnitGrid(projectId, gridQuery), true, `${projectId}:${JSON.stringify(gridQuery)}:${refreshKey}`);
+  const { dictionary } = useCanonicalFieldDictionary();
   const [selected, setSelected] = useState<string[]>([]);
   const [field, setField] = useState<EditableField>('bedrooms');
   const selectedField = fields.find((item) => item.key === field)!;
   const fieldOptions: readonly string[] = selectedField.options ?? [];
   const [operation, setOperation] = useState<'set' | 'reset_to_inherited'>('set');
   const [fieldValue, setFieldValue] = useState('');
+  const [runtimeDrafts, setRuntimeDrafts] = useState<CanonicalMutationDraft[]>([]);
   const [targetUnitTypeId, setTargetUnitTypeId] = useState('');
   const [jobAction, setJobAction] = useState<JobAction>('availability');
   const [availability, setAvailability] = useState<'Available' | 'Under Offer' | 'Not released'>('Available');
@@ -119,6 +123,31 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     return { field, operation: 'set', value: parsed.value };
   };
 
+  const currentMutations = (): UnitGridMutation[] | null => {
+    let mutations: Array<{ field: string; operation: string; value?: unknown }> = [];
+    if (runtimeDrafts.length) {
+      if (!dictionary) { setActionError('Canonical field policy is unavailable. Refresh before editing additional fields.'); return null; }
+      const serialized = serializeCanonicalMutationDrafts(runtimeDrafts, reconcileCanonicalFieldRegistry(dictionary), 'project_unit');
+      if (Object.keys(serialized.errors).length) { setActionError(Object.values(serialized.errors).join(' ')); return null; }
+      if (serialized.mutations.some((mutation) => mutation.operation === 'set_null')) {
+        setActionError('The unit-grid contract does not expose set-null mutations. Choose set, unset or reset-to-inherited as allowed by the field dictionary.');
+        return null;
+      }
+      mutations = serialized.mutations;
+    }
+    if (operation === 'reset_to_inherited' || fieldValue.trim() !== '') {
+      const mutation = currentMutation();
+      if (!mutation) return null;
+      mutations = [...mutations, mutation];
+    }
+    if (!mutations.length) { setActionError('Enter a value or choose an allowed inheritance operation.'); return null; }
+    if (new Set(mutations.map((mutation) => mutation.field)).size !== mutations.length) { setActionError('The same canonical field cannot be edited twice in one grid operation.'); return null; }
+    return mutations.map((mutation) => {
+      const operation: UnitGridMutation['operation'] = mutation.operation === 'reset_to_inherit' ? 'reset_to_inherited' : mutation.operation as UnitGridMutation['operation'];
+      return { field: mutation.field, operation, ...(Object.prototype.hasOwnProperty.call(mutation, 'value') ? { value: mutation.value } : {}) };
+    });
+  };
+
   const selectedRows = (): UnitGridRow[] | null => {
     if (!grid || !rows.length || rows.length !== selected.length) { setActionError('Select units on this grid page before submitting.'); return null; }
     if (rows.some((row) => !Number.isInteger(row.version))) { setActionError('A selected row has no current version. Refresh the grid.'); return null; }
@@ -134,15 +163,16 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     if (conflict || working || !grid) return;
     setActionError(null);
     const targets = selectedRows();
-    const mutation = currentMutation();
-    if (!targets || !mutation) return;
-    const unsigned = { expectedProjectVersion: grid.projectVersion, rows: targets.map((row) => ({ unitId: row._id, expectedVersion: row.version, canonicalFieldMutations: [mutation] })) };
+    const mutations = currentMutations();
+    if (!targets || !mutations?.length) return;
+    const unsigned = { expectedProjectVersion: grid.projectVersion, rows: targets.map((row) => ({ unitId: row._id, expectedVersion: row.version, canonicalFieldMutations: mutations })) };
     const signature = JSON.stringify(unsigned);
     setWorking(true);
     try {
       const result = await projectService.editUnitGrid(projectId, { ...unsigned, operationKey: keyFor(operationKeyRef, signature) });
       setLastOperation(result.operation);
       setSelected([]);
+      setRuntimeDrafts([]);
       operationKeyRef.current = null;
       setRefreshKey((value) => value + 1);
     } catch (raw) { handleFailure(raw); }
@@ -173,10 +203,10 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     setActionError(null);
     const targets = selectedRows();
     if (!targets) return;
-    let mutation: UnitGridMutation | null = null;
+    let mutations: UnitGridMutation[] | null = null;
     if (jobAction === 'field_edit') {
-      mutation = currentMutation();
-      if (!mutation) return;
+      mutations = currentMutations();
+      if (!mutations?.length) return;
     }
     const adjustment = Number(adjustmentValue);
     if (jobAction === 'price_adjustment' && (!Number.isFinite(adjustment) || adjustment <= 0 || (adjustmentMode === 'amount' && !Number.isInteger(adjustment)))) {
@@ -188,13 +218,14 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       action: jobAction,
       ...(jobAction === 'availability' ? { actionOptions: { targetAvailability: availability } } : {}),
       ...(jobAction === 'price_adjustment' ? { actionOptions: { mode: adjustmentMode, direction: adjustmentDirection, value: adjustment } } : {}),
-      rows: targets.map((row) => ({ unitId: row._id, expectedVersion: row.version, ...(mutation ? { canonicalFieldMutations: [mutation] } : {}) })),
+      rows: targets.map((row) => ({ unitId: row._id, expectedVersion: row.version, ...(mutations ? { canonicalFieldMutations: mutations } : {}) })),
     };
     const signature = JSON.stringify(unsigned);
     setWorking(true);
     try {
       setJob(await projectService.createUnitGridJob(projectId, { ...unsigned, operationKey: keyFor(jobKeyRef, signature) }));
       setSelected([]);
+      if (jobAction === 'field_edit') setRuntimeDrafts([]);
       jobKeyRef.current = null;
       setRefreshKey((value) => value + 1);
     } catch (raw) { handleFailure(raw); }
@@ -275,6 +306,7 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       <div className="space-y-3"><h3 className="font-black">Canonical field edit</h3><div className="grid gap-2 sm:grid-cols-2"><select aria-label="Grid field" value={field} onChange={(event) => { const nextField = event.target.value as EditableField; setField(nextField); setFieldValue(''); if (!fields.find((item) => item.key === nextField)?.inherits) setOperation('set'); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{fields.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select><select aria-label="Grid mutation" value={operation} onChange={(event) => setOperation(event.target.value as 'set' | 'reset_to_inherited')} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="set">Set explicit override</option><option value="reset_to_inherited" disabled={!fields.find((item) => item.key === field)?.inherits}>Reset to inherited</option></select></div>
         {operation === 'set' ? selectedField.kind === 'boolean' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose Yes or No</option><option value="true">Yes</option><option value="false">No</option></select> : selectedField.kind === 'enum' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose a value</option>{fieldOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select> : <input aria-label="Grid field value" type={selectedField.kind === 'text' ? 'text' : selectedField.kind === 'month' ? 'month' : 'number'} min={selectedField.min} max={selectedField.max} step={selectedField.kind === 'integer' ? 1 : 'any'} value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder={selectedField.kind === 'text' ? 'Enter a value' : 'Enter a value, including 0'} /> : <p className="text-xs text-secondary">The selected field will inherit from its unit type or project where the canonical dictionary allows inheritance.</p>}
         <Button type="button" disabled={!rows.length || working || conflict} onClick={() => void submitDirectEdit()}>Apply to selected units</Button>
+        <CanonicalFieldMutationsEditor target="project_unit" title="Runtime canonical fields" value={runtimeDrafts} onChange={setRuntimeDrafts} canonicalFields={rows.length === 1 ? rows[0].rawOverrides : undefined} effectiveFields={rows.length === 1 ? rows[0].effectiveFields : undefined} fieldSources={rows.length === 1 ? rows[0].fieldSources : undefined} allowedOperations={['set', 'unset', 'reset_to_inherit']} />
         <div className="border-t border-outline-variant/20 pt-3"><label className="text-xs font-bold text-secondary" htmlFor="unit-grid-target-type">Move to same-project unit type ID</label><input id="unit-grid-target-type" value={targetUnitTypeId} onChange={(event) => setTargetUnitTypeId(event.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="24-character unit type ID" /><Button type="button" variant="secondary" disabled={!rows.length || working || conflict} onClick={() => void submitTypeMove()}>Move selected units</Button></div>
       </div>
       <div className="space-y-3"><h3 className="font-black">Durable bulk job</h3><select aria-label="Grid job action" value={jobAction} onChange={(event) => setJobAction(event.target.value as JobAction)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{[['availability', 'Set availability'], ['field_edit', 'Edit selected field'], ['price_adjustment', 'Adjust asking price'], ['publish', 'Publish ready units'], ['unpublish', 'Unpublish'], ['archive', 'Archive'], ['confirm', 'Confirm freshness']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>

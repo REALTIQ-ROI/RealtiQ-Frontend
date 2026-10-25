@@ -12,8 +12,9 @@ import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../../lib/axios';
 import { cartService } from '../../../services/cartService';
 import { profileService } from '../../../services/profileService';
-import type { CartEligibilityResponse, CartItemResponse } from '../../../types';
+import type { CartCheckoutDetail, CartEligibilityResponse, CartItemResponse } from '../../../types';
 import { cartItemTypeLabel, formatNgn } from '../../../utils/cartFormatters';
+import { checkoutHasUnresolvedProviderOutcome, isUnknownCheckoutInitialization } from '../../../utils/cartCheckoutRecovery';
 
 interface InvalidCartItem {
   itemId?: string;
@@ -29,6 +30,7 @@ const parseInvalidItems = (value: unknown): InvalidCartItem[] =>
 
 const EMPTY_CART_ITEMS: CartItemResponse[] = [];
 const checkoutAttemptKey = (profileId: string) => `realtiq.cartCheckoutInitializationAttempt:${profileId}`;
+const checkoutUnknownKey = (profileId: string) => `realtiq.cartCheckoutOutcomeUnknown:${profileId}`;
 const eligibilityParams = (item: CartItemResponse) => {
   const rawAccessType = item.metadata?.accessType;
   const accessType = ['one_time', 'daily', 'monthly'].includes(String(rawAccessType)) ? rawAccessType as 'one_time' | 'daily' | 'monthly' : undefined;
@@ -43,7 +45,9 @@ const ServiceCart = () => {
   const [invalidItems, setInvalidItems] = useState<InvalidCartItem[]>([]);
   const [eligibility, setEligibility] = useState<Record<string, { result?: CartEligibilityResponse; error?: string }>>({});
   const [eligibilityLoading, setEligibilityLoading] = useState(false);
-  const [checkouts, setCheckouts] = useState<Array<{ checkoutId: string; paymentReference?: string; status: string; totalAmount: number; currency: string; items: Array<{ id: string; type: string; amount: number; status: string; failureReason?: string }> }>>([]);
+  const [checkouts, setCheckouts] = useState<CartCheckoutDetail[]>([]);
+  const [checkoutOutcomeUnknown, setCheckoutOutcomeUnknown] = useState(false);
+  const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null);
   const [recoveryRequired, setRecoveryRequired] = useState(false);
   const [recoveryReviewed, setRecoveryReviewed] = useState(false);
   const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(false);
@@ -70,13 +74,17 @@ const ServiceCart = () => {
     try {
       const result = await cartService.listCartCheckouts({ page: 1, limit: 10 });
       setCheckouts(result.checkouts);
+      if (result.checkouts.some((checkout) => checkoutHasUnresolvedProviderOutcome(checkout.initializationState))) {
+        setCheckoutOutcomeUnknown(true);
+        if (activeProfile?.id) sessionStorage.setItem(checkoutUnknownKey(activeProfile.id), '1');
+      }
       setRecoveryReviewed(true);
       setRecoveryAcknowledged(false);
     } catch (raw) {
       setRecoveryError(raw instanceof Error ? raw.message : 'Unable to inspect recent checkout state.');
       setRecoveryReviewed(false);
     }
-  }, []);
+  }, [activeProfile?.id]);
 
   useEffect(() => {
     if (!isBuyer || !activeProfile?.id || !eligibilityItems.length) {
@@ -105,8 +113,10 @@ const ServiceCart = () => {
       setRecoveryReviewed(false);
       setRecoveryAcknowledged(false);
       setCheckouts([]);
+      setCheckoutOutcomeUnknown(false);
       return;
     }
+    setCheckoutOutcomeUnknown(sessionStorage.getItem(checkoutUnknownKey(activeProfile.id)) === '1');
     const hasUnresolvedAttempt = sessionStorage.getItem(checkoutAttemptKey(activeProfile.id)) !== null;
     setRecoveryRequired(hasUnresolvedAttempt);
     setRecoveryReviewed(false);
@@ -140,7 +150,7 @@ const ServiceCart = () => {
   };
 
   const handleCheckout = async () => {
-    if (!activeProfile?.id || checkingOut || checkoutStepUp.busy || checkoutStepUp.challenge || locked) return;
+    if (!activeProfile?.id || checkingOut || checkoutStepUp.busy || checkoutStepUp.challenge || locked || checkoutOutcomeUnknown) return;
     if (recoveryRequired && (!recoveryReviewed || !recoveryAcknowledged)) return;
     if (paidTourItems.length) {
       toast.error('Paid or live tour purchases are not available in this cart workflow. Remove those items before checkout.');
@@ -177,6 +187,11 @@ const ServiceCart = () => {
             setRecoveryRequired(true);
             setRecoveryReviewed(false);
             setRecoveryAcknowledged(false);
+            if (isUnknownCheckoutInitialization(raw)) {
+              setCheckoutOutcomeUnknown(true);
+              setCheckoutRequestId(raw.requestId ?? null);
+              sessionStorage.setItem(checkoutUnknownKey(activeProfile.id), '1');
+            }
             const stale = raw instanceof ApiRequestError ? parseInvalidItems(raw.invalidItems) : [];
             if (stale.length) { setInvalidItems(stale); await refreshCart(); }
             void inspectCheckouts();
@@ -197,6 +212,14 @@ const ServiceCart = () => {
     if (!result.ok) return false;
     const response = result.value;
     setServerTotal(response.totalAmount);
+    if (checkoutHasUnresolvedProviderOutcome(response.initializationState)) {
+      setCheckoutOutcomeUnknown(true);
+      sessionStorage.setItem(checkoutUnknownKey(activeProfile?.id ?? ''), '1');
+      setRecoveryRequired(true);
+      setRecoveryError('The provider initialization result is unresolved. Do not start another checkout. Refresh checkout status or request support.');
+      void inspectCheckouts();
+      return true;
+    }
     setRecoveryRequired(false);
     setRecoveryReviewed(false);
     setRecoveryAcknowledged(false);
@@ -224,7 +247,8 @@ const ServiceCart = () => {
             <div className="mt-2"><Link className="font-bold underline" to="/dashboard/buyer/cart-checkouts">Open checkout history</Link></div>
           </div>
         ) : null}
-        {recoveryRequired ? <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+        {checkoutOutcomeUnknown ? <section role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-950"><h3 className="font-bold">Provider outcome unresolved</h3><p className="mt-2">The backend recorded an unknown provider initialization result. No new checkout attempt will be issued and this is not treated as a payment failure. Refresh checkout history or open a returned checkout to review its status. If it remains unresolved, contact support with the checkout reference and{checkoutRequestId ? ` request ID ${checkoutRequestId}` : ' the request ID shown by the server'}.</p><div className="mt-3 flex flex-wrap gap-3"><Button type="button" variant="secondary" disabled={checkingOut} onClick={() => void inspectCheckouts()}>Refresh checkout state</Button><Link className="font-bold underline" to="/dashboard/buyer/cart-checkouts">Open checkout history</Link></div>{checkouts.filter((checkout) => checkout.initializationState === 'outcome_unknown').map((checkout) => <Link key={checkout.checkoutId} className="mt-3 block font-bold underline" to={`/dashboard/buyer/cart-checkouts/${encodeURIComponent(checkout.checkoutId)}`}>Review checkout {checkout.checkoutId}{checkout.paymentReference ? ` · ${checkout.paymentReference}` : ''}</Link>)}</section> : null}
+        {recoveryRequired && !checkoutOutcomeUnknown ? <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
           <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Previous checkout result needs review</h3><Button type="button" variant="secondary" disabled={checkingOut || checkoutStepUp.busy} onClick={() => void inspectCheckouts()}>Inspect checkout state</Button></div>
           <p className="mt-2">The last initialization request may have created a pending checkout before the connection failed. No new payment request will be sent until you inspect the latest checkout records and explicitly authorize a recovery attempt.</p>
           {recoveryError ? <p role="alert" className="mt-2 text-error">{recoveryError}</p> : null}
@@ -297,12 +321,12 @@ const ServiceCart = () => {
             <Button type="button" variant="secondary" disabled={locked || checkingOut || Boolean(checkoutStepUp.challenge) || !cart?.items.length} onClick={() => void handleClear()}>
               Clear cart
             </Button>
-            <Button type="button" disabled={!isBuyer || !cart?.items.length || locked || checkingOut || checkoutStepUp.busy || Boolean(checkoutStepUp.challenge) || eligibilityLoading || !eligibilityComplete || Boolean(eligibilityProblems.length) || Boolean(paidTourItems.length) || (recoveryRequired && (!recoveryReviewed || !recoveryAcknowledged))} onClick={() => void handleCheckout()}>
-              {checkingOut || checkoutStepUp.busy ? 'Preparing secure checkout…' : recoveryRequired ? 'Authorize a new checkout attempt' : 'Checkout with Paystack'}
+            <Button type="button" disabled={!isBuyer || !cart?.items.length || locked || checkoutOutcomeUnknown || checkingOut || checkoutStepUp.busy || Boolean(checkoutStepUp.challenge) || eligibilityLoading || !eligibilityComplete || Boolean(eligibilityProblems.length) || Boolean(paidTourItems.length) || (recoveryRequired && (!recoveryReviewed || !recoveryAcknowledged))} onClick={() => void handleCheckout()}>
+              {checkoutOutcomeUnknown ? 'Checkout unavailable while outcome is unresolved' : checkingOut || checkoutStepUp.busy ? 'Preparing secure checkout…' : recoveryRequired ? 'Authorize a new checkout attempt' : 'Checkout with Paystack'}
             </Button>
             </div>
             {checkoutStepUp.error ? <p role="alert" className="text-xs text-error">{checkoutStepUp.error}</p> : null}
-            <p className="text-xs text-secondary">Checkout initialization uses a TOTP-bound JSON request. A failed connection is inspected before another initialization can be authorized.</p>
+            <p className="text-xs text-secondary">Checkout initialization uses a TOTP-bound JSON request. The backend's outcome_unknown state stays locked until current checkout/provider status or support resolves it.</p>
           </div>
         </section>
         <Button type="button" variant="ghost" onClick={() => navigate('/properties')}>

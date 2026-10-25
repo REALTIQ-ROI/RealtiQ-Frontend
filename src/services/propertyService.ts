@@ -38,6 +38,9 @@ export interface TitleDocumentUploadMetadata {
 
 export interface CreatePropertyPayload {
   canonicalFields?: Record<string, unknown>;
+  canonicalFieldMutations?: Array<{ field: string; operation: 'set' | 'set_null' | 'unset' | 'reset_to_inherit'; value?: unknown }>;
+  canonicalUnitTypeId?: string;
+  publicationAction?: 'save_draft';
   title: string;
   price: number;
   paymentTypes: PropertyPaymentType[];
@@ -372,9 +375,9 @@ export const propertyService = {
 
   async updateProperty(id: string, payload: UpdatePropertyPayload, challengeId?: string): Promise<Property> {
     const { data } = challengeId
-      ? await api.patch<{ property: Property; version?: number }>(`/properties/${encodeURIComponent(id)}`, payload, { headers: { 'X-Step-Up-Challenge': challengeId } })
-      : await api.patch<{ property: Property; version?: number }>(`/properties/${encodeURIComponent(id)}`, payload);
-    return normalizeProperty(data.property);
+      ? await api.patch<Property>(`/properties/${encodeURIComponent(id)}`, payload, { headers: { 'X-Step-Up-Challenge': challengeId } })
+      : await api.patch<Property>(`/properties/${encodeURIComponent(id)}`, payload);
+    return normalizeProperty(data);
   },
 
   async deleteProperty(id: string, body: ArchivePropertyRequest, challengeId: string): Promise<unknown> {

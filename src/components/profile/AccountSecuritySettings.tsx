@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
@@ -40,8 +40,47 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
   const [signatoryExpiresAt, setSignatoryExpiresAt] = useState('');
   const [signatoryError, setSignatoryError] = useState<string | null>(null);
   const [signatorySuccess, setSignatorySuccess] = useState<string | null>(null);
+  const [twoStepEnabled, setTwoStepEnabled] = useState<boolean | null>(null);
+  const [twoStepPassword, setTwoStepPassword] = useState('');
+  const [twoStepCode, setTwoStepCode] = useState('');
+  const [twoStepEnrollment, setTwoStepEnrollment] = useState<Awaited<ReturnType<typeof authService.enrollTwoStep>> | null>(null);
+  const [twoStepBusy, setTwoStepBusy] = useState(false);
+  const [twoStepError, setTwoStepError] = useState<string | null>(null);
   const [pendingStepUp, setPendingStepUp] = useState<'identity' | 'signatory' | null>(null);
   const startKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void authService.getTwoStep().then((result) => { if (active) setTwoStepEnabled(result.enabled); })
+      .catch((raw) => { if (active) setTwoStepError(errorText(raw)); });
+    return () => { active = false; };
+  }, []);
+
+  const beginTwoStepEnrollment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (twoStepBusy || twoStepEnabled || !twoStepPassword) return;
+    setTwoStepBusy(true); setTwoStepError(null);
+    try {
+      const enrollment = await authService.enrollTwoStep({ password: twoStepPassword });
+      if (!enrollment.secret || !enrollment.provisioningUri || !Number.isFinite(Date.parse(enrollment.expiresAt)) || Date.parse(enrollment.expiresAt) <= Date.now()) throw new Error('The authenticator enrollment response is incomplete or expired. Refresh status and try again.');
+      setTwoStepEnrollment(enrollment);
+      setTwoStepPassword('');
+    } catch (raw) { setTwoStepError(errorText(raw)); }
+    finally { setTwoStepBusy(false); }
+  };
+
+  const confirmTwoStepEnrollment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!twoStepEnrollment || twoStepBusy || !/^\d{6}$/.test(twoStepCode)) return;
+    if (Date.parse(twoStepEnrollment.expiresAt) <= Date.now()) { setTwoStepEnrollment(null); setTwoStepCode(''); setTwoStepError('This enrollment expired. Start again to receive a fresh authenticator setup.'); return; }
+    setTwoStepBusy(true); setTwoStepError(null);
+    try {
+      const result = await authService.confirmTwoStep(twoStepCode);
+      setTwoStepEnabled(result.enabled); setTwoStepEnrollment(null); setTwoStepCode('');
+      toast.success('Authenticator verification is enabled for this account.');
+    } catch (raw) { setTwoStepError(errorText(raw)); }
+    finally { setTwoStepBusy(false); }
+  };
 
   const requestIdentityChange = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -288,7 +327,13 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
 
       <div className="border-t border-outline-variant/10 pt-5">
         <h4 className="font-bold">Authenticator enrollment</h4>
-        <p className="mt-1 text-sm text-amber-900">Step-up works with an already-enabled TOTP factor. Enrollment and confirmation request/response DTOs are controller-defined but not included in the handoff, so setup remains unavailable here.</p>
+        <p className="mt-1 text-sm text-secondary">Account status: {twoStepEnabled === null ? 'checking…' : twoStepEnabled ? 'Authenticator enabled' : 'Authenticator not enabled'}.</p>
+        {twoStepError ? <p role="alert" className="mt-2 text-sm text-error">{twoStepError}</p> : null}
+        {twoStepEnabled === false && !twoStepEnrollment ? <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={(event) => void beginTwoStepEnrollment(event)}>
+          <label htmlFor="two-step-password" className="min-w-56 flex-1 space-y-1 text-xs font-bold">Current password<input id="two-step-password" type="password" autoComplete="current-password" value={twoStepPassword} onChange={(event) => setTwoStepPassword(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 bg-white px-3 py-2 text-sm font-normal" /></label>
+          <Button type="submit" disabled={twoStepBusy || !twoStepPassword} loading={twoStepBusy} loadingLabel="Preparing…">Set up authenticator</Button>
+        </form> : null}
+        {twoStepEnrollment ? <div className="mt-3 rounded-lg bg-surface-container-low p-4"><p className="text-sm">Add this account to your authenticator app before {new Date(twoStepEnrollment.expiresAt).toLocaleString()}.</p><label className="mt-3 block text-xs font-bold">Setup key (shown only during this enrollment)<textarea readOnly value={twoStepEnrollment.secret} rows={2} className="mt-1 w-full rounded-lg border border-outline-variant/20 bg-white p-3 font-mono text-sm" /></label><label className="mt-3 block text-xs font-bold">Provisioning URI<textarea readOnly value={twoStepEnrollment.provisioningUri} rows={3} className="mt-1 w-full rounded-lg border border-outline-variant/20 bg-white p-3 font-mono text-xs" /></label><form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={(event) => void confirmTwoStepEnrollment(event)}><label htmlFor="two-step-confirm-code" className="min-w-48 flex-1 space-y-1 text-xs font-bold">Authenticator code<input id="two-step-confirm-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={twoStepCode} onChange={(event) => setTwoStepCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-lg border border-outline-variant/20 bg-white px-3 py-2 text-sm font-normal" /></label><Button type="submit" disabled={twoStepBusy || twoStepCode.length !== 6} loading={twoStepBusy} loadingLabel="Verifying…">Confirm authenticator</Button><Button type="button" variant="secondary" disabled={twoStepBusy} onClick={() => { setTwoStepEnrollment(null); setTwoStepCode(''); }}>Cancel</Button></form></div> : null}
       </div>
 
       {activeProfile && (activeProfile.structure === 'company' || activeProfile.structure === 'cooperative') ? <section className="border-t border-outline-variant/10 pt-5">

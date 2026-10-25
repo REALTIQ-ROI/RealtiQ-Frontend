@@ -38,7 +38,11 @@ describe('buildProjectEditPatch', () => {
       canonicalFields: { gatedEstate: false, projectPin: { lat: 0, lng: 0 }, accessRoadConditions: [] },
     }, 10)).toEqual({
       expectedVersion: 10,
-      canonicalFields: { gatedEstate: false, projectPin: { lat: 0, lng: 0 }, accessRoadConditions: [] },
+      canonicalFieldMutations: [
+        { field: 'gatedEstate', operation: 'set', value: false },
+        { field: 'projectPin', operation: 'set', value: { lat: 0, lng: 0 } },
+        { field: 'accessRoadConditions', operation: 'set', value: [] },
+      ],
     });
   });
 });

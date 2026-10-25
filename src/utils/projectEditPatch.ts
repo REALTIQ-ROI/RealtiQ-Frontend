@@ -3,7 +3,7 @@ import type { CreateProjectRequest, UpdateProjectRequest } from '../services/pro
 
 const editableProjectFields = [
   'name', 'projectType', 'description', 'shortDescription', 'address', 'country', 'state', 'city', 'area',
-  'coordinates', 'amenities', 'features', 'nearbyLandmarks', 'completionDate', 'launchDate',
+  'coordinates', 'amenities', 'features', 'nearbyLandmarks', 'completionDate', 'launchDate', 'media',
 ] as const satisfies readonly (keyof CreateProjectRequest)[];
 
 type EditableProjectField = (typeof editableProjectFields)[number];
@@ -30,7 +30,7 @@ const sameCanonicalValue = (left: unknown, right: unknown): boolean => {
   return JSON.stringify(left) === JSON.stringify(right);
 };
 
-/** Builds a changed-only legacy-compatible project PATCH; canonical field dictionary DTOs remain separate. */
+/** Builds a changed-only project PATCH using the documented canonical mutation envelope. */
 export const buildProjectEditPatch = (
   current: ProjectDetail,
   draft: CreateProjectRequest,
@@ -47,7 +47,11 @@ export const buildProjectEditPatch = (
   const canonicalChanges = Object.fromEntries(Object.entries(canonicalDraft).filter(([field, value]) =>
     !sameCanonicalValue(canonicalCurrent[field], value),
   ));
-  if (Object.keys(canonicalChanges).length) patch.canonicalFields = canonicalChanges;
+  const mutations = [
+    ...Object.entries(canonicalChanges).map(([field, value]) => ({ field, operation: 'set' as const, value })),
+    ...(draft.canonicalFieldMutations ?? []),
+  ];
+  if (mutations.length) patch.canonicalFieldMutations = mutations;
   return patch;
 };
 

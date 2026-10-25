@@ -1,4 +1,4 @@
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
@@ -12,10 +12,12 @@ import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { projectService, type ProjectPublicationRequest, type UnitGridJob } from '../../../services/projectService';
 import { virtualTourService } from '../../../services/virtualTourService';
 import { ApiRequestError } from '../../../lib/axios';
+import { projectPublicationReadinessView } from '../../../utils/projectPublicationReadiness';
 import type { ProjectDetail, Property, VirtualTourProvider } from '../../../types';
 import { formatPriceRange, labelize } from '../../../utils/projectFormatters';
 import { downloadBlob } from '../../../utils/projectImport';
 import UnitGridPanel from '../../../components/project/UnitGridPanel';
+import UnitTypeManagement from '../../../components/project/UnitTypeManagement';
 import { useAuth } from '../../../contexts/AuthContext';
 
 interface LandlordProjectManageData {
@@ -31,6 +33,7 @@ const loadLandlordProjectManage = async (id: string): Promise<LandlordProjectMan
 };
 
 const ProjectManage = () => {
+  const navigate = useNavigate();
   const { activeProfile } = useAuth();
   const [savingTourPreference, setSavingTourPreference] = useState(false);
   const [exportingGrid, setExportingGrid] = useState(false);
@@ -45,8 +48,10 @@ const ProjectManage = () => {
   const [publicationUnitIds, setPublicationUnitIds] = useState<string[]>([]);
   const [publicationError, setPublicationError] = useState<string | null>(null);
   const [publicationResult, setPublicationResult] = useState<ProjectDetail['publication'] | null>(null);
+  const [publicationReadiness, setPublicationReadiness] = useState<ApiRequestError['publicationReadiness']>(undefined);
   const [publishing, setPublishing] = useState(false);
   const publicationStepUp = useBoundStepUp<{ project: ProjectDetail }>();
+  const deleteProjectStepUp = useBoundStepUp<{ message: string }>();
   const cancelPublicationStepUp = publicationStepUp.cancel;
   const [extraUnits, setExtraUnits] = useState<Property[]>([]);
   const [nextUnitPage, setNextUnitPage] = useState(2);
@@ -81,6 +86,7 @@ const ProjectManage = () => {
     cancelPublicationStepUp();
     setPublicationError(null);
     setPublicationResult(null);
+    setPublicationReadiness(undefined);
   }, [id, cancelPublicationStepUp]);
 
   const startPublication = async () => {
@@ -89,6 +95,7 @@ const ProjectManage = () => {
     setPublishing(true);
     setPublicationError(null);
     setPublicationResult(null);
+    setPublicationReadiness(undefined);
     try {
       const { project: currentProject } = await projectService.getProjectManage(project._id);
       if (typeof currentProject.version !== 'number') {
@@ -108,7 +115,10 @@ const ProjectManage = () => {
         label: body.publicationAction === 'save_draft' ? 'Save this project as a draft and unpublish its units' : `Publish project units: ${body.publicationAction.replaceAll('_', ' ')}`,
         execute: async (challengeId, exactBody) => {
           try { return await projectService.publishProject(project._id, exactBody, challengeId); }
-          catch (raw) { await refreshProject(); throw raw; }
+          catch (raw) {
+            if (raw instanceof ApiRequestError) setPublicationReadiness(raw.publicationReadiness);
+            await refreshProject(); throw raw;
+          }
         },
       });
     } catch (raw) { setPublicationError(raw instanceof ApiRequestError && raw.code ? `${raw.message} (${raw.code})` : raw instanceof Error ? raw.message : 'Unable to start publication challenge.'); }
@@ -120,9 +130,30 @@ const ProjectManage = () => {
     const result = await publicationStepUp.complete(code);
     if (!result.ok) return false;
     setPublicationResult(result.value.project.publication ?? null);
+    setPublicationReadiness(undefined);
     setPublicationUnitIds([]);
     await refreshProject();
     toast.success('Project publication state was updated. Review the current readiness and publication counts.');
+    return true;
+  };
+
+  const deleteEmptyProject = async () => {
+    if (!project || typeof project.version !== 'number' || (data?.totalUnits ?? project.totalUnits ?? project.propertyCount ?? 0) !== 0) return;
+    if (!window.confirm('Delete this empty project? Projects with current or historical units cannot be deleted.')) return;
+    const body = { expectedVersion: project.version };
+    const started = await deleteProjectStepUp.begin({
+      method: 'DELETE', path: `/api/projects/${encodeURIComponent(project._id)}`, body,
+      label: 'Delete this empty project',
+      execute: (challengeId, exactBody) => projectService.deleteProject(project._id, exactBody, challengeId),
+    });
+    if (!started) setPublicationError(deleteProjectStepUp.error ?? 'The secure deletion could not start.');
+  };
+
+  const finishProjectDelete = async (code: string): Promise<boolean> => {
+    const result = await deleteProjectStepUp.complete(code);
+    if (!result.ok) return false;
+    toast.success('Empty project deleted.');
+    navigate('/dashboard/landlord/projects');
     return true;
   };
 
@@ -229,6 +260,8 @@ const ProjectManage = () => {
     }
   };
 
+  const readinessView = publicationReadiness ? projectPublicationReadinessView(publicationReadiness) : null;
+
   return (
     <>
     <LandlordPortalLayout active="projects" title="Manage Project">
@@ -248,10 +281,12 @@ const ProjectManage = () => {
                 <Link to={`/dashboard/landlord/projects/${project._id}/imports`} className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary">Bulk Upload Properties</Link>
                 <Button type="button" variant="secondary" loading={exportingGrid} onClick={() => void exportGrid()}>Export unit grid</Button>
                 <Button type="button" onClick={() => setPublicationOpen((value) => !value)}>Publication</Button>
-                <Button type="button" variant="secondary" disabled title="The mounted archive route has no documented DELETE request DTO to bind to step-up">Archive unavailable</Button>
+                <Button type="button" variant="secondary" disabled={deleteProjectStepUp.busy || Boolean(deleteProjectStepUp.challenge) || typeof project.version !== 'number' || (data?.totalUnits ?? project.totalUnits ?? project.propertyCount ?? 0) !== 0} onClick={() => void deleteEmptyProject()}>Delete empty project</Button>
               </div>
             </header>
-            <p className="text-sm text-secondary">Project edits use changed-only fields and the current version. Publication actions below use the version-bound one-use security challenge. Project archive remains unavailable until its exact versioned DELETE body is documented.</p>
+            {deleteProjectStepUp.error ? <p role="alert" className="rounded-lg bg-error-container p-3 text-sm text-on-error-container">{deleteProjectStepUp.error}</p> : null}
+            {publicationError && !publicationOpen ? <p role="alert" className="rounded-lg bg-error-container p-3 text-sm text-on-error-container">{publicationError}</p> : null}
+            <p className="text-sm text-secondary">Project edits use changed-only fields and the current version. Publication actions use the version-bound one-use security challenge. The documented DELETE route removes only empty projects; no archive operation is available.</p>
 
             {publicationOpen ? <section className="rounded-xl border border-outline-variant/10 bg-white p-5" id="project-publication">
               <h2 className="text-xl font-black">Project publication</h2>
@@ -259,7 +294,8 @@ const ProjectManage = () => {
               <div className="mt-4 flex flex-wrap gap-3 text-sm"><label className="flex items-center gap-2"><input type="radio" name="publication-mode" disabled={Boolean(publicationStepUp.challenge)} checked={publicationMode === 'publish_all_ready'} onChange={() => setPublicationMode('publish_all_ready')} />Publish all ready units</label><label className="flex items-center gap-2"><input type="radio" name="publication-mode" disabled={Boolean(publicationStepUp.challenge)} checked={publicationMode === 'publish_selected'} onChange={() => setPublicationMode('publish_selected')} />Publish selected units</label><label className="flex items-center gap-2"><input type="radio" name="publication-mode" disabled={Boolean(publicationStepUp.challenge)} checked={publicationMode === 'save_draft'} onChange={() => setPublicationMode('save_draft')} />Save as draft / unpublish</label></div>
               {publicationMode === 'publish_selected' ? <div className="mt-3 max-h-44 space-y-1 overflow-y-auto rounded-lg bg-surface-container-low p-3 text-xs">{units.map((unit) => <label key={unit._id} className="flex items-center gap-2"><input type="checkbox" disabled={Boolean(publicationStepUp.challenge)} checked={publicationUnitIds.includes(unit._id)} onChange={(event) => setPublicationUnitIds((current) => event.target.checked ? [...current, unit._id] : current.filter((id) => id !== unit._id))} />{unit.publicReference || unit._id} · {unit.title}</label>)}{!units.length ? <p>No loaded units available to select.</p> : null}</div> : null}
               <Button type="button" className="mt-4" disabled={publishing || publicationStepUp.busy || Boolean(publicationStepUp.challenge) || typeof project.version !== 'number'} onClick={() => void startPublication()}>{publicationMode === 'save_draft' ? 'Start unpublish challenge' : 'Start publication challenge'}</Button>
-              {publicationError || (!publicationStepUp.challenge && publicationStepUp.error) ? <p role="alert" className="mt-3 text-sm text-error">{publicationError ?? publicationStepUp.error} Publication failures may omit field-level blockers; review returned project and grid readiness.</p> : null}
+              {publicationError || (!publicationStepUp.challenge && publicationStepUp.error) ? <p role="alert" className="mt-3 text-sm text-error">{publicationError ?? publicationStepUp.error}</p> : null}
+              {readinessView ? <div role="status" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><h3 className="font-bold">Publication readiness returned by the backend</h3>{readinessView.projectBlockers.length ? <div className="mt-2"><p className="font-semibold">Project blockers</p><ul className="list-disc pl-5">{readinessView.projectBlockers.map((item, index) => <li key={`${item.field}:${item.code}:${index}`}>{item.field}: {item.code}</li>)}</ul></div> : null}{readinessView.units.length ? <div className="mt-2"><p className="font-semibold">Unit blockers</p><ul className="list-disc pl-5">{readinessView.units.map((unit) => <li key={unit.unitId}>{unit.unitId}: {unit.blockers.map((item) => `${item.field}: ${item.code}`).join(' · ')}</li>)}</ul></div> : null}<div className="mt-3 flex flex-wrap gap-3"><Link className="font-bold underline" to={`/dashboard/landlord/projects/${project._id}/edit`}>Edit project details</Link><a className="font-bold underline" href="#unit-grid">Review unit grid</a></div></div> : null}
               {(publicationResult ?? project.publication) ? <div className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm"><p className="font-bold">Publication result</p><p>{(publicationResult ?? project.publication)?.publishedUnitCount ?? 0} published · {(publicationResult ?? project.publication)?.blockedUnitCount ?? 0} blocked</p>{(publicationResult ?? project.publication)?.blockedUnits?.map((unit) => <p key={unit.unitId} className="mt-1 text-xs text-amber-800">{unit.unitId}: {unit.blockers.map((item) => `${item.field} ${item.code}`).join(' · ')}</p>)}</div> : null}
             </section> : null}
 
@@ -288,7 +324,9 @@ const ProjectManage = () => {
               </div>
             </section>
 
-            <UnitGridPanel key={`${project._id}:${activeProfile?.id ?? 'none'}`} projectId={project._id} />
+            <div id="unit-grid"><UnitGridPanel key={`${project._id}:${activeProfile?.id ?? 'none'}`} projectId={project._id} /></div>
+
+            <UnitTypeManagement project={project} onChanged={async () => { await refreshProject(); }} />
 
             <section className="rounded-xl border border-outline-variant/10 bg-white p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -300,7 +338,7 @@ const ProjectManage = () => {
                   Add unit
                 </Link>
               </div>
-              <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Unit-type routes are mounted, but the handoff does not define their list/create/update DTOs or response shape. Direct unit-type CRUD is withheld. Existing units can still be managed with the canonical grid, including a move when you already have a valid same-project type ID.</p>
+              <p className="mt-3 rounded-lg bg-surface-container-low p-3 text-xs text-secondary">Select a project unit type when creating each unit. Project unit identity is stored as a unit number and must match the canonical unit identifier.</p>
               {units.length ? (
                 <div className="mt-5 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                   {units.map((property) => <div key={property._id} className="space-y-2"><div className="flex justify-end"><Link className="text-xs font-bold text-primary underline" to={`/dashboard/landlord/edit-property/${property._id}`}>Edit unit</Link></div><PropertyCard property={property} /></div>)}
@@ -335,6 +373,7 @@ const ProjectManage = () => {
       </main>
     </LandlordPortalLayout>
     <StepUpDialog challenge={publicationStepUp.challenge} busy={publicationStepUp.busy} error={publicationStepUp.error} onCancel={publicationStepUp.cancel} onSubmit={async (code) => finishPublication(code)} />
+    <StepUpDialog challenge={deleteProjectStepUp.challenge} busy={deleteProjectStepUp.busy} error={deleteProjectStepUp.error} onCancel={deleteProjectStepUp.cancel} onSubmit={finishProjectDelete} />
     </>
   );
 };

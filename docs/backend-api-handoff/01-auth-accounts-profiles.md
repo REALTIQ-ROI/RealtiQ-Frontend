@@ -31,7 +31,7 @@ All profile APIs mount under `/api/profiles`; the router applies Bearer auth, Re
 | `GET /api/auth/phone-verification/history?limit=25&before=<id>`, `GET /:id`, `POST /:id/verify`, `DELETE /:id` | Verify body `{code:"digits"}`; current identity/session. | Status `{id,state,...}`; history `{events,nextCursor}`. | Challenge binds session, auth version, phone and expiry. Phone proof is not KYC. |
 | `GET /api/auth/two-step`, `POST /two-step/enroll`, `POST /two-step/confirm`, `POST /step-up`, `POST /step-up/:id/verify` | Factor/challenge bodies are controller-defined; authenticated for enrollment/step-up. | Challenge/enrollment status DTOs. | Rate limited; do not log codes or secrets. |
 
-For sensitive routes, obtain a current server challenge, then send its token as `X-Step-Up-Challenge` on the exact mutation. The challenge is bound to HTTP method, path, selected profile, request body and, for file uploads, the submitted file digest. A changed body/file requires a new challenge. Failures include `AUTH_STEP_UP_REQUIRED`.
+For sensitive routes, obtain a current server challenge, then send its token as `X-Step-Up-Challenge` on the exact mutation. The challenge is bound to HTTP method, path, selected profile, request body and, for file uploads, the submitted file digest. A changed body/file requires a new challenge. Profile evidence upload now parses the bounded multipart request before step-up consumes the challenge, so the upload digest is checked against the actual file bytes. See [Pass 01–03 remediation](20-pass01-03-contract-remediation.md#1-bound-step-up-and-profile-evidence-uploads) for the exact digest field and request sequence. Failures include `AUTH_STEP_UP_REQUIRED`.
 
 ## Profiles, workspace and permissions
 

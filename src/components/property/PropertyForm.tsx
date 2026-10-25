@@ -11,6 +11,10 @@ import StructuredFactsFields from './StructuredFactsFields';
 import { sellerStructuredFacts, validateStructuredFacts } from '../../features/phase45/structuredFacts';
 import type { StructuredPropertyFacts } from '../../types/phase45';
 import { getCanonicalField, parseCanonicalInput, serializeCanonicalChanges } from '../../utils/canonicalFieldRegistry';
+import CanonicalFieldMutationsEditor from '../canonical/CanonicalFieldMutationsEditor';
+import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
+import { reconcileCanonicalFieldRegistry, serializeCanonicalMutationDrafts, type CanonicalMutationDraft } from '../../utils/canonicalFieldRegistry';
+import type { ProjectUnitTypeSummary } from '../../types';
 import {
   normalizePaymentTypesForForm,
   PROPERTY_PAYMENT_TYPE_ORDER,
@@ -19,7 +23,7 @@ import {
 } from '../../utils/propertyPaymentTypes';
 
 interface PropertyFormProps {
-  initialData?: Partial<CreatePropertyPayload & Pick<Property, 'project'> & { status: string }>;
+  initialData?: Partial<Property & CreatePropertyPayload & { status: string }>;
   onSubmit: (data: CreatePropertyPayload & { status?: string }) => Promise<Property | void>;
   isLoading?: boolean;
   submitLabel?: string;
@@ -239,12 +243,13 @@ const PropertyForm = ({
   const [projects, setProjects] = useState<ProjectCard[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectId, setProjectId] = useState(initialProjectId);
-  const [unitName, setUnitName] = useState(initialData?.projectUnit?.unitName ?? '');
+  const [canonicalUnitTypeId, setCanonicalUnitTypeId] = useState(initialData?.canonicalUnitTypeId ?? '');
+  const [projectUnitTypes, setProjectUnitTypes] = useState<ProjectUnitTypeSummary[]>([]);
+  const [unitTypesLoading, setUnitTypesLoading] = useState(false);
+  const [unitTypesError, setUnitTypesError] = useState<string | null>(null);
+  const [canonicalMutationDrafts, setCanonicalMutationDrafts] = useState<CanonicalMutationDraft[]>([]);
+  const { dictionary } = useCanonicalFieldDictionary();
   const [unitNumber, setUnitNumber] = useState(initialData?.projectUnit?.unitNumber ?? '');
-  const [block, setBlock] = useState(initialData?.projectUnit?.block ?? '');
-  const [phase, setPhase] = useState(initialData?.projectUnit?.phase ?? '');
-  const [floor, setFloor] = useState(initialData?.projectUnit?.floor ?? '');
-  const [plotNumber, setPlotNumber] = useState(initialData?.projectUnit?.plotNumber ?? '');
   const [listingType, setListingType] = useState<ListingType | ''>(initialData?.listingType ?? (mode === 'create' ? 'ready' : ''));
   const [offPlanTouched, setOffPlanTouched] = useState(false);
   const [developmentStatus, setDevelopmentStatus] = useState<OffPlanDevelopmentStatus>(initialData?.offPlan?.developmentStatus ?? 'planned');
@@ -304,6 +309,19 @@ const PropertyForm = ({
       .catch(() => undefined)
       .finally(() => setProjectsLoading(false));
   }, []);
+
+  useEffect(() => {
+    setCanonicalUnitTypeId(initialData?.project?._id === projectId ? initialData.canonicalUnitTypeId ?? '' : '');
+    if (!projectId) { setProjectUnitTypes([]); setUnitTypesLoading(false); setUnitTypesError(null); return; }
+    let current = true;
+    setUnitTypesLoading(true);
+    setUnitTypesError(null);
+    projectService.listUnitTypes(projectId)
+      .then((response) => { if (current) setProjectUnitTypes(response.unitTypes ?? []); })
+      .catch((raw: unknown) => { if (current) { setProjectUnitTypes([]); setUnitTypesError(raw instanceof Error ? raw.message : 'Unable to load this project’s unit types. Retry before creating a project unit.'); } })
+      .finally(() => { if (current) setUnitTypesLoading(false); });
+    return () => { current = false; };
+  }, [projectId, initialData?.canonicalUnitTypeId, initialData?.project?._id]);
 
   const togglePaymentType = (type: PropertyPaymentType) => {
     setPaymentTypes((current) => {
@@ -406,15 +424,34 @@ const PropertyForm = ({
     }
     if (Boolean(coordinatesLat.trim()) !== Boolean(coordinatesLng.trim())) canonicalErrors.projectPin = 'Enter both coordinates to set a map pin.';
     const hasSavedPin = hasCanonicalValue('projectPin') || Boolean(initialData?.coordinates);
-    if (mode === 'edit' && hasSavedPin && !coordinatesLat.trim() && !coordinatesLng.trim()) canonicalErrors.projectPin = 'The saved map pin cannot be cleared because no reset operation is documented.';
+    const pinResetRequested = canonicalMutationDrafts.some((draft) => draft.field === 'projectPin' && draft.operation !== 'set');
+    if (mode === 'edit' && hasSavedPin && !coordinatesLat.trim() && !coordinatesLng.trim() && !pinResetRequested) canonicalErrors.projectPin = 'The saved map pin cannot be cleared through empty coordinates. Choose an allowed unset/null operation from the canonical field editor.';
     if (coordinatesLat.trim() !== '' && coordinatesLng.trim() !== '') {
       canonicalDraft.projectPin = { lat: Number(coordinatesLat), lng: Number(coordinatesLng) };
+    }
+    if (mode === 'create' && projectId) {
+      if (!canonicalUnitTypeId || !projectUnitTypes.some((unitType) => unitType.id === canonicalUnitTypeId)) canonicalErrors.canonicalUnitTypeId = unitTypesError ? 'Project unit types could not be confirmed. Retry the list request before creating this project unit.' : 'Choose a unit type returned for this project.';
+      if (!unitNumber.trim()) canonicalErrors.unitNumber = 'Enter a unique unit number for this project.';
+      else canonicalDraft.unitIdentifier = unitNumber.trim();
     }
     if (Object.keys(canonicalErrors).length) {
       setErrors(canonicalErrors);
       return;
     }
     const canonicalFields = serializeCanonicalChanges(initialCanonical, canonicalDraft);
+    let canonicalFieldMutations: CreatePropertyPayload['canonicalFieldMutations'] = [];
+    if (canonicalMutationDrafts.length) {
+      if (!dictionary) { setErrors({ canonicalFields: 'Canonical field policy is unavailable. Refresh and retry.' }); return; }
+      const serialized = serializeCanonicalMutationDrafts(canonicalMutationDrafts, reconcileCanonicalFieldRegistry(dictionary), 'property');
+      if (Object.keys(serialized.errors).length) { setErrors(serialized.errors); return; }
+      if (mode === 'edit') canonicalFieldMutations = serialized.mutations;
+      else Object.assign(canonicalFields, Object.fromEntries(serialized.mutations.filter((item) => item.operation === 'set').map((item) => [item.field, item.value])));
+    }
+    const duplicateCanonicalField = canonicalFieldMutations.find((mutation) => Object.prototype.hasOwnProperty.call(canonicalFields, mutation.field));
+    if (duplicateCanonicalField) {
+      setErrors({ canonicalFields: `${duplicateCanonicalField.field} is already changed in the main form. Remove its duplicate entry from Additional canonical property fields.` });
+      return;
+    }
 
     const latProvided = coordinatesLat.trim() !== '';
     const lngProvided = coordinatesLng.trim() !== '';
@@ -432,6 +469,7 @@ const PropertyForm = ({
       ...(category ? { category } : {}),
       ...(currency ? { currency } : {}),
       ...(Object.keys(canonicalFields).length ? { canonicalFields } : {}),
+      ...(canonicalFieldMutations.length ? { canonicalFieldMutations } : {}),
       coordinates:
         latProvided && lngProvided
           ? { lat: Number(coordinatesLat), lng: Number(coordinatesLng) }
@@ -441,15 +479,10 @@ const PropertyForm = ({
       ...(completionStage ? { completionStage } : {}),
       ...(priceChanged && priceChangeReason.trim() ? { priceChangeReason: priceChangeReason.trim().slice(0, 500) } : {}),
       ...(mode === 'create' && projectId ? {
+        publicationAction: 'save_draft' as const,
         projectId,
-        projectUnit: {
-          unitName: unitName.trim() || undefined,
-          unitNumber: unitNumber.trim() || undefined,
-          block: block.trim() || undefined,
-          phase: phase.trim() || undefined,
-          floor: floor.trim() || undefined,
-          plotNumber: plotNumber.trim() || undefined,
-        },
+        canonicalUnitTypeId,
+        projectUnit: { unitNumber: unitNumber.trim() },
       } : {}),
       ...(listingType ? { listingType } : {}),
       ...(listingType === 'off_plan' && (mode === 'create' || offPlanTouched) ? {
@@ -882,11 +915,24 @@ const PropertyForm = ({
         {mode === 'edit' ? <details className="rounded-lg bg-surface-container-low p-3 text-xs text-secondary">
           <summary className="cursor-pointer font-bold">Saved property values and source</summary>
           {initialCanonical ? <>
-            <p className="mt-2">These values come from this property's canonical fields. A missing property value may inherit from its project or unit type; the owner response does not identify the effective source.</p>
+            <p className="mt-2">Raw values, effective values and their sources are shown separately when returned by the owner response.</p>
+            <dl className="mt-3 grid gap-2 sm:grid-cols-2">{Object.entries(initialData.effectiveCanonicalFields ?? {}).map(([key, value]) => <div key={`effective:${key}`}><dt className="font-semibold">{key} · effective</dt><dd>{savedCanonicalValue({ [key]: value }, key)} · source {initialData.canonicalFieldProvenance?.[key]?.sourceLevel ?? 'not returned'} ({initialData.canonicalFieldProvenance?.[key]?.state ?? 'not returned'})</dd></div>)}</dl>
             <dl className="mt-3 grid gap-2 sm:grid-cols-2">{savedCanonicalFields.map(([key, label]) => <div key={key}><dt className="font-semibold">{label}</dt><dd>{savedCanonicalValue(initialCanonical, key)}</dd></div>)}</dl>
           </> : <p className="mt-2">The owner response did not return canonical fields or effective provenance. Existing values are left unchanged unless you enter an explicit value.</p>}
         </details> : null}
       </div>
+
+      <CanonicalFieldMutationsEditor
+        target="property"
+        title="Additional canonical property fields"
+        value={canonicalMutationDrafts}
+        onChange={setCanonicalMutationDrafts}
+        canonicalFields={initialCanonical}
+        effectiveFields={initialData?.effectiveCanonicalFields}
+        fieldSources={initialData?.canonicalFieldProvenance}
+        createMode={mode === 'create'}
+        exclude={['state', 'lga', 'area', 'headline', 'description', 'otherAmenity', 'listingKind', 'advertiserDisplay', 'propertyLiveVideo', 'gatedEstate', 'estateName', 'streetAddress', 'houseNumber', 'unitOrFlatNumber', 'estateAccessStreet', 'estateInternalStreet', 'estateHouseUnitNumber', 'accessRoadConditions', 'commercialFrontage', 'commercialFloorsOrUnits', 'loadingVehicleAccess', 'loadingVehicleAccessType', 'liftCount', 'fitOut', ...(mode === 'create' ? ['projectPin'] : [])]}
+      />
 
       {isCommercial ? <div className="bg-white rounded-2xl p-6 space-y-5 border border-outline-variant/10">
         <h2 className="text-base font-black text-on-surface tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>Commercial details</h2>
@@ -945,28 +991,19 @@ const PropertyForm = ({
           {projectId ? (
             <>
               <div>
-                <label htmlFor="property-project-unit-name" className={labelClass}>Unit name</label>
-                <input id="property-project-unit-name" value={unitName} onChange={(event) => setUnitName(event.target.value)} placeholder="e.g. 3 Bedroom Terrace" className={inputClass} />
+                <label htmlFor="property-unit-type" className={labelClass}>Project unit type</label>
+                <select id="property-unit-type" value={canonicalUnitTypeId} onChange={(event) => setCanonicalUnitTypeId(event.target.value)} className={inputClass} disabled={mode === 'edit' || unitTypesLoading}>
+                  <option value="">{unitTypesLoading ? 'Loading unit types…' : 'Choose a unit type'}</option>
+                  {projectUnitTypes.map((unitType) => <option key={unitType.id} value={unitType.id}>{String(unitType.canonicalFields.unitTypeName ?? unitType.id)}</option>)}
+                </select>
+                {mode === 'create' && !projectUnitTypes.length && !unitTypesLoading ? <p className="mt-1 text-xs text-amber-800">Configure a unit type on the project before adding units.</p> : null}
+                {unitTypesError ? <div role="alert" className="mt-1 text-xs text-error">Could not load the documented project unit types: {unitTypesError}<button type="button" className="ml-2 font-bold underline" onClick={() => { const requestedProjectId = projectId; setUnitTypesLoading(true); setUnitTypesError(null); void projectService.listUnitTypes(requestedProjectId).then((response) => setProjectUnitTypes(response.unitTypes ?? [])).catch((raw: unknown) => setUnitTypesError(raw instanceof Error ? raw.message : 'Unable to load unit types.')).finally(() => setUnitTypesLoading(false)); }}>Retry</button></div> : null}
+                {errors.canonicalUnitTypeId ? <p className={errorClass}>{errors.canonicalUnitTypeId}</p> : null}
               </div>
               <div>
                 <label htmlFor="property-project-unit-number" className={labelClass}>Unit number</label>
                 <input id="property-project-unit-number" value={unitNumber} onChange={(event) => setUnitNumber(event.target.value)} placeholder="e.g. B12" className={inputClass} />
-              </div>
-              <div>
-                <label htmlFor="property-project-phase" className={labelClass}>Phase</label>
-                <input id="property-project-phase" value={phase} onChange={(event) => setPhase(event.target.value)} placeholder="e.g. Phase 1" className={inputClass} />
-              </div>
-              <div>
-                <label htmlFor="property-project-block" className={labelClass}>Block</label>
-                <input id="property-project-block" value={block} onChange={(event) => setBlock(event.target.value)} placeholder="e.g. Block B" className={inputClass} />
-              </div>
-              <div>
-                <label htmlFor="property-project-floor" className={labelClass}>Floor</label>
-                <input id="property-project-floor" value={floor} onChange={(event) => setFloor(event.target.value)} placeholder="e.g. 2" className={inputClass} />
-              </div>
-              <div>
-                <label htmlFor="property-project-plot-number" className={labelClass}>Plot number</label>
-                <input id="property-project-plot-number" value={plotNumber} onChange={(event) => setPlotNumber(event.target.value)} placeholder="e.g. Plot 14" className={inputClass} />
+                {errors.unitNumber ? <p className={errorClass}>{errors.unitNumber}</p> : null}
               </div>
             </>
           ) : null}

@@ -32,6 +32,12 @@ export interface AuthMessageResponse {
   message: string;
 }
 
+export interface TwoStepEnrollment {
+  secret: string;
+  provisioningUri: string;
+  expiresAt: string;
+}
+
 export interface PhoneVerificationStatus {
   id: string;
   state: string;
@@ -42,6 +48,21 @@ export interface PhoneVerificationStatus {
 }
 
 export const authService = {
+  async getTwoStep(): Promise<{ enabled: boolean }> {
+    const { data } = await api.get<{ enabled: boolean }>('/auth/two-step');
+    return data;
+  },
+
+  async enrollTwoStep(body: { password: string }): Promise<TwoStepEnrollment> {
+    const { data } = await api.post<TwoStepEnrollment>('/auth/two-step/enroll', body);
+    return data;
+  },
+
+  async confirmTwoStep(code: string): Promise<{ enabled: true }> {
+    const { data } = await api.post<{ enabled: true }>('/auth/two-step/confirm', { code });
+    return data;
+  },
+
   async account(): Promise<unknown> {
     const { data } = await api.get<unknown>('/auth/account');
     return data;

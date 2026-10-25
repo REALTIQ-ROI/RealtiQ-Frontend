@@ -56,7 +56,7 @@ export const paymentService = {
   },
 
   async verifyPayment(reference: string): Promise<VerifyPaymentResponse> {
-    const { data } = await api.get<VerifyPaymentResponse>(`/payments/verify/${reference}`, { withCredentials: true });
+    const { data } = await api.get<VerifyPaymentResponse>(`/payments/verify/${encodeURIComponent(reference)}`, { withCredentials: true });
     return data;
   },
 

@@ -6,6 +6,9 @@ import { nigeriaStateCities, nigeriaStates } from '../../utils/nigeriaLocations'
 import { getCanonicalField, parseCanonicalInput, serializeCanonicalChanges } from '../../utils/canonicalFieldRegistry';
 import MediaUploader from '../property/MediaUploader';
 import Button from '../ui/Button';
+import CanonicalFieldMutationsEditor from '../canonical/CanonicalFieldMutationsEditor';
+import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
+import { reconcileCanonicalFieldRegistry, serializeCanonicalMutationDrafts, type CanonicalMutationDraft } from '../../utils/canonicalFieldRegistry';
 
 interface ProjectFormProps {
   initialData?: ProjectDetail;
@@ -139,6 +142,8 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
   const [accessRoadTouched, setAccessRoadTouched] = useState(false);
   const [buildStage, setBuildStage] = useState(canonicalText('buildStage'));
   const [media, setMedia] = useState<MediaItem[]>(toMediaItems(initialData?.media));
+  const [canonicalMutationDrafts, setCanonicalMutationDrafts] = useState<CanonicalMutationDraft[]>([]);
+  const { dictionary } = useCanonicalFieldDictionary();
   const [saving, setSaving] = useState(false);
   const cityOptions = state ? nigeriaStateCities[state] ?? [] : [];
   const incompleteCanonicalIntake = [
@@ -185,8 +190,9 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
       toast.error('Enter both coordinates or clear both values.');
       return;
     }
-    if (isEdit && (hasCanonicalField('projectPin') || Boolean(initialData?.coordinates)) && !lat.trim() && !lng.trim()) {
-      toast.error('The saved map pin cannot be cleared because no reset operation is documented.');
+    const pinResetRequested = canonicalMutationDrafts.some((draft) => draft.field === 'projectPin' && draft.operation !== 'set');
+    if (isEdit && (hasCanonicalField('projectPin') || Boolean(initialData?.coordinates)) && !lat.trim() && !lng.trim() && !pinResetRequested) {
+      toast.error('The saved map pin cannot be cleared through an empty coordinate input. Choose an allowed unset/null operation from the canonical field editor.');
       return;
     }
     const canonicalDraft: Record<string, unknown> = {};
@@ -274,10 +280,27 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
       return;
     }
     const canonicalFields = serializeCanonicalChanges(canonical, canonicalDraft);
+    let canonicalFieldMutations: CreateProjectRequest['canonicalFieldMutations'] = [];
+    if (canonicalMutationDrafts.length) {
+      if (!dictionary) { toast.error('Canonical field policy is unavailable. Refresh it before saving these fields.'); return; }
+      const serialized = serializeCanonicalMutationDrafts(canonicalMutationDrafts, reconcileCanonicalFieldRegistry(dictionary), 'project');
+      if (Object.keys(serialized.errors).length) { toast.error(Object.values(serialized.errors).join(' ')); return; }
+      if (isEdit) canonicalFieldMutations = serialized.mutations;
+      else {
+        const extraFields = Object.fromEntries(serialized.mutations.filter((item) => item.operation === 'set').map((item) => [item.field, item.value]));
+        Object.assign(canonicalFields, extraFields);
+      }
+    }
+    const duplicateCanonicalField = canonicalFieldMutations.find((mutation) => Object.prototype.hasOwnProperty.call(canonicalFields, mutation.field));
+    if (duplicateCanonicalField) {
+      toast.error(`${duplicateCanonicalField.field} is already changed in the main form. Remove its duplicate entry from Additional canonical project fields.`);
+      return;
+    }
     setSaving(true);
     try {
       await onSubmit({
         canonicalFields,
+        ...(canonicalFieldMutations.length ? { canonicalFieldMutations } : {}),
         name: name.trim(),
         projectType,
         shortDescription: shortDescription.trim() || (preserveEmptyValues ? '' : undefined),
@@ -287,7 +310,7 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
         state: state.trim(),
         city: city.trim(),
         area: area.trim() || (preserveEmptyValues ? '' : undefined),
-        coordinates: coordinates ?? (preserveEmptyValues ? null : undefined),
+        coordinates,
         amenities,
         features,
         media: toProjectMedia(media),
@@ -326,6 +349,18 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
           </div>
         </div>
       </section>
+
+      <CanonicalFieldMutationsEditor
+        target="project"
+        title="Additional canonical project fields"
+        value={canonicalMutationDrafts}
+        onChange={setCanonicalMutationDrafts}
+        canonicalFields={canonical}
+        effectiveFields={initialData?.effectiveFields}
+        fieldSources={initialData?.fieldSources}
+        createMode={!isEdit}
+        exclude={['projectName', 'developmentStructure', 'shortDescription', 'projectDescription', 'unitDisplayMode', 'state', 'lga', 'area', 'gatedEstate', 'estateName', 'streetAddress', 'accessRoadConditions', 'buildStage', 'launchDate', 'approximateUnitCount', 'servicedStatus', 'paymentOptions', 'maximumInstallmentMonths', 'initialDepositPercent', 'transactionFeePayer', 'privateShowingsByAppointment', 'liveVideoTourAvailable', ...(!isEdit ? ['projectPin'] : [])]}
+      />
 
       <section className="rounded-xl border border-outline-variant/10 bg-white p-6">
         <h2 className="text-xl font-black">Location</h2>
@@ -501,8 +536,8 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
         </div>
         <div className="mt-5" role="group" aria-labelledby="project-media-label">
           <h3 id="project-media-label" className={labelClass}>Project media</h3>
-          <MediaUploader value={media} onChange={setMedia} disabled={preserveEmptyValues} />
-          {preserveEmptyValues ? <p className="mt-2 text-xs text-secondary">Existing project media remains attached. The handoff does not define the request body for the separate media-association route, so media changes are withheld on edit.</p> : null}
+          <MediaUploader value={media} onChange={setMedia} />
+          {preserveEmptyValues ? <p className="mt-2 text-xs text-secondary">Saving replaces the complete project media association list. Removing every item clears the list.</p> : null}
           <p className="mt-2 text-xs text-secondary">The first uploaded media item is used as the cover image.</p>
         </div>
       </section>

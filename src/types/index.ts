@@ -86,6 +86,16 @@ export interface ProjectUnit {
   plotNumber?: string;
 }
 
+export interface ProjectUnitTypeSummary {
+  id: string;
+  version: number;
+  projectVersion: number;
+  canonicalFields: Record<string, unknown>;
+  effectiveFields: Record<string, unknown>;
+  fieldSources: Record<string, { sourceLevel: string; state: string }>;
+  media?: ProjectMedia[];
+}
+
 export interface ProjectMedia {
   url: string;
   public_id?: string;
@@ -185,6 +195,9 @@ export interface ProjectOwnerSummary {
 export interface ProjectDetail extends ProjectCard {
   version?: number;
   canonicalFields?: Record<string, unknown>;
+  effectiveFields?: Record<string, unknown>;
+  fieldSources?: Record<string, { sourceLevel: string; state: string }>;
+  unitTypes?: Array<{ id: string; version: number; canonicalFields?: Record<string, unknown>; effectiveFields?: Record<string, unknown>; fieldSources?: Record<string, { sourceLevel: string; state: string }> }>;
   publication?: { published: boolean; publishedUnitCount: number; blockedUnitCount: number; blockedUnits: Array<{ unitId: string; blockers: Array<{ field: string; code: string }> }>; projectBlockers?: Array<{ field: string; code: string }> };
   description?: string;
   address?: string;
@@ -354,6 +367,9 @@ export interface UserKyc {
 export interface Property {
   _id: string;
   canonicalFields?: Record<string, unknown>;
+  effectiveCanonicalFields?: Record<string, unknown>;
+  canonicalFieldProvenance?: Record<string, { sourceLevel: string; state: string }>;
+  canonicalUnitTypeId?: string;
   id?: string;
   publicReference?: string | null;
   title: string;
@@ -765,6 +781,7 @@ export interface CartCheckoutInitializeResponse {
   totalAmount: number;
   currency: 'NGN';
   pending?: boolean;
+  initializationState?: 'pending' | 'outcome_unknown' | string;
 }
 
 export interface CartCheckoutItemDetail {
@@ -784,6 +801,7 @@ export interface CartCheckoutDetail {
   totalAmount: number;
   currency: 'NGN';
   status: CartCheckoutStatus;
+  initializationState?: 'pending' | 'outcome_unknown' | string;
   expiresAt?: string;
   items: CartCheckoutItemDetail[];
 }

@@ -2,7 +2,7 @@
 
 This document records the mounted contracts needed for the seven blocked frontend operations. It is based on the current route, controller, middleware and service code. Examples use illustrative identifiers and values; do not reuse them as real credentials or IDs.
 
-**Contract status:** most JSON contracts below are directly implementable. Two source-level gaps need backend correction before the frontend can rely on the stated security/error behavior: profile-evidence upload does not bind the uploaded bytes to step-up, and project-publication readiness details are discarded by the shared error serializer. Checkout provider retries also have a non-idempotent failure edge described below.
+**Contract status:** the contracts below are supplemented by [chapter 20](20-pass01-03-contract-remediation.md). The earlier profile-evidence middleware-order and publication-error serialization gaps have been corrected. Checkout initialization now reserves the cart before the provider call and fails closed on ambiguous outcomes; chapter 20 documents the current retry contract. Historical descriptions below are superseded where stated.
 
 ## 1. Bound step-up authentication
 
@@ -114,7 +114,7 @@ The protected request must use the same method, path (query string excluded), se
 
 The middleware supports a file digest only when the upload parser has populated `req.file` before the step-up middleware runs. In that ordering, the multipart body includes `__stepUpFileSha256`, a 64-character SHA-256 hex digest of the selected file; the same digest and all other multipart fields are included in challenge creation. The middleware verifies the digest against the buffered file, consumes the challenge and removes the reserved digest field before the controller.
 
-**Current mounted defect:** `POST /api/profiles/current/onboarding/evidence` mounts `stepUp` before `multer.single('file')`. At the point step-up executes, `req.file` and parsed multipart fields do not exist. The route therefore cannot enforce the implementation's file-digest binding. Do not represent this upload as file-content-bound to step-up; see “Confirmed contract gaps” below.
+**Resolved middleware order:** `POST /api/profiles/current/onboarding/evidence` now runs profile/evidence preflight, bounded `multer.single('file')`, step-up validation, then the evidence upload service. The step-up middleware hashes the actual file bytes, verifies the submitted `__stepUpFileSha256`, binds the digest and multipart fields to the challenge, consumes the challenge and removes the reserved digest field before controller validation. See [chapter 20 §1](20-pass01-03-contract-remediation.md#1-bound-step-up-and-profile-evidence-uploads) for the exact sequence and sample.
 
 **Source references:** `src/routes/authRoutes.js`, `src/controllers/authenticationChallengeController.js`, `src/services/authenticationChallengeService.js`, `src/middleware/stepUpMiddleware.js`, `src/middleware/authMiddleware.js`.
 
@@ -409,7 +409,7 @@ This is a provider verification fallback, not checkout initialization. On verifi
 
 Known business errors include `AUTH_KYC_REQUIRED`, `AUTH_PROFILE_KIND_FORBIDDEN`, `AUTH_SESSION_REQUIRED`, `CART`/eligibility 400 or 409 errors, and `PAYMENT_PROVIDER_UNAVAILABLE`/Paystack configuration 503 depending on the failure point. Empty cart or zero total is rejected; stale cart-item eligibility returns 409 with invalid item reasons internally, but the shared HTTP error serializer does not preserve arbitrary `details` fields. Missing/invalid Paystack response is currently thrown as 502 and sanitized to the shared error envelope.
 
-**Idempotency limitation:** service reuse is based on an existing `payment_initialized` checkout with a pending Payment and matching active cart/profile ownership; the stored `checkoutKey` is derived from cart/profile/cart updated time/total. There is no client key or unique atomic idempotency claim in this contract. Checkout is inserted before the Paystack initialization call, and provider errors are not caught to mark it failed. A failed provider call can leave a `pending` checkout row while the cart remains active; a retry may create another row. Do not promise exactly-once provider initialization to users.
+**Retry contract:** the initializer now atomically creates a pending checkout and changes the cart to `checkout_pending` before calling Paystack. A provider or persistence outcome that cannot be confirmed is recorded as `outcome_unknown`; the endpoint returns `PAYMENT_CHECKOUT_INITIALIZATION_PENDING` and subsequent initialization requests refuse to call Paystack again. This prevents duplicate provider attempts but deliberately requires provider/payment reconciliation or support before retry. There is still no client-supplied idempotency header. See [chapter 20 §6](20-pass01-03-contract-remediation.md#6-checkout-initialization-and-safe-retry-behavior).
 
 **Source references:** `src/app.js`, `src/routes/cartRoutes.js`, `src/controllers/cartController.js`, `src/services/cartCheckoutService.js`, `src/models/CartCheckout.js`, `src/routes/paymentRoutes.js`, `src/controllers/paymentController.js`.
 
@@ -476,7 +476,7 @@ Project and unit publication readiness are evaluated server-side. At least one e
 
 `CONTENT_PROJECT_PUBLICATION_NOT_READY` (422), `CONTENT_PROJECT_PUBLICATION_SELECTION_INVALID` (409/422), `CONTENT_CANONICAL_RECLASSIFICATION_REQUIRED` (409), `CONTENT_DUPLICATE_REVIEW_REQUIRED` (409), `AUTH_DEVELOPER_VERIFICATION_REQUIRED` (403), `AUTH_KYC_REQUIRED` (403), `PERMISSION_INDEPENDENT_REVIEW_REQUIRED` (403), `CONFLICT_PROJECT_VERSION` (409), `CONFLICT_LISTING_VERSION` (409), and relevant configuration/policy gates. Shared error envelope is `{ "message": "...", "code": "..." }`.
 
-**Confirmed response defect:** readiness service attaches `error.details.projectBlockers` and per-unit blockers for `CONTENT_PROJECT_PUBLICATION_NOT_READY`, but `src/middleware/errorMiddleware.js` serializes only message/code plus a few unrelated special fields. Those actionable blocker details are not present on the HTTP response. Frontend can show the returned message/code, but cannot rely on receiving blocker rows from failed publication until serializer behavior is corrected.
+**Resolved response behavior:** for `CONTENT_PROJECT_PUBLICATION_NOT_READY`, the shared error middleware returns an allowlisted `publicationReadiness` object containing canonical field/code blocker pairs and valid unit IDs. It discards arbitrary internal detail fields. See [chapter 20 §5](20-pass01-03-contract-remediation.md#5-project-publication-deletion-and-media-contracts).
 
 **Source references:** `src/routes/projectRoutes.js`, `src/controllers/projectController.js`, `src/services/profileProjectService.js` (`validateBody`, `publish`, `update`), `src/middleware/stepUpMiddleware.js`, `src/middleware/errorMiddleware.js`.
 
@@ -752,23 +752,20 @@ Execution/job states include `queued`, `processing`, `waiting_for_policy`, `part
 
 ## Confirmed contract gaps and frontend enablement
 
-### Blockers requiring backend contract correction
+### Current contract limits
 
-1. **Evidence upload step-up does not bind file bytes.** `src/routes/profileRoutes.js` orders `stepUp` before `evidenceUpload.single('file')`; frontend cannot rely on the advertised file digest binding for `POST /api/profiles/current/onboarding/evidence`. Metadata, scanning, ownership and content access contracts remain documented, but use of this upload route as an action-bound upload has a security contract gap.
-2. **Project publication errors omit actionable blockers.** The service constructs blocker details but `src/middleware/errorMiddleware.js` drops them. Frontend cannot render exact readiness issues from the failed publish response, although it can read message/code and can fetch project/readiness DTOs where available.
-
-### Warnings / contract limits
-
-3. **Cart checkout provider retry is not request-idempotent.** There is no client idempotency token; provider failure occurs after a pending checkout record is created and is not transitioned to a terminal failure in the initializer. Retrying can create another initialization attempt. The UI should avoid promising exactly-once checkout initialization and should query checkout/payment state before prompting a second payment attempt.
-4. **Privacy execution exposes grouped outcomes, not record rows.** Frontend can implement aggregate progress/result groups. Per-record outcome UI is unsupported by the mounted API.
-5. **Map has a canonical and legacy contract.** Use `queryVersion=canonical-v1` plus all bounds for catalogue parity. Legacy map calls have another DTO and filter builder.
+1. **Privacy execution exposes grouped outcomes, not record rows.** Frontend can implement aggregate progress/result groups. Per-record outcome UI is unsupported by the mounted API.
+2. **Map has a canonical and legacy contract.** Use `queryVersion=canonical-v1` plus all bounds for catalogue parity. Legacy map calls have another DTO and filter builder.
+3. **Unit-type endpoints are nested under the project path.** There is no plain unit-type detail GET or archive path. Use chapter 20 §4 for exact CRUD routes and DTOs.
+4. **Project delete is not project archive.** `DELETE /api/projects/:id` deletes only an empty project and returns `409 CONFLICT_PROJECT_HAS_UNITS` if unit references exist.
+5. **Checkout provider outcomes can be unknown.** Do not automatically issue a new initialization attempt after `PAYMENT_CHECKOUT_INITIALIZATION_PENDING`; use current checkout/payment status and reconciliation.
 
 ### Operations frontend Codex can safely enable now
 
-- Bound JSON step-up initiation/verification and protected JSON calls, provided method/path/profile/body remain identical and the route itself correctly consumes the challenge.
+- Bound JSON step-up initiation/verification and protected JSON calls, plus file-bound profile evidence upload using `__stepUpFileSha256` as defined in chapter 20.
 - Verification case list/detail/history, staff queue/detail/history/claim/decision, evidence metadata and content reads, subject to current profile/staff authorization and configured policy gates.
-- Cart checkout initialization using an active verified buyer profile and the bound request body; payment verification and checkout detail polling, with provider failure/retry warning above.
-- Project publish-all-ready and publish-selected requests with `publicationAction` and current `expectedVersion`, while handling `CONTENT_PROJECT_PUBLICATION_NOT_READY` without expecting blocker details from the error.
+- Cart checkout initialization using an active verified buyer profile and bound request body; payment verification and checkout detail polling. Do not auto-retry an unknown provider outcome.
+- Project publish-all-ready and publish-selected requests with `publicationAction` and current `expectedVersion`, rendering allowlisted `publicationReadiness` blockers when returned.
 - Canonical map searches with validated complete bounds, normalized shared filters, facets and either property or cluster mode.
 - Grid reads, synchronous canonical field/type edits, durable job creation/poll/cancel and step-up undo with version-conflict handling.
 - Privacy execution progress rendered as aggregate outcome groups; do not render fabricated per-record rows.

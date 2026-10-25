@@ -98,24 +98,22 @@ describe('property market service endpoints', () => {
   it('sends the optional priceChangeReason during updates', async () => {
     vi.mocked(api.patch).mockResolvedValue({
       data: {
-        property: {
-          _id: 'prop1',
-          title: 'Updated',
-          price: 45_000_000,
-          location: 'Lekki',
-          propertyType: 'apartment',
-          bedrooms: 3,
-          bathrooms: 3,
-          description: 'Updated',
-          squareFeet: 1000,
-          media: [],
-          paymentTypes: ['outright'],
-          status: 'available',
-        },
+        _id: 'prop1',
+        title: 'Updated',
+        price: 45_000_000,
+        location: 'Lekki',
+        propertyType: 'apartment',
+        bedrooms: 3,
+        bathrooms: 3,
+        description: 'Updated',
+        squareFeet: 1000,
+        media: [],
+        paymentTypes: ['outright'],
+        status: 'available',
         version: 2,
       },
     });
-    await propertyService.updateProperty('prop1', {
+    const updated = await propertyService.updateProperty('prop1', {
       price: 45_000_000,
       priceChangeReason: 'Updated after renovation',
     });
@@ -123,5 +121,6 @@ describe('property market service endpoints', () => {
       price: 45_000_000,
       priceChangeReason: 'Updated after renovation',
     });
+    expect(updated).toMatchObject({ _id: 'prop1', version: 2, title: 'Updated', price: 45_000_000 });
   });
 });

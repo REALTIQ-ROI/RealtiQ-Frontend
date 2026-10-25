@@ -20,7 +20,7 @@ describe('property edit patch', () => {
     expect(propertyEditPatch(property, {
       bedrooms: 0, price: 10,
       canonicalFields: { gatedEstate: false, commercialFrontage: 0 },
-    })).toEqual({ price: 10, canonicalFields: { gatedEstate: false, commercialFrontage: 0 } });
+    })).toEqual({ price: 10, canonicalFieldMutations: [{ field: 'commercialFrontage', operation: 'set', value: 0 }] });
   });
 
   it('never sends form status as an ordinary field edit', () => {

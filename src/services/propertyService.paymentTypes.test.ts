@@ -44,24 +44,23 @@ describe('propertyService payment types', () => {
     await propertyService.createPropertyWithResponse(payload, 'create-challenge');
     expect(api.post).toHaveBeenCalledWith('/properties', payload, { headers: { 'X-Step-Up-Challenge': 'create-challenge' } });
     vi.mocked(api.patch).mockResolvedValue({ data: { property: { _id: 'prop1', ...payload, bedrooms: 4, bathrooms: 4, status: 'available' } } });
-    const update = { expectedVersion: 4, canonicalFields: { negotiable: false } };
+    const update = { expectedVersion: 4, canonicalFieldMutations: [{ field: 'negotiable', operation: 'set' as const, value: false }] };
     await propertyService.updateProperty('prop1', update, 'update-challenge');
     expect(api.patch).toHaveBeenCalledWith('/properties/prop1', update, { headers: { 'X-Step-Up-Challenge': 'update-challenge' } });
   });
 
-  it('sends update choices and consumes the documented property envelope', async () => {
+  it('sends canonical mutation choices and consumes the documented root property PATCH response', async () => {
     vi.mocked(api.patch).mockResolvedValue({
       data: {
-        property: {
-          _id: 'prop1', ...payload, bedrooms: 4, bathrooms: 4,
-          status: 'available', price: 65_000_000, paymentTypes: ['installment', 'escrow'],
-        },
-        version: 3,
+        _id: 'prop1', ...payload, bedrooms: 4, bathrooms: 4, version: 3,
+        status: 'available', price: 65_000_000, paymentTypes: ['installment', 'escrow'],
       },
     });
-    const result = await propertyService.updateProperty('prop1', { price: 65_000_000, paymentTypes: ['escrow'] });
-    expect(api.patch).toHaveBeenCalledWith('/properties/prop1', { price: 65_000_000, paymentTypes: ['escrow'] });
+    const update = { expectedVersion: 2, price: 65_000_000, canonicalFieldMutations: [{ field: 'negotiable', operation: 'set' as const, value: false }] };
+    const result = await propertyService.updateProperty('prop1', update);
+    expect(api.patch).toHaveBeenCalledWith('/properties/prop1', update);
     expect(result.paymentTypes).toEqual(['installment', 'escrow']);
+    expect(result.version).toBe(3);
   });
 
   it('binds property archive version body and challenge header on DELETE', async () => {

@@ -77,6 +77,11 @@ export const verificationCaseService = {
     return data;
   },
 
+  async uploadEvidence(form: FormData, challengeId: string): Promise<ProfileEvidence> {
+    const { data } = await api.post<ProfileEvidence>(`${holderBase}/onboarding/evidence`, form, { headers: { 'X-Step-Up-Challenge': challengeId } });
+    return data;
+  },
+
   async getEvidence(id: string): Promise<ProfileEvidence> {
     const { data } = await api.get<ProfileEvidence>(`${holderBase}/onboarding/evidence/${encodeURIComponent(id)}`);
     return data;

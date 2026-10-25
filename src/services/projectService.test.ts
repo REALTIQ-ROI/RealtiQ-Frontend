@@ -59,7 +59,7 @@ describe('projectService', () => {
 
   it('sends the changed project body and current version with an optional bound challenge', async () => {
     vi.mocked(api.patch).mockResolvedValue({ data: { project: { _id: 'project-1', version: 9 } } });
-    const body = { expectedVersion: 8, canonicalFields: { shortDescription: '' }, description: 'Updated' };
+    const body = { expectedVersion: 8, canonicalFieldMutations: [{ field: 'shortDescription', operation: 'set' as const, value: '' }], description: 'Updated' };
     await projectService.updateProject('project-1', body, 'challenge-1');
     expect(api.patch).toHaveBeenCalledWith('/projects/project-1', body, { headers: { 'X-Step-Up-Challenge': 'challenge-1' } });
   });
@@ -70,6 +70,30 @@ describe('projectService', () => {
     expect(api.patch).toHaveBeenCalledWith('/admin/projects/project-1/status', { status: 'suspended' }, { headers: { 'X-Step-Up-Challenge': 'challenge-1' } });
     await projectService.adminSetProjectFeatured('project-1', { featured: true }, 'challenge-2');
     expect(api.patch).toHaveBeenCalledWith('/admin/projects/project-1/featured', { featured: true }, { headers: { 'X-Step-Up-Challenge': 'challenge-2' } });
+  });
+
+  it('uses only the nested unit-type routes and exact versioned DTOs', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { projectVersion: 8, unitTypes: [] } });
+    await projectService.listUnitTypes('project-1');
+    expect(api.get).toHaveBeenCalledWith('/projects/project-1/unit-types');
+    vi.mocked(api.post).mockResolvedValue({ data: { unitType: { id: 'type-1', version: 0 }, projectVersion: 8 } });
+    const createBody = { expectedVersion: 8, canonicalFields: { unitTypeName: 'Garden flat', category: 'houses', propertyType: 'flat', unitTypeQuantity: 2 } };
+    await projectService.createUnitType('project-1', createBody);
+    expect(api.post).toHaveBeenCalledWith('/projects/project-1/unit-types', createBody, undefined);
+    vi.mocked(api.patch).mockResolvedValue({ data: { unitType: { id: 'type-1', version: 1 }, impact: {}, projectVersion: 9 } });
+    const patchBody = { expectedVersion: 8, expectedTypeVersion: 0, canonicalFieldMutations: [{ field: 'bedrooms', operation: 'set', value: 2 }] };
+    await projectService.updateUnitType('project-1', 'type-1', patchBody, 'step-up');
+    expect(api.patch).toHaveBeenCalledWith('/projects/project-1/unit-types/type-1', patchBody, { headers: { 'X-Step-Up-Challenge': 'step-up' } });
+  });
+
+  it('preserves raw, effective and source-level unit-type fields from the documented list DTO', async () => {
+    const response = { projectVersion: 9, unitTypes: [{ id: 'type-1', version: 2, projectVersion: 9,
+      canonicalFields: { unitTypeName: 'Garden flat' }, effectiveFields: { bedrooms: 2, currency: 'NGN' },
+      fieldSources: { bedrooms: { sourceLevel: 'unit_type', state: 'explicit' }, currency: { sourceLevel: 'project', state: 'inherited' } }, media: [] }] };
+    vi.mocked(api.get).mockResolvedValue({ data: response });
+    const result = await projectService.listUnitTypes('project-1');
+    expect(result).toEqual(response);
+    expect(api.get).toHaveBeenCalledWith('/projects/project-1/unit-types');
   });
 
   it('uploads project property imports as multipart file field', async () => {

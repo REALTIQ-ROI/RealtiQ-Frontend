@@ -130,6 +130,7 @@ export interface UnitGridQuery {
 
 export interface CreateProjectRequest {
   canonicalFields?: Record<string, unknown>;
+  canonicalFieldMutations?: Array<{ field: string; operation: 'set' | 'set_null' | 'unset' | 'reset_to_inherit'; value?: unknown }>;
   name: string;
   developerName?: string;
   projectType: ProjectType | string;
@@ -150,7 +151,7 @@ export interface CreateProjectRequest {
   status?: ProjectStatus;
 }
 
-export type UpdateProjectRequest = Partial<CreateProjectRequest> & { expectedVersion?: number };
+export type UpdateProjectRequest = Omit<Partial<CreateProjectRequest>, 'canonicalFields'> & { expectedVersion?: number };
 export type MyProjectQuery = Pick<ProjectSearchQuery, 'search' | 'status' | 'publicationState' | 'page' | 'limit' | 'sort'>;
 
 export interface ProjectImportListResponse {
@@ -232,6 +233,21 @@ export interface UnitGridJobRequest {
   rows: Array<{ unitId: string; expectedVersion: number; canonicalFieldMutations?: UnitGridMutation[] }>;
 }
 
+export interface UnitTypeDto {
+  id: string;
+  version: number;
+  projectVersion: number;
+  canonicalFields: Record<string, unknown>;
+  effectiveFields: Record<string, unknown>;
+  fieldSources: Record<string, { sourceLevel: string; state: string }>;
+  media?: ProjectMedia[];
+}
+
+export interface UnitTypeListResponse {
+  projectVersion: number;
+  unitTypes: UnitTypeDto[];
+}
+
 export type ProjectPublicationRequest =
   | { expectedVersion: number; publicationAction: 'publish_all_ready' }
   | { expectedVersion: number; publicationAction: 'publish_selected'; selectedUnitIds: string[] }
@@ -275,6 +291,38 @@ export const projectService = {
   async getProjectManage(id: string): Promise<{ project: ProjectDetail }> {
     const { data } = await api.get<{ project: ProjectDetail }>(`/projects/${encodeURIComponent(id)}/manage`);
     return { ...data, project: normalizeProjectPublication(data.project) };
+  },
+
+  async listUnitTypes(projectId: string): Promise<UnitTypeListResponse> {
+    const { data } = await api.get<UnitTypeListResponse>(`/projects/${encodeURIComponent(projectId)}/unit-types`);
+    return data;
+  },
+
+  async createUnitType(projectId: string, body: { expectedVersion: number; canonicalFields?: Record<string, unknown> }, challengeId?: string): Promise<{ unitType: UnitTypeDto; projectVersion: number }> {
+    const config = challengeId ? { headers: { 'X-Step-Up-Challenge': challengeId } } : undefined;
+    const { data } = await api.post<{ unitType: UnitTypeDto; projectVersion: number }>(`/projects/${encodeURIComponent(projectId)}/unit-types`, body, config);
+    return data;
+  },
+
+  async updateUnitType(projectId: string, unitTypeId: string, body: { expectedVersion: number; expectedTypeVersion: number; canonicalFieldMutations: Array<{ field: string; operation: string; value?: unknown }> }, challengeId?: string): Promise<{ unitType: UnitTypeDto; impact: unknown; projectVersion: number }> {
+    const config = challengeId ? { headers: { 'X-Step-Up-Challenge': challengeId } } : undefined;
+    const { data } = await api.patch<{ unitType: UnitTypeDto; impact: unknown; projectVersion: number }>(`/projects/${encodeURIComponent(projectId)}/unit-types/${encodeURIComponent(unitTypeId)}`, body, config);
+    return data;
+  },
+
+  async unitTypeImpact(projectId: string, unitTypeId: string): Promise<{ unitType: UnitTypeDto; impact: { affectedUnits: number; fields: Record<string, { inheritingUnits: number; overriddenUnits: number }> } }> {
+    const { data } = await api.get(`/projects/${encodeURIComponent(projectId)}/unit-types/${encodeURIComponent(unitTypeId)}/impact`);
+    return data;
+  },
+
+  async deleteUnitType(projectId: string, unitTypeId: string, body: { expectedVersion: number; expectedTypeVersion: number }, challengeId: string): Promise<{ removed: true; projectVersion: number }> {
+    const { data } = await api.delete<{ removed: true; projectVersion: number }>(`/projects/${encodeURIComponent(projectId)}/unit-types/${encodeURIComponent(unitTypeId)}`, { data: body, headers: { 'X-Step-Up-Challenge': challengeId } });
+    return data;
+  },
+
+  async deleteProject(id: string, body: { expectedVersion?: number }, challengeId: string): Promise<{ message: string }> {
+    const { data } = await api.delete<{ message: string }>(`/projects/${encodeURIComponent(id)}`, { data: body, headers: { 'X-Step-Up-Challenge': challengeId } });
+    return data;
   },
 
   async downloadUnitGridCsv(projectId: string): Promise<Blob> {

@@ -1,9 +1,14 @@
 import { Link, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
+import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { cartService } from '../../../services/cartService';
+import { paymentService } from '../../../services/paymentService';
+import { ApiRequestError } from '../../../lib/axios';
 import type { CartCheckoutStatus } from '../../../types';
 import { cartItemTypeLabel, checkoutStatusClasses, checkoutStatusLabel, formatNgn } from '../../../utils/cartFormatters';
 
@@ -19,6 +24,35 @@ const statusMessage = (status?: CartCheckoutStatus) => {
 const CartCheckoutDetail = () => {
   const { checkoutId = '' } = useParams();
   const { data, loading, error, execute } = useAsync(() => cartService.getCartCheckout(checkoutId), Boolean(checkoutId));
+  const [pollCount, setPollCount] = useState(0);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyMessage, setVerifyMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!data || pollCount >= 6) return;
+    const needsRefresh = ['paid', 'allocation_processing'].includes(data.status) || ['pending', 'outcome_unknown'].includes(data.initializationState ?? '');
+    if (!needsRefresh) return;
+    const timer = window.setTimeout(() => {
+      void execute({ silent: true }).then((next) => { if (next) setPollCount((count) => count + 1); });
+    }, 15000);
+    return () => window.clearTimeout(timer);
+  }, [data, execute, pollCount]);
+
+  const verifyAndRefresh = async () => {
+    if (!data?.paymentReference || verifying) return;
+    setVerifying(true); setVerifyMessage(null);
+    try {
+      const result = await paymentService.verifyPayment(data.paymentReference);
+      if (!result.verified) setVerifyMessage('The payment is not yet verified. The provider callback/webhook remains authoritative; refresh again later.');
+      else { setVerifyMessage('Payment verification returned confirmed. Refreshing checkout allocations.'); toast.success('Payment verification completed; refreshing service allocations.'); }
+      const refreshed = await execute();
+      if (!refreshed) setVerifyMessage((current) => `${current ?? ''} Checkout detail could not be refreshed.`);
+      setPollCount(0);
+    } catch (raw) {
+      const requestId = raw instanceof ApiRequestError ? raw.requestId : undefined;
+      setVerifyMessage(`${raw instanceof Error ? raw.message : 'Unable to verify payment.'}${requestId ? ` Request ID: ${requestId}` : ''}`);
+    } finally { setVerifying(false); }
+  };
 
   return (
     <BuyerPortalLayout
@@ -36,12 +70,19 @@ const CartCheckoutDetail = () => {
                 <div>
                   <p className="text-xs font-bold uppercase tracking-widest text-secondary">{data.paymentReference || data.checkoutId}</p>
                   <h3 className="mt-2 text-3xl font-black">{formatNgn(data.totalAmount)}</h3>
-                  <p className="mt-3 max-w-2xl text-sm text-secondary">{statusMessage(data.status)}</p>
+                  <p className="mt-3 max-w-2xl text-sm text-secondary">{data.initializationState === 'outcome_unknown' ? 'The provider initialization outcome is unresolved. Do not start another checkout. Refresh status or contact support with this checkout reference and any request ID returned by the server.' : statusMessage(data.status)}</p>
+                  {data.initializationState ? <p className="mt-2 text-xs font-semibold text-secondary">Provider initialization: {data.initializationState.replaceAll('_', ' ')}</p> : null}
                 </div>
                 <span className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${checkoutStatusClasses(data.status)}`}>
                   {checkoutStatusLabel(data.status)}
                 </span>
               </div>
+            </section>
+            <section className="flex flex-wrap items-center gap-3 rounded-xl border border-outline-variant/10 bg-white p-4">
+              <Button type="button" variant="secondary" disabled={loading} onClick={() => { setPollCount(0); void execute(); }}>Refresh checkout status</Button>
+              {data.paymentReference && !['completed', 'partially_failed'].includes(data.status) ? <Button type="button" disabled={verifying || loading} loading={verifying} loadingLabel="Checking payment…" onClick={() => void verifyAndRefresh()}>Verify payment then refresh allocations</Button> : null}
+              {verifyMessage ? <p role="status" className="text-sm text-secondary">{verifyMessage}</p> : null}
+              {pollCount >= 6 ? <p className="text-xs text-secondary">Automatic status refresh paused after six checks. Use Refresh checkout status to continue.</p> : null}
             </section>
             <section className="rounded-xl border border-outline-variant/10 bg-white">
               <div className="border-b border-outline-variant/10 p-5">
