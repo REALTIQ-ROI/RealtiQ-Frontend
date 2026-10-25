@@ -84,13 +84,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const switchProfile = useCallback(async (id: string) => {
-    if (!profiles.some((profile) => profile.id === id)) throw new Error('This profile is not available to this account.');
+    await authService.account();
+    const result = await profileService.list();
+    const selected = result.profiles.find((profile) => profile.id === id);
+    if (!selected) throw new Error('This profile is no longer available to this account. Refresh your profile list and try again.');
     const current = await profileService.current(id);
     window.dispatchEvent(new Event('realtiq:session-changed'));
     localStorage.setItem('activeProfileId', id);
+    setProfiles(result.profiles);
     setActiveProfile(current.profile);
     setProfileError(null);
-  }, [profiles]);
+  }, []);
 
   const updateUser = useCallback((nextUser: User) => {
     const previous = parseUser(localStorage.getItem('user'));
@@ -108,6 +112,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     updateUser(refreshed);
     return refreshed;
   }, [updateUser, user?._id]);
+
+  const userId = user?._id;
 
   const login = useCallback(async (payload: LoginPayload): Promise<User> => {
     setIsLoading(true);
@@ -142,10 +148,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     if (token) void authService.logout(token).catch(() => undefined);
     clearSession();
-  };
+  }, [token, clearSession]);
 
   useEffect(() => {
     window.addEventListener('realtiq:session-expired', clearSession);
@@ -153,7 +159,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [clearSession]);
 
   useEffect(() => {
-    if (!token || !user) return;
+    if (!token || !userId) return;
     let current = true;
     queueMicrotask(() => {
       if (!current) return;
@@ -165,7 +171,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
     });
     return () => { current = false; };
-  }, [token, user?._id, refreshProfiles]);
+  }, [token, userId, refreshProfiles]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -184,7 +190,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       refreshUser,
       logout,
     }),
-    [user, token, isLoading, profiles, activeProfile, profileError, refreshProfiles, switchProfile, login, register, updateUser, refreshUser],
+    [user, token, isLoading, profiles, activeProfile, profileError, refreshProfiles, switchProfile, login, register, updateUser, refreshUser, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

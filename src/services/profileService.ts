@@ -42,4 +42,11 @@ export const profileService = {
     });
     return data;
   },
+
+  async submitSignatory(payload: { identityId: string; authorityEvidenceId: string; expiresAt: string }, challengeId: string): Promise<unknown> {
+    const { data } = await api.post<unknown>('/profiles/current/signatories', payload, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    });
+    return data;
+  },
 };

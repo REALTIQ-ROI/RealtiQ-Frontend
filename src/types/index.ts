@@ -460,7 +460,7 @@ export interface User {
 }
 
 export interface UpdateUserPayload {
-  name: string;
+  name?: string;
   phone?: string;
 }
 
@@ -570,6 +570,10 @@ export interface RegisterPayload {
   email: string;
   password: string;
   role: UserRole;
+  buyerProfile?: {
+    structure: 'individual' | 'company' | 'cooperative';
+    name?: string;
+  };
 }
 
 export interface PropertyFilters {

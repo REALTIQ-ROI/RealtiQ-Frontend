@@ -10,7 +10,8 @@ vi.mock('../services/stepUpService', () => ({ stepUpService: { start: vi.fn(), v
 
 const setProfile = (id: string) => {
   localStorage.setItem('activeProfileId', id);
-  vi.mocked(useAuth).mockReturnValue({ activeProfile: { id } } as ReturnType<typeof useAuth>);
+  localStorage.setItem('token', 'session-1');
+  vi.mocked(useAuth).mockReturnValue({ activeProfile: { id }, token: 'session-1' } as ReturnType<typeof useAuth>);
 };
 
 describe('useBoundStepUp', () => {
@@ -55,7 +56,7 @@ describe('useBoundStepUp', () => {
     await act(async () => { expect(await result.current.begin({ method: 'POST', path: '/api/cart/checkout/initialize', body: {}, label: 'Checkout', execute })).toBe(false); });
     expect(result.current.challenge).toBeNull();
     expect(result.current.error).toContain('expired challenge');
-    expect(await result.current.complete('123456')).toEqual({ ok: false });
+    expect(await result.current.complete('123456')).toEqual({ ok: false, error: 'This security challenge expired. Start the protected action again.' });
     expect(stepUpService.verify).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
   });
@@ -65,11 +66,23 @@ describe('useBoundStepUp', () => {
     const execute = vi.fn(async () => 'submitted');
     const { result } = renderHook(() => useBoundStepUp<string>());
     await act(async () => { await result.current.begin({ method: 'POST', path: '/api/cart/checkout/initialize', body: {}, label: 'Checkout', execute }); });
-    await act(async () => { expect(await result.current.complete('111111')).toEqual({ ok: false }); });
+    await act(async () => { expect(await result.current.complete('111111')).toEqual({ ok: false, error: 'That authenticator code was not accepted. Enter the current code and try again.' }); });
     expect(execute).not.toHaveBeenCalled();
     expect(result.current.challenge?.challengeId).toBe('challenge-1');
     expect(result.current.error).toContain('authenticator code was not accepted');
     await act(async () => { expect(await result.current.complete('222222')).toEqual({ ok: true, value: 'submitted' }); });
     expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates a pending challenge when the signed-in session changes', async () => {
+    const { result, rerender } = renderHook(() => useBoundStepUp<void>());
+    await act(async () => { expect(await result.current.begin({ method: 'POST', path: '/api/cart/checkout/initialize', body: {}, label: 'Checkout', execute: vi.fn() })).toBe(true); });
+    localStorage.setItem('token', 'session-2');
+    vi.mocked(useAuth).mockReturnValue({ activeProfile: { id: 'profile-1' }, token: 'session-2' } as ReturnType<typeof useAuth>);
+    rerender();
+    expect(result.current.challenge).toBeNull();
+    expect(result.current.error).toContain('signed-in session changed');
+    await act(async () => { expect(await result.current.complete('123456')).toMatchObject({ ok: false }); });
+    expect(stepUpService.verify).not.toHaveBeenCalled();
   });
 });

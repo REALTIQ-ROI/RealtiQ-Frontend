@@ -7,13 +7,15 @@ import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import Input from '../../../components/ui/Input';
 import LoadingState from '../../../components/ui/LoadingState';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
 import type { User, UserRole } from '../../../types';
 import { isUserVerified } from '../../../utils/userVerification';
 
 const ITEMS_PER_PAGE = 10;
-const phoneRegex = /^(\+234|234|0)[789][01]\d{8}$/;
+const phoneRegex = /^\+[1-9]\d{1,14}$/;
 
 const formatDate = (date?: string) =>
   date
@@ -30,6 +32,7 @@ const getInitials = (name: string) =>
 
 const ManageUsers = () => {
   const { data, loading, error, execute } = useAsync(() => userService.fetchUsers(), true);
+  const stepUp = useBoundStepUp<unknown>();
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
   const [page, setPage] = useState(1);
@@ -65,25 +68,40 @@ const ManageUsers = () => {
   const submitEdit = async (event: FormEvent) => {
     event.preventDefault();
     if (!editingUser) return;
-    if (!editName.trim()) {
-      setEditError('Name is required.');
+    const nextName = editName.trim();
+    const nextPhone = editPhone.trim();
+    if (!nextName || nextName.length > 120) {
+      setEditError('Name must be between 1 and 120 characters.');
       return;
     }
-    if (editPhone.trim() && !phoneRegex.test(editPhone.trim())) {
-      setEditError('Enter a valid Nigerian phone number.');
+    if (nextPhone !== (editingUser.phone ?? '') && nextPhone && !phoneRegex.test(nextPhone)) {
+      setEditError('Enter a phone number in E.164 format, such as +2348012345678.');
+      return;
+    }
+    if ((editingUser.phone ?? '') && !nextPhone) {
+      setEditError('A saved phone number cannot be cleared with this endpoint. Enter a replacement number or restore the current value.');
+      return;
+    }
+
+    const body: { name?: string; phone?: string } = {};
+    if (nextName !== editingUser.name) body.name = nextName;
+    if (nextPhone !== (editingUser.phone ?? '')) body.phone = nextPhone;
+    if (!Object.keys(body).length) {
+      setEditError('There are no account identity changes to save.');
       return;
     }
 
     setSaving(true);
     setEditError(null);
     try {
-      await userService.updateUser(editingUser._id, {
-        name: editName.trim(),
-        phone: editPhone.trim() || undefined,
+      await stepUp.begin({
+        method: 'PATCH',
+        path: `/api/users/${encodeURIComponent(editingUser._id)}`,
+        body,
+        label: `Update ${editingUser.name}'s account identity`,
+        execute: (challengeId, exactBody) => userService.updateUser(editingUser._id, exactBody, challengeId),
       });
-      toast.success('User updated successfully.');
-      setEditingUser(null);
-      await execute();
+      if (!stepUp.challenge && stepUp.getError()) setEditError(stepUp.getError());
     } catch (err) {
       setEditError(err instanceof Error ? err.message : 'Unable to update user.');
     } finally {
@@ -91,25 +109,53 @@ const ManageUsers = () => {
     }
   };
 
+  const completeEdit = async (code: string) => {
+    const result = await stepUp.complete(code);
+    if (!result.ok) {
+      setEditError(result.error ?? stepUp.error ?? 'The account update was not accepted. Review the current account state and try again.');
+      return false;
+    }
+    toast.success('User account updated.');
+    setEditingUser(null);
+    await execute();
+    return true;
+  };
+
   const deleteUser = async (user: User) => {
     const result = await Swal.fire({
-      title: 'Delete this user permanently?',
-      text: 'This action cannot be undone.',
+      title: 'Change this account to deleted status?',
+      text: 'The backend handles this as an account-deletion state transition, not a hard delete.',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Delete User',
+      confirmButtonText: 'Continue to security check',
       cancelButtonText: 'Cancel',
       confirmButtonColor: '#dc2626',
     });
     if (!result.isConfirmed) return;
 
     try {
-      await userService.deleteUser(user._id);
-      toast.success('User deleted successfully.');
-      await execute();
+      await stepUp.begin({
+        method: 'DELETE',
+        path: `/api/users/${encodeURIComponent(user._id)}`,
+        body: {},
+        label: `Change ${user.name}'s account status`,
+        execute: (challengeId) => userService.deleteUser(user._id, challengeId),
+      });
+      if (!stepUp.challenge && stepUp.getError()) toast.error(stepUp.getError());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to delete user.');
     }
+  };
+
+  const completeDelete = async (code: string) => {
+    const result = await stepUp.complete(code);
+    if (!result.ok) {
+      toast.error(result.error ?? stepUp.error ?? 'The account status transition was not accepted. Refresh and try again.');
+      return false;
+    }
+    toast.success('The account status transition was submitted.');
+    await execute();
+    return true;
   };
 
   return (
@@ -124,7 +170,7 @@ const ManageUsers = () => {
               Manage Users
             </h2>
             <p className="text-secondary mt-2 max-w-xl font-body">
-              View, update, and remove registered platform accounts.
+              View registered accounts and submit permitted changes with the required security challenge.
             </p>
           </div>
         </section>
@@ -259,21 +305,22 @@ const ManageUsers = () => {
 
         {editingUser ? (
           <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
-            <form className="bg-white rounded-xl p-6 w-full max-w-md space-y-4" onSubmit={submitEdit}>
+            <form className="bg-white rounded-xl p-6 w-full max-w-md space-y-4" onSubmit={(event) => void submitEdit(event)}>
               <div>
                 <h3 className="text-xl font-extrabold">Edit User</h3>
                 <p className="text-sm text-secondary">{editingUser.email}</p>
               </div>
               <Input label="Name" value={editName} onChange={(event) => setEditName(event.target.value)} required />
-              <Input label="Phone" value={editPhone} onChange={(event) => setEditPhone(event.target.value)} placeholder="08012345678" />
+              <Input label="Phone" value={editPhone} onChange={(event) => setEditPhone(event.target.value)} placeholder="+2348012345678" />
               {editError ? <p className="text-error text-sm">{editError}</p> : null}
               <div className="flex justify-end gap-3 pt-2">
-                <Button type="button" variant="secondary" onClick={() => setEditingUser(null)}>Cancel</Button>
+                <Button type="button" variant="secondary" onClick={() => { stepUp.cancel(); setEditingUser(null); }}>Cancel</Button>
                 <Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</Button>
               </div>
             </form>
           </div>
         ) : null}
+        <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy} error={stepUp.error} onCancel={stepUp.cancel} onSubmit={editingUser ? completeEdit : completeDelete} />
       </div>
     </AdminLayout>
   );

@@ -31,6 +31,8 @@ const Register = ({ purchaseMode = false }: RegisterProps) => {
   const { register, isLoading } = useAuth();
   const marketRedirect = useMarketAccessIntent();
   const [role, setRole] = useState<RegisterRole>('buyer');
+  const [buyerStructure, setBuyerStructure] = useState<'individual' | 'company' | 'cooperative'>('individual');
+  const [buyerProfileName, setBuyerProfileName] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -55,7 +57,16 @@ const Register = ({ purchaseMode = false }: RegisterProps) => {
     setPasswordError(null);
 
     try {
-      const response = await register({ name, email, password, role: purchaseMode ? 'buyer' : role });
+      const selectedRole = purchaseMode ? 'buyer' : role;
+      const response = await register({
+        name,
+        email,
+        password,
+        role: selectedRole,
+        ...(selectedRole === 'buyer' && buyerStructure !== 'individual'
+          ? { buyerProfile: { structure: buyerStructure, ...(buyerProfileName.trim() ? { name: buyerProfileName.trim() } : {}) } }
+          : {}),
+      });
       if (!purchaseMode && marketRedirect) {
         if (response?.token) {
           clearMarketAccessIntent();
@@ -171,6 +182,28 @@ const Register = ({ purchaseMode = false }: RegisterProps) => {
                 </button>
               ))}
             </div>
+
+            {!purchaseMode && role === 'buyer' ? (
+              <section className="mb-7 rounded-xl border border-outline-variant/20 bg-white p-4">
+                <label className="block space-y-2 text-[11px] font-bold uppercase tracking-widest text-secondary" htmlFor="buyer-profile-structure">
+                  Buyer profile type
+                  <select id="buyer-profile-structure" className="w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm font-normal normal-case tracking-normal text-on-surface" value={buyerStructure} onChange={(event) => setBuyerStructure(event.target.value as typeof buyerStructure)}>
+                    <option value="individual">Individual</option>
+                    <option value="company">Company</option>
+                    <option value="cooperative">Cooperative</option>
+                  </select>
+                </label>
+                {buyerStructure !== 'individual' ? (
+                  <>
+                    <label className="mt-3 block space-y-2 text-[11px] font-bold uppercase tracking-widest text-secondary" htmlFor="buyer-profile-name">
+                      Organization name <span className="font-normal normal-case tracking-normal">(optional)</span>
+                      <input id="buyer-profile-name" className="w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm font-normal normal-case tracking-normal text-on-surface" value={buyerProfileName} onChange={(event) => setBuyerProfileName(event.target.value)} />
+                    </label>
+                    <p className="mt-2 text-xs text-secondary">The account registration request can create this private, unverified organization profile. Verification and team authority are separate steps.</p>
+                  </>
+                ) : null}
+              </section>
+            ) : null}
 
             <form className="space-y-5" onSubmit={(e) => void onSubmit(e)}>
               <div className="space-y-2">

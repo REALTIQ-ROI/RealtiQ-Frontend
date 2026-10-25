@@ -17,13 +17,18 @@ export const userService = {
     return data;
   },
 
-  async updateUser(id: string, payload: UpdateUserPayload): Promise<User> {
-    const { data } = await api.patch<User>(`/users/${id}`, payload);
+  async updateUser(id: string, payload: UpdateUserPayload, challengeId?: string): Promise<User> {
+    const { data } = await api.patch<User>(`/users/${encodeURIComponent(id)}`, payload, {
+      headers: challengeId ? { 'X-Step-Up-Challenge': challengeId } : undefined,
+    });
     return data;
   },
 
-  async deleteUser(id: string): Promise<{ message: string }> {
-    const { data } = await api.delete<{ message: string }>(`/users/${id}`);
+  async deleteUser(id: string, challengeId?: string): Promise<{ message: string; id: string }> {
+    const { data } = await api.delete<{ message: string; id: string }>(`/users/${encodeURIComponent(id)}`, {
+      data: {},
+      headers: challengeId ? { 'X-Step-Up-Challenge': challengeId } : undefined,
+    });
     return data;
   },
 
@@ -39,7 +44,7 @@ export const userService = {
     return this.fetchUserById(id);
   },
 
-  async updateUserName(userId: string, name: string): Promise<User> {
-    return this.updateUser(userId, { name });
+  async updateUserName(userId: string, name: string, challengeId?: string): Promise<User> {
+    return this.updateUser(userId, { name }, challengeId);
   },
 };

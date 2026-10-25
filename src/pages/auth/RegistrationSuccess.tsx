@@ -33,7 +33,7 @@ const RegistrationSuccess = () => {
           {marketRedirect ? ' After verification, sign in to continue to Property Market Analysis payment.' : ''}
         </p>
         <p className="text-slate-400 text-xs leading-relaxed mb-8">
-          Didn't receive an email? Check your spam folder or try registering again.
+          Didn't receive an email? Check your spam folder.
         </p>
 
         <div className="space-y-3">
@@ -49,6 +49,9 @@ const RegistrationSuccess = () => {
             className="inline-block w-full py-4 rounded-xl bg-surface-container-low text-on-surface font-bold text-sm tracking-tight hover:bg-surface-container transition-colors"
           >
             Back to Home
+          </Link>
+          <Link to="/contact" className="inline-block w-full py-3 text-sm font-semibold text-primary hover:underline">
+            Contact support about verification
           </Link>
         </div>
       </div>

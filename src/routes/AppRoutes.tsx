@@ -39,6 +39,7 @@ import ResetPassword from '../pages/auth/ResetPassword';
 import AdminLogin from '../pages/auth/Admin/AdminLogin';
 import LandlordLogin from '../pages/auth/Landlord/LandlordLogin';
 import LandlordRegistration from '../pages/auth/Landlord/LandlordRegistration';
+import AccountSecuritySettingsPage from '../pages/proxyNetwork/AccountSecuritySettingsPage';
 
 import Dashboard from '../pages/dashboard/Dashboard';
 import Tours from '../pages/dashboard/Tours';
@@ -250,6 +251,7 @@ const AppRoutes = () => {
         <Route element={<ProtectedRoute allowedRoles={['proxy_inspector']} />}>
           <Route path="/proxy-inspector/onboarding" element={<InspectorOnboarding />} />
           <Route path="/proxy-inspector/payout-account" element={<PayoutAccountSettings />} />
+          <Route path="/account/security" element={<AccountSecuritySettingsPage />} />
           <Route path="/proxy/tasks" element={<InspectorTasks />} />
           <Route path="/proxy/tasks/:requestId" element={<InspectorProxyWorkspace />} />
         </Route>

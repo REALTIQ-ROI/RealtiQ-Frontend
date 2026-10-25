@@ -47,94 +47,118 @@ export const stepUpErrorMessage = (error: unknown): string => {
 };
 
 export const useBoundStepUp = <T,>() => {
-  const { activeProfile } = useAuth();
+  const { activeProfile, token } = useAuth();
   const profileId = activeProfile?.id ?? null;
   const profileIdRef = useRef(profileId);
   profileIdRef.current = profileId;
-  const actionRef = useRef<{ profileId: string; body: object; execute: (challengeId: string, body: never) => Promise<T> } | null>(null);
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
+  const actionRef = useRef<{ profileId: string; token: string; body: object; execute: (challengeId: string, body: never) => Promise<T> } | null>(null);
   const busyRef = useRef(false);
   const [challenge, setChallenge] = useState<BoundStepUpChallenge | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const errorRef = useRef<string | null>(null);
+  const publishError = useCallback((message: string | null) => {
+    errorRef.current = message;
+    setError(message);
+  }, []);
 
   const clear = useCallback((message?: string) => {
     actionRef.current = null;
     setChallenge(null);
-    setError(message ?? null);
-  }, []);
+    publishError(message ?? null);
+  }, [publishError]);
 
   useEffect(() => {
-    if (actionRef.current && actionRef.current.profileId !== profileId) {
-      clear('The selected profile changed. Start the protected action again.');
+    if (actionRef.current && (actionRef.current.profileId !== profileId || actionRef.current.token !== token)) {
+      clear(actionRef.current.profileId !== profileId
+        ? 'The selected profile changed. Start the protected action again.'
+        : 'The signed-in session changed. Start the protected action again.');
     }
-  }, [clear, profileId]);
+  }, [clear, profileId, token]);
 
   const begin = useCallback(async <B extends object>(action: BoundAction<B, T>): Promise<boolean> => {
     if (busyRef.current || actionRef.current) return false;
-    if (!profileIdRef.current) { setError('Select an authorized profile before continuing.'); return false; }
+    if (!profileIdRef.current) { publishError('Select an authorized profile before continuing.'); return false; }
+    if (!tokenRef.current || localStorage.getItem('token') !== tokenRef.current) { publishError('Sign in again before starting this protected action.'); return false; }
     if (!action.path.startsWith('/api/') || action.path.includes('?') || action.path.includes('#')) {
-      setError('The protected request path must be a literal API path without a query string.');
+      publishError('The protected request path must be a literal API path without a query string.');
       return false;
     }
     if (Array.isArray(action.body)) {
-      setError('The protected request body must be a JSON object.');
+      publishError('The protected request body must be a JSON object.');
       return false;
     }
     busyRef.current = true;
     setBusy(true);
-    setError(null);
+    publishError(null);
     try {
       const body = cloneAndFreeze(action.body);
       const started = await stepUpService.start(action.method, action.path, body);
       if (started.method !== 'totp') {
-        setError('This account factor is not supported by the current step-up workflow.');
+        publishError('This account factor is not supported by the current step-up workflow.');
         return false;
       }
-      if (profileIdRef.current !== activeProfile?.id || localStorage.getItem('activeProfileId') !== profileIdRef.current) {
-        setError('The selected profile changed. The challenge was discarded.');
+      if (profileIdRef.current !== activeProfile?.id || localStorage.getItem('activeProfileId') !== profileIdRef.current || tokenRef.current !== token || localStorage.getItem('token') !== token) {
+        publishError(profileIdRef.current !== activeProfile?.id || localStorage.getItem('activeProfileId') !== profileIdRef.current
+          ? 'The selected profile changed. The challenge was discarded.'
+          : 'The signed-in session changed. The challenge was discarded.');
         return false;
       }
       if (!Number.isFinite(Date.parse(started.expiresAt)) || Date.parse(started.expiresAt) <= Date.now()) {
-        setError('The server returned an expired challenge. Start the action again.');
+        publishError('The server returned an expired challenge. Start the action again.');
         return false;
       }
-      actionRef.current = { profileId: profileIdRef.current, body, execute: action.execute as (challengeId: string, body: never) => Promise<T> };
+      actionRef.current = { profileId: profileIdRef.current, token: tokenRef.current ?? '', body, execute: action.execute as (challengeId: string, body: never) => Promise<T> };
       setChallenge({ ...started, label: action.label });
       return true;
     } catch (raw) {
-      setError(stepUpErrorMessage(raw));
+      publishError(stepUpErrorMessage(raw));
       return false;
     } finally {
       busyRef.current = false;
       setBusy(false);
     }
-  }, [activeProfile?.id]);
+  }, [activeProfile?.id, publishError, token]);
 
-  const complete = useCallback(async (code: string): Promise<{ ok: true; value: T } | { ok: false }> => {
+  const complete = useCallback(async (code: string): Promise<{ ok: true; value: T } | { ok: false; error?: string }> => {
     const action = actionRef.current;
     const current = challenge;
-    if (!action || !current || busyRef.current) return { ok: false };
-    if (action.profileId !== profileIdRef.current || localStorage.getItem('activeProfileId') !== action.profileId) {
-      clear('The selected profile changed. Start the protected action again.');
-      return { ok: false };
+    if (!action || !current || busyRef.current) return { ok: false, error: error ?? undefined };
+    if (action.profileId !== profileIdRef.current || localStorage.getItem('activeProfileId') !== action.profileId || action.token !== tokenRef.current || localStorage.getItem('token') !== action.token) {
+      const message = action.profileId !== profileIdRef.current || localStorage.getItem('activeProfileId') !== action.profileId
+        ? 'The selected profile changed. Start the protected action again.'
+        : 'The signed-in session changed. Start the protected action again.';
+      clear(message);
+      return { ok: false, error: message };
     }
     if (Date.parse(current.expiresAt) <= Date.now()) {
-      clear('This security challenge expired. Start the protected action again.');
-      return { ok: false };
+      const message = 'This security challenge expired. Start the protected action again.';
+      clear(message);
+      return { ok: false, error: message };
     }
-    if (!/^\d{6}$/.test(code)) { setError('Enter the six-digit authenticator code.'); return { ok: false }; }
+    if (!/^\d{6}$/.test(code)) {
+      const message = 'Enter the six-digit authenticator code.';
+      publishError(message);
+      return { ok: false, error: message };
+    }
     busyRef.current = true;
     setBusy(true);
-    setError(null);
+    publishError(null);
     try {
       await stepUpService.verify(current.challengeId, code);
-      if (action.profileId !== profileIdRef.current || localStorage.getItem('activeProfileId') !== action.profileId) {
-        clear('The selected profile changed. The verified challenge was discarded.');
-        return { ok: false };
+      if (action.profileId !== profileIdRef.current || localStorage.getItem('activeProfileId') !== action.profileId || action.token !== tokenRef.current || localStorage.getItem('token') !== action.token) {
+        const message = action.profileId !== profileIdRef.current || localStorage.getItem('activeProfileId') !== action.profileId
+          ? 'The selected profile changed. The verified challenge was discarded.'
+          : 'The signed-in session changed. The verified challenge was discarded.';
+        clear(message);
+        return { ok: false, error: message };
       }
       if (Date.parse(current.expiresAt) <= Date.now()) {
-        clear('This security challenge expired. Start the protected action again.');
-        return { ok: false };
+        const message = 'This security challenge expired. Start the protected action again.';
+        clear(message);
+        return { ok: false, error: message };
       }
       // Consume locally before making the protected request. A network failure must never reuse this proof.
       actionRef.current = null;
@@ -148,15 +172,16 @@ export const useBoundStepUp = <T,>() => {
         actionRef.current = null;
         setChallenge(null);
       }
-      setError(message);
-      return { ok: false };
+      publishError(message);
+      return { ok: false, error: message };
     } finally {
       busyRef.current = false;
       setBusy(false);
     }
-  }, [challenge, clear]);
+  }, [challenge, clear, error, publishError]);
 
   const cancel = useCallback(() => clear(), [clear]);
-  const clearError = useCallback(() => setError(null), []);
-  return { challenge, busy, error, begin, complete, cancel, clearError };
+  const clearError = useCallback(() => publishError(null), [publishError]);
+  const getError = useCallback(() => errorRef.current, []);
+  return { challenge, busy, error, begin, complete, cancel, clearError, getError };
 };

@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
-import Button from '../../../components/ui/Button';
+import AccountSecuritySettings from '../../../components/profile/AccountSecuritySettings';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -28,13 +27,6 @@ const LandlordSettings = () => {
     Boolean(user?._id),
   );
   const account = profile ?? user;
-  const [name, setName] = useState(account?.name ?? '');
-  const [phone, setPhone] = useState('');
-
-  useEffect(() => {
-    setName(account?.name ?? '');
-    setPhone(account?.phone ?? '');
-  }, [account]);
 
   return (
     <LandlordPortalLayout active="settings" title="Settings">
@@ -63,7 +55,7 @@ const LandlordSettings = () => {
                     <label className="text-[11px] font-bold uppercase tracking-wider text-secondary">Full Name</label>
                     <input
                       className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 focus:ring-surface-tint rounded-lg px-4 py-3 text-sm transition-all outline-none"
-                      value={name}
+                      value={account?.name ?? ''}
                       readOnly
                       type="text"
                     />
@@ -82,7 +74,7 @@ const LandlordSettings = () => {
                       <label className="text-[11px] font-bold uppercase tracking-wider text-secondary">Phone Number</label>
                       <input
                         className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 focus:ring-surface-tint rounded-lg px-4 py-3 text-sm transition-all outline-none"
-                        value={phone}
+                        value={account?.phone ?? ''}
                         readOnly
                         placeholder="08012345678"
                         type="tel"
@@ -177,23 +169,8 @@ const LandlordSettings = () => {
             </section>
 
 
-            <div className="flex items-center justify-end gap-3">
-              <button
-                className="text-secondary text-sm font-semibold hover:text-primary transition-colors"
-                type="button"
-                onClick={() => {
-                  setName(profile?.name ?? user?.name ?? '');
-                  setPhone(profile?.phone ?? '');
-                }}
-              >
-                Reset
-              </button>
-              <Button type="submit" disabled title="Account changes require an undocumented step-up challenge">
-                Save Changes
-              </Button>
-            </div>
-            <p className="text-sm text-amber-800">Account changes require a server step-up challenge. Profile details remain available to view.</p>
           </form>
+          {account ? <AccountSecuritySettings user={account} /> : null}
           <DataProtectionRequests />
           <SellerPayoutAccountSettings />
           </>

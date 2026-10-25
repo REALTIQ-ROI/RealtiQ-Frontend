@@ -32,6 +32,15 @@ export interface AuthMessageResponse {
   message: string;
 }
 
+export interface PhoneVerificationStatus {
+  id: string;
+  state: string;
+  expiresAt: string;
+  sentAt?: string | null;
+  verifiedAt?: string | null;
+  errorCode?: string | null;
+}
+
 export const authService = {
   async account(): Promise<unknown> {
     const { data } = await api.get<unknown>('/auth/account');
@@ -63,6 +72,40 @@ export const authService = {
 
   async resetPassword(payload: ResetPasswordPayload): Promise<AuthMessageResponse> {
     const { data } = await api.post<AuthMessageResponse>('/auth/reset-password', payload);
+    return data;
+  },
+
+  async startPhoneVerification(idempotencyKey: string): Promise<PhoneVerificationStatus> {
+    const { data } = await api.post<PhoneVerificationStatus>('/auth/phone-verification', {}, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    });
+    return data;
+  },
+
+  async phoneVerificationHistory(limit = 25, before?: string): Promise<{ events: unknown[]; nextCursor: string | null }> {
+    const { data } = await api.get<{ events: unknown[]; nextCursor: string | null }>('/auth/phone-verification/history', {
+      params: { limit, ...(before ? { before } : {}) },
+    });
+    return data;
+  },
+
+  async phoneVerification(id: string): Promise<PhoneVerificationStatus> {
+    const { data } = await api.get<PhoneVerificationStatus>(`/auth/phone-verification/${encodeURIComponent(id)}`);
+    return data;
+  },
+
+  async verifyPhone(id: string, code: string): Promise<PhoneVerificationStatus> {
+    const { data } = await api.post<PhoneVerificationStatus>(`/auth/phone-verification/${encodeURIComponent(id)}/verify`, { code });
+    return data;
+  },
+
+  async cancelPhoneVerification(id: string): Promise<PhoneVerificationStatus> {
+    const { data } = await api.delete<PhoneVerificationStatus>(`/auth/phone-verification/${encodeURIComponent(id)}`);
+    return data;
+  },
+
+  async revokeOtherSessions(): Promise<unknown> {
+    const { data } = await api.delete<unknown>('/auth/sessions/others');
     return data;
   },
 };
