@@ -2,6 +2,8 @@
 
 Audit date: 2026-10-25. Scope: this frontend working tree against `docs/backend-api-handoff/`. The backend repository and a live API were not available. This is a source and local-test audit, not backend acceptance.
 
+This is a baseline snapshot from before the subsequent integration continuation. The current operation status is maintained in [the integration tracker](FIRST_BATCH_FRONTEND_INTEGRATION_TRACKER.md); findings such as A1 may have been fixed after this snapshot.
+
 ## Executive result
 
 **The handoff has not been fully implemented.** The working tree contains substantial, useful first-batch integration, but no whole handoff chapter can be marked complete. Several documented reads and ordinary writes work in the frontend, while sensitive mutations are intentionally disabled because the handoff does not give the exact bound step-up challenge exchange. Other features have sufficient high-level guidance but still need frontend work or endpoint-specific DTO reconciliation. The paid/live tour purchase mismatch is a confirmed backend workflow gap and must remain withheld.

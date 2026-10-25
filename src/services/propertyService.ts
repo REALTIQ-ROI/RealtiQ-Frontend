@@ -257,8 +257,10 @@ const normalizePropertiesResponse = (response: PropertiesResponse): PropertiesRe
 });
 
 export const propertyService = {
-  async getProperties(filters?: PropertyFiltersQuery): Promise<PropertiesResponse> {
-    const { data } = await api.get<PropertiesResponse>('/properties', { params: { queryVersion: 'canonical-v1', ...filters } });
+  async getProperties(filters?: PropertyFiltersQuery | URLSearchParams): Promise<PropertiesResponse> {
+    const params = filters instanceof URLSearchParams ? new URLSearchParams(filters) : { queryVersion: 'canonical-v1', ...filters };
+    if (params instanceof URLSearchParams && !params.has('queryVersion')) params.set('queryVersion', 'canonical-v1');
+    const { data } = await api.get<PropertiesResponse>('/properties', { params });
     return normalizePropertiesResponse(data);
   },
 

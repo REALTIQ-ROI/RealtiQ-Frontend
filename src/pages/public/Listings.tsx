@@ -10,7 +10,7 @@ import LoadingState from "../../components/ui/LoadingState";
 import { useAuth } from "../../contexts/AuthContext";
 import { useProperties as usePropertyCatalog } from "../../hooks/useProperties";
 import { personalisationService } from "../../services/personalisationService";
-import { readCatalogueQuery, writeCatalogueQuery } from "../../utils/catalogueQuery";
+import { cataloguePageFromQuery, readCatalogueQuery, writeCatalogueQuery } from "../../utils/catalogueQuery";
 import {
   propertyPublicReference,
   propertyRouteReference,
@@ -26,7 +26,8 @@ const formatRange = (page: number, total: number) =>
 const Listings = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialFilters = useRef(readCatalogueQuery(searchParams));
+  const [initialFilters] = useState(() => new URLSearchParams(searchParams));
+  const [initialPage] = useState(() => cataloguePageFromQuery(searchParams));
   const appliedQueryKey = useRef(searchParams.toString());
   const { user } = useAuth();
   const {
@@ -40,7 +41,7 @@ const Listings = () => {
     fetchProperties,
     applyFilters,
     goToPage,
-  } = usePropertyCatalog({ autoFetch: true, limit: LIMIT, initialFilters: initialFilters.current });
+  } = usePropertyCatalog({ autoFetch: true, limit: LIMIT, initialFilters, initialPage });
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(
     null,
   );
@@ -53,22 +54,32 @@ const Listings = () => {
   } | null>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const viewportKey = useRef("");
+  const viewportInteracted = useRef(false);
   useEffect(() => {
     const key = searchParams.toString();
     if (key === appliedQueryKey.current) return;
     appliedQueryKey.current = key;
-    applyFilters(readCatalogueQuery(searchParams));
+    viewportKey.current = '';
+    viewportInteracted.current = false;
+    applyFilters(new URLSearchParams(searchParams), cataloguePageFromQuery(searchParams));
   }, [searchParams, applyFilters]);
 
   const handleApplyFilters = useCallback(
-    (nextFilters: typeof filters) => {
-      const activeFilters = viewport ? { ...nextFilters, ...viewport, mapActive: true, mapZoom: viewport.zoom } : nextFilters;
-      const nextParams = writeCatalogueQuery(activeFilters);
+    (changes: Parameters<typeof writeCatalogueQuery>[0], clearAll = false) => {
+      const patch = viewport && viewportInteracted.current && !clearAll
+        ? { ...changes, north: viewport.north, south: viewport.south, east: viewport.east, west: viewport.west, mapActive: true, mapZoom: viewport.zoom }
+        : changes;
+      const nextParams = writeCatalogueQuery(patch, { base: searchParams, resetPage: true, clearAll });
+      if (clearAll) {
+        setViewport(null);
+        viewportKey.current = '';
+        viewportInteracted.current = false;
+      }
       appliedQueryKey.current = nextParams.toString();
       setSearchParams(nextParams);
-      applyFilters(activeFilters);
+      applyFilters(nextParams);
     },
-    [applyFilters, viewport, setSearchParams],
+    [applyFilters, searchParams, viewport, setSearchParams],
   );
 
   const handleViewportChange = useCallback(
@@ -76,17 +87,21 @@ const Listings = () => {
       const key = Object.values(nextViewport)
         .map((value) => Math.round(value * 100) / 100)
         .join(":");
-      if (key === viewportKey.current) return;
+      const previous = viewportKey.current;
+      if (key === previous) return;
       viewportKey.current = key;
       setViewport(nextViewport);
-      if (!viewport) return;
-      const nextFilters = { ...filters, ...nextViewport, mapActive: true, mapZoom: nextViewport.zoom };
-      const nextParams = writeCatalogueQuery(nextFilters);
+      if (!previous) return;
+      viewportInteracted.current = true;
+      const nextParams = writeCatalogueQuery({
+        north: nextViewport.north, south: nextViewport.south, east: nextViewport.east, west: nextViewport.west,
+        mapActive: true, mapZoom: nextViewport.zoom,
+      }, { base: searchParams, resetPage: true });
       appliedQueryKey.current = nextParams.toString();
       setSearchParams(nextParams);
-      applyFilters(nextFilters);
+      applyFilters(nextParams);
     },
-    [applyFilters, filters, viewport, setSearchParams],
+    [applyFilters, searchParams, setSearchParams],
   );
 
   const selectProperty = useCallback((property: Property) => {
@@ -121,6 +136,11 @@ const Listings = () => {
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
   const changePage = (nextPage: number) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextPage <= 1) nextParams.delete('page');
+    else nextParams.set('page', String(nextPage));
+    appliedQueryKey.current = nextParams.toString();
+    setSearchParams(nextParams);
     goToPage(nextPage);
     resultsRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -130,7 +150,8 @@ const Listings = () => {
       <section className="flex h-full min-h-0 flex-col lg:h-full">
         <PropertyFiltersPanel
           key={searchParams.toString()}
-          initialFilters={filters}
+          initialFilters={readCatalogueQuery(searchParams)}
+          initialQuery={searchParams}
           onApply={handleApplyFilters}
         />
         <div className="min-h-0 flex-1 lg:grid lg:grid-cols-[minmax(0,1.45fr)_minmax(380px,1fr)]">

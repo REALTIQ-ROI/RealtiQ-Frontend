@@ -12,6 +12,7 @@ import { virtualTourService } from '../../../services/virtualTourService';
 import { ApiRequestError } from '../../../lib/axios';
 import type { ProjectDetail, Property, VirtualTourProvider } from '../../../types';
 import { formatPriceRange, labelize } from '../../../utils/projectFormatters';
+import { downloadBlob } from '../../../utils/projectImport';
 
 interface LandlordProjectManageData {
   project: ProjectDetail;
@@ -27,6 +28,7 @@ const loadLandlordProjectManage = async (id: string): Promise<LandlordProjectMan
 
 const ProjectManage = () => {
   const [savingTourPreference, setSavingTourPreference] = useState(false);
+  const [exportingGrid, setExportingGrid] = useState(false);
   const [extraUnits, setExtraUnits] = useState<Property[]>([]);
   const [nextUnitPage, setNextUnitPage] = useState(2);
   const [loadingMoreUnits, setLoadingMoreUnits] = useState(false);
@@ -100,6 +102,18 @@ const ProjectManage = () => {
     } finally { setSavingTourPreference(false); }
   };
 
+  const exportGrid = async () => {
+    if (!project) return;
+    setExportingGrid(true);
+    try {
+      downloadBlob(await projectService.downloadUnitGridCsv(project._id), 'project-unit-grid.csv');
+    } catch (raw) {
+      toast.error(raw instanceof Error ? raw.message : 'Unable to download the unit grid.');
+    } finally {
+      setExportingGrid(false);
+    }
+  };
+
   return (
     <LandlordPortalLayout active="projects" title="Manage Project">
       <main className="p-8 lg:p-12">
@@ -116,6 +130,7 @@ const ProjectManage = () => {
               <div className="flex flex-wrap gap-2">
                 <Link to={`/dashboard/landlord/projects/${project._id}/edit`} className="rounded-lg bg-surface-container-low px-4 py-3 text-sm font-bold text-primary">Edit</Link>
                 <Link to={`/dashboard/landlord/projects/${project._id}/imports`} className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary">Bulk Upload Properties</Link>
+                <Button type="button" variant="secondary" loading={exportingGrid} onClick={() => void exportGrid()}>Export unit grid</Button>
                 {!project.isPublished ? <Button type="button" disabled title="Publication request contract and step-up exchange are unavailable">Publish</Button> : null}
                 <Button type="button" variant="secondary" disabled title="Project archive requires the step-up exchange">Archive</Button>
               </div>

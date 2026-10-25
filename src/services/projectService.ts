@@ -190,6 +190,11 @@ export const projectService = {
     return { ...data, project: normalizeProjectPublication(data.project) };
   },
 
+  async downloadUnitGridCsv(projectId: string): Promise<Blob> {
+    const { data } = await api.get<Blob>(`/projects/${encodeURIComponent(projectId)}/unit-grid/export.csv`, { responseType: 'blob' });
+    return data;
+  },
+
   async updateProject(id: string, body: UpdateProjectRequest): Promise<{ project: ProjectDetail }> {
     const { data } = await api.patch<{ project: ProjectDetail }>(`/projects/${encodeURIComponent(id)}`, body);
     return data;

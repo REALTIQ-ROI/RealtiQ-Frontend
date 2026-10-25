@@ -6,6 +6,8 @@ import MediaPreview from '../../../components/property/MediaPreview';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useProperties } from '../../../contexts/PropertiesContext';
+import { useAsync } from '../../../hooks/useAsync';
+import { adminService } from '../../../services/adminService';
 import { propertyService } from '../../../services/propertyService';
 
 const formatNGN = (value: number) =>
@@ -17,6 +19,7 @@ const formatNGN = (value: number) =>
 
 const FeaturedListings = () => {
   const { properties, loading, error, refreshProperties } = useProperties();
+  const { data: stats, loading: statsLoading, error: statsError, execute: refreshStats } = useAsync(() => adminService.fetchAdminStats(), true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const candidates = properties.filter((property) => property.status === 'available');
   const featured = candidates.filter((property) => property.featured);
@@ -65,14 +68,15 @@ const FeaturedListings = () => {
               <h3 className="text-3xl font-extrabold">{featured.length}</h3>
             </div>
             <div className="bg-surface-container-lowest p-6 rounded-xl">
-              <p className="text-xs uppercase tracking-widest text-secondary mb-1">Available in loaded catalogue</p>
-              <h3 className="text-3xl font-extrabold">{candidates.length}</h3>
+              <p className="text-xs uppercase tracking-widest text-secondary mb-1">Active listings · admin stats</p>
+              <h3 className="text-3xl font-extrabold">{statsLoading || statsError ? '—' : stats?.activeListings ?? '—'}</h3>
             </div>
             <div className="bg-surface-container-lowest p-6 rounded-xl">
-              <p className="text-xs uppercase tracking-widest text-secondary mb-1">Other statuses in loaded catalogue</p>
-              <h3 className="text-3xl font-extrabold">{properties.length - candidates.length}</h3>
+              <p className="text-xs uppercase tracking-widest text-secondary mb-1">Sold properties · admin stats</p>
+              <h3 className="text-3xl font-extrabold">{statsLoading || statsError ? '—' : stats?.soldProperties ?? '—'}</h3>
             </div>
           </section>
+          {statsError ? <div role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Admin totals are unavailable. <button type="button" className="font-bold underline" onClick={() => void refreshStats()}>Retry totals</button></div> : null}
 
           <section className="bg-surface-container-low rounded-xl overflow-hidden">
             <div className="p-6 bg-surface-container-lowest flex items-center justify-between gap-4">
@@ -81,7 +85,7 @@ const FeaturedListings = () => {
                 <p className="text-sm text-secondary">Toggle listings that should appear as featured.</p>
               </div>
               <button
-                onClick={() => void refreshProperties()}
+                onClick={() => { void refreshProperties(); void refreshStats(); }}
                 className="px-4 py-2 rounded-lg bg-surface-container-low text-sm font-bold hover:bg-surface-container transition-colors"
               >
                 Refresh

@@ -12,33 +12,37 @@ import type { Property } from '../types';
 
 interface UsePropertiesOptions {
   autoFetch?: boolean;
-  initialFilters?: PropertyFiltersQuery;
+  initialFilters?: PropertyFiltersQuery | URLSearchParams;
+  initialPage?: number;
   limit?: number;
 }
 
 export const useProperties = (options: UsePropertiesOptions = {}) => {
-  const { autoFetch = false, initialFilters = {}, limit = 10 } = options;
+  const { autoFetch = false, initialFilters = {}, initialPage = 1, limit = 10 } = options;
   const [properties, setProperties] = useState<Property[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialPage);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notices, setNotices] = useState<unknown[]>([]);
-  const [filters, setFilters] = useState<PropertyFiltersQuery>(initialFilters);
+  const [filters, setFilters] = useState<PropertyFiltersQuery | URLSearchParams>(initialFilters);
   const requestSequence = useRef(0);
 
   const fetchProperties = useCallback(
-    async (currentFilters: PropertyFiltersQuery = filters, currentPage = page) => {
+    async (currentFilters: PropertyFiltersQuery | URLSearchParams = filters, currentPage = page) => {
       const requestId = ++requestSequence.current;
       setLoading(true);
       setError(null);
       setNotices([]);
       try {
-        const res = await propertyService.getProperties({
-          ...currentFilters,
-          page: currentPage,
-          limit,
-        });
+        const requestFilters = currentFilters instanceof URLSearchParams
+          ? new URLSearchParams(currentFilters)
+          : { ...currentFilters, page: currentPage, limit };
+        if (requestFilters instanceof URLSearchParams) {
+          requestFilters.set('page', String(currentPage));
+          requestFilters.set('limit', String(limit));
+        }
+        const res = await propertyService.getProperties(requestFilters);
         if (requestId === requestSequence.current) {
           setProperties(res.properties);
           setTotal(res.total);
@@ -59,16 +63,16 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
   );
 
   useEffect(() => {
-    if (autoFetch) void fetchProperties(initialFilters, 1);
+    if (autoFetch) void fetchProperties(initialFilters, initialPage);
     // run only on mount for the initial catalog load
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const applyFilters = useCallback(
-    (newFilters: PropertyFiltersQuery) => {
+    (newFilters: PropertyFiltersQuery | URLSearchParams, nextPage = 1) => {
       setFilters(newFilters);
-      setPage(1);
-      void fetchProperties(newFilters, 1);
+      setPage(nextPage);
+      void fetchProperties(newFilters, nextPage);
     },
     [fetchProperties],
   );

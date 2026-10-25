@@ -34,6 +34,7 @@ const ProjectPropertyImports = () => {
   const [templateLoading, setTemplateLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState('');
   const [error, setError] = useState('');
+  const [progressError, setProgressError] = useState('');
   const [statusFilter, setStatusFilter] = useState<ImportRowStatus | 'all'>('all');
   const [search, setSearch] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
@@ -45,6 +46,7 @@ const ProjectPropertyImports = () => {
     if (!id) return;
     setLoading(true);
     setError('');
+    setProgressError('');
     try {
       const [manage, schemaResponse, history] = await Promise.all([
         projectService.getProjectManage(id),
@@ -67,6 +69,21 @@ const ProjectPropertyImports = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, importId]);
 
+  useEffect(() => {
+    if (!id || !importId || !['queued', 'processing', 'importing'].includes(session?.status ?? '')) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      void projectService.getProjectPropertyImport(id, importId, { page: 1, limit: 100 }).then((latest) => {
+        if (!active) return;
+        setSession(latest);
+        setProgressError('');
+      }).catch((raw: unknown) => {
+        if (active) setProgressError(raw instanceof Error ? raw.message : 'Unable to refresh import progress.');
+      });
+    }, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [id, importId, session?.status]);
+
   const filteredRows = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return (session?.rows ?? []).filter((row) => {
@@ -77,8 +94,8 @@ const ProjectPropertyImports = () => {
   }, [search, session?.rows, statusFilter]);
 
   const canConfirm = session?.status === 'ready' && (session.summary.invalidRows ?? 0) === 0 && (session.summary.validRows ?? 0) > 0;
-  const canRetry = session?.status === 'partially_completed' || session?.status === 'failed';
-  const canCancel = session ? !['completed', 'partially_completed', 'failed', 'cancelled', 'expired'].includes(session.status) : false;
+  const canRetry = session?.status === 'partially_completed' || session?.status === 'partial' || session?.status === 'failed';
+  const canCancel = session ? !['completed', 'partially_completed', 'partial', 'failed', 'cancelled', 'expired'].includes(session.status) : false;
 
   const upload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -116,6 +133,16 @@ const ProjectPropertyImports = () => {
 
   const replaceSession = (next: ProjectImportSession) => {
     setSession(next);
+  };
+
+  const refreshSession = async () => {
+    if (!importId) return;
+    try {
+      setSession(await projectService.getProjectPropertyImport(id, importId, { page: 1, limit: 100 }));
+      setProgressError('');
+    } catch (raw) {
+      setProgressError(raw instanceof Error ? raw.message : 'Unable to refresh import progress.');
+    }
   };
 
   const beginEdit = (row: ProjectImportRow) => {
@@ -231,11 +258,15 @@ const ProjectPropertyImports = () => {
                     <p className="mt-2 text-sm text-amber-800">Imported Properties start as pending review and will not include media or title documents.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="secondary" disabled={!importId} onClick={() => void refreshSession()}>Refresh status</Button>
                     {canConfirm ? <Button type="button" disabled title="Step-up challenge contract is not documented">Import Properties</Button> : null}
                     {canRetry ? <Button type="button" variant="secondary" disabled title="Step-up challenge contract is not documented">Retry failed rows</Button> : null}
                     {canCancel ? <Button type="button" variant="ghost" loading={pendingAction === 'cancel'} loadingLabel="Cancelling..." onClick={() => void cancel()}>Cancel import</Button> : null}
                   </div>
                 </div>
+                {['queued', 'processing', 'importing'].includes(session.status) ? <p role="status" className="mt-3 text-sm text-secondary">This import is running. Progress refreshes every few seconds; committed rows remain even if cancellation is requested.</p> : null}
+                {session.status === 'partial' || session.status === 'partially_completed' ? <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Some rows were imported and others need review. Check each row result before retrying.</p> : null}
+                {progressError ? <p role="alert" className="mt-3 text-sm text-red-700">Progress refresh failed: {progressError}</p> : null}
                 {(canConfirm || canRetry) ? <p className="mt-3 text-sm text-amber-800">Import submission and retry require a server step-up challenge. Those actions are unavailable until the challenge request contract is supplied.</p> : null}
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">

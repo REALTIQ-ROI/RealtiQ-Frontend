@@ -1,8 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { propertyService, type CreatePropertyPayload, type CreatePropertyResponse, type UpdatePropertyPayload } from '../services/propertyService';
-import type { Property, User } from '../types';
+import type { Property } from '../types';
 import { isPublicPropertyVisible } from '../utils/projectPublication';
+import { useAuth } from './AuthContext';
 
 interface PropertiesContextValue {
   properties: Property[];
@@ -18,16 +19,28 @@ interface PropertiesContextValue {
 const PropertiesContext = createContext<PropertiesContextValue | undefined>(undefined);
 
 export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
+  const { user, activeProfile } = useAuth();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestSequence = useRef(0);
+  const loadedProfileId = useRef<string | null>(null);
+  const selectedProfileId = activeProfile?.id ?? null;
+  const [renderProfileId, setRenderProfileId] = useState<string | null>(selectedProfileId);
+  const visibleProperties = renderProfileId === selectedProfileId ? properties : [];
+  const visibleLoading = loading || renderProfileId !== selectedProfileId;
+  const visibleError = renderProfileId === selectedProfileId ? error : null;
 
   const refreshProperties = useCallback(async (limitOverride = 500) => {
+    const requestId = ++requestSequence.current;
+    if (loadedProfileId.current !== selectedProfileId) {
+      loadedProfileId.current = selectedProfileId;
+      setRenderProfileId(selectedProfileId);
+      setProperties([]);
+    }
     setLoading(true);
     setError(null);
     try {
-      const storedUser = localStorage.getItem('user');
-      const user = storedUser ? (JSON.parse(storedUser) as User) : null;
       const res = user?.role === 'landlord'
         ? await (async () => {
             const pageSize = 20;
@@ -48,14 +61,14 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
         : 'properties' in res && Array.isArray(res.properties)
           ? res.properties
           : [];
-      setProperties(user?.role ? nextProperties : nextProperties.filter(isPublicPropertyVisible));
+      if (requestId === requestSequence.current) setProperties(user?.role ? nextProperties : nextProperties.filter(isPublicPropertyVisible));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch properties.';
-      setError(message);
+      if (requestId === requestSequence.current) setError(message);
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) setLoading(false);
     }
-  }, []);
+  }, [selectedProfileId, user?.role]);
 
   useEffect(() => {
     void refreshProperties();
@@ -97,9 +110,9 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
 
   const value = useMemo<PropertiesContextValue>(
     () => ({
-      properties,
-      loading,
-      error,
+      properties: visibleProperties,
+      loading: visibleLoading,
+      error: visibleError,
       refreshProperties,
       addProperty,
       updateProperty,
@@ -107,7 +120,7 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
       buyProperty,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [properties, loading, error, refreshProperties],
+    [visibleProperties, visibleLoading, visibleError, refreshProperties],
   );
 
   return <PropertiesContext.Provider value={value}>{children}</PropertiesContext.Provider>;

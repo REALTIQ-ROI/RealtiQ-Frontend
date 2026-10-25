@@ -9,6 +9,20 @@ vi.mock('../lib/axios', () => ({
 describe('property market service endpoints', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('passes repeated canonical catalogue parameters to the API unchanged', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { properties: [], total: 0, page: 1, limit: 10 } });
+    const query = new URLSearchParams('amenities=pool&amenities=gym&includeUnpriced=false&minPrice=0');
+    await propertyService.getProperties(query);
+    const [path, options] = vi.mocked(api.get).mock.calls[0];
+    expect(path).toBe('/properties');
+    const params = options?.params as URLSearchParams;
+    expect(params).toBeInstanceOf(URLSearchParams);
+    expect(params.getAll('amenities')).toEqual(['pool', 'gym']);
+    expect(params.get('includeUnpriced')).toBe('false');
+    expect(params.get('minPrice')).toBe('0');
+    expect(params.get('queryVersion')).toBe('canonical-v1');
+  });
+
   it('calls the viewport map endpoint with bounds and activity filters', async () => {
     vi.mocked(api.get).mockResolvedValue({
       data: {
@@ -61,18 +75,21 @@ describe('property market service endpoints', () => {
   it('sends the optional priceChangeReason during updates', async () => {
     vi.mocked(api.patch).mockResolvedValue({
       data: {
-        _id: 'prop1',
-        title: 'Updated',
-        price: 45_000_000,
-        location: 'Lekki',
-        propertyType: 'apartment',
-        bedrooms: 3,
-        bathrooms: 3,
-        description: 'Updated',
-        squareFeet: 1000,
-        media: [],
-        paymentTypes: ['outright'],
-        status: 'available',
+        property: {
+          _id: 'prop1',
+          title: 'Updated',
+          price: 45_000_000,
+          location: 'Lekki',
+          propertyType: 'apartment',
+          bedrooms: 3,
+          bathrooms: 3,
+          description: 'Updated',
+          squareFeet: 1000,
+          media: [],
+          paymentTypes: ['outright'],
+          status: 'available',
+        },
+        version: 2,
       },
     });
     await propertyService.updateProperty('prop1', {

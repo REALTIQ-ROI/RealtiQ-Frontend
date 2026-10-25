@@ -1,35 +1,27 @@
-import { useMemo } from "react";
+import { useState } from 'react';
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import LandlordPortalLayout from "../../../components/layout/LandlordPortalLayout";
 import PropertyForm from "../../../components/property/PropertyForm";
 import LoadingState from "../../../components/ui/LoadingState";
-import { useAuth } from "../../../contexts/AuthContext";
+import ErrorState from "../../../components/ui/ErrorState";
 import { useProperties } from "../../../contexts/PropertiesContext";
-import type { UpdatePropertyPayload } from "../../../services/propertyService";
-import { propertyRouteReference, resolvePropertyOwnerId } from "../../../types";
+import { useAsync } from "../../../hooks/useAsync";
+import { ApiRequestError } from "../../../lib/axios";
+import { propertyService, type UpdatePropertyPayload } from "../../../services/propertyService";
+import { propertyRouteReference } from "../../../types";
 
 const Editproperty = () => {
-  const { user } = useAuth();
-  const { properties, updateProperty } = useProperties();
+  const { updateProperty } = useProperties();
+  const [hasConflict, setHasConflict] = useState(false);
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-
-  const property = useMemo(() => {
-    if (id)
-      return (
-        properties.find(
-          (item) =>
-            propertyRouteReference(item) === id ||
-            item._id === id ||
-            item.id === id,
-        ) ?? null
-      );
-    return (
-      properties.find((item) => resolvePropertyOwnerId(item) === user?._id) ??
-      null
-    );
-  }, [properties, user, id]);
+  const { data, loading, error, execute } = useAsync(
+    () => id ? propertyService.getPropertyOwnerDetail(id) : Promise.reject(new Error('Missing property reference.')),
+    Boolean(id),
+    id,
+  );
+  const property = data?.property;
 
   const handleSubmit = async (
     payload: UpdatePropertyPayload & { status?: string },
@@ -39,15 +31,22 @@ const Editproperty = () => {
       return undefined;
     }
 
-    const success = await updateProperty(
-      propertyRouteReference(property),
-      { ...payload, ...(typeof property.version === 'number' ? { expectedVersion: property.version } : {}) },
-    );
-    if (success) {
+    try {
+      const updated = await updateProperty(
+        propertyRouteReference(property),
+        { ...payload, ...(typeof property.version === 'number' ? { expectedVersion: property.version } : {}) },
+      );
       toast.success("Property updated successfully");
       navigate("/dashboard/landlord/my-properties");
+      return updated;
+    } catch (raw) {
+      if (raw instanceof ApiRequestError && raw.status === 409) {
+        setHasConflict(true);
+        toast.error('This listing changed while you were editing. Review the latest owner details before saving again.');
+        return undefined;
+      }
+      throw raw;
     }
-    return success || undefined;
   };
 
   return (
@@ -80,16 +79,19 @@ const Editproperty = () => {
           </button>
         </header>
 
-        {property ? (
+        {error ? <ErrorState message={error} onRetry={() => void execute()} /> : null}
+        {hasConflict ? <div role="alert" className="mb-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">The server has a newer version. Your draft remains on this page. <button type="button" className="font-bold underline" onClick={() => { setHasConflict(false); void execute(); }}>Reload latest and discard draft</button></div> : null}
+        {property && !error ? (
           <PropertyForm
+            key={`${property._id}:${property.version ?? 'unversioned'}`}
             initialData={property}
             mode="edit"
             submitLabel="Save Changes"
             onSubmit={handleSubmit}
           />
-        ) : (
+        ) : loading ? (
           <LoadingState label="Loading property..." />
-        )}
+        ) : !error ? <p role="alert" className="text-sm text-secondary">The owner listing could not be loaded.</p> : null}
       </div>
     </LandlordPortalLayout>
   );
