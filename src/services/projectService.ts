@@ -225,7 +225,7 @@ export const projectService = {
     return { ...data, project: normalizeProjectPublication(data.project) };
   },
 
-  async adminUpdateProjectStatus(id: string, body: { status?: ProjectStatus; isPublished?: boolean }): Promise<{ project: ProjectDetail }> {
+  async adminUpdateProjectStatus(id: string, body: { status: ProjectStatus }): Promise<{ project: ProjectDetail }> {
     const { data } = await api.patch<{ project: ProjectDetail }>(`/admin/projects/${encodeURIComponent(id)}/status`, body);
     return data;
   },

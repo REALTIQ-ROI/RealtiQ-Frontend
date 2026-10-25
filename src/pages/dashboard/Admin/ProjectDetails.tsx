@@ -1,4 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import ProjectMediaGallery from '../../../components/project/ProjectMediaGallery';
 import PropertyCard from '../../../components/property/PropertyCard';
@@ -12,19 +13,70 @@ import { formatDate, formatPriceRange, labelize } from '../../../utils/projectFo
 interface AdminProjectDetailsData {
   project: ProjectDetail;
   properties: Property[];
+  totalPublicProperties: number;
+  publicInventoryError: string | null;
 }
 
 const loadAdminProjectDetails = async (id: string): Promise<AdminProjectDetailsData> => {
   const { project } = await projectService.adminGetProject(id);
-  const inventory = await projectService.getProjectProperties(project._id, { page: 1, limit: 100, sort: 'recent' });
-  return { project, properties: inventory.properties ?? [] };
+  if (!project.isPublished) return { project, properties: [], totalPublicProperties: 0, publicInventoryError: null };
+  try {
+    const inventory = await projectService.getProjectProperties(project._id, { page: 1, limit: 100, sort: 'recent' });
+    return {
+      project,
+      properties: inventory.properties ?? [],
+      totalPublicProperties: inventory.total ?? inventory.properties?.length ?? 0,
+      publicInventoryError: null,
+    };
+  } catch (raw) {
+    return {
+      project,
+      properties: [],
+      totalPublicProperties: 0,
+      publicInventoryError: raw instanceof Error ? raw.message : 'Public inventory is unavailable.',
+    };
+  }
 };
 
 const AdminProjectDetails = () => {
   const { id = '' } = useParams();
+  const currentProjectId = useRef(id);
+  currentProjectId.current = id;
+  const [extraProperties, setExtraProperties] = useState<Property[]>([]);
+  const [nextPage, setNextPage] = useState(2);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [pagesExhausted, setPagesExhausted] = useState(false);
   const { data, loading, error, execute } = useAsync(() => loadAdminProjectDetails(id), Boolean(id));
   const project = data?.project;
-  const properties = data?.properties ?? [];
+  const properties = [...(data?.properties ?? []), ...extraProperties];
+  const hasMore = Boolean(project?.isPublished) && !pagesExhausted && properties.length < (data?.totalPublicProperties ?? 0);
+
+  useEffect(() => {
+    setExtraProperties([]);
+    setNextPage(2);
+    setLoadingMore(false);
+    setPageError(null);
+    setPagesExhausted(false);
+  }, [id]);
+
+  const loadMore = async () => {
+    if (!project || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    setPageError(null);
+    try {
+      const page = await projectService.getProjectProperties(project._id, { page: nextPage, limit: 100, sort: 'recent' });
+      if (currentProjectId.current !== id) return;
+      const knownIds = new Set(properties.map((property) => property._id));
+      setExtraProperties((current) => [...current, ...(page.properties ?? []).filter((property) => !knownIds.has(property._id))]);
+      setNextPage((current) => current + 1);
+      if (!page.properties?.length) setPagesExhausted(true);
+    } catch (raw) {
+      if (currentProjectId.current === id) setPageError(raw instanceof Error ? raw.message : 'Unable to load more public units.');
+    } finally {
+      if (currentProjectId.current === id) setLoadingMore(false);
+    }
+  };
 
   return (
     <AdminLayout>
@@ -94,17 +146,27 @@ const AdminProjectDetails = () => {
             <section className="rounded-xl bg-white p-6">
               <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <h2 className="text-2xl font-black">Properties under this project</h2>
-                  <p className="text-sm text-secondary">Showing {properties.length} child properties.</p>
+                  <h2 className="text-2xl font-black">Publicly visible units</h2>
+                  <p className="text-sm text-secondary">Showing {properties.length} eligible published units returned by the public project inventory.</p>
                 </div>
               </div>
+              {data?.publicInventoryError ? <p role="alert" className="mb-4 text-sm text-red-700">Public inventory is unavailable: {data.publicInventoryError}</p> : null}
+              {pageError ? <p role="alert" className="mb-4 text-sm text-red-700">{pageError}</p> : null}
               {properties.length ? (
                 <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                   {properties.map((property) => <PropertyCard key={property._id || property.publicReference} property={property} />)}
                 </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-outline-variant/20 p-8 text-center text-secondary">No child properties found for this project.</div>
-              )}
+              ) : !data?.publicInventoryError ? (
+                <div className="rounded-xl border border-dashed border-outline-variant/20 p-8 text-center text-secondary">No publicly visible units returned for this project.</div>
+              ) : null}
+              {hasMore ? (
+                <div className="mt-5 flex items-center gap-3">
+                  <button type="button" disabled={loadingMore} onClick={() => void loadMore()} className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold text-primary disabled:opacity-60">
+                    {loadingMore ? 'Loading…' : 'Load more public units'}
+                  </button>
+                  <span className="text-sm text-secondary">Showing {properties.length} of {data?.totalPublicProperties ?? 0}</span>
+                </div>
+              ) : null}
             </section>
           </>
         ) : null}

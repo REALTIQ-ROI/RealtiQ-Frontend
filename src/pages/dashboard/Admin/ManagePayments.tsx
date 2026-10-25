@@ -38,10 +38,7 @@ const ManagePayments = () => {
   const { data, loading, error, execute } = useAsync(() => paymentService.getPayments(), true);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [verifying, setVerifying] = useState<string | null>(null);
-  const [canceling, setCanceling] = useState<string | null>(null);
-  const [localPayments, setLocalPayments] = useState<Record<string, ApiPayment>>({});
-
-  const payments = (data ?? []).map((payment) => localPayments[payment._id] ?? payment);
+  const payments = data ?? [];
   const filtered = activeTab === 'all' ? payments : payments.filter((p) => p.status === activeTab);
 
   const totalVolume = payments.reduce((s, p) => s + p.amount, 0);
@@ -79,36 +76,6 @@ const ManagePayments = () => {
     }
   };
 
-  const handleCancel = async (payment: ApiPayment) => {
-    const confirmed = await Swal.fire({
-      title: 'Cancel payment?',
-      text: 'This preserves the transaction as canceled for audit/history and releases the pending or failed payment hold.',
-      icon: 'warning',
-      input: 'textarea',
-      inputLabel: 'Cancellation reason (optional)',
-      inputPlaceholder: 'Enter an admin note...',
-      showCancelButton: true,
-      confirmButtonText: 'Cancel payment',
-      cancelButtonText: 'Keep payment',
-      confirmButtonColor: '#b91c1c',
-      cancelButtonColor: '#6b7280',
-      reverseButtons: true,
-    });
-    if (!confirmed.isConfirmed) return;
-
-    setCanceling(payment._id);
-    try {
-      const result = await paymentService.cancelPayment(payment._id || payment.reference, typeof confirmed.value === 'string' ? confirmed.value : undefined);
-      setLocalPayments((previous) => ({ ...previous, [payment._id]: { ...payment, ...result.payment, status: 'canceled' } }));
-      toast.success(result.message);
-      void execute({ silent: true });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Unable to cancel payment');
-    } finally {
-      setCanceling(null);
-    }
-  };
-
   return (
     <AdminLayout>
       <div className="min-h-screen">
@@ -121,6 +88,7 @@ const ManagePayments = () => {
               <p className="text-secondary max-w-md leading-relaxed text-sm">
                 Comprehensive overview of platform liquidity and individual asset performance.
               </p>
+              <p className="mt-3 text-sm text-secondary">Payment cancellation is unavailable until the one-use security challenge contract is supplied.</p>
             </div>
             <div className="lg:col-span-5">
               <div className="bg-primary-container p-8 rounded-xl relative overflow-hidden">
@@ -196,7 +164,7 @@ const ManagePayments = () => {
                   </tr>
                 ) : (
                   filtered.map((payment) => {
-                    const isBusy = verifying === payment._id || canceling === payment._id;
+                    const isBusy = verifying === payment._id;
                     return (
                       <tr key={payment._id} className="hover:bg-surface-container-lowest transition-colors group">
                         <td className="px-6 py-5">
@@ -253,17 +221,11 @@ const ManagePayments = () => {
                                   ) : 'Verify'}
                                 </button>
                                 <button
-                                  disabled={isBusy}
-                                  onClick={() => void handleCancel(payment)}
-                                  aria-busy={canceling === payment._id || undefined}
+                                  disabled
+                                  title="Payment cancellation requires the one-use security challenge."
                                   className="inline-flex items-center gap-1 whitespace-nowrap px-3 py-1.5 text-xs font-bold border border-rose-200 text-rose-700 rounded-lg hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
                                 >
-                                  {canceling === payment._id ? (
-                                    <>
-                                      <span className="material-symbols-outlined animate-spin text-sm" aria-hidden="true">progress_activity</span>
-                                      Canceling...
-                                    </>
-                                  ) : 'Cancel payment'}
+                                  Cancel payment
                                 </button>
                                 <button
                                   disabled={isBusy}

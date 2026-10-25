@@ -1,14 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { paymentService } from '../../services/paymentService';
 import Checkout from './Checkout';
 
 vi.mock('../../components/layout/PublicLayout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock('../../services/paymentService', () => ({
-  paymentService: { getPendingPaymentPropertyId: vi.fn(() => null), initializePayment: vi.fn() },
+  paymentService: { getPendingPaymentPropertyId: vi.fn(() => null) },
 }));
 
 describe('outright checkout contract boundary', () => {
@@ -17,6 +16,5 @@ describe('outright checkout contract boundary', () => {
 
     expect(screen.getByText('Outright checkout unavailable')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Property' })).toHaveAttribute('href', '/properties/RTQ-PROP-1');
-    expect(paymentService.initializePayment).not.toHaveBeenCalled();
   });
 });

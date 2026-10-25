@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
@@ -7,8 +8,10 @@ import { cartService } from '../../../services/cartService';
 import { checkoutStatusClasses, checkoutStatusLabel, formatNgn } from '../../../utils/cartFormatters';
 
 const AdminCartCheckouts = () => {
-  const { data, loading, error, execute } = useAsync(() => cartService.adminListCartCheckouts({ page: 1, limit: 30 }), true);
+  const [page, setPage] = useState(1);
+  const { data, loading, error, execute } = useAsync(() => cartService.adminListCartCheckouts({ page, limit: 30 }), true, page);
   const checkouts = data?.checkouts ?? [];
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.limit ?? 30)));
 
   return (
     <AdminLayout>
@@ -42,6 +45,11 @@ const AdminCartCheckouts = () => {
             {!checkouts.length ? <div className="p-10 text-center text-secondary">No cart checkouts found.</div> : null}
           </div>
         ) : null}
+        {!loading && !error && data ? <nav aria-label="Checkout pages" className="mt-5 flex items-center justify-between gap-4 text-sm">
+          <button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} className="rounded-lg bg-surface-container-low px-4 py-2 font-bold disabled:opacity-40">Previous</button>
+          <span>Page {data.page} of {totalPages} · {data.total} checkouts</span>
+          <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} className="rounded-lg bg-surface-container-low px-4 py-2 font-bold disabled:opacity-40">Next</button>
+        </nav> : null}
       </div>
     </AdminLayout>
   );

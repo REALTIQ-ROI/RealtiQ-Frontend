@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { titleVerificationService } from '../../../services/titleVerificationService';
@@ -31,6 +31,8 @@ const renderReview = async (status: TitleVerificationStatus) => {
   vi.mocked(titleVerificationService.listTitleVerifications).mockResolvedValue({ verifications: [selected] });
   vi.mocked(titleVerificationService.getTitleVerification).mockResolvedValue({ verification: selected, logs: [] });
   render(<MemoryRouter><TitleVerificationReview /></MemoryRouter>);
+  const [row] = await screen.findAllByRole('button', { name: /Lekki Home/ });
+  fireEvent.click(row);
   await screen.findByRole('heading', { name: 'Lekki Home' });
 };
 

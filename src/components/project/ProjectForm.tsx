@@ -263,7 +263,7 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', read
         </div>
         <div className="mt-5" role="group" aria-labelledby="project-media-label">
           <h3 id="project-media-label" className={labelClass}>Project media</h3>
-          <MediaUploader value={media} onChange={setMedia} />
+          <MediaUploader value={media} onChange={setMedia} disabled={readOnly} />
           <p className="mt-2 text-xs text-secondary">The first uploaded media item is used as the cover image.</p>
         </div>
       </section>

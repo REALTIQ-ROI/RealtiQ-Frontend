@@ -2,16 +2,18 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import type { PublicProviderAvailability, VirtualTourProvider, VirtualTourSummary } from '../../types/virtualTour';
 import { virtualTourService } from '../../services/virtualTourService';
+import { ApiRequestError } from '../../lib/axios';
 import Button from '../ui/Button';
 
 interface Props {
   propertyId: string;
   summary?: VirtualTourSummary;
   providerOverride?: VirtualTourProvider | null;
+  version?: number;
   onUpdated: () => Promise<unknown> | unknown;
 }
 
-const VirtualTourManagement = ({ propertyId, summary, providerOverride, onUpdated }: Props) => {
+const VirtualTourManagement = ({ propertyId, summary, providerOverride, version, onUpdated }: Props) => {
   const [availability, setAvailability] = useState<PublicProviderAvailability | null>(null);
   const [workId, setWorkId] = useState('');
   const [workUrl, setWorkUrl] = useState('');
@@ -31,24 +33,32 @@ const VirtualTourManagement = ({ propertyId, summary, providerOverride, onUpdate
     toast.success(message);
     await onUpdated();
   };
-  const fail = (raw: unknown) => toast.error(raw instanceof Error ? raw.message : 'Unable to update virtual-tour configuration.');
+  const fail = (raw: unknown) => {
+    if (raw instanceof ApiRequestError && raw.status === 409) {
+      void onUpdated();
+      toast.error('This property changed. Latest values were reloaded; review them before saving again.');
+      return;
+    }
+    toast.error(raw instanceof Error ? raw.message : 'Unable to update virtual-tour configuration.');
+  };
+  const versionBody = typeof version === 'number' ? { expectedVersion: version } : {};
 
   const saveRealsee = async (event: FormEvent) => {
     event.preventDefault();
     if (!workId.trim()) { toast.error('Realsee Work ID is required.'); return; }
     setSaving('realsee');
     try {
-      await virtualTourService.configurePropertyRealsee(propertyId, { workId: workId.trim(), ...(workUrl.trim() ? { workUrl: workUrl.trim() } : {}), ...(vrUrl.trim() ? { vrUrl: vrUrl.trim() } : {}) });
+      await virtualTourService.configurePropertyRealsee(propertyId, { workId: workId.trim(), ...(workUrl.trim() ? { workUrl: workUrl.trim() } : {}), ...(vrUrl.trim() ? { vrUrl: vrUrl.trim() } : {}), ...versionBody });
       await finish('Realsee configuration saved.');
     } catch (raw) { fail(raw); } finally { setSaving(null); }
   };
 
   const saveMatterport = async (event: FormEvent) => {
     event.preventDefault();
-    if (modelSid.trim().length < 8 || modelSid.trim().length > 20) { toast.error('Enter a valid Matterport model SID.'); return; }
+    if (modelSid.trim().length !== 11) { toast.error('Matterport model SID must be 11 characters.'); return; }
     setSaving('matterport');
     try {
-      await virtualTourService.configurePropertyMatterport(propertyId, { modelSid: modelSid.trim(), ...(showcaseUrl.trim() ? { showcaseUrl: showcaseUrl.trim() } : {}) });
+      await virtualTourService.configurePropertyMatterport(propertyId, { modelSid: modelSid.trim(), ...(showcaseUrl.trim() ? { showcaseUrl: showcaseUrl.trim() } : {}), ...versionBody });
       await finish('Matterport configuration saved.');
     } catch (raw) { fail(raw); } finally { setSaving(null); }
   };
@@ -56,8 +66,8 @@ const VirtualTourManagement = ({ propertyId, summary, providerOverride, onUpdate
   const disable = async (provider: VirtualTourProvider) => {
     setSaving(`disable-${provider}`);
     try {
-      if (provider === 'realsee') await virtualTourService.configurePropertyRealsee(propertyId, { enabled: false });
-      else await virtualTourService.configurePropertyMatterport(propertyId, { enabled: false });
+      if (provider === 'realsee') await virtualTourService.configurePropertyRealsee(propertyId, { enabled: false, ...versionBody });
+      else await virtualTourService.configurePropertyMatterport(propertyId, { enabled: false, ...versionBody });
       await finish(`${provider === 'realsee' ? 'Realsee' : 'Matterport'} disabled. Its identifier remains stored by the server.`);
     } catch (raw) { fail(raw); } finally { setSaving(null); }
   };
@@ -65,7 +75,7 @@ const VirtualTourManagement = ({ propertyId, summary, providerOverride, onUpdate
   const saveOverride = async () => {
     setSaving('override');
     try {
-      await virtualTourService.setPropertyVirtualTourProvider(propertyId, { provider: override || null });
+      await virtualTourService.setPropertyVirtualTourProvider(propertyId, { provider: override || null, ...versionBody });
       await finish(override ? 'Property provider preference saved.' : 'Property now inherits its Project or global preference.');
     } catch (raw) { fail(raw); } finally { setSaving(null); }
   };
@@ -90,7 +100,7 @@ const VirtualTourManagement = ({ propertyId, summary, providerOverride, onUpdate
       </form>
       <form onSubmit={(event) => void saveMatterport(event)} className="space-y-3 rounded-xl bg-surface-container-low p-5">
         <h3 className="font-black">Matterport Showcase</h3>
-        <input aria-label="Matterport model SID" className="w-full rounded-lg border border-outline-variant/20 bg-white px-3 py-2" placeholder="Model SID (required)" value={modelSid} onChange={(event) => setModelSid(event.target.value)} minLength={8} maxLength={20} />
+        <input aria-label="Matterport model SID" className="w-full rounded-lg border border-outline-variant/20 bg-white px-3 py-2" placeholder="Model SID (11 characters)" value={modelSid} onChange={(event) => setModelSid(event.target.value)} minLength={11} maxLength={11} />
         <input aria-label="Matterport Showcase URL" className="w-full rounded-lg border border-outline-variant/20 bg-white px-3 py-2" placeholder="Showcase URL (optional)" value={showcaseUrl} onChange={(event) => setShowcaseUrl(event.target.value)} type="url" />
         <p className="text-xs text-secondary">Validation may remain in progress while the tour provider connection is unavailable.</p>
         <div className="flex gap-2"><Button type="submit" loading={saving === 'matterport'}>Save Matterport</Button><Button type="button" variant="secondary" loading={saving === 'disable-matterport'} onClick={() => void disable('matterport')}>Disable</Button></div>

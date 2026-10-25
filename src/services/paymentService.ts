@@ -9,12 +9,6 @@ export interface InitializePaymentResponse {
   reference: string;
 }
 
-export interface CancelPaymentResponse {
-  message: string;
-  payment: ApiPayment;
-  alreadyCanceled: boolean;
-}
-
 const persistPendingPayment = (reference: string, propertyId?: string) => {
   sessionStorage.setItem(PENDING_PAYMENT_REFERENCE_KEY, reference);
   if (propertyId) {
@@ -46,16 +40,6 @@ export const paymentService = {
     sessionStorage.removeItem(PENDING_PAYMENT_PROPERTY_KEY);
   },
 
-  async initializePayment(propertyId: string): Promise<InitializePaymentResponse> {
-    if (!propertyId) {
-      throw new Error('Missing property ID.');
-    }
-
-    const { data } = await api.post<InitializePaymentResponse>('/payments/initialize', { propertyId });
-    persistPendingPayment(data.reference, propertyId);
-    return data;
-  },
-
   redirectToCheckout({ redirectUrl, reference }: InitializePaymentResponse, propertyId?: string): void {
     persistPendingPayment(reference, propertyId);
     window.location.href = redirectUrl;
@@ -76,11 +60,4 @@ export const paymentService = {
     return data;
   },
 
-  async cancelPayment(idOrReference: string, reason?: string): Promise<CancelPaymentResponse> {
-    const { data } = await api.patch<CancelPaymentResponse>(
-      `/admin/payments/${encodeURIComponent(idOrReference)}/cancel`,
-      { reason: reason?.trim() || undefined },
-    );
-    return data;
-  },
 };

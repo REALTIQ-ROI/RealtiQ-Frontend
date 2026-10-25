@@ -7,6 +7,7 @@ interface MediaUploaderProps {
   value: MediaItem[];
   onChange: (media: MediaItem[]) => void;
   error?: string;
+  disabled?: boolean;
 }
 
 interface PendingUploadFile {
@@ -23,7 +24,7 @@ const createPendingUploadFile = (file: File): PendingUploadFile => ({
   type: file.type.startsWith('video/') ? 'video' : 'image',
 });
 
-const MediaUploader = ({ value, onChange, error }: MediaUploaderProps) => {
+const MediaUploader = ({ value, onChange, error, disabled = false }: MediaUploaderProps) => {
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -56,7 +57,7 @@ const MediaUploader = ({ value, onChange, error }: MediaUploaderProps) => {
   };
 
   const uploadFiles = async (fileArray: File[]) => {
-    if (fileArray.length === 0) return;
+    if (disabled || fileArray.length === 0) return;
     setUploading(true);
     setProgress(0);
     try {
@@ -86,10 +87,12 @@ const MediaUploader = ({ value, onChange, error }: MediaUploaderProps) => {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragActive(false);
+    if (disabled) return;
     void handleFiles(e.dataTransfer.files);
   };
 
   const handleRemove = (index: number) => {
+    if (disabled) return;
     onChange(value.filter((_, i) => i !== index));
   };
 
@@ -105,11 +108,11 @@ const MediaUploader = ({ value, onChange, error }: MediaUploaderProps) => {
     <div className="space-y-3">
       {/* Drop Zone */}
       <div
-        onClick={() => !uploading && inputRef.current?.click()}
+        onClick={() => !disabled && !uploading && inputRef.current?.click()}
         onDrop={handleDrop}
         onDragOver={(e) => {
           e.preventDefault();
-          setDragActive(true);
+          if (!disabled) setDragActive(true);
         }}
         onDragLeave={() => setDragActive(false)}
         className={`relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 ${
@@ -118,11 +121,12 @@ const MediaUploader = ({ value, onChange, error }: MediaUploaderProps) => {
             : error
               ? 'border-error/50 bg-error/5'
               : 'border-outline-variant/30 hover:border-primary/50 hover:bg-surface-container-low'
-        } ${uploading ? 'pointer-events-none opacity-60' : ''}`}
+        } ${uploading || disabled ? 'pointer-events-none opacity-60' : ''}`}
       >
         <input
           ref={inputRef}
           type="file"
+          disabled={disabled}
           multiple
           accept="image/*,video/*"
           className="hidden"
@@ -169,7 +173,7 @@ const MediaUploader = ({ value, onChange, error }: MediaUploaderProps) => {
               <button
                 type="button"
                 onClick={() => void retryPendingUpload()}
-                disabled={uploading}
+                disabled={uploading || disabled}
                 className="rounded-lg bg-amber-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
               >
                 Retry upload
@@ -177,7 +181,7 @@ const MediaUploader = ({ value, onChange, error }: MediaUploaderProps) => {
               <button
                 type="button"
                 onClick={clearPendingFiles}
-                disabled={uploading}
+                disabled={uploading || disabled}
                 className="rounded-lg bg-white px-4 py-2 text-xs font-bold text-amber-900 disabled:opacity-60"
               >
                 Remove saved files
@@ -185,7 +189,7 @@ const MediaUploader = ({ value, onChange, error }: MediaUploaderProps) => {
               <button
                 type="button"
                 onClick={() => inputRef.current?.click()}
-                disabled={uploading}
+                disabled={uploading || disabled}
                 className="rounded-lg bg-white px-4 py-2 text-xs font-bold text-amber-900 disabled:opacity-60"
               >
                 Reselect
@@ -210,7 +214,7 @@ const MediaUploader = ({ value, onChange, error }: MediaUploaderProps) => {
                 <button
                   type="button"
                   onClick={() => handleRemovePending(item.id)}
-                  disabled={uploading}
+                  disabled={uploading || disabled}
                   className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white opacity-100 shadow-md transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
                   aria-label={`Remove ${item.file.name}`}
                 >
@@ -248,24 +252,24 @@ const MediaUploader = ({ value, onChange, error }: MediaUploaderProps) => {
               </span>
 
               {/* Remove button */}
-              <button
+              {!disabled ? <button
                 type="button"
                 onClick={() => handleRemove(i)}
                 className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
               >
                 <span className="material-symbols-outlined text-xs">close</span>
-              </button>
+              </button> : null}
             </div>
           ))}
 
           {/* Add more */}
-          <button
+          {!disabled ? <button
             type="button"
             onClick={() => inputRef.current?.click()}
             className="aspect-square rounded-lg border-2 border-dashed border-outline-variant/30 flex items-center justify-center hover:border-primary/50 hover:bg-surface-container-low transition-all"
           >
             <span className="material-symbols-outlined text-xl text-on-surface-variant/50">add</span>
-          </button>
+          </button> : null}
         </div>
       )}
     </div>

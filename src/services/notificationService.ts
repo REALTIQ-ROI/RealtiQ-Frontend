@@ -10,6 +10,7 @@ export interface RecentPropertiesDigestResponse {
   message: string;
   recipientCount: number;
   propertyCount: number;
+  httpStatus: number;
 }
 
 export const notificationService = {
@@ -23,10 +24,10 @@ export const notificationService = {
   async sendRecentPropertiesDigest(
     payload: RecentPropertiesDigestPayload,
   ): Promise<RecentPropertiesDigestResponse> {
-    const { data } = await api.post<RecentPropertiesDigestResponse>(
+    const { data, status } = await api.post<Omit<RecentPropertiesDigestResponse, 'httpStatus'>>(
       '/notifications/recent-properties/digest',
       payload,
     );
-    return data;
+    return { ...data, httpStatus: status };
   },
 };

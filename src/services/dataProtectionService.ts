@@ -33,4 +33,11 @@ export const dataProtectionService = {
     const { data } = await api.get<{ request: DataProtectionRequestSummary }>(`${base}/${encodeURIComponent(id)}`);
     return data.request;
   },
+
+  async downloadExport(id: string): Promise<Blob> {
+    const { data } = await api.get<Blob>(`${base}/${encodeURIComponent(id)}/export/download`, {
+      responseType: 'blob',
+    });
+    return data;
+  },
 };

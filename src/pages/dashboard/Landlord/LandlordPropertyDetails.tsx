@@ -254,7 +254,7 @@ const LandlordPropertyDetails = () => {
           </div>
         </div>
         {property ? <ConstructionUpdateManager property={property} /> : null}
-        {property ? <VirtualTourManagement propertyId={propertyReference} summary={property.virtualTour} providerOverride={property.virtualTourProviderOverride} onUpdated={() => refreshProperties()} /> : null}
+        {property ? <VirtualTourManagement propertyId={propertyReference} summary={property.virtualTour} providerOverride={property.virtualTourProviderOverride} version={property.version} onUpdated={() => refreshProperties()} /> : null}
         {property ? <TitleDocumentManagement propertyId={propertyReference} sold={property.status === 'sold'} /> : null}
       </div>
     </LandlordPortalLayout>

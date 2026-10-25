@@ -59,8 +59,8 @@ describe('projectService', () => {
 
   it('uses admin moderation endpoints', async () => {
     vi.mocked(api.patch).mockResolvedValue({ data: { project: { _id: 'project-1' } } });
-    await projectService.adminUpdateProjectStatus('project-1', { status: 'suspended', isPublished: false });
-    expect(api.patch).toHaveBeenCalledWith('/admin/projects/project-1/status', { status: 'suspended', isPublished: false });
+    await projectService.adminUpdateProjectStatus('project-1', { status: 'suspended' });
+    expect(api.patch).toHaveBeenCalledWith('/admin/projects/project-1/status', { status: 'suspended' });
     await projectService.adminSetProjectFeatured('project-1', { featured: true });
     expect(api.patch).toHaveBeenCalledWith('/admin/projects/project-1/featured', { featured: true });
   });

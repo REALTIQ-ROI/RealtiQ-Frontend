@@ -1,8 +1,5 @@
-import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { toast } from 'sonner';
 import AdminLayout from '../../../components/layout/AdminLayout';
-import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
@@ -18,20 +15,6 @@ const canRetry = (detail: Awaited<ReturnType<typeof cartService.adminGetCartChec
 const AdminCartCheckoutDetail = () => {
   const { checkoutId = '' } = useParams();
   const { data, loading, error, execute } = useAsync(() => cartService.adminGetCartCheckout(checkoutId), Boolean(checkoutId));
-  const [retrying, setRetrying] = useState(false);
-
-  const retry = async () => {
-    setRetrying(true);
-    try {
-      await cartService.adminRetryCartAllocations(checkoutId);
-      toast.success('Retry requested.');
-      await execute();
-    } catch (raw) {
-      toast.error(raw instanceof Error ? raw.message : 'Unable to retry allocations.');
-    } finally {
-      setRetrying(false);
-    }
-  };
 
   return (
     <AdminLayout>
@@ -54,13 +37,12 @@ const AdminCartCheckoutDetail = () => {
                     {checkoutStatusLabel(data.checkout.status)}
                   </span>
                   {canRetry(data) ? (
-                    <Button type="button" loading={retrying} loadingLabel="Retrying..." onClick={() => void retry()}>
-                      Retry failed allocations
-                    </Button>
+                    <button type="button" disabled title="Allocation retry requires a one-use security challenge." className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold text-secondary disabled:cursor-not-allowed disabled:opacity-60">Retry failed allocations</button>
                   ) : null}
                 </div>
               </div>
             </section>
+            {canRetry(data) ? <p className="text-sm text-secondary">Allocation retry is unavailable until the one-use security challenge contract is supplied. Checkout and payment status remain available for review.</p> : null}
             <section className="rounded-xl border border-outline-variant/10 bg-white">
               <div className="border-b border-outline-variant/10 p-5">
                 <h2 className="text-xl font-black">Allocation items</h2>

@@ -10,6 +10,7 @@ const DataProtectionRequests = () => {
   const [selected, setSelected] = useState<DataProtectionRequestSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const load = async (before?: string) => {
     setLoading(true);
@@ -41,6 +42,26 @@ const DataProtectionRequests = () => {
     }
   };
 
+  const downloadExport = async (id: string) => {
+    setDownloading(true);
+    setError(null);
+    try {
+      const blob = await dataProtectionService.downloadExport(id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `realtiq-data-export-${id}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (raw) {
+      setError(raw instanceof Error ? raw.message : 'Unable to download the access export.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <section className="rounded-xl border border-outline-variant/10 bg-white p-6">
       <h3 className="text-lg font-bold">Data protection requests</h3>
@@ -64,6 +85,14 @@ const DataProtectionRequests = () => {
           {selected.correctionFields?.length ? <p className="mt-1 text-secondary">Correction fields: {selected.correctionFields.map(readable).join(', ')}</p> : null}
           {selected.resultCodes.length ? <p className="mt-2 text-secondary">Result codes: {selected.resultCodes.join(', ')}</p> : null}
           {selected.completedAt ? <p className="mt-2 text-secondary">Last completed {new Date(selected.completedAt).toLocaleDateString('en-NG')}; individual records may have separate outcomes.</p> : null}
+          {selected.requestType === 'access' ? (
+            <div className="mt-3">
+              <Button type="button" variant="secondary" disabled={downloading} onClick={() => void downloadExport(selected.id)}>
+                {downloading ? 'Downloading…' : 'Download access export'}
+              </Button>
+              <p className="mt-1 text-xs text-secondary">The server permits only an available, unexpired export for this profile.</p>
+            </div>
+          ) : null}
         </div>
       ) : null}
       <p className="mt-4 text-xs text-amber-800">Creating or withdrawing a request requires a server step-up challenge. Those actions are unavailable until its request contract is documented.</p>

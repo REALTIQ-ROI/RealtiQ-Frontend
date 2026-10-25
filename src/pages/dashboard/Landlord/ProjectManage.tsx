@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import PropertyCard from '../../../components/property/PropertyCard';
@@ -9,28 +9,76 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { projectService } from '../../../services/projectService';
 import { virtualTourService } from '../../../services/virtualTourService';
+import { ApiRequestError } from '../../../lib/axios';
 import type { ProjectDetail, Property, VirtualTourProvider } from '../../../types';
 import { formatPriceRange, labelize } from '../../../utils/projectFormatters';
 
 interface LandlordProjectManageData {
   project: ProjectDetail;
   units: Property[];
+  totalUnits: number;
 }
 
 const loadLandlordProjectManage = async (id: string): Promise<LandlordProjectManageData> => {
   const { project } = await projectService.getProjectManage(id);
   const inventory = await projectService.getProjectProperties(project._id, { page: 1, limit: 100, includeUnpublished: true });
-  return { project, units: inventory.properties ?? [] };
+  return { project, units: inventory.properties ?? [], totalUnits: inventory.total ?? inventory.properties?.length ?? 0 };
 };
 
 const ProjectManage = () => {
   const [savingTourPreference, setSavingTourPreference] = useState(false);
+  const [extraUnits, setExtraUnits] = useState<Property[]>([]);
+  const [nextUnitPage, setNextUnitPage] = useState(2);
+  const [loadingMoreUnits, setLoadingMoreUnits] = useState(false);
+  const [unitPageError, setUnitPageError] = useState<string | null>(null);
+  const [unitPagesExhausted, setUnitPagesExhausted] = useState(false);
   const { id = '' } = useParams();
+  const currentProjectId = useRef(id);
+  currentProjectId.current = id;
   const { data, loading, error, execute } = useAsync(() => loadLandlordProjectManage(id), Boolean(id));
   const project = data?.project;
-  const units = data?.units ?? [];
+  const units = [...(data?.units ?? []), ...extraUnits];
+  const hasMoreUnits = !unitPagesExhausted && units.length < (data?.totalUnits ?? 0);
   const [tourPreference, setTourPreference] = useState<VirtualTourProvider | ''>('');
   useEffect(() => setTourPreference(project?.virtualTourProviderOverride ?? ''), [project?.virtualTourProviderOverride]);
+  useEffect(() => {
+    setExtraUnits([]);
+    setNextUnitPage(2);
+    setLoadingMoreUnits(false);
+    setUnitPageError(null);
+    setUnitPagesExhausted(false);
+  }, [id]);
+
+  const refreshProject = async () => {
+    setExtraUnits([]);
+    setNextUnitPage(2);
+    setUnitPagesExhausted(false);
+    setUnitPageError(null);
+    await execute();
+  };
+
+  const loadMoreUnits = async () => {
+    if (!project || loadingMoreUnits || !hasMoreUnits) return;
+    setLoadingMoreUnits(true);
+    setUnitPageError(null);
+    try {
+      const page = await projectService.getProjectProperties(project._id, {
+        page: nextUnitPage,
+        limit: 100,
+        includeUnpublished: true,
+      });
+      if (currentProjectId.current !== id) return;
+      const newUnits = page.properties ?? [];
+      const knownIds = new Set(units.map((unit) => unit._id));
+      setExtraUnits((current) => [...current, ...newUnits.filter((unit) => !knownIds.has(unit._id))]);
+      setNextUnitPage((current) => current + 1);
+      if (!newUnits.length) setUnitPagesExhausted(true);
+    } catch (raw) {
+      if (currentProjectId.current === id) setUnitPageError(raw instanceof Error ? raw.message : 'Unable to load more units.');
+    } finally {
+      if (currentProjectId.current === id) setLoadingMoreUnits(false);
+    }
+  };
 
   const saveTourPreference = async () => {
     if (!project) return;
@@ -41,9 +89,14 @@ const ProjectManage = () => {
         ...(typeof project.version === 'number' ? { expectedVersion: project.version } : {}),
       });
       toast.success(tourPreference ? 'Project virtual-tour preference saved.' : 'Project now inherits the global default.');
-      await execute();
+      await refreshProject();
     } catch (raw) {
-      toast.error(raw instanceof Error ? raw.message : 'Unable to update the Project preference.');
+      if (raw instanceof ApiRequestError && raw.status === 409) {
+        await refreshProject();
+        toast.error('This project changed. Latest values were reloaded; review them before saving again.');
+      } else {
+        toast.error(raw instanceof Error ? raw.message : 'Unable to update the Project preference.');
+      }
     } finally { setSavingTourPreference(false); }
   };
 
@@ -113,6 +166,15 @@ const ProjectManage = () => {
                   No child units yet.
                 </div>
               )}
+              {unitPageError ? <p role="alert" className="mt-3 text-sm text-red-700">{unitPageError}</p> : null}
+              {hasMoreUnits ? (
+                <div className="mt-5 flex items-center gap-3">
+                  <Button type="button" variant="secondary" disabled={loadingMoreUnits} onClick={() => void loadMoreUnits()}>
+                    {loadingMoreUnits ? 'Loading…' : 'Load more units'}
+                  </Button>
+                  <span className="text-sm text-secondary">Showing {units.length} of {data?.totalUnits ?? 0}</span>
+                </div>
+              ) : null}
             </section>
           </div>
         ) : null}

@@ -1,4 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
+import { useState } from 'react';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
@@ -16,11 +17,13 @@ const rowStatusClass = (status: string) =>
 
 const AdminPropertyImports = () => {
   const { importId } = useParams();
+  const [page, setPage] = useState(1);
   const { data, loading, error, execute } = useAsync(
     (): Promise<ProjectImportSession | ProjectImportListResponse> => importId
       ? projectService.getAdminPropertyImport(importId)
-      : projectService.listAdminPropertyImports({ page: 1, limit: 50 }),
+      : projectService.listAdminPropertyImports({ page, limit: 50 }),
     true,
+    importId || page,
   );
 
   if (importId) {
@@ -64,7 +67,9 @@ const AdminPropertyImports = () => {
     );
   }
 
-  const list = data && 'imports' in data ? data.imports : [];
+  const listResponse = data && 'imports' in data ? data : null;
+  const list = listResponse?.imports ?? [];
+  const totalPages = Math.max(1, Math.ceil((listResponse?.total ?? 0) / (listResponse?.limit ?? 50)));
   return (
     <AdminLayout>
       <main className="mx-auto max-w-7xl space-y-6 p-8">
@@ -93,6 +98,11 @@ const AdminPropertyImports = () => {
             </table>
           </section>
         ) : null}
+        {!loading && !error && listResponse ? <nav aria-label="Import pages" className="flex items-center justify-between gap-4 text-sm">
+          <button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} className="rounded-lg bg-surface-container-low px-4 py-2 font-bold disabled:opacity-40">Previous</button>
+          <span>Page {listResponse.page} of {totalPages} · {listResponse.total} imports</span>
+          <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)} className="rounded-lg bg-surface-container-low px-4 py-2 font-bold disabled:opacity-40">Next</button>
+        </nav> : null}
       </main>
     </AdminLayout>
   );

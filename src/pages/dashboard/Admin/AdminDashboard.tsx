@@ -74,7 +74,6 @@ const PropertyCard = ({ property }: { property: Property }) => {
           </div>
           <p className="font-extrabold text-primary">
             ₦{property.price.toLocaleString()}
-            <span className="text-[10px] text-secondary font-normal">/mo</span>
           </p>
         </div>
         <div className="mt-6 pt-6 border-t border-slate-50 flex justify-between text-secondary text-xs">
@@ -102,8 +101,7 @@ const AdminDashboard = () => {
   );
   const stats = statsData ?? emptyStats;
 
-  const featuredProperties = properties.filter((p) => p.featured).slice(0, 3);
-  const displayProperties = featuredProperties.length > 0 ? featuredProperties : properties.slice(0, 3);
+  const displayProperties = properties.filter((property) => property.featured).slice(0, 3);
 
   return (
     <AdminLayout>
@@ -171,7 +169,7 @@ const AdminDashboard = () => {
         {/* Featured Properties */}
         <section className="space-y-6 pb-12">
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-extrabold tracking-tight font-headline">Active Featured Listings</h3>
+            <h3 className="text-2xl font-extrabold tracking-tight font-headline">Featured Listings in Loaded Catalogue</h3>
           </div>
 
           {displayProperties.length > 0 ? (
@@ -181,7 +179,7 @@ const AdminDashboard = () => {
               ))}
             </div>
           ) : (
-            <p className="text-secondary text-sm">No properties to display.</p>
+            <p className="text-secondary text-sm">No featured properties in the loaded catalogue.</p>
           )}
         </section>
       </div>

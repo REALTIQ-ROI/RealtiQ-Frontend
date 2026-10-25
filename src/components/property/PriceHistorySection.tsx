@@ -20,30 +20,41 @@ const directionClass = (direction: string) =>
 const PriceHistorySection = ({ propertyId }: { propertyId: string }) => {
   const [history, setHistory] = useState<PropertyPriceHistoryResponse | null>(null);
   const [chart, setChart] = useState<PropertyPriceHistoryChartResponse | null>(null);
+  const [page, setPage] = useState(1);
+  const [retryCount, setRetryCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [chartLoading, setChartLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const load = async () => {
-    if (!propertyId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const [historyResponse, chartResponse] = await Promise.all([
-        propertyService.getPriceHistory(propertyId, { page: 1, limit: 20, sort: 'desc' }),
-        propertyService.getPriceHistoryChart(propertyId),
-      ]);
-      setHistory(historyResponse);
-      setChart(chartResponse);
-    } catch (raw) {
-      setError(raw instanceof Error ? raw.message : 'Unable to load price history.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [chartError, setChartError] = useState<string | null>(null);
 
   useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setPage(1);
+  }, [propertyId]);
+
+  useEffect(() => {
+    if (!propertyId) return;
+    let active = true;
+    setLoading(true);
+    setError(null);
+    setHistory(null);
+    propertyService.getPriceHistory(propertyId, { page, limit: 20, sort: 'desc' })
+      .then((response) => { if (active) setHistory(response); })
+      .catch((raw: unknown) => { if (active) setError(raw instanceof Error ? raw.message : 'Unable to load price history.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [propertyId, page, retryCount]);
+
+  useEffect(() => {
+    if (!propertyId) return;
+    let active = true;
+    setChart(null);
+    setChartError(null);
+    setChartLoading(true);
+    propertyService.getPriceHistoryChart(propertyId)
+      .then((response) => { if (active) setChart(response); })
+      .catch((raw: unknown) => { if (active) setChartError(raw instanceof Error ? raw.message : 'Unable to load price chart.'); })
+      .finally(() => { if (active) setChartLoading(false); });
+    return () => { active = false; };
   }, [propertyId]);
 
   const currency = history?.property.currency || chart?.currency || 'NGN';
@@ -53,7 +64,7 @@ const PriceHistorySection = ({ propertyId }: { propertyId: string }) => {
   );
 
   if (loading) return <LoadingState label="Loading price history..." />;
-  if (error) return <ErrorState message={error} onRetry={() => void load()} />;
+  if (error) return <ErrorState message={error} onRetry={() => setRetryCount((current) => current + 1)} />;
 
   return (
     <section className="space-y-5" aria-label="Price history">
@@ -80,11 +91,11 @@ const PriceHistorySection = ({ propertyId }: { propertyId: string }) => {
       ) : null}
 
       <div className="rounded-xl border border-outline-variant/10 bg-white p-5">
-        <SimpleLineChart
+        {chartLoading ? <LoadingState label="Loading price chart..." /> : chartError ? <p role="status" className="text-sm text-amber-800">Price chart unavailable: {chartError}</p> : <SimpleLineChart
           data={chartData}
           formatValue={(value) => formatCurrency(value, currency)}
           emptyLabel="No price-history chart data is available for this property."
-        />
+        />}
       </div>
 
       {history?.history.length ? (
@@ -127,6 +138,11 @@ const PriceHistorySection = ({ propertyId }: { propertyId: string }) => {
           No price changes have been recorded for this property yet.
         </div>
       )}
+      {history && history.total > history.limit ? <nav aria-label="Price history pages" className="flex items-center justify-between gap-4 text-sm">
+        <button type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} className="rounded-lg bg-surface-container-low px-4 py-2 font-bold disabled:opacity-40">Previous</button>
+        <span>Page {history.page} of {Math.ceil(history.total / history.limit)}</span>
+        <button type="button" disabled={page * history.limit >= history.total} onClick={() => setPage((current) => current + 1)} className="rounded-lg bg-surface-container-low px-4 py-2 font-bold disabled:opacity-40">Next</button>
+      </nav> : null}
     </section>
   );
 };

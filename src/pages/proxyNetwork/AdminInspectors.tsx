@@ -415,10 +415,9 @@ export const AdminInspectorDetailPage = () => {
   const kyc = user?.kyc;
   const profileImage =
     profile.profileImageUrl ||
-    profile.profilePhoto?.accessUrl ||
-    profile.profilePhoto?.url;
-  const idDocumentUrl = kyc?.idDocumentAccessUrl || kyc?.idDocumentUrl;
-  const selfieUrl = kyc?.selfieAccessUrl || kyc?.selfieUrl;
+    profile.profilePhoto?.accessUrl;
+  const idDocumentUrl = kyc?.idDocumentAccessUrl;
+  const selfieUrl = kyc?.selfieAccessUrl;
   const reject = () =>
     setTextAction({
       title: "Reject Property Agent",
@@ -548,7 +547,7 @@ export const AdminInspectorDetailPage = () => {
                   <dt className="text-xs font-bold text-secondary">
                     National ID
                   </dt>
-                  <dd>{kyc?.nationalId || "—"}</dd>
+                  <dd>{kyc?.nationalId ? `••••${kyc.nationalId.slice(-4)}` : "—"}</dd>
                 </div>
               </dl>
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -652,7 +651,7 @@ export const AdminInspectorDetailPage = () => {
               {kyc?.professionalDocuments?.length ? (
                 <ul className="mt-3 grid gap-3 sm:grid-cols-2">
                   {kyc.professionalDocuments.map((document, index) => {
-                    const documentUrl = document.accessUrl || document.url;
+                    const documentUrl = document.accessUrl;
                     const label = document.label || "Professional credential";
                     return (
                       <li
@@ -755,17 +754,18 @@ export const AdminInspectorDetailPage = () => {
           </div>
           <aside className="h-fit rounded-2xl bg-white p-5 shadow-sm">
             <h2 className="font-black">Profile actions</h2>
+            <p className="mt-2 text-xs text-secondary">Staff decisions require a one-use security challenge. These actions are unavailable until its request contract is supplied.</p>
             {profile.verificationStatus === "under_review" ? (
               <div className="mt-4 space-y-3">
                 <button
-                  disabled={pending}
+                  disabled
                   onClick={() => setApprovalOpen(true)}
                   className="w-full rounded-lg bg-emerald-700 px-4 py-3 font-bold text-white"
                 >
                   Approve
                 </button>
                 <button
-                  disabled={pending}
+                  disabled
                   onClick={reject}
                   className="w-full rounded-lg bg-red-700 px-4 py-3 font-bold text-white"
                 >
@@ -775,7 +775,7 @@ export const AdminInspectorDetailPage = () => {
             ) : null}
             {profile.verificationStatus === "approved" ? (
               <button
-                disabled={pending}
+                disabled
                 onClick={() =>
                   setTextAction({
                     title: "Suspend Property Agent",
@@ -805,7 +805,7 @@ export const AdminInspectorDetailPage = () => {
             ) : null}
             {profile.verificationStatus === "suspended" ? (
               <button
-                disabled={pending}
+                disabled
                 onClick={() =>
                   setTextAction({
                     title: "Reactivate Property Agent",

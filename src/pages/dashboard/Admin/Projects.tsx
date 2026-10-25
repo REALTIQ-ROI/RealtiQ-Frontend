@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
-import { toast } from 'sonner';
+import { useEffect, useRef, useState } from 'react';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
@@ -13,37 +12,40 @@ const statuses: ProjectStatus[] = ['draft', 'upcoming', 'ongoing', 'completed', 
 
 const AdminProjects = () => {
   const [status, setStatus] = useState('');
-  const [pendingAction, setPendingAction] = useState('');
-  const { data, loading, error, execute } = useAsync(() => projectService.adminListProjects({ page: 1, limit: 50, status }), true);
-  const projects = data?.projects ?? [];
+  const currentStatus = useRef(status);
+  currentStatus.current = status;
+  const [extraProjects, setExtraProjects] = useState<Awaited<ReturnType<typeof projectService.adminListProjects>>['projects']>([]);
+  const [nextPage, setNextPage] = useState(2);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [pagesExhausted, setPagesExhausted] = useState(false);
+  const { data, loading, error, execute } = useAsync(() => projectService.adminListProjects({ page: 1, limit: 50, status }), true, status);
+  const projects = [...(data?.projects ?? []), ...extraProjects];
+  const hasMore = !pagesExhausted && projects.length < (data?.total ?? 0);
 
-  const updateStatus = async (id: string, nextStatus: ProjectStatus, isPublished?: boolean, action = 'status') => {
-    const actionKey = `${action}:${id}`;
-    if (pendingAction) return;
-    setPendingAction(actionKey);
-    try {
-      await projectService.adminUpdateProjectStatus(id, { status: nextStatus, isPublished });
-      toast.success('Project status updated.');
-      await execute();
-    } catch (raw) {
-      toast.error(raw instanceof Error ? raw.message : 'Unable to update project.');
-    } finally {
-      setPendingAction('');
-    }
-  };
+  useEffect(() => {
+    setExtraProjects([]);
+    setNextPage(2);
+    setLoadingMore(false);
+    setPageError(null);
+    setPagesExhausted(false);
+  }, [status]);
 
-  const toggleFeatured = async (id: string, featured: boolean) => {
-    const actionKey = `featured:${id}`;
-    if (pendingAction) return;
-    setPendingAction(actionKey);
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    setPageError(null);
     try {
-      await projectService.adminSetProjectFeatured(id, { featured });
-      toast.success(featured ? 'Project featured.' : 'Project unfeatured.');
-      await execute();
+      const page = await projectService.adminListProjects({ page: nextPage, limit: 50, status });
+      if (currentStatus.current !== status) return;
+      const knownIds = new Set(projects.map((project) => project._id));
+      setExtraProjects((current) => [...current, ...page.projects.filter((project) => !knownIds.has(project._id))]);
+      setNextPage((current) => current + 1);
+      if (!page.projects.length) setPagesExhausted(true);
     } catch (raw) {
-      toast.error(raw instanceof Error ? raw.message : 'Unable to update featured state.');
+      if (currentStatus.current === status) setPageError(raw instanceof Error ? raw.message : 'Unable to load more projects.');
     } finally {
-      setPendingAction('');
+      if (currentStatus.current === status) setLoadingMore(false);
     }
   };
 
@@ -53,7 +55,7 @@ const AdminProjects = () => {
         <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-4xl font-black tracking-tight">Projects</h1>
-            <p className="mt-2 text-sm text-secondary">Moderate project publication, status, and featured placement.</p>
+            <p className="mt-2 text-sm text-secondary">Review project publication, status, and featured placement.</p>
           </div>
           <select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-lg bg-surface-container-low px-4 py-3 text-sm outline-none">
             <option value="">Any status</option>
@@ -62,6 +64,7 @@ const AdminProjects = () => {
         </header>
         {loading ? <LoadingState label="Loading projects..." /> : null}
         {error ? <ErrorState message={error} onRetry={() => void execute()} /> : null}
+        <p className="mb-4 text-sm text-secondary">Staff project status and Featured changes require a one-use security challenge. Publication also awaits the exact transition contract.</p>
         {!loading && !error ? (
           <div className="overflow-x-auto rounded-xl bg-white">
             <table className="w-full text-left text-sm">
@@ -93,39 +96,27 @@ const AdminProjects = () => {
                         </Link>
                         <select
                           value={project.status}
-                          disabled={Boolean(pendingAction)}
-                          onChange={(event) => void updateStatus(project._id, event.target.value as ProjectStatus, project.isPublished)}
+                          disabled
+                          title="Project status changes require the one-use security challenge."
                           className="rounded-lg bg-surface-container-low px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {statuses.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
                         </select>
                         <button
                           type="button"
-                          disabled={Boolean(pendingAction)}
-                          aria-busy={pendingAction === `publish:${project._id}` || undefined}
-                          onClick={() => void updateStatus(project._id, project.status, !project.isPublished, 'publish')}
+                          disabled
+                          title="Project publication transition contract is unavailable."
                           className="inline-flex items-center gap-1 rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {pendingAction === `publish:${project._id}` ? (
-                            <>
-                              <span className="material-symbols-outlined animate-spin text-sm" aria-hidden="true">progress_activity</span>
-                              Updating...
-                            </>
-                          ) : project.isPublished ? 'Unpublish' : 'Publish'}
+                          {project.isPublished ? 'Unpublish' : 'Publish'}
                         </button>
                         <button
                           type="button"
-                          disabled={Boolean(pendingAction)}
-                          aria-busy={pendingAction === `featured:${project._id}` || undefined}
-                          onClick={() => void toggleFeatured(project._id, !project.isFeatured)}
+                          disabled
+                          title="Project Featured changes require the one-use security challenge."
                           className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {pendingAction === `featured:${project._id}` ? (
-                            <>
-                              <span className="material-symbols-outlined animate-spin text-sm" aria-hidden="true">progress_activity</span>
-                              Updating...
-                            </>
-                          ) : project.isFeatured ? 'Unfeature' : 'Feature'}
+                          {project.isFeatured ? 'Unfeature' : 'Feature'}
                         </button>
                       </div>
                     </td>
@@ -134,6 +125,15 @@ const AdminProjects = () => {
                 {!projects.length ? <tr><td colSpan={6} className="p-10 text-center text-secondary">No projects found.</td></tr> : null}
               </tbody>
             </table>
+          </div>
+        ) : null}
+        {pageError ? <p role="alert" className="mt-4 text-sm text-red-700">{pageError}</p> : null}
+        {!loading && !error && hasMore ? (
+          <div className="mt-6 flex items-center gap-3">
+            <button type="button" disabled={loadingMore} onClick={() => void loadMore()} className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold text-primary disabled:opacity-60">
+              {loadingMore ? 'Loading…' : 'Load more projects'}
+            </button>
+            <span className="text-sm text-secondary">Showing {projects.length} of {data?.total ?? 0}</span>
           </div>
         ) : null}
       </main>

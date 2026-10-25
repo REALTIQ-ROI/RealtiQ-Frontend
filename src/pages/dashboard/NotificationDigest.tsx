@@ -14,6 +14,7 @@ const NotificationDigest = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [needsReview, setNeedsReview] = useState(false);
 
   if (user?.role !== 'admin') {
     return (
@@ -30,14 +31,24 @@ const NotificationDigest = () => {
     setLoading(true);
     setError(null);
     setMessage(null);
+    setNeedsReview(false);
 
     try {
+      const parsedDays = Number(daysBack);
+      const parsedLimit = Number(limit);
+      if (!Number.isInteger(parsedDays) || parsedDays < 1 || parsedDays > 30 || !Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 20) {
+        throw new Error('Days Back must be 1–30 and Limit must be 1–20.');
+      }
       const result = await notificationService.sendRecentPropertiesDigest({
-        daysBack: Number(daysBack),
-        limit: Number(limit),
+        daysBack: parsedDays,
+        limit: parsedLimit,
       });
-      setMessage(`${result.message} (${result.recipientCount} recipients, ${result.propertyCount} properties)`);
-      toast.success(result.message);
+      const isPartial = result.httpStatus === 207;
+      setNeedsReview(result.httpStatus !== 202);
+      const outcome = isPartial ? 'Some dispatches failed.' : result.httpStatus === 202 ? 'Dispatch accepted.' : `Request returned status ${result.httpStatus}.`;
+      setMessage(`${outcome} ${result.recipientCount} recipients and ${result.propertyCount} properties were considered. Delivery is not confirmed by this request.`);
+      if (isPartial) toast.error('Some digest dispatches failed. Review delivery status before retrying.');
+      else if (result.httpStatus === 202) toast.success('Digest dispatch accepted.');
     } catch (err) {
       const nextError = err instanceof Error ? err.message : 'Unable to send digest.';
       setError(nextError);
@@ -64,6 +75,7 @@ const NotificationDigest = () => {
             <input
               type="number"
               min={1}
+              max={30}
               value={daysBack}
               onChange={(e) => setDaysBack(e.target.value)}
               className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm"
@@ -74,6 +86,7 @@ const NotificationDigest = () => {
             <input
               type="number"
               min={1}
+              max={20}
               value={limit}
               onChange={(e) => setLimit(e.target.value)}
               className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm"
@@ -90,7 +103,7 @@ const NotificationDigest = () => {
         {error ? <ErrorState message={error} onRetry={() => undefined} /> : null}
 
         {message ? (
-          <div className="bg-emerald-50 text-emerald-800 rounded-xl p-5 border border-emerald-200">
+          <div className={`${needsReview ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-800'} rounded-xl border p-5`}>
             {message}
           </div>
         ) : null}

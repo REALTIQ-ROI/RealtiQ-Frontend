@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import ErrorState from "../../../components/ui/ErrorState";
 import LoadingState from "../../../components/ui/LoadingState";
@@ -16,11 +16,6 @@ const TrustAppeals = () => {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selected, setSelected] = useState<TrustAppeal | null>(null);
-  const [action, setAction] = useState<Exclude<AppealStatus, "open">>("upheld");
-  const [reason, setReason] = useState("");
-  const [working, setWorking] = useState(false);
-  const reasonRef = useRef<HTMLTextAreaElement>(null);
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -39,46 +34,6 @@ const TrustAppeals = () => {
   useEffect(() => {
     void load();
   }, [load]);
-  useEffect(() => {
-    if (selected) reasonRef.current?.focus();
-  }, [selected]);
-  const resolve = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!selected?._id || working || !reason.trim()) return;
-    setWorking(true);
-    setError("");
-    try {
-      await trustService.resolveAppeal(selected._id, {
-        action,
-        reason: reason.trim().slice(0, 2000),
-      });
-      setSelected(null);
-      setReason("");
-      await load();
-    } catch (raw) {
-      setError(
-        raw instanceof Error ? raw.message : "Unable to resolve appeal.",
-      );
-    } finally {
-      setWorking(false);
-    }
-  };
-  const recompute = async (appeal: TrustAppeal) => {
-    const userId =
-      typeof appeal.user === "object" ? appeal.user._id : appeal.user;
-    if (!userId || working) return;
-    setWorking(true);
-    try {
-      await trustService.recompute(userId);
-      await load();
-    } catch (raw) {
-      setError(
-        raw instanceof Error ? raw.message : "Unable to recompute trust.",
-      );
-    } finally {
-      setWorking(false);
-    }
-  };
   return (
     <AdminLayout>
       <main className={"space-y-6 p-4 sm:p-8"}>
@@ -95,6 +50,7 @@ const TrustAppeals = () => {
             Resolution details and reviewer data remain inside this admin-only
             queue.
           </p>
+          <p className={"mt-2 text-sm text-secondary"}>Appeal resolution and trust recomputation require a one-use security challenge. Review access remains available.</p>
         </header>
         <label className={"block max-w-xs text-sm font-bold"}>
           Status filter
@@ -164,19 +120,22 @@ const TrustAppeals = () => {
                     <div className={"flex flex-col gap-2"}>
                       {appeal.status === "open" ? (
                         <button
-                          onClick={() => setSelected(appeal)}
+                          type="button"
+                          disabled
+                          title="Appeal resolution requires a one-use security challenge."
                           className={
-                            "rounded-lg bg-primary px-3 py-2 font-bold text-on-primary"
+                            "rounded-lg bg-primary px-3 py-2 font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-60"
                           }
                         >
                           Resolve
                         </button>
                       ) : null}
                       <button
-                        disabled={working}
-                        onClick={() => void recompute(appeal)}
+                        type="button"
+                        disabled
+                        title="Trust recomputation requires a one-use security challenge."
                         className={
-                          "rounded-lg bg-surface-container-low px-3 py-2 font-bold disabled:opacity-60"
+                          "rounded-lg bg-surface-container-low px-3 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-60"
                         }
                       >
                         Recompute trust
@@ -212,80 +171,6 @@ const TrustAppeals = () => {
             >
               Next
             </button>
-          </div>
-        ) : null}
-        {selected ? (
-          <div
-            className={
-              "fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
-            }
-            role={"presentation"}
-          >
-            <section
-              role={"dialog"}
-              aria-modal={"true"}
-              aria-labelledby={"resolve-title"}
-              className={"w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"}
-            >
-              <h2 id={"resolve-title"} className={"text-2xl font-black"}>
-                Resolve {selected.publicReference}
-              </h2>
-              <p className={"mt-2 text-sm text-secondary"}>
-                Confirm a deliberate outcome. This action does not
-                optimistically change the trust score.
-              </p>
-              <form className={"mt-5 space-y-4"} onSubmit={resolve}>
-                <label className={"block text-sm font-bold"}>
-                  Action
-                  <select
-                    value={action}
-                    onChange={(e) =>
-                      setAction(e.target.value as Exclude<AppealStatus, "open">)
-                    }
-                    className={
-                      "mt-1 w-full rounded-lg bg-surface-container-low p-3"
-                    }
-                  >
-                    <option value={"upheld"}>Upheld</option>
-                    <option value={"adjusted"}>Adjusted</option>
-                    <option value={"dismissed"}>Dismissed</option>
-                  </select>
-                </label>
-                <label className={"block text-sm font-bold"}>
-                  Resolution reason
-                  <textarea
-                    ref={reasonRef}
-                    required
-                    maxLength={2000}
-                    rows={5}
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    className={
-                      "mt-1 w-full rounded-lg bg-surface-container-low p-3"
-                    }
-                  />
-                </label>
-                <div className={"flex justify-end gap-3"}>
-                  <button
-                    type={"button"}
-                    onClick={() => setSelected(null)}
-                    className={
-                      "rounded-lg bg-surface-container-low px-4 py-2 font-bold"
-                    }
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    disabled={working}
-                    className={
-                      "rounded-lg bg-primary px-4 py-2 font-bold text-on-primary disabled:opacity-60"
-                    }
-                  >
-                    {working ? "Resolving…" : "Confirm resolution"}
-                  </button>
-                </div>
-              </form>
-            </section>
           </div>
         ) : null}
       </main>

@@ -37,21 +37,21 @@ describe('VirtualTourManagement', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(virtualTourService.getVirtualTourProviders).mockResolvedValue(availability);
-    vi.mocked(virtualTourService.configurePropertyRealsee).mockResolvedValue({ propertyId: 'p1', provider: 'realsee', tour: {
+    vi.mocked(virtualTourService.configurePropertyRealsee).mockResolvedValue({ propertyId: 'p1', provider: 'realsee', version: 4, tour: {
       enabled: true, status: 'processing', workId: 'work_1', capabilities: summary.capabilities, metadata: {},
     } });
-    vi.mocked(virtualTourService.configurePropertyMatterport).mockResolvedValue({ propertyId: 'p1', provider: 'matterport', tour: {
+    vi.mocked(virtualTourService.configurePropertyMatterport).mockResolvedValue({ propertyId: 'p1', provider: 'matterport', version: 4, tour: {
       enabled: true, status: 'ready', modelSid: 'SxQL3iGyoDo', capabilities: summary.capabilities, metadata: {},
     } });
-    vi.mocked(virtualTourService.setPropertyVirtualTourProvider).mockResolvedValue({ propertyId: 'p1', virtualTourProviderOverride: null });
+    vi.mocked(virtualTourService.setPropertyVirtualTourProvider).mockResolvedValue({ propertyId: 'p1', version: 4, virtualTourProviderOverride: null });
   });
 
   it('submits Work-ID-only Realsee configuration as the documented deferred payload', async () => {
     const onUpdated = vi.fn();
-    render(<VirtualTourManagement propertyId="p1" summary={summary} onUpdated={onUpdated} />);
+    render(<VirtualTourManagement propertyId="p1" summary={summary} version={3} onUpdated={onUpdated} />);
     await userEvent.type(screen.getByLabelText('Realsee Work ID'), 'work_1');
     await userEvent.click(screen.getByRole('button', { name: 'Save Realsee' }));
-    await waitFor(() => expect(virtualTourService.configurePropertyRealsee).toHaveBeenCalledWith('p1', { workId: 'work_1' }));
+    await waitFor(() => expect(virtualTourService.configurePropertyRealsee).toHaveBeenCalledWith('p1', { workId: 'work_1', expectedVersion: 3 }));
     expect(onUpdated).toHaveBeenCalled();
   });
 

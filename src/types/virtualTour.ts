@@ -98,8 +98,8 @@ export interface MatterportConfiguration {
   failedAt?: string | null; failureReason?: string | null;
 }
 export type PropertyProviderConfigurationResponse =
-  | { propertyId: string; provider: 'realsee'; tour: RealseeConfiguration }
-  | { propertyId: string; provider: 'matterport'; tour: MatterportConfiguration };
+  | { propertyId: string; provider: 'realsee'; version: number; tour: RealseeConfiguration }
+  | { propertyId: string; provider: 'matterport'; version: number; tour: MatterportConfiguration };
 export interface SafeRealseeConfiguration {
   enabled: boolean; status: VirtualTourStatus; workId: string | null; workUrl: string | null; vrUrl: string | null;
   capabilities: VirtualTourCapabilities; metadata: Record<string, unknown>; configuredAt: string | null; readyAt: string | null;

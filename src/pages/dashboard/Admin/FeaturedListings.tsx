@@ -61,15 +61,15 @@ const FeaturedListings = () => {
 
           <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-primary-container text-on-primary p-6 rounded-xl">
-              <p className="text-xs uppercase tracking-widest text-on-primary-container mb-1">Featured</p>
+              <p className="text-xs uppercase tracking-widest text-on-primary-container mb-1">Featured in loaded catalogue</p>
               <h3 className="text-3xl font-extrabold">{featured.length}</h3>
             </div>
             <div className="bg-surface-container-lowest p-6 rounded-xl">
-              <p className="text-xs uppercase tracking-widest text-secondary mb-1">Available Candidates</p>
+              <p className="text-xs uppercase tracking-widest text-secondary mb-1">Available in loaded catalogue</p>
               <h3 className="text-3xl font-extrabold">{candidates.length}</h3>
             </div>
             <div className="bg-surface-container-lowest p-6 rounded-xl">
-              <p className="text-xs uppercase tracking-widest text-secondary mb-1">Sold Excluded</p>
+              <p className="text-xs uppercase tracking-widest text-secondary mb-1">Other statuses in loaded catalogue</p>
               <h3 className="text-3xl font-extrabold">{properties.length - candidates.length}</h3>
             </div>
           </section>
@@ -95,7 +95,7 @@ const FeaturedListings = () => {
             ) : candidates.length === 0 ? (
               <div className="py-16 text-center text-secondary">
                 <span className="material-symbols-outlined text-5xl opacity-30 mb-3 block">star_off</span>
-                <p className="font-semibold">No available properties can be featured.</p>
+                <p className="font-semibold">No available properties in the loaded catalogue.</p>
               </div>
             ) : (
               <div className="divide-y divide-surface-container">

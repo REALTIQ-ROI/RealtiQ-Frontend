@@ -37,7 +37,6 @@ const AdminPaymentDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
-  const [canceling, setCanceling] = useState(false);
 
   useEffect(() => {
     if (!id) { setError('No payment ID provided.'); setLoading(false); return; }
@@ -69,7 +68,7 @@ const AdminPaymentDetails = () => {
       const result = await paymentService.verifyPayment(payment.reference);
       if (result.verified) {
         toast.success('Payment verified successfully');
-        setPayment((prev) => (prev ? { ...prev, status: 'paid' } : prev));
+        setPayment(await paymentService.getPaymentById(payment._id || payment.reference));
       } else {
         toast.error('Payment verification failed');
       }
@@ -77,36 +76,6 @@ const AdminPaymentDetails = () => {
       toast.error(err instanceof Error ? err.message : 'Unable to verify payment');
     } finally {
       setVerifying(false);
-    }
-  };
-
-  const handleCancel = async () => {
-    if (!payment) return;
-    const confirmed = await Swal.fire({
-      title: 'Cancel payment?',
-      text: 'Canceling preserves this transaction for audit/history and releases the payment hold so the original flow can initialize a new payment.',
-      icon: 'warning',
-      input: 'textarea',
-      inputLabel: 'Cancellation reason (optional)',
-      inputPlaceholder: 'Enter an admin note...',
-      showCancelButton: true,
-      confirmButtonText: 'Cancel payment',
-      cancelButtonText: 'Keep payment',
-      confirmButtonColor: '#b91c1c',
-      cancelButtonColor: '#6b7280',
-      reverseButtons: true,
-    });
-    if (!confirmed.isConfirmed) return;
-
-    setCanceling(true);
-    try {
-      const result = await paymentService.cancelPayment(payment._id || payment.reference, typeof confirmed.value === 'string' ? confirmed.value : undefined);
-      setPayment((prev) => (prev ? { ...prev, ...result.payment, status: 'canceled' } : prev));
-      toast.success(result.message);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Unable to cancel payment');
-    } finally {
-      setCanceling(false);
     }
   };
 
@@ -141,7 +110,7 @@ const AdminPaymentDetails = () => {
 
   const canVerify = payment.status === 'pending' || payment.status === 'failed';
   const canCancel = payment.status === 'pending' || payment.status === 'failed';
-  const busy = verifying || canceling;
+  const busy = verifying;
 
   return (
     <AdminLayout>
@@ -171,12 +140,12 @@ const AdminPaymentDetails = () => {
             )}
             {canCancel && (
               <button
-                disabled={busy}
-                onClick={() => void handleCancel()}
+                disabled
+                title="Payment cancellation requires the one-use security challenge."
                 className="flex items-center gap-2 border border-rose-200 text-rose-700 px-6 py-3 rounded-md font-bold text-sm hover:bg-rose-50 transition-all disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-sm">block</span>
-                {canceling ? 'Canceling...' : 'Cancel payment'}
+                Cancel payment
               </button>
             )}
             <button
@@ -188,6 +157,7 @@ const AdminPaymentDetails = () => {
             </button>
           </div>
         </div>
+        {canCancel ? <p className="mb-6 text-sm text-secondary">Payment cancellation is unavailable until the one-use security challenge contract is supplied.</p> : null}
 
         {/* Status banner */}
         {payment.status === 'pending' && (

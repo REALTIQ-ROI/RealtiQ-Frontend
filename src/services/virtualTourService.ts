@@ -66,20 +66,20 @@ export const virtualTourService = {
     return data;
   },
 
-  async configurePropertyRealsee(propertyIdOrReference: string, body: { workId: string; workUrl?: string; vrUrl?: string } | { enabled: false }): Promise<PropertyProviderConfigurationResponse> {
+  async configurePropertyRealsee(propertyIdOrReference: string, body: ({ workId: string; workUrl?: string; vrUrl?: string } | { enabled: false }) & { expectedVersion?: number }): Promise<PropertyProviderConfigurationResponse> {
     const { data } = await api.patch<PropertyProviderConfigurationResponse>(`/properties/${encode(propertyIdOrReference)}/virtual-tour/realsee`, body);
     viewerCache.delete(encode(propertyIdOrReference));
     return data;
   },
 
-  async configurePropertyMatterport(propertyIdOrReference: string, body: { modelSid: string; showcaseUrl?: string } | { enabled: false }): Promise<PropertyProviderConfigurationResponse> {
+  async configurePropertyMatterport(propertyIdOrReference: string, body: ({ modelSid: string; showcaseUrl?: string } | { enabled: false }) & { expectedVersion?: number }): Promise<PropertyProviderConfigurationResponse> {
     const { data } = await api.patch<PropertyProviderConfigurationResponse>(`/properties/${encode(propertyIdOrReference)}/virtual-tour/matterport`, body);
     viewerCache.delete(encode(propertyIdOrReference));
     return data;
   },
 
-  async setPropertyVirtualTourProvider(propertyIdOrReference: string, body: { provider: VirtualTourProvider | null }): Promise<{ propertyId: string; virtualTourProviderOverride: VirtualTourProvider | null }> {
-    const { data } = await api.patch<{ propertyId: string; virtualTourProviderOverride: VirtualTourProvider | null }>(`/properties/${encode(propertyIdOrReference)}/virtual-tour/provider`, body);
+  async setPropertyVirtualTourProvider(propertyIdOrReference: string, body: { provider: VirtualTourProvider | null; expectedVersion?: number }): Promise<{ propertyId: string; version: number; virtualTourProviderOverride: VirtualTourProvider | null }> {
+    const { data } = await api.patch<{ propertyId: string; version: number; virtualTourProviderOverride: VirtualTourProvider | null }>(`/properties/${encode(propertyIdOrReference)}/virtual-tour/provider`, body);
     viewerCache.delete(encode(propertyIdOrReference));
     return data;
   },

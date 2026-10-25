@@ -92,11 +92,6 @@ export interface CreatePropertyResponse {
   message?: string;
 }
 
-export interface BuyPropertyResponse {
-  redirectUrl: string;
-  reference: string;
-}
-
 export type PropertyFiltersQuery = PropertyFilters;
 
 export interface NearbyPropertySummary {
@@ -373,11 +368,6 @@ export const propertyService = {
       input,
     );
     return { ...data, property: normalizeProperty(data.property) };
-  },
-
-  async buyProperty(id: string): Promise<BuyPropertyResponse> {
-    const { data } = await api.post<BuyPropertyResponse>(`/properties/${id}/buy`);
-    return data;
   },
 
   async toggleFeatured(id: string, featured: boolean): Promise<{ _id: string; featured: boolean }> {
