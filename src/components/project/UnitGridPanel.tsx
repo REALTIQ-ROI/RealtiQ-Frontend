@@ -4,20 +4,11 @@ import { useAsync } from '../../hooks/useAsync';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
 import { projectService, type UnitGridJob, type UnitGridJobRequest, type UnitGridMutation, type UnitGridOperation, type UnitGridQuery, type UnitGridRow } from '../../services/projectService';
 import { stepUpService } from '../../services/stepUpService';
+import { getCanonicalFields, parseCanonicalInput } from '../../utils/canonicalFieldRegistry';
 import StepUpDialog from '../auth/StepUpDialog';
 import Button from '../ui/Button';
 
-const fields = [
-  { key: 'unitIdentifier', label: 'Unit identifier', kind: 'text', inherits: false },
-  { key: 'bedrooms', label: 'Bedrooms', kind: 'integer', inherits: true },
-  { key: 'fullBathrooms', label: 'Full bathrooms', kind: 'integer', inherits: true },
-  { key: 'parkingSpaces', label: 'Parking spaces', kind: 'integer', inherits: true },
-  { key: 'internalFloorArea', label: 'Internal floor area (m²)', kind: 'number', inherits: true },
-  { key: 'negotiable', label: 'Price negotiable', kind: 'boolean', inherits: true },
-  { key: 'furnishing', label: 'Furnishing', kind: 'furnishing', inherits: true },
-  { key: 'occupancy', label: 'Occupancy', kind: 'enum', inherits: false, options: ['Vacant possession', 'Sold with occupiers'] },
-  { key: 'buildStage', label: 'Build stage', kind: 'enum', inherits: true, options: ['Off-plan', 'Under construction', 'Uncompleted building', 'Semi-finished (Advanced Shell / Lock-up)', 'Newly built', 'Renovated', 'Previously owned', 'Old'] },
-] as const;
+const fields = getCanonicalFields('unit');
 
 type EditableField = (typeof fields)[number]['key'];
 type JobAction = UnitGridJobRequest['action'];
@@ -62,7 +53,7 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
   const [selected, setSelected] = useState<string[]>([]);
   const [field, setField] = useState<EditableField>('bedrooms');
   const selectedField = fields.find((item) => item.key === field)!;
-  const fieldOptions: readonly string[] = 'options' in selectedField ? selectedField.options : [];
+  const fieldOptions: readonly string[] = selectedField.options ?? [];
   const [operation, setOperation] = useState<'set' | 'reset_to_inherited'>('set');
   const [fieldValue, setFieldValue] = useState('');
   const [targetUnitTypeId, setTargetUnitTypeId] = useState('');
@@ -115,24 +106,17 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       if (!config.inherits) { setActionError('The selected canonical field does not inherit from its project or unit type.'); return null; }
       return { field, operation };
     }
-    if (!fieldValue.trim()) { setActionError('Enter a value. Zero and false must be entered explicitly.'); return null; }
-    if (config.kind === 'boolean') {
-      if (fieldValue !== 'true' && fieldValue !== 'false') { setActionError('Choose Yes or No.'); return null; }
-      return { field, operation: 'set', value: fieldValue === 'true' };
+    const parsed = parseCanonicalInput(config, fieldValue);
+    if (!parsed.ok) { setActionError(parsed.error); return null; }
+    if (config.condition === 'Terraced House or Townhouse' && rows.some((row) => !['terraced house', 'townhouse'].includes(String(row.effectiveFields.propertyType ?? '').toLowerCase()))) {
+      setActionError('Terrace floors apply only to Terraced House or Townhouse units. Filter or select only applicable units.');
+      return null;
     }
-    if (config.kind === 'furnishing') {
-      if (!['Furnished', 'Semi-Furnished', 'Unfurnished'].includes(fieldValue)) { setActionError('Choose a supported furnishing value.'); return null; }
-      return { field, operation: 'set', value: fieldValue };
+    if (config.key === 'loadingVehicleAccessType' && rows.some((row) => row.effectiveFields.loadingVehicleAccess !== true)) {
+      setActionError('Loading access type can be changed only when every selected unit has loading vehicle access enabled.');
+      return null;
     }
-    if (config.kind === 'enum') {
-      const options: readonly string[] = 'options' in config ? config.options : [];
-      if (!options.includes(fieldValue)) { setActionError('Choose one of the documented values.'); return null; }
-      return { field, operation: 'set', value: fieldValue };
-    }
-    if (config.kind === 'text') return { field, operation: 'set', value: fieldValue.trim() };
-    const value = Number(fieldValue);
-    if (!Number.isFinite(value) || value < 0 || (config.kind === 'integer' && !Number.isInteger(value))) { setActionError('Enter a non-negative' + (config.kind === 'integer' ? ' whole number.' : ' number.')); return null; }
-    return { field, operation: 'set', value };
+    return { field, operation: 'set', value: parsed.value };
   };
 
   const selectedRows = (): UnitGridRow[] | null => {
@@ -279,7 +263,7 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       <div className="mt-3 max-h-[520px] space-y-3 overflow-y-auto">
         {grid.items.map((row) => <div key={row._id} className="rounded-lg border border-outline-variant/20 p-3 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2"><label className="flex items-center gap-2 font-bold"><input type="checkbox" checked={selected.includes(row._id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, row._id] : current.filter((id) => id !== row._id))} />{row.publicReference || row._id}</label><span className="text-xs text-secondary">Version {row.version} · {row.readiness.publicationState}</span></div>
-          <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">{['unitIdentifier', 'propertyType', 'bedrooms', 'fullBathrooms', 'parkingSpaces', 'internalFloorArea', 'furnishing', 'occupancy', 'buildStage', 'askingPrice', 'currency', 'availability'].map((key) => <div key={key}><span className="font-bold text-secondary">{key.replace(/([a-z])([A-Z])/g, '$1 $2')}: </span>{sourceValue(row.effectiveFields, key)}<span className="ml-1 text-secondary">{row.fieldSources[key] ? `(${row.fieldSources[key].sourceLevel}, ${row.fieldSources[key].state})` : '(source not returned)'}</span>{Object.prototype.hasOwnProperty.call(row.rawOverrides, key) ? <span className="ml-1 text-primary">Override: {sourceValue(row.rawOverrides, key)}</span> : null}</div>)}</div>
+          <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">{['unitIdentifier', 'propertyType', 'bedrooms', 'fullBathrooms', 'powderRooms', 'allBedroomsEnSuite', 'parkingSpaces', 'negotiable', 'internalFloorArea', 'unitFootprint', 'wholeBuildingFootprint', 'plotSize', 'terraceFloors', 'furnishing', 'occupancy', 'buildStage', 'completedBeforeHandover', 'projectedHandoverMonth', 'askingPrice', 'currency', 'availability'].map((key) => <div key={key}><span className="font-bold text-secondary">{key.replace(/([a-z])([A-Z])/g, '$1 $2')}: </span>{sourceValue(row.effectiveFields, key)}<span className="ml-1 text-secondary">{row.fieldSources[key] ? `(${row.fieldSources[key].sourceLevel}, ${row.fieldSources[key].state})` : '(source not returned)'}</span>{Object.prototype.hasOwnProperty.call(row.rawOverrides, key) ? <span className="ml-1 text-primary">Override: {sourceValue(row.rawOverrides, key)}</span> : null}</div>)}</div>
           {row.readiness.blockers?.length ? <p className="mt-2 text-xs text-amber-800">Readiness: {row.readiness.blockers.map((item) => `${item.field ?? 'workflow'} ${item.code ?? 'blocked'}`).join(' · ')}</p> : null}
           {row.readiness.problems ? <p className="mt-1 text-xs font-semibold text-amber-800">This unit has readiness problems.</p> : null}
         </div>)}
@@ -288,8 +272,8 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       <div className="mt-3 flex items-center gap-2"><Button type="button" variant="secondary" disabled={page <= 1 || loading} onClick={() => { setPage((value) => value - 1); setSelected([]); }}>Previous</Button><Button type="button" variant="secondary" disabled={page >= grid.pagination.pages || loading} onClick={() => { setPage((value) => value + 1); setSelected([]); }}>Next</Button></div>
     </> : null}
     <div className="mt-6 grid gap-4 border-t border-outline-variant/20 pt-5 lg:grid-cols-2">
-      <div className="space-y-3"><h3 className="font-black">Canonical field edit</h3><div className="grid gap-2 sm:grid-cols-2"><select aria-label="Grid field" value={field} onChange={(event) => { const nextField = event.target.value as EditableField; setField(nextField); if (!fields.find((item) => item.key === nextField)?.inherits) setOperation('set'); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{fields.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select><select aria-label="Grid mutation" value={operation} onChange={(event) => setOperation(event.target.value as 'set' | 'reset_to_inherited')} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="set">Set explicit override</option><option value="reset_to_inherited" disabled={!fields.find((item) => item.key === field)?.inherits}>Reset to inherited</option></select></div>
-        {operation === 'set' ? fields.find((item) => item.key === field)?.kind === 'boolean' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose Yes or No</option><option value="true">Yes</option><option value="false">No</option></select> : fields.find((item) => item.key === field)?.kind === 'furnishing' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose furnishing</option>{['Furnished', 'Semi-Furnished', 'Unfurnished'].map((item) => <option key={item} value={item}>{item}</option>)}</select> : fields.find((item) => item.key === field)?.kind === 'enum' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose a value</option>{fieldOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select> : <input aria-label="Grid field value" type={fields.find((item) => item.key === field)?.kind === 'text' ? 'text' : 'number'} min={fields.find((item) => item.key === field)?.kind === 'text' ? undefined : 0} step={fields.find((item) => item.key === field)?.kind === 'integer' ? 1 : 'any'} value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder={fields.find((item) => item.key === field)?.kind === 'text' ? 'Enter unit identifier' : 'Enter value, including 0'} /> : <p className="text-xs text-secondary">The selected field will inherit from its unit type or project where the canonical dictionary allows inheritance.</p>}
+      <div className="space-y-3"><h3 className="font-black">Canonical field edit</h3><div className="grid gap-2 sm:grid-cols-2"><select aria-label="Grid field" value={field} onChange={(event) => { const nextField = event.target.value as EditableField; setField(nextField); setFieldValue(''); if (!fields.find((item) => item.key === nextField)?.inherits) setOperation('set'); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{fields.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select><select aria-label="Grid mutation" value={operation} onChange={(event) => setOperation(event.target.value as 'set' | 'reset_to_inherited')} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="set">Set explicit override</option><option value="reset_to_inherited" disabled={!fields.find((item) => item.key === field)?.inherits}>Reset to inherited</option></select></div>
+        {operation === 'set' ? selectedField.kind === 'boolean' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose Yes or No</option><option value="true">Yes</option><option value="false">No</option></select> : selectedField.kind === 'enum' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose a value</option>{fieldOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select> : <input aria-label="Grid field value" type={selectedField.kind === 'text' ? 'text' : selectedField.kind === 'month' ? 'month' : 'number'} min={selectedField.min} max={selectedField.max} step={selectedField.kind === 'integer' ? 1 : 'any'} value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder={selectedField.kind === 'text' ? 'Enter a value' : 'Enter a value, including 0'} /> : <p className="text-xs text-secondary">The selected field will inherit from its unit type or project where the canonical dictionary allows inheritance.</p>}
         <Button type="button" disabled={!rows.length || working || conflict} onClick={() => void submitDirectEdit()}>Apply to selected units</Button>
         <div className="border-t border-outline-variant/20 pt-3"><label className="text-xs font-bold text-secondary" htmlFor="unit-grid-target-type">Move to same-project unit type ID</label><input id="unit-grid-target-type" value={targetUnitTypeId} onChange={(event) => setTargetUnitTypeId(event.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="24-character unit type ID" /><Button type="button" variant="secondary" disabled={!rows.length || working || conflict} onClick={() => void submitTypeMove()}>Move selected units</Button></div>
       </div>

@@ -97,6 +97,38 @@ describe('canonical unit grid', () => {
     })));
   });
 
+  it('uses the shared registry for additional canonical unit values and preserves zero', async () => {
+    render(<UnitGridPanel projectId="p" />);
+    await screen.findByText(/RTQ-UNIT-1/);
+    await userEvent.click(screen.getByRole('checkbox', { name: /RTQ-UNIT-1/ }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Grid field' }), 'powderRooms');
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Grid field value' }), '0');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply to selected units' }));
+    await waitFor(() => expect(projectService.editUnitGrid).toHaveBeenCalledWith('p', expect.objectContaining({
+      rows: [{ unitId: 'unit-1', expectedVersion: 4, canonicalFieldMutations: [{ field: 'powderRooms', operation: 'set', value: 0 }] }],
+    })));
+  });
+
+  it('allows an explicit false override and blocks a conditionally inapplicable field', async () => {
+    render(<UnitGridPanel projectId="p" />);
+    await screen.findByText(/RTQ-UNIT-1/);
+    await userEvent.click(screen.getByRole('checkbox', { name: /RTQ-UNIT-1/ }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Grid field' }), 'allBedroomsEnSuite');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Grid field value' }), 'false');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply to selected units' }));
+    await waitFor(() => expect(projectService.editUnitGrid).toHaveBeenCalledWith('p', expect.objectContaining({
+      rows: [{ unitId: 'unit-1', expectedVersion: 4, canonicalFieldMutations: [{ field: 'allBedroomsEnSuite', operation: 'set', value: false }] }],
+    })));
+
+    vi.mocked(projectService.editUnitGrid).mockClear();
+    await userEvent.click(screen.getByRole('checkbox', { name: /RTQ-UNIT-1/ }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Grid field' }), 'terraceFloors');
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Grid field value' }), '2');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply to selected units' }));
+    expect(await screen.findByText(/Terrace floors apply only/)).toBeInTheDocument();
+    expect(projectService.editUnitGrid).not.toHaveBeenCalled();
+  });
+
   it('binds the exact empty-body undo route before verifying and consuming the challenge', async () => {
     vi.mocked(projectService.editUnitGrid).mockResolvedValueOnce({ operation: { id: 'op-1', state: 'applied', action: 'field_edit', undoAvailable: true, rowCount: 1, createdAt: '', rows: [] }, projectVersion: 9, replayed: false });
     render(<UnitGridPanel projectId="p" />);

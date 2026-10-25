@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import type { CreateProjectRequest } from '../../services/projectService';
 import type { MediaItem, ProjectDetail, ProjectMedia, ProjectType } from '../../types';
 import { nigeriaStateCities, nigeriaStates } from '../../utils/nigeriaLocations';
+import { getCanonicalField, parseCanonicalInput, serializeCanonicalChanges } from '../../utils/canonicalFieldRegistry';
 import MediaUploader from '../property/MediaUploader';
 import Button from '../ui/Button';
 
@@ -16,10 +17,11 @@ interface ProjectFormProps {
 }
 
 const projectTypes: ProjectType[] = ['estate', 'apartment_development', 'residential', 'commercial', 'mixed_use', 'housing_project', 'other'];
-const developmentStructures = ['Estate / gated community', 'Apartment building', 'Mixed-use development', 'Commercial complex', 'Other'] as const;
-const unitDisplayModes = ['Grouped by unit type', 'Individual units'] as const;
-const accessRoadOptions = ['Tarred', 'Untarred', 'Flood-prone', 'Sand-filled area'] as const;
-const buildStages = ['Off-plan', 'Under construction', 'Uncompleted building', 'Semi-finished (Advanced Shell / Lock-up)', 'Newly built', 'Renovated', 'Previously owned', 'Old'] as const;
+const developmentStructures = getCanonicalField('developmentStructure')?.options ?? [];
+const unitDisplayModes = getCanonicalField('unitDisplayMode')?.options ?? [];
+const accessRoadOptions = getCanonicalField('accessRoadConditions')?.options ?? [];
+const buildStages = getCanonicalField('buildStage')?.options ?? [];
+const paymentOptionValues = getCanonicalField('paymentOptions')?.options ?? [];
 const inputClass = 'w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20';
 const labelClass = 'block text-xs font-bold uppercase tracking-widest text-secondary mb-2';
 
@@ -95,17 +97,20 @@ const ChipInput = ({ id, label, placeholder, value, draft, onDraftChange, onAdd,
 };
 
 const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', preserveEmptyValues = false, isLoading = false, serverErrors = {} }: ProjectFormProps) => {
+  const isEdit = Boolean(initialData);
   const canonical = initialData?.canonicalFields ?? {};
   const canonicalText = (key: string) => typeof canonical[key] === 'string' ? canonical[key] as string : '';
+  const hasCanonicalField = (key: string) => Object.prototype.hasOwnProperty.call(canonical, key);
+  const canonicalTextOr = (key: string, fallback?: string) => hasCanonicalField(key) && typeof canonical[key] === 'string' ? canonical[key] as string : fallback ?? '';
   const pin = canonical.projectPin && typeof canonical.projectPin === 'object' ? canonical.projectPin as { lat?: unknown; lng?: unknown } : null;
-  const [name, setName] = useState(initialData?.name ?? '');
+  const [name, setName] = useState(canonicalTextOr('projectName', initialData?.name));
   const [projectType, setProjectType] = useState<ProjectType>(initialData?.projectType ?? 'estate');
-  const [shortDescription, setShortDescription] = useState(initialData?.shortDescription ?? '');
-  const [description, setDescription] = useState(initialData?.description ?? '');
+  const [shortDescription, setShortDescription] = useState(canonicalTextOr('shortDescription', initialData?.shortDescription));
+  const [description, setDescription] = useState(canonicalTextOr('projectDescription', initialData?.description));
   const [address, setAddress] = useState(initialData?.address ?? '');
-  const [state, setState] = useState(initialData?.state ?? initialData?.location?.state ?? '');
+  const [state, setState] = useState(canonicalTextOr('state', initialData?.state ?? initialData?.location?.state));
   const [city, setCity] = useState(initialData?.city ?? initialData?.location?.city ?? '');
-  const [area, setArea] = useState(initialData?.area ?? (typeof canonical.area === 'string' ? canonical.area : initialData?.location?.area ?? ''));
+  const [area, setArea] = useState(canonicalTextOr('area', initialData?.area ?? initialData?.location?.area));
   const [lat, setLat] = useState((typeof pin?.lat === 'number' ? pin.lat : initialData?.coordinates?.lat)?.toString() ?? '');
   const [lng, setLng] = useState((typeof pin?.lng === 'number' ? pin.lng : initialData?.coordinates?.lng)?.toString() ?? '');
   const [amenities, setAmenities] = useState<string[]>(initialData?.amenities ?? []);
@@ -113,13 +118,25 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
   const [features, setFeatures] = useState<string[]>(initialData?.features ?? []);
   const [featureInput, setFeatureInput] = useState('');
   const [completionDate, setCompletionDate] = useState(initialData?.completionDate?.slice(0, 10) ?? '');
-  const [launchDate, setLaunchDate] = useState(initialData?.launchDate?.slice(0, 10) ?? '');
+  const [launchDate, setLaunchDate] = useState(canonicalTextOr('launchDate', initialData?.launchDate?.slice(0, 10)));
+  const [approximateUnitCount, setApproximateUnitCount] = useState(typeof canonical.approximateUnitCount === 'number' ? String(canonical.approximateUnitCount) : '');
+  const [servicedStatus, setServicedStatus] = useState(canonicalText('servicedStatus'));
+  const [paymentOptions, setPaymentOptions] = useState<string[]>(Array.isArray(canonical.paymentOptions) ? canonical.paymentOptions.filter((item): item is string => typeof item === 'string') : []);
+  const [paymentOptionsTouched, setPaymentOptionsTouched] = useState(false);
+  const savedMortgageOption = paymentOptions.includes('Mortgage Accepted');
+  const [maximumInstallmentMonths, setMaximumInstallmentMonths] = useState(canonical.maximumInstallmentMonths == null ? '' : String(canonical.maximumInstallmentMonths));
+  const [initialDepositPercent, setInitialDepositPercent] = useState(canonical.initialDepositPercent == null ? '' : String(canonical.initialDepositPercent));
+  const [transactionFeePayer, setTransactionFeePayer] = useState(canonicalText('transactionFeePayer'));
+  const [privateShowingsByAppointment, setPrivateShowingsByAppointment] = useState(typeof canonical.privateShowingsByAppointment === 'boolean' ? String(canonical.privateShowingsByAppointment) : '');
+  const [liveVideoTourAvailable, setLiveVideoTourAvailable] = useState(typeof canonical.liveVideoTourAvailable === 'boolean' ? String(canonical.liveVideoTourAvailable) : '');
   const [developmentStructure, setDevelopmentStructure] = useState(canonicalText('developmentStructure'));
   const [unitDisplayMode, setUnitDisplayMode] = useState(canonicalText('unitDisplayMode'));
   const [gatedEstate, setGatedEstate] = useState(typeof canonical.gatedEstate === 'boolean' ? String(canonical.gatedEstate) : '');
   const [estateName, setEstateName] = useState(canonicalText('estateName'));
+  const [canonicalStreetAddress, setCanonicalStreetAddress] = useState(canonicalTextOr('streetAddress', initialData?.address));
   const [lga, setLga] = useState(canonicalText('lga'));
   const [accessRoadConditions, setAccessRoadConditions] = useState<string[]>(Array.isArray(canonical.accessRoadConditions) ? canonical.accessRoadConditions.filter((item): item is string => typeof item === 'string') : []);
+  const [accessRoadTouched, setAccessRoadTouched] = useState(false);
   const [buildStage, setBuildStage] = useState(canonicalText('buildStage'));
   const [media, setMedia] = useState<MediaItem[]>(toMediaItems(initialData?.media));
   const [saving, setSaving] = useState(false);
@@ -137,6 +154,12 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
     gatedEstate === 'true' && !estateName.trim() && 'estate name',
     !accessRoadConditions.length && 'access road conditions',
     !buildStage && 'build stage',
+    !servicedStatus && 'serviced status',
+    gatedEstate === 'false' && !canonicalStreetAddress.trim() && 'street address',
+    !paymentOptions.length && 'payment options',
+    !transactionFeePayer && 'transaction fee payer before publication',
+    paymentOptions.includes('Instalment Plan') && !maximumInstallmentMonths.trim() && 'maximum instalment months',
+    paymentOptions.includes('Instalment Plan') && !initialDepositPercent.trim() && 'initial deposit percentage',
   ].filter((item): item is string => Boolean(item));
 
   const addListItem = (draft: string, setDraft: (value: string) => void, setItems: Dispatch<SetStateAction<string[]>>) => {
@@ -162,21 +185,97 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
       toast.error('Enter both coordinates or clear both values.');
       return;
     }
+    if (isEdit && (hasCanonicalField('projectPin') || Boolean(initialData?.coordinates)) && !lat.trim() && !lng.trim()) {
+      toast.error('The saved map pin cannot be cleared because no reset operation is documented.');
+      return;
+    }
+    const canonicalDraft: Record<string, unknown> = {};
+    if (!isEdit || hasCanonicalField('projectName') || name.trim() !== (initialData?.name ?? '')) canonicalDraft.projectName = name.trim();
+    const canonicalErrors: string[] = [];
+    const hasSavedCanonicalValue = (key: string) => hasCanonicalField(key) && canonical[key] !== null && canonical[key] !== '';
+    const clearableTextControls: Array<[string, string]> = [
+      ['shortDescription', shortDescription], ['projectDescription', description], ['state', state], ['lga', lga], ['area', area], ['launchDate', launchDate],
+      ...(gatedEstate === 'true' ? [['estateName', estateName] as [string, string]] : []),
+      ...(gatedEstate === 'false' ? [['streetAddress', canonicalStreetAddress] as [string, string]] : []),
+    ];
+    if (isEdit && clearableTextControls.some(([key, value]) => hasSavedCanonicalValue(key) && !value.trim())) {
+      canonicalErrors.push('A saved canonical value was cleared. Omission means no mutation and no reset operation is documented for these fields; restore the value before saving.');
+    }
+    const enumInputs: Array<[string, string]> = [['developmentStructure', developmentStructure], ['unitDisplayMode', unitDisplayMode], ['buildStage', buildStage], ['servicedStatus', servicedStatus], ['transactionFeePayer', transactionFeePayer]];
+    for (const [key, value] of enumInputs) {
+      if (!value) continue;
+      const definition = getCanonicalField(key);
+      const parsed = definition ? parseCanonicalInput(definition, value) : null;
+      if (!parsed || !parsed.ok) canonicalErrors.push(parsed && !parsed.ok ? parsed.error : `Unsupported ${key} value.`);
+      else canonicalDraft[key] = parsed.value;
+    }
+    if ((shortDescription.trim() || preserveEmptyValues) && (!isEdit || hasCanonicalField('shortDescription') || shortDescription.trim() !== (initialData?.shortDescription ?? ''))) canonicalDraft.shortDescription = shortDescription.trim();
+    if ((description.trim() || preserveEmptyValues) && (!isEdit || hasCanonicalField('projectDescription') || description.trim() !== (initialData?.description ?? ''))) canonicalDraft.projectDescription = description.trim();
+    if (state.trim() && (!isEdit || hasCanonicalField('state') || state.trim() !== (initialData?.state ?? initialData?.location?.state ?? ''))) canonicalDraft.state = state.trim();
+    if ((lga.trim() || preserveEmptyValues) && (!isEdit || hasCanonicalField('lga') || lga.trim() !== '')) canonicalDraft.lga = lga.trim();
+    if ((area.trim() || preserveEmptyValues) && (!isEdit || hasCanonicalField('area') || area.trim() !== (initialData?.area ?? initialData?.location?.area ?? ''))) canonicalDraft.area = area.trim();
+    if (gatedEstate === 'false' && (canonicalStreetAddress.trim() || preserveEmptyValues) && (!isEdit || hasCanonicalField('streetAddress') || canonicalStreetAddress.trim() !== (initialData?.address ?? ''))) canonicalDraft.streetAddress = canonicalStreetAddress.trim();
+    if (gatedEstate !== '') {
+      const parsed = parseCanonicalInput(getCanonicalField('gatedEstate')!, gatedEstate);
+      if (parsed.ok) canonicalDraft.gatedEstate = parsed.value;
+      else canonicalErrors.push(parsed.error);
+    }
+    if (paymentOptionsTouched) {
+      if (!paymentOptions.length) canonicalErrors.push('Choose at least one payment option. Clearing the saved options requires a reset operation that is not documented.');
+      else if (savedMortgageOption) canonicalErrors.push('Payment options cannot be changed while Mortgage Accepted is present because the active Mortgage Partner gate is unavailable.');
+      else if (!paymentOptions.includes('Instalment Plan') && (hasSavedCanonicalValue('maximumInstallmentMonths') || hasSavedCanonicalValue('initialDepositPercent'))) canonicalErrors.push('Saved instalment terms cannot be cleared when removing Instalment Plan because no reset operation is documented.');
+      else if (paymentOptions.some((item) => !paymentOptionValues.includes(item))) canonicalErrors.push('A selected payment option is not in the canonical dictionary.');
+      else canonicalDraft.paymentOptions = [...paymentOptions];
+    }
+    if (paymentOptions.includes('Instalment Plan')) {
+      if (hasSavedCanonicalValue('maximumInstallmentMonths') && !maximumInstallmentMonths.trim()) canonicalErrors.push('The saved maximum instalment term cannot be cleared because no reset operation is documented.');
+      if (hasSavedCanonicalValue('initialDepositPercent') && !initialDepositPercent.trim()) canonicalErrors.push('The saved initial deposit cannot be cleared because no reset operation is documented.');
+      if (maximumInstallmentMonths.trim()) {
+        const parsed = parseCanonicalInput(getCanonicalField('maximumInstallmentMonths')!, maximumInstallmentMonths);
+        if (parsed.ok) canonicalDraft.maximumInstallmentMonths = parsed.value;
+        else canonicalErrors.push(parsed.error);
+      }
+      if (initialDepositPercent.trim()) {
+        const parsed = parseCanonicalInput(getCanonicalField('initialDepositPercent')!, initialDepositPercent);
+        if (parsed.ok) canonicalDraft.initialDepositPercent = parsed.value;
+        else canonicalErrors.push(parsed.error);
+      }
+    }
+    for (const [key, raw] of [['privateShowingsByAppointment', privateShowingsByAppointment], ['liveVideoTourAvailable', liveVideoTourAvailable]] as const) {
+      if (!raw) continue;
+      const parsed = parseCanonicalInput(getCanonicalField(key)!, raw);
+      if (parsed.ok) canonicalDraft[key] = parsed.value;
+      else canonicalErrors.push(parsed.error);
+    }
+    if (isEdit && gatedEstate !== '' && (canonical.gatedEstate === undefined || canonical.gatedEstate !== (gatedEstate === 'true'))) {
+      const fieldsToClear = gatedEstate === 'true' ? ['streetAddress'] : ['estateName'];
+      if (fieldsToClear.some((key) => Object.prototype.hasOwnProperty.call(canonical, key) && canonical[key] !== null && canonical[key] !== '')) canonicalErrors.push('Changing the address path would leave saved values in the other path. No reset operation is documented for those fields.');
+    }
+    if (gatedEstate === 'true' && (estateName.trim() || preserveEmptyValues)) canonicalDraft.estateName = estateName.trim();
+    const initialCoordinates = initialData?.coordinates;
+    if (coordinates && (!isEdit || hasCanonicalField('projectPin') || coordinates.lat !== initialCoordinates?.lat || coordinates.lng !== initialCoordinates?.lng)) canonicalDraft.projectPin = coordinates;
+    if (accessRoadTouched) {
+      if (!accessRoadConditions.length) canonicalErrors.push('Choose at least one access road condition. Clearing the last saved condition requires a reset operation that is not documented.');
+      else if (accessRoadConditions.some((item) => !accessRoadOptions.includes(item))) canonicalErrors.push('Choose only documented access road conditions.');
+      else canonicalDraft.accessRoadConditions = [...accessRoadConditions];
+    }
+    if (launchDate && (!isEdit || hasCanonicalField('launchDate') || launchDate !== (initialData?.launchDate?.slice(0, 10) ?? ''))) {
+      const parsed = parseCanonicalInput(getCanonicalField('launchDate')!, launchDate);
+      if (parsed.ok) canonicalDraft.launchDate = parsed.value;
+      else canonicalErrors.push(parsed.error);
+    }
+    if (approximateUnitCount.trim()) {
+      const parsed = parseCanonicalInput(getCanonicalField('approximateUnitCount')!, approximateUnitCount);
+      if (parsed.ok) canonicalDraft.approximateUnitCount = parsed.value;
+      else canonicalErrors.push(parsed.error);
+    }
+    if (canonicalErrors.length) {
+      toast.error(canonicalErrors.join(' '));
+      return;
+    }
+    const canonicalFields = serializeCanonicalChanges(canonical, canonicalDraft);
     setSaving(true);
     try {
-      const canonicalFields: Record<string, unknown> = { projectName: name.trim() };
-      if (developmentStructure) canonicalFields.developmentStructure = developmentStructure;
-      if (shortDescription.trim() || preserveEmptyValues) canonicalFields.shortDescription = shortDescription.trim();
-      if (description.trim() || preserveEmptyValues) canonicalFields.projectDescription = description.trim();
-      if (unitDisplayMode) canonicalFields.unitDisplayMode = unitDisplayMode;
-      if (state.trim()) canonicalFields.state = state.trim();
-      if (lga.trim() || preserveEmptyValues) canonicalFields.lga = lga.trim();
-      if (area.trim() || preserveEmptyValues) canonicalFields.area = area.trim();
-      if (gatedEstate !== '') canonicalFields.gatedEstate = gatedEstate === 'true';
-      if (gatedEstate === 'true' && (estateName.trim() || preserveEmptyValues)) canonicalFields.estateName = estateName.trim();
-      if (coordinates) canonicalFields.projectPin = coordinates;
-      if (accessRoadConditions.length || preserveEmptyValues) canonicalFields.accessRoadConditions = [...accessRoadConditions];
-      if (buildStage) canonicalFields.buildStage = buildStage;
       await onSubmit({
         canonicalFields,
         name: name.trim(),
@@ -289,11 +388,29 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
             </select>
           </div>
           <div>
+            <label htmlFor="project-launch-date" className={labelClass}>Launch date <span className="normal-case tracking-normal">(optional)</span></label>
+            <input id="project-launch-date" type="date" value={launchDate} onChange={(event) => setLaunchDate(event.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label htmlFor="project-approximate-unit-count" className={labelClass}>Approximate unit count <span className="normal-case tracking-normal">(optional)</span></label>
+            <input id="project-approximate-unit-count" type="number" min={1} step={1} value={approximateUnitCount} onChange={(event) => setApproximateUnitCount(event.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label htmlFor="project-serviced-status" className={labelClass}>Serviced status</label>
+            <select id="project-serviced-status" value={servicedStatus} onChange={(event) => setServicedStatus(event.target.value)} className={inputClass}>
+              <option value="">Not specified</option>{getCanonicalField('servicedStatus')?.options?.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </div>
+          <div>
             <label htmlFor="project-gated-estate" className={labelClass}>Gated estate</label>
             <select id="project-gated-estate" value={gatedEstate} onChange={(event) => setGatedEstate(event.target.value)} className={inputClass}>
               <option value="">Not specified</option><option value="true">Yes</option><option value="false">No</option>
             </select>
           </div>
+          {gatedEstate === 'false' ? <div>
+            <label htmlFor="project-canonical-street-address" className={labelClass}>Canonical street address</label>
+            <input id="project-canonical-street-address" value={canonicalStreetAddress} onChange={(event) => { setCanonicalStreetAddress(event.target.value); if (!isEdit || !hasCanonicalField('streetAddress')) setAddress(event.target.value); }} className={inputClass} />
+          </div> : null}
           {gatedEstate === 'true' ? <div>
             <label htmlFor="project-estate-name" className={labelClass}>Estate name</label>
             <input id="project-estate-name" value={estateName} onChange={(event) => setEstateName(event.target.value)} className={inputClass} />
@@ -311,11 +428,47 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
           <fieldset className="md:col-span-2">
             <legend className={labelClass}>Access road conditions</legend>
             <div className="grid gap-2 sm:grid-cols-2">
-              {accessRoadOptions.map((item) => <label key={item} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={accessRoadConditions.includes(item)} onChange={(event) => setAccessRoadConditions((current) => event.target.checked ? [...current, item] : current.filter((value) => value !== item))} />{item}</label>)}
+              {accessRoadOptions.map((item) => <label key={item} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={accessRoadConditions.includes(item)} onChange={(event) => { setAccessRoadTouched(true); setAccessRoadConditions((current) => event.target.checked ? [...current, item] : current.filter((value) => value !== item)); }} />{item}</label>)}
             </div>
           </fieldset>
+          <fieldset className="md:col-span-2">
+            <legend className={labelClass}>Payment options</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {paymentOptionValues.map((item) => {
+                const gated = item === 'Mortgage Accepted';
+                return <label key={item} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={paymentOptions.includes(item)} disabled={gated || savedMortgageOption} onChange={(event) => { setPaymentOptionsTouched(true); setPaymentOptions((current) => event.target.checked ? [...current, item] : current.filter((value) => value !== item)); }} />{item}{gated ? <span className="text-xs text-secondary">(active Mortgage Partner policy required)</span> : null}</label>;
+              })}
+            </div>
+            <p className="mt-2 text-xs text-secondary">Mortgage Accepted remains controlled by the active Mortgage Partner policy. Existing server values are retained in an edit but cannot be added or removed here.</p>
+          </fieldset>
+          {paymentOptions.includes('Instalment Plan') ? <>
+            <div>
+              <label htmlFor="project-maximum-installment-months" className={labelClass}>Maximum instalment months</label>
+              <input id="project-maximum-installment-months" type="number" min={1} step={1} value={maximumInstallmentMonths} onChange={(event) => setMaximumInstallmentMonths(event.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label htmlFor="project-initial-deposit-percent" className={labelClass}>Initial deposit (%)</label>
+              <input id="project-initial-deposit-percent" type="number" min={0} max={100} step="any" value={initialDepositPercent} onChange={(event) => setInitialDepositPercent(event.target.value)} className={inputClass} />
+            </div>
+          </> : null}
+          <div>
+            <label htmlFor="project-transaction-fee-payer" className={labelClass}>Transaction fee payer</label>
+            <select id="project-transaction-fee-payer" value={transactionFeePayer} onChange={(event) => setTransactionFeePayer(event.target.value)} className={inputClass}>
+              <option value="">Not specified</option>{getCanonicalField('transactionFeePayer')?.options?.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-secondary">Required for publication; the server decides readiness.</p>
+          </div>
+          <div>
+            <label htmlFor="project-private-showings" className={labelClass}>Private showings by appointment</label>
+            <select id="project-private-showings" value={privateShowingsByAppointment} onChange={(event) => setPrivateShowingsByAppointment(event.target.value)} className={inputClass}><option value="">Not specified</option><option value="true">Yes</option><option value="false">No</option></select>
+          </div>
+          <div>
+            <label htmlFor="project-live-video-tour" className={labelClass}>Live video tour available</label>
+            <select id="project-live-video-tour" value={liveVideoTourAvailable} onChange={(event) => setLiveVideoTourAvailable(event.target.value)} className={inputClass}><option value="">Not specified</option><option value="true">Yes</option><option value="false">No</option></select>
+          </div>
         </div>
         {incompleteCanonicalIntake.length ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Draft intake fields still to complete: {incompleteCanonicalIntake.join(', ')}. Server publication readiness remains authoritative.</p> : <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-900">The visible required project intake fields are populated. The server still decides publication readiness.</p>}
+        <p role="note" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Annual service charge is a canonical `money_or_none` value; the handoff does not define its exact request representation, and explicit None differs from unanswered. This form preserves drafts and does not send that field.</p>
       </section>
 
       <section className="rounded-xl border border-outline-variant/10 bg-white p-6">
@@ -341,10 +494,6 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
             onAdd={() => addListItem(featureInput, setFeatureInput, setFeatures)}
             onRemove={(item) => setFeatures((current) => current.filter((value) => value !== item))}
           />
-          <div>
-            <label htmlFor="project-launch-date" className={labelClass}>Launch date</label>
-            <input id="project-launch-date" type="date" value={launchDate} onChange={(event) => setLaunchDate(event.target.value)} className={inputClass} />
-          </div>
           <div>
             <label htmlFor="project-completion-date" className={labelClass}>Expected completion date</label>
             <input id="project-completion-date" type="date" value={completionDate} onChange={(event) => setCompletionDate(event.target.value)} className={inputClass} />

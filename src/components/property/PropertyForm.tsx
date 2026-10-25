@@ -10,6 +10,7 @@ import { documentTypeLabel, titleDocumentTypeOptions } from '../../utils/titleVe
 import StructuredFactsFields from './StructuredFactsFields';
 import { sellerStructuredFacts, validateStructuredFacts } from '../../features/phase45/structuredFacts';
 import type { StructuredPropertyFacts } from '../../types/phase45';
+import { getCanonicalField, parseCanonicalInput, serializeCanonicalChanges } from '../../utils/canonicalFieldRegistry';
 import {
   normalizePaymentTypesForForm,
   PROPERTY_PAYMENT_TYPE_ORDER,
@@ -36,6 +37,9 @@ const PROPERTY_TYPES = [
 const CATEGORY_OPTIONS = ['residential', 'commercial', 'mixed_use'];
 const STAGE_OPTIONS = ['off_plan', 'unfinished', 'finished', 'renovation'];
 const CURRENCY_OPTIONS = ['NGN', 'USD'];
+const accessRoadOptions = getCanonicalField('accessRoadConditions')?.options ?? [];
+const listingKindOptions = getCanonicalField('listingKind')?.options ?? [];
+const advertiserDisplayOptions = getCanonicalField('advertiserDisplay')?.options ?? [];
 const LISTING_TYPE_OPTIONS: Array<{ value: ListingType; label: string }> = [
   { value: 'ready', label: 'Ready' },
   { value: 'off_plan', label: 'Off-Plan' },
@@ -83,10 +87,13 @@ const canonicalBoolean = (fields: Record<string, unknown> | undefined, key: stri
 };
 
 const savedCanonicalFields = [
+  ['state', 'State'], ['lga', 'Local Government Area'], ['area', 'Area'], ['projectPin', 'Map pin'],
+  ['headline', 'Listing headline'], ['description', 'Listing description'], ['otherAmenity', 'Other amenity'], ['listingKind', 'Listing kind'],
+  ['advertiserDisplay', 'Advertiser display'], ['propertyLiveVideo', 'Live video available'],
   ['gatedEstate', 'Gated estate'], ['estateName', 'Estate name'], ['streetAddress', 'Street address'],
   ['houseNumber', 'House number'], ['unitOrFlatNumber', 'Unit or flat number'],
   ['estateAccessStreet', 'Estate access street'], ['estateInternalStreet', 'Estate internal street'],
-  ['estateHouseUnitNumber', 'Estate house or unit number'], ['commercialFrontage', 'Commercial frontage'],
+  ['estateHouseUnitNumber', 'Estate house or unit number'], ['accessRoadConditions', 'Access road conditions'], ['commercialFrontage', 'Commercial frontage'],
   ['commercialFloorsOrUnits', 'Commercial floors or units'], ['loadingVehicleAccess', 'Loading vehicle access'],
   ['loadingVehicleAccessType', 'Loading access type'], ['liftCount', 'Lift count'], ['fitOut', 'Fit-out'],
 ] as const;
@@ -99,23 +106,15 @@ const savedCanonicalValue = (fields: Record<string, unknown>, key: string): stri
   if (value === true) return 'True (explicit)';
   if (value === 0) return '0 (explicit)';
   if (value === '') return 'Empty string (explicit)';
+  if (key === 'projectPin' && value && typeof value === 'object') {
+    const pin = value as { lat?: unknown; lng?: unknown };
+    return `${String(pin.lat ?? '—')}, ${String(pin.lng ?? '—')}`;
+  }
+  if (Array.isArray(value)) return value.map(String).join(', ') || 'Empty array (explicit)';
   return typeof value === 'string' || typeof value === 'number' ? String(value) : 'Returned value';
 };
 
 // An empty control is unanswered. Zero and false are explicit answers, never defaults.
-const changedCanonicalValue = (
-  patch: Record<string, unknown>,
-  original: Record<string, unknown> | undefined,
-  key: string,
-  value: string,
-  kind: 'text' | 'number' | 'boolean' = 'text',
-): void => {
-  if (value.trim() === '') return;
-  if (value === original?.[key]) return;
-  const next = kind === 'number' ? Number(value) : kind === 'boolean' ? value === 'true' : value.trim();
-  if (next !== original?.[key]) patch[key] = next;
-};
-
 const validate = (data: CreatePropertyPayload & { status?: string }, mode: 'create' | 'edit', hadPaymentTypes: boolean): Record<string, string> => {
   const errs: Record<string, string> = {};
   if (mode === 'create' && !data.title.trim()) errs.title = 'Title is required';
@@ -181,7 +180,13 @@ const PropertyForm = ({
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const initialProject = initialData?.project;
   const initialProjectId = searchParams.get('projectId') ?? initialProject?._id ?? '';
-  const [title, setTitle] = useState(initialData?.title ?? '');
+  const initialCanonical = initialData?.canonicalFields;
+  const initialFormTitle = typeof initialCanonical?.headline === 'string' ? initialCanonical.headline : initialData?.title ?? '';
+  const initialFormDescription = typeof initialCanonical?.description === 'string' ? initialCanonical.description : initialData?.description ?? '';
+  const initialPin = initialCanonical?.projectPin && typeof initialCanonical.projectPin === 'object'
+    ? initialCanonical.projectPin as { lat?: unknown; lng?: unknown }
+    : undefined;
+  const [title, setTitle] = useState(initialFormTitle);
   const [price, setPrice] = useState(initialData?.price?.toString() ?? '');
   const [location, setLocation] = useState(initialData?.location ?? '');
   const [propertyType, setPropertyType] = useState(initialData?.propertyType ?? 'apartment');
@@ -190,17 +195,25 @@ const PropertyForm = ({
   const [squareFeet, setSquareFeet] = useState(initialData?.squareFeet?.toString() ?? '');
   const [structuredFacts, setStructuredFacts] = useState<StructuredPropertyFacts>(() => sellerStructuredFacts(initialData?.structuredFacts ?? {}));
   const [structuredFactsTouched, setStructuredFactsTouched] = useState(false);
-  const [description, setDescription] = useState(initialData?.description ?? '');
+  const [description, setDescription] = useState(initialFormDescription);
   const [category, setCategory] = useState(initialData?.category ?? (mode === 'create' ? 'residential' : ''));
   const [completionStage, setCompletionStage] = useState(initialData?.completionStage ?? (mode === 'create' ? 'finished' : ''));
   const [currency, setCurrency] = useState(initialData?.currency ?? (mode === 'create' ? 'NGN' : ''));
-  const [coordinatesLat, setCoordinatesLat] = useState(initialData?.coordinates?.lat?.toString() ?? '');
-  const [coordinatesLng, setCoordinatesLng] = useState(initialData?.coordinates?.lng?.toString() ?? '');
+  const [coordinatesLat, setCoordinatesLat] = useState((typeof initialPin?.lat === 'number' ? initialPin.lat : initialData?.coordinates?.lat)?.toString() ?? '');
+  const [coordinatesLng, setCoordinatesLng] = useState((typeof initialPin?.lng === 'number' ? initialPin.lng : initialData?.coordinates?.lng)?.toString() ?? '');
   const [priceChangeReason, setPriceChangeReason] = useState('');
   const [amenities, setAmenities] = useState<string[]>(initialData?.amenities ?? []);
   const [amenityInput, setAmenityInput] = useState('');
   const [media, setMedia] = useState<MediaItem[]>(initialData?.media ?? []);
-  const initialCanonical = initialData?.canonicalFields;
+  const [canonicalState, setCanonicalState] = useState(() => canonicalText(initialCanonical, 'state'));
+  const [canonicalLga, setCanonicalLga] = useState(() => canonicalText(initialCanonical, 'lga'));
+  const [canonicalArea, setCanonicalArea] = useState(() => canonicalText(initialCanonical, 'area'));
+  const [accessRoadConditions, setAccessRoadConditions] = useState<string[]>(() => Array.isArray(initialCanonical?.accessRoadConditions) ? initialCanonical.accessRoadConditions.filter((item): item is string => typeof item === 'string') : []);
+  const [accessRoadTouched, setAccessRoadTouched] = useState(false);
+  const [listingKind, setListingKind] = useState(() => canonicalText(initialCanonical, 'listingKind'));
+  const [advertiserDisplay, setAdvertiserDisplay] = useState(() => canonicalText(initialCanonical, 'advertiserDisplay'));
+  const [propertyLiveVideo, setPropertyLiveVideo] = useState(() => canonicalBoolean(initialCanonical, 'propertyLiveVideo'));
+  const [otherAmenity, setOtherAmenity] = useState(() => canonicalText(initialCanonical, 'otherAmenity'));
   const [gatedEstate, setGatedEstate] = useState(() => canonicalBoolean(initialCanonical, 'gatedEstate'));
   const [estateName, setEstateName] = useState(() => canonicalText(initialCanonical, 'estateName'));
   const [streetAddress, setStreetAddress] = useState(() => canonicalText(initialCanonical, 'streetAddress'));
@@ -264,6 +277,24 @@ const PropertyForm = ({
   const initialPrice = Number(initialData?.price ?? 0);
   const priceChanged = mode === 'edit' && Number.isFinite(parsedPrice) && initialPrice > 0 && parsedPrice !== initialPrice;
   const isCommercial = category === 'commercial' || propertyType === 'commercial';
+  const incompleteCanonicalIntake = [
+    !title.trim() && 'headline',
+    !description.trim() && 'description',
+    !canonicalState.trim() && 'state',
+    !canonicalLga.trim() && 'Local Government Area',
+    !canonicalArea.trim() && 'area',
+    (!coordinatesLat.trim() || !coordinatesLng.trim()) && 'map pin',
+    !accessRoadConditions.length && 'access road conditions',
+    !listingKind && 'listing kind',
+    gatedEstate === '' && 'gated-estate selection',
+    gatedEstate === 'true' && !estateName.trim() && 'estate name',
+    gatedEstate === 'true' && !estateAccessStreet.trim() && 'estate access street',
+    gatedEstate === 'true' && !estateHouseUnitNumber.trim() && 'estate house/unit number',
+    gatedEstate === 'false' && !streetAddress.trim() && 'street address',
+    gatedEstate === 'false' && !houseNumber.trim() && 'house number',
+    isCommercial && loadingVehicleAccess === 'true' && !loadingVehicleAccessType.trim() && 'loading access type',
+    !media.length && 'property photos',
+  ].filter((item): item is string => Boolean(item));
 
   useEffect(() => {
     setProjectsLoading(true);
@@ -312,55 +343,90 @@ const PropertyForm = ({
       return;
     }
 
-    const canonicalInputs: Array<[string, string, 'text' | 'number' | 'boolean']> = [
-      ['gatedEstate', gatedEstate, 'boolean'],
-      ['unitOrFlatNumber', unitOrFlatNumber, 'text'],
-      ...(gatedEstate === 'true' ? [
-        ['estateName', estateName, 'text'],
-        ['estateAccessStreet', estateAccessStreet, 'text'],
-        ['estateInternalStreet', estateInternalStreet, 'text'],
-        ['estateHouseUnitNumber', estateHouseUnitNumber, 'text'],
-      ] : gatedEstate === 'false' ? [
-        ['streetAddress', streetAddress, 'text'],
-        ['houseNumber', houseNumber, 'text'],
-      ] : []) as Array<[string, string, 'text' | 'number' | 'boolean']>,
-      ...(isCommercial ? [
-        ['commercialFrontage', commercialFrontage, 'number'],
-        ['commercialFloorsOrUnits', commercialFloorsOrUnits, 'number'],
-        ['loadingVehicleAccess', loadingVehicleAccess, 'boolean'],
-        ...(loadingVehicleAccess === 'true' ? [['loadingVehicleAccessType', loadingVehicleAccessType, 'text']] : []),
-        ['liftCount', liftCount, 'number'],
-        ['fitOut', fitOut, 'text'],
-      ] : []) as Array<[string, string, 'text' | 'number' | 'boolean']>,
-    ];
+    const canonicalInputs: Record<string, string> = {
+      headline: title,
+      description,
+      otherAmenity,
+      state: canonicalState,
+      lga: canonicalLga,
+      area: canonicalArea,
+      gatedEstate,
+      unitOrFlatNumber,
+      listingKind,
+      advertiserDisplay,
+      propertyLiveVideo,
+      ...(gatedEstate === 'true' ? {
+        estateName,
+        estateAccessStreet,
+        estateInternalStreet,
+        estateHouseUnitNumber,
+      } : gatedEstate === 'false' ? {
+        streetAddress,
+        houseNumber,
+      } : {}),
+      ...(isCommercial ? {
+        commercialFrontage,
+        commercialFloorsOrUnits,
+        loadingVehicleAccess,
+        ...(loadingVehicleAccess === 'true' ? { loadingVehicleAccessType } : {}),
+        liftCount,
+        fitOut,
+      } : {}),
+    };
+    if (mode === 'edit' && !Object.prototype.hasOwnProperty.call(initialCanonical ?? {}, 'headline') && title === (initialData?.title ?? '')) delete canonicalInputs.headline;
+    if (mode === 'edit' && !Object.prototype.hasOwnProperty.call(initialCanonical ?? {}, 'description') && description === (initialData?.description ?? '')) delete canonicalInputs.description;
     const canonicalErrors: Record<string, string> = {};
-    const canonicalFields: Record<string, unknown> = {};
-    for (const [key, value, kind] of canonicalInputs) {
+    const canonicalDraft: Record<string, unknown> = {};
+    const hasCanonicalValue = (key: string) => Object.prototype.hasOwnProperty.call(initialCanonical ?? {}, key) && initialCanonical?.[key] !== null && initialCanonical?.[key] !== '';
+    const oldEstatePathKeys = ['estateName', 'estateAccessStreet', 'estateInternalStreet', 'estateHouseUnitNumber'];
+    const oldStandardPathKeys = ['streetAddress', 'houseNumber'];
+    if (mode === 'edit' && initialCanonical?.gatedEstate !== undefined && gatedEstate !== '' && initialCanonical.gatedEstate !== (gatedEstate === 'true')) {
+      const fieldsToClear = gatedEstate === 'true' ? oldStandardPathKeys : oldEstatePathKeys;
+      if (fieldsToClear.some(hasCanonicalValue)) canonicalErrors.gatedEstate = 'Changing the address path would leave saved values in the other path. No reset operation is documented for those fields.';
+    }
+    if (mode === 'edit' && loadingVehicleAccess === 'false' && hasCanonicalValue('loadingVehicleAccessType')) {
+      canonicalErrors.loadingVehicleAccess = 'The saved loading access type cannot be cleared because no reset operation is documented.';
+    }
+    for (const [key, value] of Object.entries(canonicalInputs)) {
       if (value.trim() === '' && initialCanonical?.[key] !== undefined && initialCanonical[key] !== null && initialCanonical[key] !== '') {
         canonicalErrors[key] = 'Clearing this saved value requires a documented reset operation.';
-      } else if (kind === 'number' && value.trim() !== '' && (!Number.isFinite(Number(value)) || Number(value) < 0 ||
-        ((key === 'commercialFloorsOrUnits' || key === 'liftCount') && !Number.isInteger(Number(value))))) {
-        canonicalErrors[key] = 'Enter a non-negative' + (key === 'commercialFrontage' ? ' number.' : ' whole number.');
-      } else {
-        changedCanonicalValue(canonicalFields, initialCanonical, key, value, kind);
+        continue;
       }
+      if (value.trim() === '') continue;
+      const definition = getCanonicalField(key);
+      const parsed = definition ? parseCanonicalInput(definition, value) : null;
+      if (!parsed || !parsed.ok) canonicalErrors[key] = parsed && !parsed.ok ? parsed.error : 'This canonical field is not configured for editing.';
+      else canonicalDraft[key] = parsed.value;
+    }
+    if (accessRoadTouched) {
+      const definition = getCanonicalField('accessRoadConditions');
+      if (!accessRoadConditions.length) canonicalErrors.accessRoadConditions = 'Choose at least one access road condition. Clearing the last saved condition requires a reset operation that is not documented.';
+      else if (!definition?.options || accessRoadConditions.some((item) => !definition.options?.includes(item))) canonicalErrors.accessRoadConditions = 'Choose only documented access road conditions.';
+      else canonicalDraft.accessRoadConditions = [...accessRoadConditions];
+    }
+    if (Boolean(coordinatesLat.trim()) !== Boolean(coordinatesLng.trim())) canonicalErrors.projectPin = 'Enter both coordinates to set a map pin.';
+    const hasSavedPin = hasCanonicalValue('projectPin') || Boolean(initialData?.coordinates);
+    if (mode === 'edit' && hasSavedPin && !coordinatesLat.trim() && !coordinatesLng.trim()) canonicalErrors.projectPin = 'The saved map pin cannot be cleared because no reset operation is documented.';
+    if (coordinatesLat.trim() !== '' && coordinatesLng.trim() !== '') {
+      canonicalDraft.projectPin = { lat: Number(coordinatesLat), lng: Number(coordinatesLng) };
     }
     if (Object.keys(canonicalErrors).length) {
       setErrors(canonicalErrors);
       return;
     }
+    const canonicalFields = serializeCanonicalChanges(initialCanonical, canonicalDraft);
 
     const latProvided = coordinatesLat.trim() !== '';
     const lngProvided = coordinatesLng.trim() !== '';
     const basePayload: CreatePropertyPayload & { status?: string } = {
-      title: title.trim(),
+      title: mode === 'edit' && title === initialFormTitle ? initialData?.title ?? title.trim() : title.trim(),
       price: Number(price),
       paymentTypes: normalizePaymentTypesForForm(parsedPrice, paymentTypes),
       location: location.trim(),
       propertyType,
       ...(squareFeet.trim() === '' ? {} : { squareFeet: Number(squareFeet) }),
       ...(mode === 'create' || structuredFactsTouched ? { structuredFacts: sellerStructuredFacts(structuredFacts) } : {}),
-      description: description.trim(),
+      description: mode === 'edit' && description === initialFormDescription ? initialData?.description ?? description.trim() : description.trim(),
       amenities,
       media,
       ...(category ? { category } : {}),
@@ -731,6 +797,26 @@ const PropertyForm = ({
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
+            <label htmlFor="canonical-state" className={labelClass}>Canonical state</label>
+            <input id="canonical-state" value={canonicalState} onChange={(event) => setCanonicalState(event.target.value)} className={inputClass} placeholder="Validated against approved location data" />
+            {errors.state && <p className={errorClass}>{errors.state}</p>}
+          </div>
+          <div>
+            <label htmlFor="canonical-lga" className={labelClass}>Canonical Local Government Area</label>
+            <input id="canonical-lga" value={canonicalLga} onChange={(event) => setCanonicalLga(event.target.value)} className={inputClass} placeholder="Must belong to the selected state" />
+            {errors.lga && <p className={errorClass}>{errors.lga}</p>}
+          </div>
+          <div>
+            <label htmlFor="canonical-area" className={labelClass}>Canonical area</label>
+            <input id="canonical-area" value={canonicalArea} onChange={(event) => setCanonicalArea(event.target.value)} className={inputClass} placeholder="Must belong to the selected LGA" />
+            {errors.area && <p className={errorClass}>{errors.area}</p>}
+          </div>
+          <div>
+            <label htmlFor="canonical-other-amenity" className={labelClass}>Other amenity <span className="normal-case tracking-normal">(optional)</span></label>
+            <input id="canonical-other-amenity" value={otherAmenity} onChange={(event) => setOtherAmenity(event.target.value)} className={inputClass} />
+            {errors.otherAmenity && <p className={errorClass}>{errors.otherAmenity}</p>}
+          </div>
+          <div>
             <label className={labelClass}>Gated estate</label>
             <select aria-label="Gated estate" value={gatedEstate} onChange={(e) => setGatedEstate(e.target.value)} className={inputClass}>
               <option value="">Unanswered</option><option value="true">Yes</option><option value="false">No</option>
@@ -775,11 +861,24 @@ const PropertyForm = ({
             <input value={unitOrFlatNumber} onChange={(e) => setUnitOrFlatNumber(e.target.value)} className={inputClass} />
             {errors.unitOrFlatNumber && <p className={errorClass}>{errors.unitOrFlatNumber}</p>}
           </div>
+          <fieldset className="md:col-span-2">
+            <legend className={labelClass}>Access road conditions <span className="normal-case tracking-normal">(select every applicable condition)</span></legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {accessRoadOptions.map((option) => <label key={option} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={accessRoadConditions.includes(option)} onChange={(event) => { setAccessRoadTouched(true); setAccessRoadConditions((current) => event.target.checked ? [...current, option] : current.filter((item) => item !== option)); }} />{option}</label>)}
+            </div>
+            {errors.accessRoadConditions && <p className={errorClass}>{errors.accessRoadConditions}</p>}
+            {!accessRoadConditions.length ? <p className="mt-1 text-xs text-secondary">No condition selected yet. The dictionary requires at least one for complete intake.</p> : null}
+          </fieldset>
         </div>
         {gatedEstate === 'true' && (!estateName.trim() || !estateAccessStreet.trim() || !estateHouseUnitNumber.trim()) ?
           <p className="text-xs text-amber-800">The estate address is incomplete for publication. The server decides draft acceptance and readiness.</p> : null}
         {gatedEstate === 'false' && (!streetAddress.trim() || !houseNumber.trim()) ?
           <p className="text-xs text-amber-800">The street address is incomplete for publication. The server decides draft acceptance and readiness.</p> : null}
+        <p role="status" className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+          {incompleteCanonicalIntake.length
+            ? `Visible canonical intake fields still to complete: ${incompleteCanonicalIntake.join(', ')}. Draft acceptance and publication readiness remain server-authoritative.`
+            : 'The visible canonical intake fields are populated. The server remains authoritative for draft acceptance and publication readiness.'}
+        </p>
         {mode === 'edit' ? <details className="rounded-lg bg-surface-container-low p-3 text-xs text-secondary">
           <summary className="cursor-pointer font-bold">Saved property values and source</summary>
           {initialCanonical ? <>
@@ -806,6 +905,27 @@ const PropertyForm = ({
           Project and listing mode
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div>
+            <label htmlFor="canonical-listing-kind" className={labelClass}>Canonical listing kind</label>
+            <select id="canonical-listing-kind" value={listingKind} onChange={(event) => setListingKind(event.target.value)} className={inputClass}>
+              <option value="">Not specified</option>{listingKindOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+            {errors.listingKind && <p className={errorClass}>{errors.listingKind}</p>}
+          </div>
+          <div>
+            <label htmlFor="canonical-advertiser-display" className={labelClass}>Advertiser display preference</label>
+            <select id="canonical-advertiser-display" value={advertiserDisplay} onChange={(event) => setAdvertiserDisplay(event.target.value)} className={inputClass}>
+              <option value="">No preference supplied</option>{advertiserDisplayOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+            {errors.advertiserDisplay && <p className={errorClass}>{errors.advertiserDisplay}</p>}
+          </div>
+          <div>
+            <label htmlFor="canonical-live-video" className={labelClass}>Live video available</label>
+            <select id="canonical-live-video" value={propertyLiveVideo} onChange={(event) => setPropertyLiveVideo(event.target.value)} className={inputClass}>
+              <option value="">Not specified</option><option value="true">Yes</option><option value="false">No</option>
+            </select>
+            {errors.propertyLiveVideo && <p className={errorClass}>{errors.propertyLiveVideo}</p>}
+          </div>
           <div>
             <label htmlFor="property-listing-type" className={labelClass}>Listing type</label>
             <select id="property-listing-type" value={listingType} onChange={(event) => { setListingType(event.target.value as ListingType | ''); setOffPlanTouched(true); }} className={inputClass}>

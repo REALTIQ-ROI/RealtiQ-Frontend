@@ -102,4 +102,14 @@ describe('PropertyForm payment types', () => {
     expect(onSubmit).toHaveBeenCalled();
     expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('canonicalFields');
   });
+
+  it('shows canonical headline/description without rewriting different legacy values on an unrelated edit', async () => {
+    const onSubmit = vi.fn(async (payload: CreatePropertyPayload) => { void payload; return undefined; });
+    render(<PropertyForm mode="edit" initialData={{ ...initialData, title: 'Legacy title', description: 'Legacy description', canonicalFields: { headline: 'Canonical headline', description: 'Canonical description' } }} onSubmit={onSubmit} />);
+    expect(screen.getByDisplayValue('Canonical headline')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Canonical description')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Save Property' }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ title: 'Legacy title', description: 'Legacy description' }));
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('canonicalFields');
+  });
 });

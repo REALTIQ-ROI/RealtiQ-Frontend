@@ -87,4 +87,16 @@ describe('canonical catalogue URL', () => {
     expect(next.get('state')).toBe('lagos');
     expect(next.has('page')).toBe(false);
   });
+
+  it('serializes canonical numeric zero and explicit false filters without retaining conflicting aliases', () => {
+    const base = new URLSearchParams('toilets=2&min_beds=1&state=lagos&page=4');
+    const next = writeCatalogueQuery({ powderRooms: 0, minBedrooms: 0, allBedroomsEnSuite: false }, { base, resetPage: true });
+    expect(next.get('powderRooms')).toBe('0');
+    expect(next.has('toilets')).toBe(false);
+    expect(next.get('minBedrooms')).toBe('0');
+    expect(next.has('min_beds')).toBe(false);
+    expect(next.get('allBedroomsEnSuite')).toBe('false');
+    expect(next.get('state')).toBe('lagos');
+    expect(next.has('page')).toBe(false);
+  });
 });

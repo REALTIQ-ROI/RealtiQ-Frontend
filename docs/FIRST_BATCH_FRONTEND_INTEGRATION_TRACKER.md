@@ -199,3 +199,45 @@ Audit scope: [chapter 02](backend-api-handoff/02-properties-projects-units.md) w
 ### PASS 02 verdict
 
 **PARTIAL.** Property creation/editing now recovers through exact bound step-up; owner listing archive is version-bound and step-up protected; project draft editing and canonical intake fields are connected; existing project publication, child-unit workflow and durable grid actions remain available; staff project status/featured actions now use documented TOTP challenges. Full canonical applicability/readiness/provenance, project media edits, project archive request DTO, direct unit-type CRUD and the remainder of canonical grid fields remain partial or blocked for the exact reasons in the operation table.
+
+## PASS 03 — CANONICAL FIELD DICTIONARY
+
+### Initial and final coverage
+
+The pass started with canonical input scattered across property/project forms, search filters and nine unit-grid edit fields; there was no shared typed registry. Property and project controls were PARTIAL, unit canonical editing was PARTIAL, canonical search was PARTIAL, public canonical projection was PARTIAL, the runtime field-dictionary reader was NOT IMPLEMENTED, and unit-type CRUD was NOT IMPLEMENTED pending its request/response DTOs.
+
+The field-by-field review covers all 156 source keys in [the Pass 03 coverage matrix](CANONICAL_FIELD_COVERAGE_PASS03.md). Final counts: 2 COMPLETE, 59 PARTIAL, 81 BLOCKED BY CONTRACT, 1 BLOCKED BY CONFIGURATION, 13 NOT APPLICABLE, 0 NOT STARTED. Workflow/system-owned fields are excluded from ordinary canonical writes. The two COMPLETE entries are the unit availability state workflow and project publication action workflow; they use their dedicated endpoints rather than generic field mutation.
+
+| Operation | Initial | Final | UI and implementation | Remaining dependency |
+|---|---|---|---|---|
+| Shared canonical registry, parser and changed-only serializer | PARTIAL | PARTIAL | `src/utils/canonicalFieldRegistry.ts`; typed applicability, enums, number/date/month checks, missing/null/value inspection and omission-preserving serialization. | Registry covers the safe supported subset, not all 156 fields. `GET /api/properties/field-dictionary` has no response DTO/schema. |
+| Property canonical form | PARTIAL | PARTIAL | `src/components/property/PropertyForm.tsx` adds canonical listing/address/amenity/display controls, approved-value guidance, array selection, explicit false/zero preservation, changed-only fields and server field-error mapping. Existing owner step-up and draft flow remain. | Full gazetteer selectors and canonical response/provenance DTO are absent. No generic reset contract exists for property/project address values; unsafe clearing is blocked. |
+| Project canonical form | PARTIAL | PARTIAL | `src/components/project/ProjectForm.tsx` adds canonical launch date, approximate unit count, service status, payment options, conditional instalment terms, fee payer, appointment/video availability and explicit gated-estate/access-road handling. Draft/readiness feedback remains server-authoritative. | Mortgage Accepted remains disabled without the active Mortgage Partner gate. Money/None, payment templates, full readiness projection and generic reset contracts remain incomplete. |
+| Unit field display/edit/reset | PARTIAL | PARTIAL | `src/components/project/UnitGridPanel.tsx` uses shared typed fields for canonical edits, inherited reset, explicit zero/false, effective values, raw overrides and supplied provenance; conditional terrace/loading validation is applied. | Project/type defaults, many structured fields and full public effective projections remain incomplete. |
+| Unit-type field CRUD | NOT IMPLEMENTED | BLOCKED BY CONTRACT | Project unit grid remains usable for documented unit-level edits and same-project moves. No invented type form was added. | Chapter 02 does not define list/create/update/delete/impact request and response DTOs for unit types. |
+| Canonical search controls and URL serialization | PARTIAL | PARTIAL | `src/components/property/PropertyFiltersPanel.tsx` adds state/LGA/area/estate criteria, documented numeric ranges and true/false all-en-suite; existing URL patcher preserves repeated/unrelated values and resets page intentionally. | Runtime gazetteer/Console catalogue values and the remaining documented filter/facet UI are not complete. |
+| Public canonical detail projection and provenance | PARTIAL | PARTIAL | Existing public-safe property/project detail projections remain; no raw `canonicalFields` object is sent to public views. | The public effective-field DTO and field-level source/provenance contract are absent. |
+| Runtime dictionary endpoint | NOT IMPLEMENTED | BLOCKED BY CONTRACT | Static source-derived registry is used without guessing a runtime response shape. | The endpoint is mounted, but the handoff does not define its response DTO/schema or returned field metadata. |
+| Canonical media, private evidence and specialized values | PARTIAL | BLOCKED BY CONTRACT | Existing media and verification workflows remain available through their dedicated paths; generic canonical editing does not handle private bytes or system values. | Per-item media entitlement/write DTOs, evidence binding, complex list/payment/milestone value shapes and POA/reset mutation details remain incomplete; multipart step-up stays disabled. |
+
+### Files changed in Pass 03
+
+- `src/utils/canonicalFieldRegistry.ts` and `src/utils/canonicalFieldRegistry.test.ts`
+- `src/components/property/PropertyForm.tsx`, `src/components/property/PropertyForm.paymentTypes.test.tsx`, `src/components/property/PropertyFiltersPanel.tsx`
+- `src/components/project/ProjectForm.tsx`, `src/components/project/ProjectForm.canonical.test.tsx`
+- `src/components/project/UnitGridPanel.tsx`, `src/components/project/UnitGridPanel.test.tsx`
+- `src/utils/catalogueQuery.ts`, `src/utils/catalogueQuery.test.ts`
+- `docs/CANONICAL_FIELD_COVERAGE_PASS03.md`
+- `docs/FIRST_BATCH_FRONTEND_INTEGRATION_TRACKER.md`
+
+### PASS 03 focused verification
+
+- `npx tsc --noEmit -p tsconfig.app.json`: passed after the final source edits.
+- The final focused Vitest run executed 33 assertions across 5 files successfully. The process exited 1 because this Windows environment reports `EPERM lstat C:\Users\DELL`, unresolved `esbuild`, and missing `jsdom` during runner setup; the five focused files nevertheless completed with all 33 assertions passing.
+- ESLint on all edited TS/TSX files: passed after removing one unused test parameter.
+- `git diff --check`: passed; Git emitted only line-ending normalization notices.
+- No broad build, full suite, live backend, or runtime dictionary response was tested.
+
+### PASS 03 verdict
+
+**PARTIAL.** The shared field utilities and supported property/project/unit/search controls are wired, with focused tests for scalar semantics, forms, grid mutation and URL criteria. Chapter 03 cannot be COMPLETE while 81 fields require missing/specialized contracts, one field is configuration-gated, 59 remain partial across applicable contexts and the runtime dictionary/public effective-field schemas are undefined.
