@@ -104,6 +104,7 @@ import AdminWallet from '../pages/dashboard/Admin/AdminWallet';
 import AdminEscrowDisputes from '../pages/dashboard/Admin/AdminEscrowDisputes';
 import AdminEscrowDisputeDetails from '../pages/dashboard/Admin/AdminEscrowDisputeDetails';
 import KycManagement from '../pages/dashboard/Admin/KycManagement';
+import AdminDataProtectionExecution from '../pages/dashboard/Admin/AdminDataProtectionExecution';
 import EscrowList from '../pages/dashboard/Escrow/EscrowList';
 import EscrowDetails from '../pages/dashboard/Escrow/EscrowDetails';
 import CreateEscrow from '../pages/dashboard/Escrow/CreateEscrow';
@@ -317,6 +318,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/landlord-details" element={<LandlordDetails />} />
           <Route path="/dashboard/admin/landlord-details/:id" element={<LandlordDetails />} />
           <Route path="/dashboard/admin/kyc" element={<KycManagement />} />
+          <Route path="/dashboard/admin/data-protection-execution" element={<AdminDataProtectionExecution />} />
           <Route path="/dashboard/admin/title-verifications" element={<TitleVerificationReview />} />
           <Route path="/admin/kyc" element={<KycManagement />} />
           <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />

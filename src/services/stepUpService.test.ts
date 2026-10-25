@@ -18,7 +18,8 @@ describe('bound JSON step-up', () => {
 
   it('sends an exact empty JSON body and one-use challenge header for undo', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { operation: { state: 'undone' } } });
-    await stepUpService.undoUnitGridOperation('p', 'o', 'challenge');
-    expect(api.post).toHaveBeenCalledWith('/projects/p/unit-grid/operations/o/undo', {}, { headers: { 'X-Step-Up-Challenge': 'challenge' } });
+    const body: Record<string, never> = {};
+    await stepUpService.undoUnitGridOperation('p', 'o', 'challenge', body);
+    expect(api.post).toHaveBeenCalledWith('/projects/p/unit-grid/operations/o/undo', body, { headers: { 'X-Step-Up-Challenge': 'challenge' } });
   });
 });

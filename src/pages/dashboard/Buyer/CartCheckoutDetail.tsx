@@ -11,7 +11,7 @@ const statusMessage = (status?: CartCheckoutStatus) => {
   if (status === 'completed') return 'Payment received and all services are active.';
   if (status === 'allocation_processing') return 'Payment received; services are being activated.';
   if (status === 'partially_failed') return 'Payment succeeded, but one or more services are still being activated. No additional payment is required.';
-  if (status === 'failed') return 'Payment succeeded, but service activation needs support review. No additional payment is required.';
+  if (status === 'failed') return 'The checkout failed. Confirm payment and allocation state from the returned records before starting another payment.';
   if (status === 'paid') return 'Payment has been confirmed and allocation is queued.';
   return 'Your latest checkout status is shown here.';
 };

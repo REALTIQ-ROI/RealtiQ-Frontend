@@ -48,7 +48,9 @@ const ScopedDataProtectionRequests = () => {
   const [execution, setExecution] = useState<DataProtectionExecution | null>(null);
   const [executionLoading, setExecutionLoading] = useState(false);
   const [executionError, setExecutionError] = useState<string | null>(null);
+  const [executionPollTick, setExecutionPollTick] = useState(0);
   const selectedId = useRef<string | null>(null);
+  const executionPollCount = useRef(0);
 
   const load = async (before?: string) => {
     setLoading(true);
@@ -86,6 +88,8 @@ const ScopedDataProtectionRequests = () => {
   };
 
   const loadExecution = async (id: string) => {
+    executionPollCount.current = 0;
+    setExecutionPollTick((tick) => tick + 1);
     setExecutionLoading(true);
     setExecutionError(null);
     try {
@@ -98,17 +102,18 @@ const ScopedDataProtectionRequests = () => {
     }
   };
 
-  const executionJobState = execution?.job?.state;
+  const executionJobState = execution?.job?.state ?? execution?.state;
   const activeRequestId = selected?.id;
   useEffect(() => {
-    if (!activeRequestId || !executionJobState || !['queued', 'processing'].includes(executionJobState)) return;
+    if (!activeRequestId || !executionJobState || !['queued', 'processing', 'waiting_for_policy'].includes(executionJobState) || executionPollCount.current >= 12) return;
     const id = activeRequestId;
-    const timer = window.setInterval(() => {
-      void dataProtectionService.execution(id).then((result) => { if (selectedId.current === id) setExecution(result); })
+    const timer = window.setTimeout(() => {
+      executionPollCount.current += 1;
+      void dataProtectionService.execution(id).then((result) => { if (selectedId.current === id) { setExecution(result); setExecutionPollTick((tick) => tick + 1); } })
         .catch((raw: unknown) => { if (selectedId.current === id) setExecutionError(raw instanceof Error ? raw.message : 'Unable to refresh execution progress.'); });
     }, 10000);
-    return () => window.clearInterval(timer);
-  }, [activeRequestId, executionJobState]);
+    return () => window.clearTimeout(timer);
+  }, [activeRequestId, executionJobState, executionPollTick]);
 
   const open = async (id: string) => {
     selectedId.current = id;
@@ -204,13 +209,14 @@ const ScopedDataProtectionRequests = () => {
             {executionError ? <p role="alert" className="mt-2 text-red-700">{executionError}</p> : null}
             {executionLoading ? <p className="mt-2 text-secondary">Loading execution status…</p> : null}
             {!executionLoading && !executionError ? execution ? <div className="mt-2 space-y-3 rounded-lg bg-surface-container-low p-3">
-              <p className="font-bold capitalize">{readable(execution.state)} · Version {execution.version}</p>
-              {execution.job ? <div><p className="font-semibold capitalize">Job {readable(execution.job.state)} · {execution.job.attempts} attempts</p><p className="mt-1 text-xs text-secondary">{execution.job.progress.discovered} discovered · {execution.job.progress.completed} completed · {execution.job.progress.preserved} preserved · {execution.job.progress.blocked} blocked · {execution.job.progress.processing} processing</p>{execution.job.lastErrorCode ? <p className="mt-1 text-xs text-error">Last error: {execution.job.lastErrorCode}</p> : null}</div> : <p className="text-xs text-secondary">No execution job returned.</p>}
-              {execution.deletion ? <div><h5 className="font-bold">Deletion outcome groups</h5><p className="mt-1 text-xs text-secondary">{execution.deletion.counts.completed} completed · {execution.deletion.counts.preserved} preserved · {execution.deletion.counts.blocked} blocked · {execution.deletion.counts.held} held · {execution.deletion.counts.eligible} eligible · {execution.deletion.counts.processing} processing</p><div className="mt-2 space-y-2">{execution.deletion.outcomes.map((outcome, index) => <div key={`${outcome.recordKind}:${outcome.category}:${outcome.state}:${outcome.reasonCode}:${index}`} className="rounded bg-white p-3 text-xs"><p className="font-bold capitalize">{readable(outcome.recordKind)} · {readable(outcome.category)} · {readable(outcome.state)} · {outcome.count} records</p><p className="mt-1 text-secondary">Reason: {outcome.reasonCode} · Proposed action: {readable(outcome.proposedAction)}</p></div>)}</div>{!execution.deletion.outcomes.length ? <p className="mt-2 text-xs text-secondary">No outcome groups returned yet.</p> : null}</div> : null}
-              {execution.export !== null ? <div><p className="font-bold">Access export status</p>{serverFields(execution.export)}</div> : null}
+              <p className="font-bold capitalize">{readable(execution.state)} · Version {execution.version} · Completed {execution.completedAt ? new Date(execution.completedAt).toLocaleString('en-NG') : 'not completed'}</p>
+              {execution.job ? <div><p className="font-semibold capitalize">Job {readable(execution.job.state)} · {execution.job.attempts} attempts</p><p className="mt-1 text-xs text-secondary">{execution.job.progress.discovered} discovered · {execution.job.progress.completed} completed · {execution.job.progress.preserved} preserved · {execution.job.progress.blocked} blocked · {execution.job.progress.processing} processing</p><p className="mt-1 text-xs text-secondary">Due {execution.job.dueAt ? new Date(execution.job.dueAt).toLocaleString('en-NG') : 'not scheduled'} · Job completed {execution.job.completedAt ? new Date(execution.job.completedAt).toLocaleString('en-NG') : 'not completed'}</p>{execution.job.lastErrorCode ? <p className="mt-1 text-xs text-error">Last error: {execution.job.lastErrorCode}</p> : null}{execution.job.resultCodes.length ? <p className="mt-1 text-xs text-secondary">Job result codes: {execution.job.resultCodes.join(', ')}</p> : null}</div> : <p className="text-xs text-secondary">No execution job returned.</p>}
+              {execution.deletion ? <div><h5 className="font-bold">Deletion outcome groups</h5><p className="mt-1 text-xs text-secondary">{execution.deletion.counts.discovered} discovered · {execution.deletion.counts.completed} completed · {execution.deletion.counts.preserved} preserved · {execution.deletion.counts.blocked} blocked · {execution.deletion.counts.held} held · {execution.deletion.counts.eligible} eligible · {execution.deletion.counts.processing} processing</p><div className="mt-2 space-y-2">{execution.deletion.outcomes.map((outcome, index) => <div key={`${outcome.recordKind}:${outcome.category}:${outcome.state}:${outcome.reasonCode}:${index}`} className="rounded bg-white p-3 text-xs"><p className="font-bold capitalize">{readable(outcome.recordKind)} · {readable(outcome.category)} · {readable(outcome.state)} · {outcome.count} records</p><p className="mt-1 text-secondary">Reason: {outcome.reasonCode} · Proposed action: {readable(outcome.proposedAction)}</p></div>)}</div>{!execution.deletion.outcomes.length ? <p className="mt-2 text-xs text-secondary">No outcome groups returned yet.</p> : null}</div> : null}
+              {execution.export !== null && execution.export !== undefined ? <div><p className="font-bold">Access export</p><p className="mt-1 text-xs text-secondary">An export record was returned. The current handoff does not define its status fields, so this screen does not infer whether it is ready or downloadable.</p></div> : <p className="text-xs text-secondary">No access export record was returned.</p>}
               {execution.resultCodes.length ? <p className="text-xs text-secondary">Result codes: {execution.resultCodes.join(', ')}</p> : null}
             </div> : <p className="mt-2 text-secondary">No execution record returned.</p> : null}
             <p className="mt-2 text-xs text-secondary">The server groups outcomes by record kind, category, state and reason; it does not return individual record IDs. Held and preserved counts reflect retention or legal-hold decisions only as returned.</p>
+            {executionJobState && ['queued', 'processing', 'waiting_for_policy'].includes(executionJobState) && executionPollCount.current >= 12 ? <p className="mt-2 text-xs text-amber-800">Automatic refresh stopped after 12 checks. Use Refresh to check the latest state.</p> : null}
           </div>
         </div>
       ) : null}

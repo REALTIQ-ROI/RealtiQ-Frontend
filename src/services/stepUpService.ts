@@ -10,8 +10,8 @@ export const stepUpService = {
     await api.post(`/auth/step-up/${encodeURIComponent(challengeId)}/verify`, { code });
   },
 
-  async undoUnitGridOperation(projectId: string, operationId: string, challengeId: string): Promise<unknown> {
-    const { data } = await api.post(`/projects/${encodeURIComponent(projectId)}/unit-grid/operations/${encodeURIComponent(operationId)}/undo`, {}, {
+  async undoUnitGridOperation(projectId: string, operationId: string, challengeId: string, body: Record<string, never>): Promise<unknown> {
+    const { data } = await api.post(`/projects/${encodeURIComponent(projectId)}/unit-grid/operations/${encodeURIComponent(operationId)}/undo`, body, {
       headers: { 'X-Step-Up-Challenge': challengeId },
     });
     return data;

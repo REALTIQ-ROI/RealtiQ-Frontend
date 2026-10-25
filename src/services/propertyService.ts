@@ -180,7 +180,6 @@ export interface CanonicalMapProperty {
   publicReference?: string;
   title?: string;
   locationPoint?: { type: 'Point'; coordinates: [number, number] };
-  coordinates?: { lat: number; lng: number } | null;
   canonicalEffectiveFields?: { askingPrice?: number | null; currency?: string };
 }
 
@@ -207,7 +206,7 @@ interface CanonicalMapCommon {
 
 export type CanonicalPropertyMapResponse =
   | (CanonicalMapCommon & { mode: 'properties'; properties: CanonicalMapProperty[]; truncated: boolean })
-  | (CanonicalMapCommon & { mode: 'clusters'; clusters: CanonicalMapCluster[]; priceAggregateState?: string });
+  | (CanonicalMapCommon & { mode: 'clusters'; clusters: CanonicalMapCluster[]; priceAggregateState?: 'configured' | 'fx_unconfigured' | string });
 
 export interface PropertyPriceHistoryItem {
   _id: string;
@@ -309,7 +308,27 @@ export const propertyService = {
 
   async getCanonicalMap(query: URLSearchParams, signal?: AbortSignal): Promise<CanonicalPropertyMapResponse> {
     const params = new URLSearchParams(query);
-    if (!params.has('queryVersion')) params.set('queryVersion', 'canonical-v1');
+    if (!params.has('mapZoom') && params.has('zoom')) params.set('mapZoom', params.get('zoom') ?? '');
+    params.delete('zoom');
+    params.set('queryVersion', 'canonical-v1');
+    params.delete('mapActive');
+    params.delete('page');
+    params.set('page', '1');
+    params.set('limit', '100');
+    const requiredBounds = ['north', 'south', 'east', 'west', 'mapZoom'];
+    for (const key of requiredBounds) {
+      const values = params.getAll(key);
+      if (new Set(values).size > 1) throw new Error(`Canonical map search has conflicting ${key} values.`);
+      if (values.length > 1) {
+        params.delete(key);
+        params.set(key, values[0]);
+      }
+    }
+    const hasCompleteBounds = requiredBounds.every((key) => {
+      const value = params.get(key);
+      return value !== null && value.trim() !== '' && Number.isFinite(Number(value));
+    });
+    if (!hasCompleteBounds) throw new Error('Canonical map search needs complete north, south, east, west and mapZoom values.');
     const { data } = await api.get<CanonicalPropertyMapResponse>('/properties/map', { params, signal });
     return data;
   },

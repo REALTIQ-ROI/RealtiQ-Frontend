@@ -33,6 +33,7 @@ export interface DataProtectionExecution {
   job: null | { state: string; dueAt: string | null; attempts: number; progress: { discovered: number; completed: number; preserved: number; blocked: number; processing: number }; resultCodes: string[]; lastErrorCode: string | null; completedAt: string | null };
   export: unknown | null;
   deletion: null | { counts: { discovered: number; completed: number; preserved: number; blocked: number; held: number; eligible: number; processing: number }; outcomes: Array<{ recordKind: string; category: string; state: string; reasonCode: string; proposedAction: string; count: number }> };
+  completionNotice?: { state: string; outcome: string; attempts: number; lastErrorCode: string | null; acceptedAt: string | null };
 }
 
 const base = '/profiles/current/data-protection-requests';
@@ -59,6 +60,11 @@ export const dataProtectionService = {
 
   async execution(id: string): Promise<DataProtectionExecution> {
     const { data } = await api.get<DataProtectionExecution>(`${base}/${encodeURIComponent(id)}/execution`);
+    return data;
+  },
+
+  async adminExecution(id: string): Promise<DataProtectionExecution> {
+    const { data } = await api.get<DataProtectionExecution>(`/admin/data-protection-requests/${encodeURIComponent(id)}/execution`);
     return data;
   },
 

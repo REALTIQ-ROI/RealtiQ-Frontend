@@ -28,13 +28,22 @@ describe('property market service endpoints', () => {
       clusters: [{ clusterId: 'a', lat: 6.5, lng: 3.4, propertyCount: 2 }], facets: { categories: {} }, sort: 'recommended', page: 1, limit: 50,
       normalization: { queryVersion: 'canonical-v1', query: {}, notices: [] } };
     vi.mocked(api.get).mockResolvedValue({ data: response });
-    const query = new URLSearchParams('state=lagos&buildStage=Newly+built&buildStage=Renovated&north=6.7&south=6.2&east=3.7&west=3.1&mapActive=true');
+    const query = new URLSearchParams('state=lagos&buildStage=Newly+built&buildStage=Renovated&north=6.7&south=6.2&east=3.7&west=3.1&mapZoom=8&mapActive=true&page=4&limit=10');
     const result = await propertyService.getCanonicalMap(query);
     const [path, options] = vi.mocked(api.get).mock.calls[0];
     expect(path).toBe('/properties/map');
     expect((options?.params as URLSearchParams).getAll('buildStage')).toEqual(['Newly built', 'Renovated']);
     expect((options?.params as URLSearchParams).get('queryVersion')).toBe('canonical-v1');
+    expect((options?.params as URLSearchParams).get('page')).toBe('1');
+    expect((options?.params as URLSearchParams).get('limit')).toBe('100');
+    expect((options?.params as URLSearchParams).has('mapActive')).toBe(false);
     expect(result).toBe(response);
+  });
+
+  it('does not issue a canonical map request without all geographic bounds and zoom', async () => {
+    await expect(propertyService.getCanonicalMap(new URLSearchParams('north=6.7&south=6.2&east=3.7&west=3.1')))
+      .rejects.toThrow('complete north, south, east, west and mapZoom');
+    expect(api.get).not.toHaveBeenCalled();
   });
 
   it('calls the viewport map endpoint with bounds and activity filters', async () => {

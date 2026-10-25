@@ -4,11 +4,12 @@ import { toast } from 'sonner';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import PropertyCard from '../../../components/property/PropertyCard';
 import Button from '../../../components/ui/Button';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { projectService, type ProjectPublicationRequest, type UnitGridJob } from '../../../services/projectService';
-import { stepUpService } from '../../../services/stepUpService';
 import { virtualTourService } from '../../../services/virtualTourService';
 import { ApiRequestError } from '../../../lib/axios';
 import type { ProjectDetail, Property, VirtualTourProvider } from '../../../types';
@@ -40,13 +41,13 @@ const ProjectManage = () => {
   const [jobError, setJobError] = useState<string | null>(null);
   const [autoRefreshJob, setAutoRefreshJob] = useState(false);
   const [publicationOpen, setPublicationOpen] = useState(false);
-  const [publicationMode, setPublicationMode] = useState<'publish_all_ready' | 'publish_selected'>('publish_all_ready');
+  const [publicationMode, setPublicationMode] = useState<'publish_all_ready' | 'publish_selected' | 'save_draft'>('publish_all_ready');
   const [publicationUnitIds, setPublicationUnitIds] = useState<string[]>([]);
-  const [publicationChallenge, setPublicationChallenge] = useState<{ challengeId: string; expiresAt: string; body: ProjectPublicationRequest } | null>(null);
-  const [publicationCode, setPublicationCode] = useState('');
   const [publicationError, setPublicationError] = useState<string | null>(null);
   const [publicationResult, setPublicationResult] = useState<ProjectDetail['publication'] | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const publicationStepUp = useBoundStepUp<{ project: ProjectDetail }>();
+  const cancelPublicationStepUp = publicationStepUp.cancel;
   const [extraUnits, setExtraUnits] = useState<Property[]>([]);
   const [nextUnitPage, setNextUnitPage] = useState(2);
   const [loadingMoreUnits, setLoadingMoreUnits] = useState(false);
@@ -73,16 +74,17 @@ const ProjectManage = () => {
     setJobError(null);
     setAutoRefreshJob(false);
     setPublicationUnitIds([]);
-    setPublicationChallenge(null);
+    cancelPublicationStepUp();
     setPublicationError(null);
     setPublicationResult(null);
-  }, [id]);
+  }, [id, cancelPublicationStepUp]);
 
   const startPublication = async () => {
     if (!project || publishing) return;
     if (publicationMode === 'publish_selected' && !publicationUnitIds.length) { setPublicationError('Select at least one loaded unit.'); return; }
     setPublishing(true);
     setPublicationError(null);
+    setPublicationResult(null);
     try {
       const { project: currentProject } = await projectService.getProjectManage(project._id);
       if (typeof currentProject.version !== 'number') {
@@ -95,32 +97,29 @@ const ProjectManage = () => {
         return;
       }
       const body: ProjectPublicationRequest = publicationMode === 'publish_selected'
-        ? { expectedVersion: currentProject.version, publicationAction: 'publish_selected', selectedUnitIds: publicationUnitIds }
-        : { expectedVersion: currentProject.version, publicationAction: 'publish_all_ready' };
-      const challenge = await stepUpService.start('PATCH', `/api/projects/${encodeURIComponent(project._id)}`, body);
-      setPublicationChallenge({ ...challenge, body });
-      setPublicationCode('');
+        ? { expectedVersion: currentProject.version, publicationAction: 'publish_selected', selectedUnitIds: [...publicationUnitIds] }
+        : { expectedVersion: currentProject.version, publicationAction: publicationMode };
+      await publicationStepUp.begin({
+        method: 'PATCH', path: `/api/projects/${encodeURIComponent(project._id)}`, body,
+        label: body.publicationAction === 'save_draft' ? 'Save this project as a draft and unpublish its units' : `Publish project units: ${body.publicationAction.replaceAll('_', ' ')}`,
+        execute: async (challengeId, exactBody) => {
+          try { return await projectService.publishProject(project._id, exactBody, challengeId); }
+          catch (raw) { await refreshProject(); throw raw; }
+        },
+      });
     } catch (raw) { setPublicationError(raw instanceof ApiRequestError && raw.code ? `${raw.message} (${raw.code})` : raw instanceof Error ? raw.message : 'Unable to start publication challenge.'); }
     finally { setPublishing(false); }
   };
 
-  const finishPublication = async () => {
-    if (!project || !publicationChallenge || publishing) return;
-    if (!/^\d{6}$/.test(publicationCode)) { setPublicationError('Enter the six-digit authenticator code.'); return; }
-    setPublishing(true);
+  const finishPublication = async (code: string): Promise<boolean> => {
     setPublicationError(null);
-    try {
-      await stepUpService.verify(publicationChallenge.challengeId, publicationCode);
-      const result = await projectService.publishProject(project._id, publicationChallenge.body, publicationChallenge.challengeId);
-      setPublicationResult(result.project.publication ?? null);
-      setPublicationChallenge(null);
-      setPublicationUnitIds([]);
-      await refreshProject();
-      toast.success('Publication action completed. Review the returned ready and blocked unit counts.');
-    } catch (raw) {
-      setPublicationError(raw instanceof ApiRequestError && raw.code ? `${raw.message} (${raw.code})` : raw instanceof Error ? raw.message : 'Unable to publish project units.');
-      if (raw instanceof ApiRequestError && raw.status === 409) { setPublicationChallenge(null); await refreshProject(); }
-    } finally { setPublishing(false); }
+    const result = await publicationStepUp.complete(code);
+    if (!result.ok) return false;
+    setPublicationResult(result.value.project.publication ?? null);
+    setPublicationUnitIds([]);
+    await refreshProject();
+    toast.success('Project publication state was updated. Review the current readiness and publication counts.');
+    return true;
   };
 
   useEffect(() => {
@@ -227,6 +226,7 @@ const ProjectManage = () => {
   };
 
   return (
+    <>
     <LandlordPortalLayout active="projects" title="Manage Project">
       <main className="p-8 lg:p-12">
         {loading ? <LoadingState label="Loading project..." /> : null}
@@ -252,10 +252,10 @@ const ProjectManage = () => {
             {publicationOpen ? <section className="rounded-xl border border-outline-variant/10 bg-white p-5" id="project-publication">
               <h2 className="text-xl font-black">Project publication</h2>
               <p className="mt-1 text-sm text-secondary">The server checks each selected unit's current readiness. Publish all ready leaves blocked units unpublished; selected publication checks every chosen unit.</p>
-              <div className="mt-4 flex flex-wrap gap-3 text-sm"><label className="flex items-center gap-2"><input type="radio" name="publication-mode" disabled={Boolean(publicationChallenge)} checked={publicationMode === 'publish_all_ready'} onChange={() => setPublicationMode('publish_all_ready')} />Publish all ready units</label><label className="flex items-center gap-2"><input type="radio" name="publication-mode" disabled={Boolean(publicationChallenge)} checked={publicationMode === 'publish_selected'} onChange={() => setPublicationMode('publish_selected')} />Publish selected units</label></div>
-              {publicationMode === 'publish_selected' ? <div className="mt-3 max-h-44 space-y-1 overflow-y-auto rounded-lg bg-surface-container-low p-3 text-xs">{units.map((unit) => <label key={unit._id} className="flex items-center gap-2"><input type="checkbox" disabled={Boolean(publicationChallenge)} checked={publicationUnitIds.includes(unit._id)} onChange={(event) => setPublicationUnitIds((current) => event.target.checked ? [...current, unit._id] : current.filter((id) => id !== unit._id))} />{unit.publicReference || unit._id} · {unit.title}</label>)}{!units.length ? <p>No loaded units available to select.</p> : null}</div> : null}
-              {!publicationChallenge ? <Button type="button" className="mt-4" disabled={publishing || typeof project.version !== 'number'} onClick={() => void startPublication()}>Start publication challenge</Button> : <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm"><p className="font-bold">Enter your authenticator code</p><p className="text-xs">Bound to {publicationChallenge.body.publicationAction.replaceAll('_', ' ')} at project version {publicationChallenge.body.expectedVersion}. Challenge expires {new Date(publicationChallenge.expiresAt).toLocaleString('en-NG')}. Keep this profile and session selected.</p><div className="mt-2 flex flex-wrap gap-2"><input aria-label="Publication authenticator code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={publicationCode} onChange={(event) => setPublicationCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="rounded-lg border border-amber-300 px-3 py-2" placeholder="6-digit code" /><Button type="button" disabled={publishing || publicationCode.length !== 6} onClick={() => void finishPublication()}>Verify and publish</Button><Button type="button" variant="secondary" onClick={() => setPublicationChallenge(null)}>Dismiss</Button></div></div>}
-              {publicationError ? <p role="alert" className="mt-3 text-sm text-error">{publicationError} A failed readiness response may omit field-level blockers; review current project and grid readiness.</p> : null}
+              <div className="mt-4 flex flex-wrap gap-3 text-sm"><label className="flex items-center gap-2"><input type="radio" name="publication-mode" disabled={Boolean(publicationStepUp.challenge)} checked={publicationMode === 'publish_all_ready'} onChange={() => setPublicationMode('publish_all_ready')} />Publish all ready units</label><label className="flex items-center gap-2"><input type="radio" name="publication-mode" disabled={Boolean(publicationStepUp.challenge)} checked={publicationMode === 'publish_selected'} onChange={() => setPublicationMode('publish_selected')} />Publish selected units</label><label className="flex items-center gap-2"><input type="radio" name="publication-mode" disabled={Boolean(publicationStepUp.challenge)} checked={publicationMode === 'save_draft'} onChange={() => setPublicationMode('save_draft')} />Save as draft / unpublish</label></div>
+              {publicationMode === 'publish_selected' ? <div className="mt-3 max-h-44 space-y-1 overflow-y-auto rounded-lg bg-surface-container-low p-3 text-xs">{units.map((unit) => <label key={unit._id} className="flex items-center gap-2"><input type="checkbox" disabled={Boolean(publicationStepUp.challenge)} checked={publicationUnitIds.includes(unit._id)} onChange={(event) => setPublicationUnitIds((current) => event.target.checked ? [...current, unit._id] : current.filter((id) => id !== unit._id))} />{unit.publicReference || unit._id} · {unit.title}</label>)}{!units.length ? <p>No loaded units available to select.</p> : null}</div> : null}
+              <Button type="button" className="mt-4" disabled={publishing || publicationStepUp.busy || Boolean(publicationStepUp.challenge) || typeof project.version !== 'number'} onClick={() => void startPublication()}>{publicationMode === 'save_draft' ? 'Start unpublish challenge' : 'Start publication challenge'}</Button>
+              {publicationError || (!publicationStepUp.challenge && publicationStepUp.error) ? <p role="alert" className="mt-3 text-sm text-error">{publicationError ?? publicationStepUp.error} Publication failures may omit field-level blockers; review returned project and grid readiness.</p> : null}
               {(publicationResult ?? project.publication) ? <div className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm"><p className="font-bold">Publication result</p><p>{(publicationResult ?? project.publication)?.publishedUnitCount ?? 0} published · {(publicationResult ?? project.publication)?.blockedUnitCount ?? 0} blocked</p>{(publicationResult ?? project.publication)?.blockedUnits?.map((unit) => <p key={unit.unitId} className="mt-1 text-xs text-amber-800">{unit.unitId}: {unit.blockers.map((item) => `${item.field} ${item.code}`).join(' · ')}</p>)}</div> : null}
             </section> : null}
 
@@ -329,6 +329,8 @@ const ProjectManage = () => {
         ) : null}
       </main>
     </LandlordPortalLayout>
+    <StepUpDialog challenge={publicationStepUp.challenge} busy={publicationStepUp.busy} error={publicationStepUp.error} onCancel={publicationStepUp.cancel} onSubmit={async (code) => finishPublication(code)} />
+    </>
   );
 };
 

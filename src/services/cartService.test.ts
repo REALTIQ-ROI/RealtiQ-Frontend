@@ -49,25 +49,12 @@ describe('cartService', () => {
         currency: 'NGN',
       },
     });
-    const result = await cartService.initializeCartCheckout();
-    expect(api.post).toHaveBeenCalledWith('/cart/checkout/initialize');
+    const result = await cartService.initializeCartCheckout({}, 'challenge-1');
+    expect(api.post).toHaveBeenCalledWith('/cart/checkout/initialize', {}, { headers: { 'X-Step-Up-Challenge': 'challenge-1' } });
     expect(result.totalAmount).toBe(55000);
     expect(cartService.getPendingCheckout()).toEqual({ checkoutId: 'checkout1', reference: 'ref1' });
-  });
-
-  it('sends guest email when initializing guest cart checkout', async () => {
-    vi.mocked(api.post).mockResolvedValue({
-      data: {
-        checkoutId: 'checkout1',
-        reference: 'ref1',
-        redirectUrl: 'https://checkout.paystack.com/ref1',
-        authorizationUrl: 'https://checkout.paystack.com/ref1',
-        totalAmount: 55000,
-        currency: 'NGN',
-      },
-    });
-    await cartService.initializeCartCheckout({ email: 'guest@example.com' });
-    expect(api.post).toHaveBeenCalledWith('/cart/checkout/initialize', { email: 'guest@example.com' });
+    expect(sessionStorage.getItem('realtiq.cartCheckoutReference')).toBe('ref1');
+    expect(sessionStorage.getItem('realtiq.cartCheckoutChallenge')).toBeNull();
   });
 
   it('uses user and admin cart checkout audit routes', async () => {

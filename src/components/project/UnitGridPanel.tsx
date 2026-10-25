@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiRequestError } from '../../lib/axios';
 import { useAsync } from '../../hooks/useAsync';
+import { useBoundStepUp } from '../../hooks/useBoundStepUp';
 import { projectService, type UnitGridJob, type UnitGridJobRequest, type UnitGridMutation, type UnitGridOperation, type UnitGridQuery, type UnitGridRow } from '../../services/projectService';
 import { stepUpService } from '../../services/stepUpService';
+import StepUpDialog from '../auth/StepUpDialog';
 import Button from '../ui/Button';
 
 const fields = [
@@ -69,8 +71,7 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
   const [conflict, setConflict] = useState(false);
   const [lastOperation, setLastOperation] = useState<UnitGridOperation | null>(null);
   const [job, setJob] = useState<UnitGridJob | null>(null);
-  const [pendingUndo, setPendingUndo] = useState<{ operationId: string; challengeId: string; expiresAt: string } | null>(null);
-  const [totpCode, setTotpCode] = useState('');
+  const undoStepUp = useBoundStepUp<unknown>();
   const [existingOperationId, setExistingOperationId] = useState('');
   const operationKeyRef = useRef<{ signature: string; key: string } | null>(null);
   const jobKeyRef = useRef<{ signature: string; key: string } | null>(null);
@@ -204,30 +205,25 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
 
   const beginUndo = async (operationId: string) => {
     setActionError(null);
-    setWorking(true);
-    try {
-      const path = `/api/projects/${encodeURIComponent(projectId)}/unit-grid/operations/${encodeURIComponent(operationId)}/undo`;
-      const challenge = await stepUpService.start('POST', path, {});
-      setPendingUndo({ operationId, challengeId: challenge.challengeId, expiresAt: challenge.expiresAt });
-      setTotpCode('');
-    } catch (raw) { handleFailure(raw); }
-    finally { setWorking(false); }
+    const path = `/api/projects/${encodeURIComponent(projectId)}/unit-grid/operations/${encodeURIComponent(operationId)}/undo`;
+    await undoStepUp.begin({ method: 'POST', path, body: {}, label: `Undo unit-grid operation ${operationId}`,
+      execute: (challengeId, exactBody) => stepUpService.undoUnitGridOperation(projectId, operationId, challengeId, exactBody) });
   };
 
-  const completeUndo = async () => {
-    if (!pendingUndo || working) return;
-    if (!/^\d{6}$/.test(totpCode)) { setActionError('Enter the six-digit authenticator code.'); return; }
+  const completeUndo = async (code: string): Promise<boolean> => {
+    if (working) return false;
     setActionError(null);
     setWorking(true);
     try {
-      await stepUpService.verify(pendingUndo.challengeId, totpCode);
-      await stepUpService.undoUnitGridOperation(projectId, pendingUndo.operationId, pendingUndo.challengeId);
-      setPendingUndo(null);
+      const result = await undoStepUp.complete(code);
+      if (!result.ok) return false;
       setLastOperation(null);
       setRefreshKey((value) => value + 1);
       if (job) setJob(await projectService.getUnitGridJob(projectId, job.id));
+      return true;
     } catch (raw) { handleFailure(raw); }
     finally { setWorking(false); }
+    return false;
   };
 
   return <section className="rounded-xl border border-outline-variant/10 bg-white p-5">
@@ -279,12 +275,12 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
         <Button type="button" disabled={!rows.length || working || conflict} onClick={() => void submitJob()}>Queue selected job</Button>
       </div>
     </div>
-    {actionError ? <p role="alert" className="mt-4 rounded-lg bg-error-container p-3 text-sm text-on-error-container">{actionError}</p> : null}
+    {actionError || (!undoStepUp.challenge && undoStepUp.error) ? <p role="alert" className="mt-4 rounded-lg bg-error-container p-3 text-sm text-on-error-container">{actionError ?? undoStepUp.error}</p> : null}
     {conflict ? <div role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">A project or unit version changed. Your selection and inputs remain. <button type="button" className="font-bold underline" onClick={async () => { const latest = await execute(); if (latest) setConflict(false); }}>Refresh versions and review before retrying</button></div> : null}
     {lastOperation ? <div className="mt-5 rounded-lg bg-surface-container-low p-4 text-sm"><h3 className="font-bold">Direct edit {lastOperation.state}</h3><p>{lastOperation.rowCount} rows · Operation {lastOperation.id}</p>{lastOperation.undoAvailable ? <Button type="button" variant="secondary" disabled={working} onClick={() => void beginUndo(lastOperation.id)}>Undo with authenticator</Button> : null}</div> : null}
     {job ? <div className="mt-5 rounded-lg bg-surface-container-low p-4 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Job {job.state}</h3><div className="flex gap-2"><Button type="button" variant="secondary" disabled={working} onClick={() => void projectService.getUnitGridJob(projectId, job.id).then(setJob).catch((raw: unknown) => setActionError(errorText(raw)))}>Refresh job</Button>{!terminalJobStates.has(job.state) ? <Button type="button" variant="secondary" disabled={working} onClick={() => void projectService.cancelUnitGridJob(projectId, job.id).then(setJob).catch((raw: unknown) => setActionError(errorText(raw)))}>Cancel remaining</Button> : null}</div></div><p className="mt-2 text-xs text-secondary">{job.progress.completed} completed · {job.progress.failed} failed · {job.progress.cancelled} cancelled · {job.progress.remaining} remaining</p>{job.state === 'partially_completed' ? <p className="mt-2 text-xs font-semibold text-amber-800">Some rows committed and others did not. Review every row before retrying.</p> : null}<div className="mt-3 space-y-2">{job.rows.map((row) => <div key={`${row.index}:${row.unitId}`} className="rounded bg-white p-2 text-xs"><span className="font-bold">{row.unitId} · {row.state}</span>{row.error ? <span className="ml-2 text-error">{row.error.code}: {row.error.message}</span> : null}{row.operationId && row.undoAvailable ? <button type="button" disabled={working} className="ml-2 font-bold text-primary underline" onClick={() => void beginUndo(row.operationId!)}>Undo with authenticator</button> : null}</div>)}</div></div> : null}
     <div className="mt-5 flex flex-wrap gap-2 border-t border-outline-variant/20 pt-4"><input aria-label="Existing grid operation ID" value={existingOperationId} onChange={(event) => setExistingOperationId(event.target.value)} className="min-w-[220px] flex-1 rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="Existing operation ID for undo" /><Button type="button" variant="secondary" disabled={!existingOperationId.trim() || working} onClick={() => void beginUndo(existingOperationId.trim())}>Request undo challenge</Button></div>
-    {pendingUndo ? <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm"><h3 className="font-bold">Confirm undo with your authenticator</h3><p className="mt-1 text-xs">Challenge expires {new Date(pendingUndo.expiresAt).toLocaleString('en-NG')}. The same profile and session must complete it.</p><div className="mt-3 flex flex-wrap gap-2"><input aria-label="Authenticator code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="rounded-lg border border-amber-300 px-3 py-2" placeholder="6-digit code" /><Button type="button" disabled={working || totpCode.length !== 6} onClick={() => void completeUndo()}>Verify and undo</Button><Button type="button" variant="secondary" onClick={() => setPendingUndo(null)}>Dismiss</Button></div></div> : null}
+    <StepUpDialog challenge={undoStepUp.challenge} busy={working || undoStepUp.busy} error={undoStepUp.error} onCancel={undoStepUp.cancel} onSubmit={completeUndo} />
   </section>;
 };
 

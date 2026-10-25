@@ -19,6 +19,7 @@ const navLinks = [
   { to: '/dashboard/admin/manage-landlords', label: 'Manage Landlords', icon: 'person_pin' },
   { to: '/dashboard/admin/manage-users', label: 'Manage Users', icon: 'group' },
   { to: '/dashboard/admin/kyc', label: 'KYC Review', icon: 'verified_user' },
+  { to: '/dashboard/admin/data-protection-execution', label: 'Privacy Execution', icon: 'privacy_tip' },
   { to: '/dashboard/admin/manage-inquiries', label: 'Inquiries', icon: 'mail' },
   { to: '/dashboard/admin/message-moderation', label: 'Message Moderation', icon: 'shield' },
   { to: '/dashboard/notifications', label: 'Notifications', icon: 'notifications' },

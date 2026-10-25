@@ -233,7 +233,8 @@ export interface UnitGridJobRequest {
 
 export type ProjectPublicationRequest =
   | { expectedVersion: number; publicationAction: 'publish_all_ready' }
-  | { expectedVersion: number; publicationAction: 'publish_selected'; selectedUnitIds: string[] };
+  | { expectedVersion: number; publicationAction: 'publish_selected'; selectedUnitIds: string[] }
+  | { expectedVersion: number; publicationAction: 'save_draft' };
 
 export const projectService = {
   async listProjects(query?: ProjectSearchQuery): Promise<ProjectListResponse> {

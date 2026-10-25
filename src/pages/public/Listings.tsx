@@ -25,6 +25,19 @@ const formatRange = (page: number, total: number) =>
   total === 0
     ? "0 properties"
     : `${(page - 1) * LIMIT + 1}–${Math.min(page * LIMIT, total)} of ${total}`;
+const facetSummary = (facets: Record<string, unknown>): string => Object.entries(facets)
+  .flatMap(([group, value]) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]));
+    return entries.length ? [`${group.replaceAll('_', ' ')}: ${entries.slice(0, 3).map(([name, count]) => `${name.replaceAll('_', ' ')} ${count}`).join(', ')}`] : [];
+  }).slice(0, 4).join(' · ');
+const mapNoticeText = (notice: unknown): string => {
+  if (typeof notice === 'string') return notice;
+  if (!notice || typeof notice !== 'object') return '';
+  const item = notice as Record<string, unknown>;
+  return [item.message, item.code].filter((value): value is string => typeof value === 'string').join(' · ');
+};
 
 const Listings = () => {
   const navigate = useNavigate();
@@ -55,7 +68,7 @@ const Listings = () => {
     west: number;
     zoom: number;
   } | null>(null);
-  const [mapState, setMapState] = useState<{ queryKey: string; count: number | null; error: string | null; markers: CanonicalMapMarker[]; skipped: number; mode: 'properties' | 'clusters' | null; truncated: boolean; categories: Record<string, number> }>({ queryKey: '', count: null, error: null, markers: [], skipped: 0, mode: null, truncated: false, categories: {} });
+  const [mapState, setMapState] = useState<{ queryKey: string; count: number | null; error: string | null; markers: CanonicalMapMarker[]; skipped: number; mode: 'properties' | 'clusters' | null; truncated: boolean; facets: Record<string, unknown>; priceAggregateState: string | null; normalizationNotices: unknown[] }>({ queryKey: '', count: null, error: null, markers: [], skipped: 0, mode: null, truncated: false, facets: {}, priceAggregateState: null, normalizationNotices: [] });
   const mapQueryKey = searchParams.toString();
   const mapLoading = searchParams.get('mapActive') === 'true' && mapState.queryKey !== mapQueryKey;
   const mapResultCount = mapState.queryKey === mapQueryKey ? mapState.count : null;
@@ -84,10 +97,11 @@ const Listings = () => {
         setMapState({ queryKey: mapQueryKey, count: Number.isFinite(result.total) ? result.total : null, error: null,
           markers: parsed.markers, skipped: parsed.skipped, mode: result.mode,
           truncated: result.mode === 'properties' && result.truncated,
-          categories: result.facets?.categories ?? {} });
+          facets: result.facets ?? {}, priceAggregateState: result.mode === 'clusters' ? result.priceAggregateState ?? null : null,
+          normalizationNotices: result.normalization?.notices ?? [] });
       })
       .catch((raw: unknown) => {
-        if (!controller.signal.aborted) setMapState({ queryKey: mapQueryKey, count: null, error: raw instanceof Error ? raw.message : 'Map results are unavailable.', markers: [], skipped: 0, mode: null, truncated: false, categories: {} });
+        if (!controller.signal.aborted) setMapState({ queryKey: mapQueryKey, count: null, error: raw instanceof Error ? raw.message : 'Map results are unavailable.', markers: [], skipped: 0, mode: null, truncated: false, facets: {}, priceAggregateState: null, normalizationNotices: [] });
       });
     return () => controller.abort();
   }, [mapQueryKey]);
@@ -211,7 +225,9 @@ const Listings = () => {
             {searchParams.get('mapActive') === 'true' ? <div className="absolute bottom-4 left-4 z-[1000] max-w-[min(90%,340px)] rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-secondary shadow" role="status">
               {mapLoading ? 'Checking map results…' : mapError ? `Map results unavailable: ${mapError}` : mapResultCount === null ? 'Map result count unavailable.' : `${mapResultCount} properties match this map area.`}
               {!mapLoading && !mapError && mapState.queryKey === mapQueryKey ? <span className="mt-1 block font-normal">{mapState.mode === 'clusters' ? `${mapState.markers.length} server clusters shown.` : `${mapState.markers.length} server property markers shown${mapState.truncated ? ' (page limit reached)' : ''}.`}{mapState.skipped ? ` ${mapState.skipped} returned items lacked safe marker coordinates or references.` : ''}</span> : null}
-              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey && Object.keys(mapState.categories).length ? <span className="mt-1 block font-normal">Categories: {Object.entries(mapState.categories).filter(([, count]) => typeof count === 'number').slice(0, 4).map(([name, count]) => `${name.replaceAll('_', ' ')} ${count}`).join(' · ')}</span> : null}
+              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey && facetSummary(mapState.facets) ? <span className="mt-1 block font-normal">Facets: {facetSummary(mapState.facets)}</span> : null}
+              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey && mapState.priceAggregateState === 'fx_unconfigured' ? <span className="mt-1 block font-semibold text-amber-800">Price aggregates are unavailable because currency conversion is not configured.</span> : null}
+              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey ? mapState.normalizationNotices.map((notice, index) => mapNoticeText(notice) ? <span key={`map-notice-${index}`} className="mt-1 block font-normal">Search notice: {mapNoticeText(notice)}</span> : null) : null}
             </div> : null}
           </section>
           <section

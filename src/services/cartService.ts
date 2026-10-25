@@ -12,9 +12,7 @@ import type {
   CartResponse,
 } from '../types';
 
-export interface CartCheckoutInitializeRequest {
-  email?: string;
-}
+export type CartCheckoutInitializeRequest = Record<string, never>;
 
 const CART_CHECKOUT_ID_KEY = 'realtiq.cartCheckoutId';
 const CART_CHECKOUT_REFERENCE_KEY = 'realtiq.cartCheckoutReference';
@@ -67,11 +65,10 @@ export const cartService = {
     return data;
   },
 
-  async initializeCartCheckout(body?: CartCheckoutInitializeRequest): Promise<CartCheckoutInitializeResponse> {
-    const payload = compact(body);
-    const { data } = Object.keys(payload).length
-      ? await api.post<CartCheckoutInitializeResponse>('/cart/checkout/initialize', payload)
-      : await api.post<CartCheckoutInitializeResponse>('/cart/checkout/initialize');
+  async initializeCartCheckout(body: CartCheckoutInitializeRequest, challengeId: string): Promise<CartCheckoutInitializeResponse> {
+    const { data } = await api.post<CartCheckoutInitializeResponse>('/cart/checkout/initialize', body, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    });
     cartService.persistPendingCheckout(data.checkoutId, data.reference);
     return data;
   },

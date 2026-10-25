@@ -29,8 +29,8 @@ export const canonicalMapMarkers = (response: CanonicalPropertyMapResponse): { m
   } else {
     for (const property of response.properties) {
       const coordinates = property.locationPoint?.coordinates;
-      const lng = coordinates?.[0] ?? property.coordinates?.lng;
-      const lat = coordinates?.[1] ?? property.coordinates?.lat;
+      const lng = coordinates?.[0];
+      const lat = coordinates?.[1];
       if (!validPoint(lat, lng) || typeof property.publicReference !== 'string' || !property.publicReference) {
         skipped += 1;
         continue;

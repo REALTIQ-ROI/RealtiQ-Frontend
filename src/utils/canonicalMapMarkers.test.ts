@@ -20,4 +20,10 @@ describe('canonical map markers', () => {
     ] };
     expect(canonicalMapMarkers(response)).toEqual({ skipped: 1, markers: [{ kind: 'cluster', id: 'good', lat: 6.4, lng: 3.2, count: 18 }] });
   });
+
+  it('does not fall back to legacy coordinate fields when canonical locationPoint is missing', () => {
+    const response: CanonicalPropertyMapResponse = { ...common, mode: 'properties', truncated: false,
+      properties: [{ _id: 'legacy', publicReference: 'RTQ-LEGACY' }] };
+    expect(canonicalMapMarkers(response)).toEqual({ skipped: 1, markers: [] });
+  });
 });
