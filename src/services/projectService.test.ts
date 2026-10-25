@@ -57,12 +57,19 @@ describe('projectService', () => {
     expect(api.post).toHaveBeenCalledWith('/projects', expect.not.objectContaining({ owner: expect.anything(), ownerId: expect.anything() }));
   });
 
+  it('sends the changed project body and current version with an optional bound challenge', async () => {
+    vi.mocked(api.patch).mockResolvedValue({ data: { project: { _id: 'project-1', version: 9 } } });
+    const body = { expectedVersion: 8, canonicalFields: { shortDescription: '' }, description: 'Updated' };
+    await projectService.updateProject('project-1', body, 'challenge-1');
+    expect(api.patch).toHaveBeenCalledWith('/projects/project-1', body, { headers: { 'X-Step-Up-Challenge': 'challenge-1' } });
+  });
+
   it('uses admin moderation endpoints', async () => {
     vi.mocked(api.patch).mockResolvedValue({ data: { project: { _id: 'project-1' } } });
-    await projectService.adminUpdateProjectStatus('project-1', { status: 'suspended' });
-    expect(api.patch).toHaveBeenCalledWith('/admin/projects/project-1/status', { status: 'suspended' });
-    await projectService.adminSetProjectFeatured('project-1', { featured: true });
-    expect(api.patch).toHaveBeenCalledWith('/admin/projects/project-1/featured', { featured: true });
+    await projectService.adminUpdateProjectStatus('project-1', { status: 'suspended' }, 'challenge-1');
+    expect(api.patch).toHaveBeenCalledWith('/admin/projects/project-1/status', { status: 'suspended' }, { headers: { 'X-Step-Up-Challenge': 'challenge-1' } });
+    await projectService.adminSetProjectFeatured('project-1', { featured: true }, 'challenge-2');
+    expect(api.patch).toHaveBeenCalledWith('/admin/projects/project-1/featured', { featured: true }, { headers: { 'X-Step-Up-Challenge': 'challenge-2' } });
   });
 
   it('uploads project property imports as multipart file field', async () => {

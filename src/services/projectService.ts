@@ -129,6 +129,7 @@ export interface UnitGridQuery {
 }
 
 export interface CreateProjectRequest {
+  canonicalFields?: Record<string, unknown>;
   name: string;
   developerName?: string;
   projectType: ProjectType | string;
@@ -259,8 +260,10 @@ export const projectService = {
     return data;
   },
 
-  async createProject(body: CreateProjectRequest): Promise<{ project: ProjectDetail }> {
-    const { data } = await api.post<{ project: ProjectDetail }>('/projects', body);
+  async createProject(body: CreateProjectRequest, challengeId?: string): Promise<{ project: ProjectDetail }> {
+    const { data } = challengeId
+      ? await api.post<{ project: ProjectDetail }>('/projects', body, { headers: { 'X-Step-Up-Challenge': challengeId } })
+      : await api.post<{ project: ProjectDetail }>('/projects', body);
     return data;
   },
 
@@ -304,19 +307,16 @@ export const projectService = {
     return data.job;
   },
 
-  async updateProject(id: string, body: UpdateProjectRequest): Promise<{ project: ProjectDetail }> {
-    const { data } = await api.patch<{ project: ProjectDetail }>(`/projects/${encodeURIComponent(id)}`, body);
+  async updateProject(id: string, body: UpdateProjectRequest, challengeId?: string): Promise<{ project: ProjectDetail }> {
+    const { data } = challengeId
+      ? await api.patch<{ project: ProjectDetail }>(`/projects/${encodeURIComponent(id)}`, body, { headers: { 'X-Step-Up-Challenge': challengeId } })
+      : await api.patch<{ project: ProjectDetail }>(`/projects/${encodeURIComponent(id)}`, body);
     return data;
   },
 
   async publishProject(id: string, body: ProjectPublicationRequest, challengeId: string): Promise<{ project: ProjectDetail }> {
     const { data } = await api.patch<{ project: ProjectDetail }>(`/projects/${encodeURIComponent(id)}`, body, { headers: { 'X-Step-Up-Challenge': challengeId } });
     return { ...data, project: normalizeProjectPublication(data.project) };
-  },
-
-  async deleteProject(id: string): Promise<{ message: string }> {
-    const { data } = await api.delete<{ message: string }>(`/projects/${encodeURIComponent(id)}`);
-    return data;
   },
 
   async addProjectMedia(id: string, body: ProjectMedia | { media: ProjectMedia[] }): Promise<{ project: ProjectDetail }> {
@@ -344,13 +344,13 @@ export const projectService = {
     return { ...data, project: normalizeProjectPublication(data.project) };
   },
 
-  async adminUpdateProjectStatus(id: string, body: { status: ProjectStatus }): Promise<{ project: ProjectDetail }> {
-    const { data } = await api.patch<{ project: ProjectDetail }>(`/admin/projects/${encodeURIComponent(id)}/status`, body);
+  async adminUpdateProjectStatus(id: string, body: { status: ProjectStatus }, challengeId: string): Promise<{ project: ProjectDetail }> {
+    const { data } = await api.patch<{ project: ProjectDetail }>(`/admin/projects/${encodeURIComponent(id)}/status`, body, { headers: { 'X-Step-Up-Challenge': challengeId } });
     return data;
   },
 
-  async adminSetProjectFeatured(id: string, body: { featured: boolean }): Promise<{ project: ProjectDetail }> {
-    const { data } = await api.patch<{ project: ProjectDetail }>(`/admin/projects/${encodeURIComponent(id)}/featured`, body);
+  async adminSetProjectFeatured(id: string, body: { featured: boolean }, challengeId: string): Promise<{ project: ProjectDetail }> {
+    const { data } = await api.patch<{ project: ProjectDetail }>(`/admin/projects/${encodeURIComponent(id)}/featured`, body, { headers: { 'X-Step-Up-Challenge': challengeId } });
     return data;
   },
 

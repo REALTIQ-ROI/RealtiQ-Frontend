@@ -1,6 +1,5 @@
 ﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Swal from 'sweetalert2';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
 import MapListLayout from '../../../components/property/map/MapListLayout';
@@ -53,7 +52,7 @@ const ownerDisplay = (property: Property) => {
 };
 
 const ManageProperties = () => {
-  const { properties, refreshProperties, deleteProperty } = useProperties();
+  const { properties, refreshProperties } = useProperties();
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'price-desc' | 'price-asc'>('recent');
@@ -64,7 +63,6 @@ const ManageProperties = () => {
   const [minProgress, setMinProgress] = useState('');
   const [maxProgress, setMaxProgress] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
   const filtered = [...properties]
@@ -105,30 +103,6 @@ const ManageProperties = () => {
       await refreshProperties();
     } finally {
       setUpdatingId(null);
-    }
-  };
-
-  const handleDelete = async (property: Property) => {
-    const reference = propertyRouteReference(property);
-    if (!reference || deletingId) return;
-    const confirmed = await Swal.fire({
-      title: 'Delete this property?',
-      text: 'This action cannot be undone.',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Delete Property',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#6b7280',
-      reverseButtons: true,
-    });
-    if (confirmed.isConfirmed) {
-      setDeletingId(reference);
-      try {
-        await deleteProperty(reference);
-      } finally {
-        setDeletingId(null);
-      }
     }
   };
 
@@ -245,21 +219,6 @@ const ManageProperties = () => {
                   </>
                 ) : property.featured ? 'Unfeature' : 'Feature'}
               </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 rounded-lg bg-error-container px-3 py-2 text-xs font-bold text-error disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={() => void handleDelete(property)}
-                disabled
-                title="Listing archive requires a documented step-up challenge"
-                aria-busy={deletingId === propertyRouteReference(property) || undefined}
-              >
-                {deletingId === propertyRouteReference(property) ? (
-                  <>
-                    <span className="material-symbols-outlined animate-spin text-sm" aria-hidden="true">progress_activity</span>
-                    Deleting...
-                  </>
-                ) : 'Delete'}
-              </button>
             </>
           )}
         >
@@ -354,17 +313,6 @@ const ManageProperties = () => {
                               style={property.featured ? { fontVariationSettings: "'FILL' 1" } : undefined}
                             >
                               {updatingId === propertyReference ? 'progress_activity' : 'star'}
-                            </span>
-                          </button>
-                          <button
-                            className="p-2 text-secondary hover:text-error hover:bg-error-container rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-60"
-                            title="Listing archive requires a documented step-up challenge"
-                            disabled
-                            aria-busy={deletingId === propertyReference || undefined}
-                            onClick={() => void handleDelete(property)}
-                          >
-                            <span className={`material-symbols-outlined text-lg ${deletingId === propertyReference ? 'animate-spin' : ''}`}>
-                              {deletingId === propertyReference ? 'progress_activity' : 'delete'}
                             </span>
                           </button>
                         </div>

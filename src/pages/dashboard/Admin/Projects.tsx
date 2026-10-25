@@ -1,14 +1,18 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import AdminLayout from '../../../components/layout/AdminLayout';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { projectService } from '../../../services/projectService';
-import type { ProjectStatus } from '../../../types';
+import type { ProjectDetail, ProjectStatus } from '../../../types';
 import { formatPriceRange, labelize } from '../../../utils/projectFormatters';
 
 const statuses: ProjectStatus[] = ['draft', 'upcoming', 'ongoing', 'completed', 'sold_out', 'suspended'];
+type ProjectModerationBody = { status: ProjectStatus } | { featured: boolean };
 
 const AdminProjects = () => {
   const [status, setStatus] = useState('');
@@ -20,6 +24,8 @@ const AdminProjects = () => {
   const [pageError, setPageError] = useState<string | null>(null);
   const [pagesExhausted, setPagesExhausted] = useState(false);
   const { data, loading, error, execute } = useAsync(() => projectService.adminListProjects({ page: 1, limit: 50, status }), true, status);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const stepUp = useBoundStepUp<{ project: ProjectDetail }>();
   const projects = [...(data?.projects ?? []), ...extraProjects];
   const hasMore = !pagesExhausted && projects.length < (data?.total ?? 0);
 
@@ -49,13 +55,39 @@ const AdminProjects = () => {
     }
   };
 
+  const beginModerationChange = async (projectId: string, body: ProjectModerationBody) => {
+    setMutationError(null);
+    const isStatusChange = 'status' in body;
+    const path = isStatusChange
+      ? `/api/admin/projects/${encodeURIComponent(projectId)}/status`
+      : `/api/admin/projects/${encodeURIComponent(projectId)}/featured`;
+    await stepUp.begin({
+      method: 'PATCH',
+      path,
+      body,
+      label: isStatusChange ? `Set project status to ${body.status}` : `${body.featured ? 'Feature' : 'Unfeature'} this project`,
+      execute: (challengeId, exactBody) => 'status' in exactBody
+        ? projectService.adminUpdateProjectStatus(projectId, exactBody, challengeId)
+        : projectService.adminSetProjectFeatured(projectId, exactBody, challengeId),
+    });
+  };
+
+  const completeModerationChange = async (code: string): Promise<boolean> => {
+    const result = await stepUp.complete(code);
+    if (!result.ok) return false;
+    toast.success('Project moderation change saved.');
+    await execute();
+    return true;
+  };
+
   return (
+    <>
     <AdminLayout>
       <main className="p-8 lg:p-12">
         <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-4xl font-black tracking-tight">Projects</h1>
-            <p className="mt-2 text-sm text-secondary">Review project publication, status, and featured placement.</p>
+            <p className="mt-2 text-sm text-secondary">Review project details, administrative status and featured placement.</p>
           </div>
           <select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-lg bg-surface-container-low px-4 py-3 text-sm outline-none">
             <option value="">Any status</option>
@@ -64,7 +96,8 @@ const AdminProjects = () => {
         </header>
         {loading ? <LoadingState label="Loading projects..." /> : null}
         {error ? <ErrorState message={error} onRetry={() => void execute()} /> : null}
-        <p className="mb-4 text-sm text-secondary">Staff project status and Featured changes require a one-use security challenge. Publication also awaits the exact transition contract.</p>
+        <p className="mb-4 text-sm text-secondary">Status and featured changes require a one-use authenticator challenge. Project publication is managed from the authorized owner project controls.</p>
+        {mutationError || (!stepUp.challenge && stepUp.error) ? <p role="alert" className="mb-4 rounded-lg bg-error-container p-4 text-sm text-on-error-container">{mutationError ?? stepUp.error}</p> : null}
         {!loading && !error ? (
           <div className="overflow-x-auto rounded-xl bg-white">
             <table className="w-full text-left text-sm">
@@ -96,8 +129,9 @@ const AdminProjects = () => {
                         </Link>
                         <select
                           value={project.status}
-                          disabled
-                          title="Project status changes require the one-use security challenge."
+                          disabled={stepUp.busy || Boolean(stepUp.challenge)}
+                          aria-label={`Set status for ${project.name}`}
+                          onChange={(event) => void beginModerationChange(project._id, { status: event.target.value as ProjectStatus })}
                           className="rounded-lg bg-surface-container-low px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {statuses.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
@@ -105,15 +139,15 @@ const AdminProjects = () => {
                         <button
                           type="button"
                           disabled
-                          title="Project publication transition contract is unavailable."
+                          title="Publication is available in the authorized owner project controls."
                           className="inline-flex items-center gap-1 rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {project.isPublished ? 'Unpublish' : 'Publish'}
+                          Owner publication controls
                         </button>
                         <button
                           type="button"
-                          disabled
-                          title="Project Featured changes require the one-use security challenge."
+                          disabled={stepUp.busy || Boolean(stepUp.challenge)}
+                          onClick={() => void beginModerationChange(project._id, { featured: !project.isFeatured })}
                           className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {project.isFeatured ? 'Unfeature' : 'Feature'}
@@ -138,6 +172,8 @@ const AdminProjects = () => {
         ) : null}
       </main>
     </AdminLayout>
+    <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy} error={stepUp.error} onCancel={stepUp.cancel} onSubmit={completeModerationChange} />
+    </>
   );
 };
 

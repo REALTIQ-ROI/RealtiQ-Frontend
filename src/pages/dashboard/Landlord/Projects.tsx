@@ -55,24 +55,16 @@ const LandlordProjects = () => {
               <div key={project._id} className="space-y-3">
                 <ProjectCard project={project} requirePublishedToView />
                 <div className="flex flex-wrap gap-2">
-                  <Link to={`/dashboard/landlord/projects/${project._id}`} className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold text-primary">Manage</Link>
+                    <Link to={`/dashboard/landlord/projects/${project._id}`} className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold text-primary">Manage</Link>
                   {!project.isPublished ? (
-                    <button
-                      type="button"
-                      disabled
-                      title="The project publication transition requires a backend request contract."
-                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Publish
-                    </button>
+                    <Link to={`/dashboard/landlord/projects/${project._id}#project-publication`} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-on-primary">
+                      Publication controls
+                    </Link>
                   ) : null}
                 </div>
               </div>
             ))}
           </div>
-        ) : null}
-        {!loading && !error && projects.some((project) => !project.isPublished) ? (
-          <p className="mt-4 text-sm text-secondary">Project publishing is unavailable until the publication request contract and required step-up exchange are supplied.</p>
         ) : null}
         {pageError ? <p role="alert" className="mt-4 text-sm text-red-700">{pageError}</p> : null}
         {!loading && !error && hasMore ? (

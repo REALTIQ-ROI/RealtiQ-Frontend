@@ -184,6 +184,7 @@ export interface ProjectOwnerSummary {
 
 export interface ProjectDetail extends ProjectCard {
   version?: number;
+  canonicalFields?: Record<string, unknown>;
   publication?: { published: boolean; publishedUnitCount: number; blockedUnitCount: number; blockedUnits: Array<{ unitId: string; blockers: Array<{ field: string; code: string }> }>; projectBlockers?: Array<{ field: string; code: string }> };
   description?: string;
   address?: string;

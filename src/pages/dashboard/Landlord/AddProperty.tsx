@@ -1,15 +1,29 @@
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import PropertyForm from '../../../components/property/PropertyForm';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
+import { ApiRequestError } from '../../../lib/axios';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
-import type { CreatePropertyPayload } from '../../../services/propertyService';
+import type { CreatePropertyPayload, CreatePropertyResponse } from '../../../services/propertyService';
+import type { Property } from '../../../types';
 
 const AddProperty = () => {
   const { user, activeProfile } = useAuth();
   const { addProperty } = useProperties();
   const navigate = useNavigate();
+  const stepUp = useBoundStepUp<CreatePropertyResponse>();
+
+  const finishCreation = (response: CreatePropertyResponse): Property => {
+    toast.success(response.message || 'Property saved. Publication depends on the server readiness and approval workflow.');
+    if (response.riskDetected) {
+      toast.warning('Title document risk signals were detected. Legal review is required before title verification can be published.');
+    }
+    navigate('/dashboard/landlord/my-properties');
+    return response.property;
+  };
 
   const handleSubmit = async (payload: CreatePropertyPayload & { status?: string }) => {
     if (!user) {
@@ -17,18 +31,30 @@ const AddProperty = () => {
       return undefined;
     }
 
-    const response = await addProperty(user._id, payload);
-    if (response.property) {
-      toast.success(response.message || 'Property saved. Publication depends on the server readiness and approval workflow.');
-      if (response.riskDetected) {
-        toast.warning('Title document risk signals were detected. Legal review is required before title verification can be published.');
+    try {
+      const response = await addProperty(user._id, payload);
+      return response.property ? finishCreation(response) : undefined;
+    } catch (raw) {
+      if (raw instanceof ApiRequestError && raw.code === 'AUTH_STEP_UP_REQUIRED') {
+        await stepUp.begin({
+          method: 'POST',
+          path: '/api/properties',
+          body: payload,
+          label: 'Create this property listing',
+          execute: async (challengeId, exactBody) => {
+            const created = await addProperty(user._id, exactBody as CreatePropertyPayload, challengeId);
+            finishCreation(created);
+            return created;
+          },
+        });
+        return undefined;
       }
-      navigate('/dashboard/landlord/my-properties');
+      throw raw;
     }
-    return response.property;
   };
 
   return (
+    <>
     <LandlordPortalLayout active="add-property" title="New Property Listing">
       <div className="p-8 lg:p-12 max-w-6xl mx-auto">
         <nav className="flex mb-8 gap-2 text-sm font-medium text-secondary">
@@ -42,7 +68,8 @@ const AddProperty = () => {
         {activeProfile ? (
           <>
             <p className="mb-5 rounded-lg bg-surface-container-low p-4 text-sm text-secondary">The server checks the selected profile's current verification, permission and publication eligibility when you submit.</p>
-            <PropertyForm onSubmit={handleSubmit} submitLabel="Save Listing" />
+            {stepUp.error && !stepUp.challenge ? <p role="alert" className="mb-4 rounded-lg bg-error-container p-4 text-sm text-on-error-container">{stepUp.error}</p> : null}
+            <PropertyForm onSubmit={handleSubmit} submitLabel="Save Listing" isLoading={stepUp.busy || Boolean(stepUp.challenge)} />
           </>
         ) : (
           <section className="rounded-2xl border border-dashed border-outline-variant/20 bg-surface-container-lowest p-8 lg:p-12 text-center">
@@ -68,6 +95,8 @@ const AddProperty = () => {
         )}
       </div>
     </LandlordPortalLayout>
+    <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy} error={stepUp.error} onCancel={stepUp.cancel} onSubmit={async (code) => (await stepUp.complete(code)).ok} />
+    </>
   );
 };
 

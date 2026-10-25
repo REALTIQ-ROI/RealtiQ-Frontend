@@ -5,16 +5,19 @@ import LandlordPortalLayout from "../../../components/layout/LandlordPortalLayou
 import PropertyForm from "../../../components/property/PropertyForm";
 import LoadingState from "../../../components/ui/LoadingState";
 import ErrorState from "../../../components/ui/ErrorState";
+import StepUpDialog from '../../../components/auth/StepUpDialog';
 import { useProperties } from "../../../contexts/PropertiesContext";
 import { useAsync } from "../../../hooks/useAsync";
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { ApiRequestError } from "../../../lib/axios";
 import { propertyService, type UpdatePropertyPayload } from "../../../services/propertyService";
-import { propertyRouteReference } from "../../../types";
+import { propertyRouteReference, type Property } from "../../../types";
 import { propertyEditPatch } from '../../../utils/propertyEditPatch';
 
 const Editproperty = () => {
   const { updateProperty } = useProperties();
   const [hasConflict, setHasConflict] = useState(false);
+  const stepUp = useBoundStepUp<Property>();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { data, loading, error, execute } = useAsync(
@@ -38,24 +41,44 @@ const Editproperty = () => {
         toast.info('No changes to save.');
         return property;
       }
-      const updated = await updateProperty(
-        propertyRouteReference(property),
-        { ...changed, ...(typeof property.version === 'number' ? { expectedVersion: property.version } : {}) },
-      );
-      toast.success("Property updated successfully");
-      navigate("/dashboard/landlord/my-properties");
-      return updated;
+      const requestBody = { ...changed, ...(typeof property.version === 'number' ? { expectedVersion: property.version } : {}) };
+      const propertyId = propertyRouteReference(property);
+      try {
+        const updated = await updateProperty(propertyId, requestBody);
+        toast.success("Property updated successfully");
+        navigate("/dashboard/landlord/my-properties");
+        return updated;
+      } catch (raw) {
+        if (raw instanceof ApiRequestError && raw.code === 'AUTH_STEP_UP_REQUIRED') {
+          await stepUp.begin({
+            method: 'PATCH',
+            path: `/api/properties/${encodeURIComponent(propertyId)}`,
+            body: requestBody,
+            label: 'Save these property listing changes',
+            execute: async (challengeId, exactBody) => {
+              const updated = await updateProperty(propertyId, exactBody, challengeId);
+              toast.success('Property updated successfully.');
+              navigate('/dashboard/landlord/my-properties');
+              return updated;
+            },
+          });
+          return undefined;
+        }
+        throw raw;
+      }
     } catch (raw) {
       if (raw instanceof ApiRequestError && raw.status === 409) {
         setHasConflict(true);
         toast.error('This listing changed while you were editing. Review the latest owner details before saving again.');
         return undefined;
       }
-      throw raw;
+      if (!(raw instanceof ApiRequestError && raw.code === 'AUTH_STEP_UP_REQUIRED')) toast.error(raw instanceof Error ? raw.message : 'Unable to save property changes.');
+      return undefined;
     }
   };
 
   return (
+    <>
     <LandlordPortalLayout active="my-properties" title="Edit Listing">
       <div className="p-8 lg:p-12 bg-surface min-h-screen">
         <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -87,6 +110,7 @@ const Editproperty = () => {
 
         {error ? <ErrorState message={error} onRetry={() => void execute()} /> : null}
         {hasConflict ? <div role="alert" className="mb-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">The server has a newer version. Your draft remains on this page. <button type="button" className="font-bold underline" onClick={() => { setHasConflict(false); void execute(); }}>Reload latest and discard draft</button></div> : null}
+        {stepUp.error && !stepUp.challenge ? <p role="alert" className="mb-5 rounded-lg bg-error-container p-4 text-sm text-on-error-container">{stepUp.error}</p> : null}
         {property && !error ? (
           <PropertyForm
             key={`${property._id}:${property.version ?? 'unversioned'}`}
@@ -100,6 +124,8 @@ const Editproperty = () => {
         ) : !error ? <p role="alert" className="text-sm text-secondary">The owner listing could not be loaded.</p> : null}
       </div>
     </LandlordPortalLayout>
+    <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy} error={stepUp.error} onCancel={stepUp.cancel} onSubmit={async (code) => (await stepUp.complete(code)).ok} />
+    </>
   );
 };
 

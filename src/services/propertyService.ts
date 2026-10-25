@@ -69,6 +69,10 @@ export interface UpdatePropertyPayload extends Partial<CreatePropertyPayload> {
   expectedVersion?: number;
 }
 
+export interface ArchivePropertyRequest {
+  expectedVersion?: number;
+}
+
 export interface PropertiesResponse {
   properties: Property[];
   total: number;
@@ -352,8 +356,10 @@ export const propertyService = {
     return normalizeProperty(data.property);
   },
 
-  async createPropertyWithResponse(payload: CreatePropertyPayload): Promise<CreatePropertyResponse> {
-    const { data } = await api.post<CreatePropertyResponse>('/properties', payload);
+  async createPropertyWithResponse(payload: CreatePropertyPayload, challengeId?: string): Promise<CreatePropertyResponse> {
+    const { data } = challengeId
+      ? await api.post<CreatePropertyResponse>('/properties', payload, { headers: { 'X-Step-Up-Challenge': challengeId } })
+      : await api.post<CreatePropertyResponse>('/properties', payload);
     return { ...data, property: normalizeProperty(data.property) };
   },
 
@@ -364,13 +370,18 @@ export const propertyService = {
       : data);
   },
 
-  async updateProperty(id: string, payload: UpdatePropertyPayload): Promise<Property> {
-    const { data } = await api.patch<{ property: Property; version?: number }>(`/properties/${encodeURIComponent(id)}`, payload);
+  async updateProperty(id: string, payload: UpdatePropertyPayload, challengeId?: string): Promise<Property> {
+    const { data } = challengeId
+      ? await api.patch<{ property: Property; version?: number }>(`/properties/${encodeURIComponent(id)}`, payload, { headers: { 'X-Step-Up-Challenge': challengeId } })
+      : await api.patch<{ property: Property; version?: number }>(`/properties/${encodeURIComponent(id)}`, payload);
     return normalizeProperty(data.property);
   },
 
-  async deleteProperty(id: string): Promise<{ message: string }> {
-    const { data } = await api.delete<{ message: string }>(`/properties/${id}`);
+  async deleteProperty(id: string, body: ArchivePropertyRequest, challengeId: string): Promise<unknown> {
+    const { data } = await api.delete<unknown>(`/properties/${encodeURIComponent(id)}`, {
+      data: body,
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    });
     return data;
   },
 

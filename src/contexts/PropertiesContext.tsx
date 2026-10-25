@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { propertyService, type CreatePropertyPayload, type CreatePropertyResponse, type UpdatePropertyPayload } from '../services/propertyService';
+import { propertyService, type ArchivePropertyRequest, type CreatePropertyPayload, type CreatePropertyResponse, type UpdatePropertyPayload } from '../services/propertyService';
 import type { Property } from '../types';
 import { isPublicPropertyVisible } from '../utils/projectPublication';
 import { useAuth } from './AuthContext';
@@ -10,9 +10,9 @@ interface PropertiesContextValue {
   loading: boolean;
   error: string | null;
   refreshProperties: (limitOverride?: number) => Promise<void>;
-  addProperty: (ownerId: string, payload: CreatePropertyPayload) => Promise<CreatePropertyResponse>;
-  updateProperty: (propertyId: string, payload: UpdatePropertyPayload) => Promise<Property>;
-  deleteProperty: (propertyId: string) => Promise<void>;
+  addProperty: (ownerId: string, payload: CreatePropertyPayload, challengeId?: string) => Promise<CreatePropertyResponse>;
+  updateProperty: (propertyId: string, payload: UpdatePropertyPayload, challengeId?: string) => Promise<Property>;
+  deleteProperty: (propertyId: string, body: ArchivePropertyRequest, challengeId: string) => Promise<void>;
   buyProperty: (propertyId: string, buyerId: string) => Promise<void>;
 }
 
@@ -74,15 +74,15 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
     void refreshProperties();
   }, [refreshProperties]);
 
-  const addProperty = async (_ownerId: string, payload: CreatePropertyPayload): Promise<CreatePropertyResponse> => {
-    const created = await propertyService.createPropertyWithResponse(payload);
+  const addProperty = async (_ownerId: string, payload: CreatePropertyPayload, challengeId?: string): Promise<CreatePropertyResponse> => {
+    const created = await propertyService.createPropertyWithResponse(payload, challengeId);
     setProperties((current) => [created.property, ...current]);
     await refreshProperties();
     return created;
   };
 
-  const updateProperty = async (propertyId: string, payload: UpdatePropertyPayload): Promise<Property> => {
-    const updated = await propertyService.updateProperty(propertyId, payload);
+  const updateProperty = async (propertyId: string, payload: UpdatePropertyPayload, challengeId?: string): Promise<Property> => {
+    const updated = await propertyService.updateProperty(propertyId, payload, challengeId);
     setProperties((current) =>
       current.map((property) =>
         (Boolean(updated._id) && property._id === updated._id) ||
@@ -96,8 +96,8 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
     return updated;
   };
 
-  const deleteProperty = async (propertyId: string): Promise<void> => {
-    await propertyService.deleteProperty(propertyId);
+  const deleteProperty = async (propertyId: string, body: ArchivePropertyRequest, challengeId: string): Promise<void> => {
+    await propertyService.deleteProperty(propertyId, body, challengeId);
     await refreshProperties();
   };
 

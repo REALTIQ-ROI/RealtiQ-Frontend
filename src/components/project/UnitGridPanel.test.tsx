@@ -19,7 +19,8 @@ describe('canonical unit grid', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.setItem('activeProfileId', 'profile-1');
-    vi.mocked(useAuth).mockReturnValue({ activeProfile: { id: 'profile-1' } } as ReturnType<typeof useAuth>);
+    localStorage.setItem('token', 'session-1');
+    vi.mocked(useAuth).mockReturnValue({ activeProfile: { id: 'profile-1' }, token: 'session-1' } as ReturnType<typeof useAuth>);
     vi.mocked(projectService.getUnitGrid).mockResolvedValue(grid);
     vi.mocked(projectService.editUnitGrid).mockResolvedValue({ operation: { id: 'op', state: 'applied', action: 'field_edit', undoAvailable: false, rowCount: 1, createdAt: '', rows: [] }, projectVersion: 9, replayed: false });
     vi.mocked(projectService.createUnitGridJob).mockResolvedValue({ id: 'job-1', projectId: 'p', action: 'availability', state: 'queued', operationKey: 'grid_job_12345678', createdAt: '', startedAt: null, completedAt: null, progress: { total: 1, completed: 0, failed: 0, cancelled: 0, remaining: 1 }, cancellationRequested: false, rows: [] });
@@ -81,6 +82,19 @@ describe('canonical unit grid', () => {
       rows: [{ unitId: 'unit-1', expectedVersion: 4 }],
     })));
     expect(screen.getByRole('combobox', { name: 'Target availability' })).not.toHaveTextContent('Sold');
+  });
+
+  it('edits documented unit occupancy values as canonical fields', async () => {
+    render(<UnitGridPanel projectId="p" />);
+    await screen.findByText(/RTQ-UNIT-1/);
+    await userEvent.click(screen.getByRole('checkbox', { name: /RTQ-UNIT-1/ }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Grid field' }), 'occupancy');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Grid field value' }), 'Vacant possession');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply to selected units' }));
+    await waitFor(() => expect(projectService.editUnitGrid).toHaveBeenCalledWith('p', expect.objectContaining({
+      expectedProjectVersion: 8,
+      rows: [{ unitId: 'unit-1', expectedVersion: 4, canonicalFieldMutations: [{ field: 'occupancy', operation: 'set', value: 'Vacant possession' }] }],
+    })));
   });
 
   it('binds the exact empty-body undo route before verifying and consuming the challenge', async () => {

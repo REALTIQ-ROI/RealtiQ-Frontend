@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Swal from 'sweetalert2';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
 import MapListLayout from '../../../components/property/map/MapListLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
+import type { Property } from '../../../types';
 import { propertyDisplayReference, propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
 
 const statusConfig = {
@@ -25,6 +28,7 @@ const approvalLabel = (status?: string) => {
 const LandlordMyProperties = () => {
   const { user } = useAuth();
   const { properties, deleteProperty } = useProperties();
+  const archiveStepUp = useBoundStepUp<void>();
   const [activeFilter, setActiveFilter] = useState<'all' | 'available' | 'sold'>('all');
   const [query, setQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -39,19 +43,36 @@ const LandlordMyProperties = () => {
     });
   }, [activeFilter, properties, query, user?._id]);
 
-  const handleDelete = async (id: string) => {
+  const handleArchive = async (property: Property) => {
+    const id = propertyRouteReference(property);
+    if (!id) return;
     const result = await Swal.fire({
-      title: 'Delete Property?',
-      text: 'This action cannot be undone.',
+      title: 'Archive Property?',
+      text: 'The listing will be archived and historical references will be retained. Sold or transaction-linked listings may be ineligible.',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Delete',
+      confirmButtonText: 'Continue to security check',
       cancelButtonText: 'Cancel',
       confirmButtonColor: '#ef4444',
       cancelButtonColor: '#6b7280',
       reverseButtons: true,
     });
-    if (result.isConfirmed) void deleteProperty(id);
+    if (!result.isConfirmed) return;
+    const body = typeof property.version === 'number' ? { expectedVersion: property.version } : {};
+    await archiveStepUp.begin({
+      method: 'DELETE',
+      path: `/api/properties/${encodeURIComponent(id)}`,
+      body,
+      label: `Archive listing ${propertyDisplayReference(property)}`,
+      execute: (challengeId, exactBody) => deleteProperty(id, exactBody, challengeId),
+    });
+  };
+
+  const finishArchive = async (code: string): Promise<boolean> => {
+    const result = await archiveStepUp.complete(code);
+    if (!result.ok) return false;
+    Swal.fire({ title: 'Property archived', text: 'The listing was archived. Historical references remain available where authorized.', icon: 'success' });
+    return true;
   };
 
   const totalValue = myProperties.reduce((sum, p) => sum + p.price, 0);
@@ -62,6 +83,7 @@ const LandlordMyProperties = () => {
     : 0;
 
   return (
+    <>
     <LandlordPortalLayout
       active="my-properties"
       title="My Properties"
@@ -105,6 +127,7 @@ const LandlordMyProperties = () => {
       }
     >
       <main className="p-8">
+        {archiveStepUp.error && !archiveStepUp.challenge ? <p role="alert" className="mb-5 rounded-lg bg-error-container p-4 text-sm text-on-error-container">{archiveStepUp.error}</p> : null}
         <div className="mb-10">
           <div className="flex items-center gap-2 text-label text-secondary mb-2">
             <span className="uppercase tracking-widest text-[10px]">Portal</span>
@@ -211,7 +234,7 @@ const LandlordMyProperties = () => {
           actions={(property) => (
             <>
               <Link className="rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold text-primary" to={`/dashboard/landlord/edit-property/${propertyRouteReference(property)}`}>Edit</Link>
-              <button type="button" className="rounded-lg bg-error-container px-3 py-2 text-xs font-bold text-error" onClick={() => void handleDelete(propertyRouteReference(property))}>Delete</button>
+              <button type="button" className="rounded-lg bg-error-container px-3 py-2 text-xs font-bold text-error" disabled={archiveStepUp.busy || Boolean(archiveStepUp.challenge)} onClick={() => void handleArchive(property)}>Archive</button>
             </>
           )}
         >
@@ -290,11 +313,12 @@ const LandlordMyProperties = () => {
                             </Link>
                             <button
                               className="p-2 text-secondary hover:text-error hover:bg-error-container/20 rounded-lg transition-all"
-                              title="Delete"
-                              onClick={() => void handleDelete(propertyRouteReference(property))}
+                              title="Archive listing"
+                              disabled={archiveStepUp.busy || Boolean(archiveStepUp.challenge)}
+                              onClick={() => void handleArchive(property)}
                               type="button"
                             >
-                              <span className="material-symbols-outlined text-xl">delete</span>
+                              <span className="material-symbols-outlined text-xl">archive</span>
                             </button>
                           </div>
                         </td>
@@ -352,11 +376,12 @@ const LandlordMyProperties = () => {
                           </Link>
                           <button
                             className="p-2 text-secondary hover:text-error hover:bg-error-container/20 rounded-lg transition-all"
-                            title="Delete"
-                            onClick={() => void handleDelete(propertyRouteReference(property))}
+                            title="Archive listing"
+                            disabled={archiveStepUp.busy || Boolean(archiveStepUp.challenge)}
+                            onClick={() => void handleArchive(property)}
                             type="button"
                           >
-                            <span className="material-symbols-outlined text-xl">delete</span>
+                            <span className="material-symbols-outlined text-xl">archive</span>
                           </button>
                         </div>
                       </div>
@@ -405,6 +430,8 @@ const LandlordMyProperties = () => {
         <span className="material-symbols-outlined">add</span>
       </Link>
     </LandlordPortalLayout>
+    <StepUpDialog challenge={archiveStepUp.challenge} busy={archiveStepUp.busy} error={archiveStepUp.error} onCancel={archiveStepUp.cancel} onSubmit={finishArchive} />
+    </>
   );
 };
 

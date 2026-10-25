@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
@@ -54,6 +54,7 @@ const ProjectManage = () => {
   const [unitPageError, setUnitPageError] = useState<string | null>(null);
   const [unitPagesExhausted, setUnitPagesExhausted] = useState(false);
   const { id = '' } = useParams();
+  const location = useLocation();
   const currentProjectId = useRef(id);
   currentProjectId.current = id;
   const { data, loading, error, execute } = useAsync(() => loadLandlordProjectManage(id), Boolean(id));
@@ -62,6 +63,9 @@ const ProjectManage = () => {
   const hasMoreUnits = !unitPagesExhausted && units.length < (data?.totalUnits ?? 0);
   const [tourPreference, setTourPreference] = useState<VirtualTourProvider | ''>('');
   useEffect(() => setTourPreference(project?.virtualTourProviderOverride ?? ''), [project?.virtualTourProviderOverride]);
+  useEffect(() => {
+    if (location.hash === '#project-publication') setPublicationOpen(true);
+  }, [location.hash]);
   useEffect(() => {
     setExtraUnits([]);
     setNextUnitPage(2);
@@ -244,10 +248,10 @@ const ProjectManage = () => {
                 <Link to={`/dashboard/landlord/projects/${project._id}/imports`} className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary">Bulk Upload Properties</Link>
                 <Button type="button" variant="secondary" loading={exportingGrid} onClick={() => void exportGrid()}>Export unit grid</Button>
                 <Button type="button" onClick={() => setPublicationOpen((value) => !value)}>Publication</Button>
-                <Button type="button" variant="secondary" disabled title="Project archive is not yet connected to the versioned lifecycle action">Archive</Button>
+                <Button type="button" variant="secondary" disabled title="The mounted archive route has no documented DELETE request DTO to bind to step-up">Archive unavailable</Button>
               </div>
             </header>
-            <p className="text-sm text-secondary">Project editing and archiving still need their field and archival UI reconciliation. Publication actions below use a version-bound one-use security challenge.</p>
+            <p className="text-sm text-secondary">Project edits use changed-only fields and the current version. Publication actions below use the version-bound one-use security challenge. Project archive remains unavailable until its exact versioned DELETE body is documented.</p>
 
             {publicationOpen ? <section className="rounded-xl border border-outline-variant/10 bg-white p-5" id="project-publication">
               <h2 className="text-xl font-black">Project publication</h2>
@@ -296,6 +300,7 @@ const ProjectManage = () => {
                   Add unit
                 </Link>
               </div>
+              <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Unit-type routes are mounted, but the handoff does not define their list/create/update DTOs or response shape. Direct unit-type CRUD is withheld. Existing units can still be managed with the canonical grid, including a move when you already have a valid same-project type ID.</p>
               {units.length ? (
                 <div className="mt-5 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                   {units.map((property) => <div key={property._id} className="space-y-2"><div className="flex justify-end"><Link className="text-xs font-bold text-primary underline" to={`/dashboard/landlord/edit-property/${property._id}`}>Edit unit</Link></div><PropertyCard property={property} /></div>)}

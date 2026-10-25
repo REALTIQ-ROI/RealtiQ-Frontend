@@ -130,31 +130,6 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
     }
   };
 
-  const deleteProperty = async (id: string): Promise<boolean> => {
-    const result = await Swal.fire({
-      title: 'Delete Property?',
-      text: 'This action cannot be undone',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Delete',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#6b7280',
-      reverseButtons: true,
-    });
-    if (!result.isConfirmed) return false;
-
-    try {
-      await propertyService.deleteProperty(id);
-      setProperties((prev) => prev.filter((p) => p._id !== id));
-      toast.success('Property deleted successfully');
-      return true;
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to delete property.');
-      return false;
-    }
-  };
-
   const toggleFeatured = async (id: string, currentFeatured: boolean): Promise<void> => {
     const nextFeatured = !currentFeatured;
     setProperties((prev) => prev.map((p) => (p._id === id ? { ...p, featured: nextFeatured } : p)));
@@ -186,7 +161,6 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
     goToPage,
     createProperty,
     updateProperty,
-    deleteProperty,
     toggleFeatured,
     buyProperty,
   };

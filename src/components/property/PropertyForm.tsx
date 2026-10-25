@@ -489,7 +489,7 @@ const PropertyForm = ({
       if (savedProperty?.paymentTypes) {
         setPaymentTypes(normalizePaymentTypesForForm(savedProperty.price, savedProperty.paymentTypes));
       }
-      setTitleDocumentRows([]);
+      if (savedProperty) setTitleDocumentRows([]);
     } catch (raw) {
       const message = raw instanceof Error ? raw.message : 'Unable to create the property.';
       if (raw instanceof ApiRequestError && raw.fieldErrors?.length) {

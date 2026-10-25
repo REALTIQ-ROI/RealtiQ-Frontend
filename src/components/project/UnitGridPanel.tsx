@@ -8,12 +8,15 @@ import StepUpDialog from '../auth/StepUpDialog';
 import Button from '../ui/Button';
 
 const fields = [
-  { key: 'bedrooms', label: 'Bedrooms', kind: 'integer' },
-  { key: 'fullBathrooms', label: 'Full bathrooms', kind: 'integer' },
-  { key: 'parkingSpaces', label: 'Parking spaces', kind: 'integer' },
-  { key: 'internalFloorArea', label: 'Internal floor area (m²)', kind: 'number' },
-  { key: 'negotiable', label: 'Price negotiable', kind: 'boolean' },
-  { key: 'furnishing', label: 'Furnishing', kind: 'furnishing' },
+  { key: 'unitIdentifier', label: 'Unit identifier', kind: 'text', inherits: false },
+  { key: 'bedrooms', label: 'Bedrooms', kind: 'integer', inherits: true },
+  { key: 'fullBathrooms', label: 'Full bathrooms', kind: 'integer', inherits: true },
+  { key: 'parkingSpaces', label: 'Parking spaces', kind: 'integer', inherits: true },
+  { key: 'internalFloorArea', label: 'Internal floor area (m²)', kind: 'number', inherits: true },
+  { key: 'negotiable', label: 'Price negotiable', kind: 'boolean', inherits: true },
+  { key: 'furnishing', label: 'Furnishing', kind: 'furnishing', inherits: true },
+  { key: 'occupancy', label: 'Occupancy', kind: 'enum', inherits: false, options: ['Vacant possession', 'Sold with occupiers'] },
+  { key: 'buildStage', label: 'Build stage', kind: 'enum', inherits: true, options: ['Off-plan', 'Under construction', 'Uncompleted building', 'Semi-finished (Advanced Shell / Lock-up)', 'Newly built', 'Renovated', 'Previously owned', 'Old'] },
 ] as const;
 
 type EditableField = (typeof fields)[number]['key'];
@@ -58,6 +61,8 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
   const { data: grid, loading, error, execute } = useAsync(() => projectService.getUnitGrid(projectId, gridQuery), true, `${projectId}:${JSON.stringify(gridQuery)}:${refreshKey}`);
   const [selected, setSelected] = useState<string[]>([]);
   const [field, setField] = useState<EditableField>('bedrooms');
+  const selectedField = fields.find((item) => item.key === field)!;
+  const fieldOptions: readonly string[] = 'options' in selectedField ? selectedField.options : [];
   const [operation, setOperation] = useState<'set' | 'reset_to_inherited'>('set');
   const [fieldValue, setFieldValue] = useState('');
   const [targetUnitTypeId, setTargetUnitTypeId] = useState('');
@@ -105,8 +110,11 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
   };
 
   const currentMutation = (): UnitGridMutation | null => {
-    if (operation === 'reset_to_inherited') return { field, operation };
     const config = fields.find((item) => item.key === field)!;
+    if (operation === 'reset_to_inherited') {
+      if (!config.inherits) { setActionError('The selected canonical field does not inherit from its project or unit type.'); return null; }
+      return { field, operation };
+    }
     if (!fieldValue.trim()) { setActionError('Enter a value. Zero and false must be entered explicitly.'); return null; }
     if (config.kind === 'boolean') {
       if (fieldValue !== 'true' && fieldValue !== 'false') { setActionError('Choose Yes or No.'); return null; }
@@ -116,6 +124,12 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       if (!['Furnished', 'Semi-Furnished', 'Unfurnished'].includes(fieldValue)) { setActionError('Choose a supported furnishing value.'); return null; }
       return { field, operation: 'set', value: fieldValue };
     }
+    if (config.kind === 'enum') {
+      const options: readonly string[] = 'options' in config ? config.options : [];
+      if (!options.includes(fieldValue)) { setActionError('Choose one of the documented values.'); return null; }
+      return { field, operation: 'set', value: fieldValue };
+    }
+    if (config.kind === 'text') return { field, operation: 'set', value: fieldValue.trim() };
     const value = Number(fieldValue);
     if (!Number.isFinite(value) || value < 0 || (config.kind === 'integer' && !Number.isInteger(value))) { setActionError('Enter a non-negative' + (config.kind === 'integer' ? ' whole number.' : ' number.')); return null; }
     return { field, operation: 'set', value };
@@ -226,6 +240,17 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     return false;
   };
 
+  const selectVisibleFailedJobRows = () => {
+    const failedIds = new Set((job?.rows ?? []).filter((row) => row.state === 'failed').map((row) => row.unitId));
+    const visibleRows = (grid?.items ?? []).filter((row) => failedIds.has(row._id));
+    if (!visibleRows.length) {
+      setActionError('No failed rows from this job are on the current grid page. Refresh the grid and page through the affected units before starting a reviewed retry.');
+      return;
+    }
+    setSelected(visibleRows.map((row) => row._id));
+    setActionError('Failed rows on this page are selected. Review their current versions, choose the intended action and options, then queue a new job.');
+  };
+
   return <section className="rounded-xl border border-outline-variant/10 bg-white p-5">
     <h2 className="text-xl font-black">Canonical unit grid</h2>
     <p className="mt-1 text-sm text-secondary">Effective values and their project, type or unit source come from the private grid response. Each edit carries current project and row versions.</p>
@@ -254,7 +279,7 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       <div className="mt-3 max-h-[520px] space-y-3 overflow-y-auto">
         {grid.items.map((row) => <div key={row._id} className="rounded-lg border border-outline-variant/20 p-3 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2"><label className="flex items-center gap-2 font-bold"><input type="checkbox" checked={selected.includes(row._id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, row._id] : current.filter((id) => id !== row._id))} />{row.publicReference || row._id}</label><span className="text-xs text-secondary">Version {row.version} · {row.readiness.publicationState}</span></div>
-          <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">{['propertyType', 'bedrooms', 'fullBathrooms', 'parkingSpaces', 'internalFloorArea', 'furnishing', 'askingPrice', 'currency', 'availability'].map((key) => <div key={key}><span className="font-bold text-secondary">{key.replace(/([a-z])([A-Z])/g, '$1 $2')}: </span>{sourceValue(row.effectiveFields, key)}<span className="ml-1 text-secondary">{row.fieldSources[key] ? `(${row.fieldSources[key].sourceLevel}, ${row.fieldSources[key].state})` : '(source not returned)'}</span>{Object.prototype.hasOwnProperty.call(row.rawOverrides, key) ? <span className="ml-1 text-primary">Override: {sourceValue(row.rawOverrides, key)}</span> : null}</div>)}</div>
+          <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">{['unitIdentifier', 'propertyType', 'bedrooms', 'fullBathrooms', 'parkingSpaces', 'internalFloorArea', 'furnishing', 'occupancy', 'buildStage', 'askingPrice', 'currency', 'availability'].map((key) => <div key={key}><span className="font-bold text-secondary">{key.replace(/([a-z])([A-Z])/g, '$1 $2')}: </span>{sourceValue(row.effectiveFields, key)}<span className="ml-1 text-secondary">{row.fieldSources[key] ? `(${row.fieldSources[key].sourceLevel}, ${row.fieldSources[key].state})` : '(source not returned)'}</span>{Object.prototype.hasOwnProperty.call(row.rawOverrides, key) ? <span className="ml-1 text-primary">Override: {sourceValue(row.rawOverrides, key)}</span> : null}</div>)}</div>
           {row.readiness.blockers?.length ? <p className="mt-2 text-xs text-amber-800">Readiness: {row.readiness.blockers.map((item) => `${item.field ?? 'workflow'} ${item.code ?? 'blocked'}`).join(' · ')}</p> : null}
           {row.readiness.problems ? <p className="mt-1 text-xs font-semibold text-amber-800">This unit has readiness problems.</p> : null}
         </div>)}
@@ -263,8 +288,8 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       <div className="mt-3 flex items-center gap-2"><Button type="button" variant="secondary" disabled={page <= 1 || loading} onClick={() => { setPage((value) => value - 1); setSelected([]); }}>Previous</Button><Button type="button" variant="secondary" disabled={page >= grid.pagination.pages || loading} onClick={() => { setPage((value) => value + 1); setSelected([]); }}>Next</Button></div>
     </> : null}
     <div className="mt-6 grid gap-4 border-t border-outline-variant/20 pt-5 lg:grid-cols-2">
-      <div className="space-y-3"><h3 className="font-black">Canonical field edit</h3><div className="grid gap-2 sm:grid-cols-2"><select aria-label="Grid field" value={field} onChange={(event) => setField(event.target.value as EditableField)} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{fields.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select><select aria-label="Grid mutation" value={operation} onChange={(event) => setOperation(event.target.value as 'set' | 'reset_to_inherited')} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="set">Set explicit override</option><option value="reset_to_inherited">Reset to inherited</option></select></div>
-        {operation === 'set' ? fields.find((item) => item.key === field)?.kind === 'boolean' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose Yes or No</option><option value="true">Yes</option><option value="false">No</option></select> : fields.find((item) => item.key === field)?.kind === 'furnishing' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose furnishing</option>{['Furnished', 'Semi-Furnished', 'Unfurnished'].map((item) => <option key={item} value={item}>{item}</option>)}</select> : <input aria-label="Grid field value" type="number" min={0} step={fields.find((item) => item.key === field)?.kind === 'integer' ? 1 : 'any'} value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="Enter value, including 0" /> : <p className="text-xs text-secondary">The selected field will inherit from its unit type or project where supported.</p>}
+      <div className="space-y-3"><h3 className="font-black">Canonical field edit</h3><div className="grid gap-2 sm:grid-cols-2"><select aria-label="Grid field" value={field} onChange={(event) => { const nextField = event.target.value as EditableField; setField(nextField); if (!fields.find((item) => item.key === nextField)?.inherits) setOperation('set'); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{fields.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select><select aria-label="Grid mutation" value={operation} onChange={(event) => setOperation(event.target.value as 'set' | 'reset_to_inherited')} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="set">Set explicit override</option><option value="reset_to_inherited" disabled={!fields.find((item) => item.key === field)?.inherits}>Reset to inherited</option></select></div>
+        {operation === 'set' ? fields.find((item) => item.key === field)?.kind === 'boolean' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose Yes or No</option><option value="true">Yes</option><option value="false">No</option></select> : fields.find((item) => item.key === field)?.kind === 'furnishing' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose furnishing</option>{['Furnished', 'Semi-Furnished', 'Unfurnished'].map((item) => <option key={item} value={item}>{item}</option>)}</select> : fields.find((item) => item.key === field)?.kind === 'enum' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose a value</option>{fieldOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select> : <input aria-label="Grid field value" type={fields.find((item) => item.key === field)?.kind === 'text' ? 'text' : 'number'} min={fields.find((item) => item.key === field)?.kind === 'text' ? undefined : 0} step={fields.find((item) => item.key === field)?.kind === 'integer' ? 1 : 'any'} value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder={fields.find((item) => item.key === field)?.kind === 'text' ? 'Enter unit identifier' : 'Enter value, including 0'} /> : <p className="text-xs text-secondary">The selected field will inherit from its unit type or project where the canonical dictionary allows inheritance.</p>}
         <Button type="button" disabled={!rows.length || working || conflict} onClick={() => void submitDirectEdit()}>Apply to selected units</Button>
         <div className="border-t border-outline-variant/20 pt-3"><label className="text-xs font-bold text-secondary" htmlFor="unit-grid-target-type">Move to same-project unit type ID</label><input id="unit-grid-target-type" value={targetUnitTypeId} onChange={(event) => setTargetUnitTypeId(event.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="24-character unit type ID" /><Button type="button" variant="secondary" disabled={!rows.length || working || conflict} onClick={() => void submitTypeMove()}>Move selected units</Button></div>
       </div>
@@ -277,8 +302,8 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     </div>
     {actionError || (!undoStepUp.challenge && undoStepUp.error) ? <p role="alert" className="mt-4 rounded-lg bg-error-container p-3 text-sm text-on-error-container">{actionError ?? undoStepUp.error}</p> : null}
     {conflict ? <div role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">A project or unit version changed. Your selection and inputs remain. <button type="button" className="font-bold underline" onClick={async () => { const latest = await execute(); if (latest) setConflict(false); }}>Refresh versions and review before retrying</button></div> : null}
-    {lastOperation ? <div className="mt-5 rounded-lg bg-surface-container-low p-4 text-sm"><h3 className="font-bold">Direct edit {lastOperation.state}</h3><p>{lastOperation.rowCount} rows · Operation {lastOperation.id}</p>{lastOperation.undoAvailable ? <Button type="button" variant="secondary" disabled={working} onClick={() => void beginUndo(lastOperation.id)}>Undo with authenticator</Button> : null}</div> : null}
-    {job ? <div className="mt-5 rounded-lg bg-surface-container-low p-4 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Job {job.state}</h3><div className="flex gap-2"><Button type="button" variant="secondary" disabled={working} onClick={() => void projectService.getUnitGridJob(projectId, job.id).then(setJob).catch((raw: unknown) => setActionError(errorText(raw)))}>Refresh job</Button>{!terminalJobStates.has(job.state) ? <Button type="button" variant="secondary" disabled={working} onClick={() => void projectService.cancelUnitGridJob(projectId, job.id).then(setJob).catch((raw: unknown) => setActionError(errorText(raw)))}>Cancel remaining</Button> : null}</div></div><p className="mt-2 text-xs text-secondary">{job.progress.completed} completed · {job.progress.failed} failed · {job.progress.cancelled} cancelled · {job.progress.remaining} remaining</p>{job.state === 'partially_completed' ? <p className="mt-2 text-xs font-semibold text-amber-800">Some rows committed and others did not. Review every row before retrying.</p> : null}<div className="mt-3 space-y-2">{job.rows.map((row) => <div key={`${row.index}:${row.unitId}`} className="rounded bg-white p-2 text-xs"><span className="font-bold">{row.unitId} · {row.state}</span>{row.error ? <span className="ml-2 text-error">{row.error.code}: {row.error.message}</span> : null}{row.operationId && row.undoAvailable ? <button type="button" disabled={working} className="ml-2 font-bold text-primary underline" onClick={() => void beginUndo(row.operationId!)}>Undo with authenticator</button> : null}</div>)}</div></div> : null}
+    {lastOperation ? <div className="mt-5 rounded-lg bg-surface-container-low p-4 text-sm"><h3 className="font-bold">Direct edit {lastOperation.state}</h3><p>{lastOperation.rowCount} rows · Operation {lastOperation.id}</p>{lastOperation.undoExpiresAt ? <p className="mt-1 text-xs text-secondary">Undo window ends {new Date(lastOperation.undoExpiresAt).toLocaleString()}.</p> : null}{lastOperation.undoAvailable ? <Button type="button" variant="secondary" disabled={working || Boolean(lastOperation.undoExpiresAt && Date.parse(lastOperation.undoExpiresAt) <= Date.now())} onClick={() => void beginUndo(lastOperation.id)}>{lastOperation.undoExpiresAt && Date.parse(lastOperation.undoExpiresAt) <= Date.now() ? 'Undo window expired' : 'Undo with authenticator'}</Button> : null}</div> : null}
+    {job ? <div className="mt-5 rounded-lg bg-surface-container-low p-4 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Job {job.state}</h3><div className="flex gap-2"><Button type="button" variant="secondary" disabled={working} onClick={() => void projectService.getUnitGridJob(projectId, job.id).then(setJob).catch((raw: unknown) => setActionError(errorText(raw)))}>Refresh job</Button>{!terminalJobStates.has(job.state) ? <Button type="button" variant="secondary" disabled={working} onClick={() => void projectService.cancelUnitGridJob(projectId, job.id).then(setJob).catch((raw: unknown) => setActionError(errorText(raw)))}>Cancel remaining</Button> : null}</div></div><p className="mt-2 text-xs text-secondary">{job.progress.completed} completed · {job.progress.failed} failed · {job.progress.cancelled} cancelled · {job.progress.remaining} remaining</p>{job.state === 'partially_completed' ? <p className="mt-2 text-xs font-semibold text-amber-800">Some rows committed and others did not. Review every row before retrying.</p> : null}<div className="mt-3 space-y-2">{job.rows.map((row) => <div key={`${row.index}:${row.unitId}`} className="rounded bg-white p-2 text-xs"><span className="font-bold">{row.unitId} · {row.state}</span>{row.error ? <span className="ml-2 text-error">{row.error.code}: {row.error.message}</span> : null}{row.operationId && row.undoAvailable ? <button type="button" disabled={working} className="ml-2 font-bold text-primary underline" onClick={() => void beginUndo(row.operationId!)}>Undo with authenticator</button> : null}</div>)}</div>{job.rows.some((row) => row.state === 'failed') ? <Button type="button" variant="secondary" className="mt-3" disabled={working || conflict} onClick={selectVisibleFailedJobRows}>Select failed rows on this page for reviewed retry</Button> : null}</div> : null}
     <div className="mt-5 flex flex-wrap gap-2 border-t border-outline-variant/20 pt-4"><input aria-label="Existing grid operation ID" value={existingOperationId} onChange={(event) => setExistingOperationId(event.target.value)} className="min-w-[220px] flex-1 rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="Existing operation ID for undo" /><Button type="button" variant="secondary" disabled={!existingOperationId.trim() || working} onClick={() => void beginUndo(existingOperationId.trim())}>Request undo challenge</Button></div>
     <StepUpDialog challenge={undoStepUp.challenge} busy={working || undoStepUp.busy} error={undoStepUp.error} onCancel={undoStepUp.cancel} onSubmit={completeUndo} />
   </section>;
