@@ -1,10 +1,22 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { dataProtectionService, type DataProtectionRequestSummary } from '../../services/dataProtectionService';
+import { dataProtectionService, type DataProtectionExecution, type DataProtectionRequestSummary } from '../../services/dataProtectionService';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../ui/Button';
 
 const readable = (value: string) => value.replaceAll('_', ' ');
 const fieldLabel = (value: string) => readable(value.replace(/([a-z0-9])([A-Z])/g, '$1 $2'));
+const stateGuidance: Record<string, string> = {
+  submitted: 'Submitted for review.',
+  under_review: 'A reviewer is assessing the request.',
+  queued: 'Execution is queued; individual records have not all finished.',
+  processing: 'Execution is in progress. Refresh to see later record outcomes.',
+  completed: 'The request reached a terminal state. Inspect record outcomes to see what was completed or preserved.',
+  partially_blocked: 'Some records may be complete while others are preserved or blocked. Inspect each returned outcome and reason code.',
+  waiting_for_policy: 'Execution is waiting for an approved retention or legal-hold policy decision.',
+  failed: 'Execution failed. The returned result codes and record outcomes show what remains unresolved.',
+  rejected: 'The request was rejected. Review the returned result codes and history.',
+  withdrawn: 'This request was withdrawn.',
+};
 
 const serverFields = (value: unknown, depth = 0): ReactNode => {
   if (value === null || value === undefined) return '—';
@@ -33,7 +45,7 @@ const ScopedDataProtectionRequests = () => {
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const [execution, setExecution] = useState<unknown>(null);
+  const [execution, setExecution] = useState<DataProtectionExecution | null>(null);
   const [executionLoading, setExecutionLoading] = useState(false);
   const [executionError, setExecutionError] = useState<string | null>(null);
   const selectedId = useRef<string | null>(null);
@@ -85,6 +97,18 @@ const ScopedDataProtectionRequests = () => {
       if (selectedId.current === id) setExecutionLoading(false);
     }
   };
+
+  const executionJobState = execution?.job?.state;
+  const activeRequestId = selected?.id;
+  useEffect(() => {
+    if (!activeRequestId || !executionJobState || !['queued', 'processing'].includes(executionJobState)) return;
+    const id = activeRequestId;
+    const timer = window.setInterval(() => {
+      void dataProtectionService.execution(id).then((result) => { if (selectedId.current === id) setExecution(result); })
+        .catch((raw: unknown) => { if (selectedId.current === id) setExecutionError(raw instanceof Error ? raw.message : 'Unable to refresh execution progress.'); });
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [activeRequestId, executionJobState]);
 
   const open = async (id: string) => {
     selectedId.current = id;
@@ -145,9 +169,16 @@ const ScopedDataProtectionRequests = () => {
       {selected ? (
         <div className="mt-5 rounded-lg border border-outline-variant/20 p-4 text-sm">
           <p className="font-bold capitalize">{selected.requestType} · {readable(selected.state)}</p>
+          <p role="status" className="mt-2 rounded-lg bg-surface-container-low p-3 text-secondary">{stateGuidance[selected.state] ?? 'Review the server result codes and record outcomes for the current state.'}</p>
+          <div className="mt-2 flex flex-wrap gap-3 text-xs text-secondary">
+            <span>Submitted {new Date(selected.submittedAt).toLocaleString('en-NG')}</span>
+            {selected.reviewedAt ? <span>Reviewed {new Date(selected.reviewedAt).toLocaleString('en-NG')}</span> : null}
+            <span>Version {selected.version}</span>
+            <button type="button" className="font-bold text-primary" onClick={() => void open(selected.id)}>Refresh request</button>
+          </div>
           <p className="mt-2 text-secondary">Requested scopes: {selected.scopes?.map(readable).join(', ') || 'See request status'}</p>
           {selected.correctionFields?.length ? <p className="mt-1 text-secondary">Correction fields: {selected.correctionFields.map(readable).join(', ')}</p> : null}
-          {selected.resultCodes.length ? <p className="mt-2 text-secondary">Result codes: {selected.resultCodes.join(', ')}</p> : null}
+          {selected.resultCodes.length ? <div className="mt-2"><p className="text-xs font-bold text-secondary">Server result codes</p><div className="mt-1 flex flex-wrap gap-1">{selected.resultCodes.map((code) => <span key={code} className="rounded bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">{code}</span>)}</div></div> : null}
           {selected.completedAt ? <p className="mt-2 text-secondary">Last completed {new Date(selected.completedAt).toLocaleDateString('en-NG')}; individual records may have separate outcomes.</p> : null}
           {['partially_blocked', 'waiting_for_policy', 'failed'].includes(selected.state) ? (
             <p role="status" className="mt-2 rounded-lg bg-amber-50 p-3 text-amber-900">Some work may be pending, blocked or preserved under retention and legal-hold rules. Review the server outcomes below.</p>
@@ -172,11 +203,18 @@ const ScopedDataProtectionRequests = () => {
             <div className="flex items-center justify-between gap-2"><h4 className="font-bold">Execution and record outcomes</h4><button type="button" className="text-xs font-bold text-primary" disabled={executionLoading} onClick={() => void loadExecution(selected.id)}>Refresh</button></div>
             {executionError ? <p role="alert" className="mt-2 text-red-700">{executionError}</p> : null}
             {executionLoading ? <p className="mt-2 text-secondary">Loading execution status…</p> : null}
-            {!executionLoading && !executionError ? <div className="mt-2 rounded-lg bg-surface-container-low p-3">{serverFields(execution)}</div> : null}
+            {!executionLoading && !executionError ? execution ? <div className="mt-2 space-y-3 rounded-lg bg-surface-container-low p-3">
+              <p className="font-bold capitalize">{readable(execution.state)} · Version {execution.version}</p>
+              {execution.job ? <div><p className="font-semibold capitalize">Job {readable(execution.job.state)} · {execution.job.attempts} attempts</p><p className="mt-1 text-xs text-secondary">{execution.job.progress.discovered} discovered · {execution.job.progress.completed} completed · {execution.job.progress.preserved} preserved · {execution.job.progress.blocked} blocked · {execution.job.progress.processing} processing</p>{execution.job.lastErrorCode ? <p className="mt-1 text-xs text-error">Last error: {execution.job.lastErrorCode}</p> : null}</div> : <p className="text-xs text-secondary">No execution job returned.</p>}
+              {execution.deletion ? <div><h5 className="font-bold">Deletion outcome groups</h5><p className="mt-1 text-xs text-secondary">{execution.deletion.counts.completed} completed · {execution.deletion.counts.preserved} preserved · {execution.deletion.counts.blocked} blocked · {execution.deletion.counts.held} held · {execution.deletion.counts.eligible} eligible · {execution.deletion.counts.processing} processing</p><div className="mt-2 space-y-2">{execution.deletion.outcomes.map((outcome, index) => <div key={`${outcome.recordKind}:${outcome.category}:${outcome.state}:${outcome.reasonCode}:${index}`} className="rounded bg-white p-3 text-xs"><p className="font-bold capitalize">{readable(outcome.recordKind)} · {readable(outcome.category)} · {readable(outcome.state)} · {outcome.count} records</p><p className="mt-1 text-secondary">Reason: {outcome.reasonCode} · Proposed action: {readable(outcome.proposedAction)}</p></div>)}</div>{!execution.deletion.outcomes.length ? <p className="mt-2 text-xs text-secondary">No outcome groups returned yet.</p> : null}</div> : null}
+              {execution.export !== null ? <div><p className="font-bold">Access export status</p>{serverFields(execution.export)}</div> : null}
+              {execution.resultCodes.length ? <p className="text-xs text-secondary">Result codes: {execution.resultCodes.join(', ')}</p> : null}
+            </div> : <p className="mt-2 text-secondary">No execution record returned.</p> : null}
+            <p className="mt-2 text-xs text-secondary">The server groups outcomes by record kind, category, state and reason; it does not return individual record IDs. Held and preserved counts reflect retention or legal-hold decisions only as returned.</p>
           </div>
         </div>
       ) : null}
-      <p className="mt-4 text-xs text-amber-800">Creating or withdrawing a request requires a server step-up challenge. Those actions are unavailable until its request contract is documented.</p>
+      <p className="mt-4 text-xs text-amber-800">Creating or withdrawing a request requires a bound authenticator challenge. Those write controls are not yet connected in this screen.</p>
     </section>
   );
 };

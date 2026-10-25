@@ -184,6 +184,7 @@ export interface ProjectOwnerSummary {
 
 export interface ProjectDetail extends ProjectCard {
   version?: number;
+  publication?: { published: boolean; publishedUnitCount: number; blockedUnitCount: number; blockedUnits: Array<{ unitId: string; blockers: Array<{ field: string; code: string }> }>; projectBlockers?: Array<{ field: string; code: string }> };
   description?: string;
   address?: string;
   country?: string;
@@ -351,6 +352,7 @@ export interface UserKyc {
 
 export interface Property {
   _id: string;
+  canonicalFields?: Record<string, unknown>;
   id?: string;
   publicReference?: string | null;
   title: string;

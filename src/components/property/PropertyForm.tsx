@@ -72,23 +72,67 @@ const inputClass =
 const labelClass = 'block text-[11px] font-bold uppercase tracking-widest text-secondary mb-1.5';
 const errorClass = 'text-error text-xs mt-1';
 
-const validate = (data: CreatePropertyPayload & { status?: string }): Record<string, string> => {
+const canonicalText = (fields: Record<string, unknown> | undefined, key: string): string => {
+  const value = fields?.[key];
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+};
+
+const canonicalBoolean = (fields: Record<string, unknown> | undefined, key: string): string => {
+  const value = fields?.[key];
+  return typeof value === 'boolean' ? String(value) : '';
+};
+
+const savedCanonicalFields = [
+  ['gatedEstate', 'Gated estate'], ['estateName', 'Estate name'], ['streetAddress', 'Street address'],
+  ['houseNumber', 'House number'], ['unitOrFlatNumber', 'Unit or flat number'],
+  ['estateAccessStreet', 'Estate access street'], ['estateInternalStreet', 'Estate internal street'],
+  ['estateHouseUnitNumber', 'Estate house or unit number'], ['commercialFrontage', 'Commercial frontage'],
+  ['commercialFloorsOrUnits', 'Commercial floors or units'], ['loadingVehicleAccess', 'Loading vehicle access'],
+  ['loadingVehicleAccessType', 'Loading access type'], ['liftCount', 'Lift count'], ['fitOut', 'Fit-out'],
+] as const;
+
+const savedCanonicalValue = (fields: Record<string, unknown>, key: string): string => {
+  if (!Object.prototype.hasOwnProperty.call(fields, key)) return 'Missing from property response';
+  const value = fields[key];
+  if (value === null) return 'Explicit null';
+  if (value === false) return 'False (explicit)';
+  if (value === true) return 'True (explicit)';
+  if (value === 0) return '0 (explicit)';
+  if (value === '') return 'Empty string (explicit)';
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : 'Returned value';
+};
+
+// An empty control is unanswered. Zero and false are explicit answers, never defaults.
+const changedCanonicalValue = (
+  patch: Record<string, unknown>,
+  original: Record<string, unknown> | undefined,
+  key: string,
+  value: string,
+  kind: 'text' | 'number' | 'boolean' = 'text',
+): void => {
+  if (value.trim() === '') return;
+  if (value === original?.[key]) return;
+  const next = kind === 'number' ? Number(value) : kind === 'boolean' ? value === 'true' : value.trim();
+  if (next !== original?.[key]) patch[key] = next;
+};
+
+const validate = (data: CreatePropertyPayload & { status?: string }, mode: 'create' | 'edit', hadPaymentTypes: boolean): Record<string, string> => {
   const errs: Record<string, string> = {};
-  if (!data.title.trim()) errs.title = 'Title is required';
+  if (mode === 'create' && !data.title.trim()) errs.title = 'Title is required';
   if (data.price < 0) errs.price = 'Price cannot be negative';
   if (!Number.isFinite(data.price)) errs.price = 'Price must be a valid number';
-  if (!data.location.trim()) errs.location = 'Location is required';
-  if (!data.propertyType) errs.propertyType = 'Property type is required';
-  else if (!PROPERTY_TYPES.includes(data.propertyType)) errs.propertyType = 'Select a supported property type';
+  if (mode === 'create' && !data.location.trim()) errs.location = 'Location is required';
+  if (!data.propertyType && mode === 'create') errs.propertyType = 'Property type is required';
   if (data.bedrooms !== undefined && (!Number.isInteger(data.bedrooms) || data.bedrooms < 0)) errs.bedrooms = 'Bedrooms must be a non-negative whole number';
   if (data.bathrooms !== undefined && (!Number.isInteger(data.bathrooms) || data.bathrooms < 0)) errs.bathrooms = 'Bathrooms must be a non-negative whole number';
-  if (!data.completionStage) errs.completionStage = 'Completion stage is required';
-  if (!Number.isFinite(data.squareFeet) || data.squareFeet < 0) errs.squareFeet = 'Square footage must be non-negative';
-  if (!data.description.trim()) errs.description = 'Description is required';
-  if (!data.media || data.media.length === 0) errs.media = 'At least one media file is required';
-  if (!data.category) errs.category = 'Category is required';
-  if (!data.currency) errs.currency = 'Currency is required';
-  if (!data.paymentTypes.length) errs.paymentTypes = 'Select at least one property payment type';
+  if (!data.completionStage && mode === 'create') errs.completionStage = 'Completion stage is required';
+  if (mode === 'create' && data.squareFeet === undefined) errs.squareFeet = 'Enter square footage, including 0 when explicitly intended';
+  else if (data.squareFeet !== undefined && (!Number.isFinite(data.squareFeet) || data.squareFeet < 0)) errs.squareFeet = 'Square footage must be non-negative';
+  if (!data.description.trim() && mode === 'create') errs.description = 'Description is required';
+  if ((!data.media || data.media.length === 0) && mode === 'create') errs.media = 'At least one media file is required';
+  if (!data.category && mode === 'create') errs.category = 'Category is required';
+  if (!data.currency && mode === 'create') errs.currency = 'Currency is required';
+  if (!data.paymentTypes.length && (mode === 'create' || hadPaymentTypes)) errs.paymentTypes = 'Select at least one property payment type';
   if (data.coordinates) {
     if (!Number.isFinite(data.coordinates.lat) || data.coordinates.lat < -90 || data.coordinates.lat > 90) {
       errs.coordinatesLat = 'Latitude must be between -90 and 90';
@@ -103,13 +147,13 @@ const validate = (data: CreatePropertyPayload & { status?: string }): Record<str
   if (data.offPlan) {
     const progress = Number(data.offPlan.constructionProgress ?? 0);
     if (progress < 0 || progress > 100) errs.constructionProgress = 'Progress must be between 0 and 100';
-    if (!data.offPlan.expectedCompletionDate) errs.expectedCompletionDate = 'Expected completion date is required';
+    if (mode === 'create' && !data.offPlan.expectedCompletionDate) errs.expectedCompletionDate = 'Expected completion date is required';
     if ((data.offPlan.reservationAmount ?? 0) < 0) errs.reservationAmount = 'Reservation cannot be negative';
     if ((data.offPlan.minimumInitialDeposit ?? 0) < 0) errs.minimumInitialDeposit = 'Deposit cannot be negative';
     if ((data.offPlan.reservationAmount ?? 0) > data.price) errs.reservationAmount = 'Reservation cannot exceed property price';
     if ((data.offPlan.minimumInitialDeposit ?? 0) > data.price) errs.minimumInitialDeposit = 'Deposit cannot exceed property price';
     if ((data.offPlan.unitsAvailable ?? 0) > (data.offPlan.totalUnitsPlanned ?? Number.MAX_SAFE_INTEGER)) errs.unitsAvailable = 'Available units cannot exceed planned units';
-    if (!data.offPlan.riskDisclosure?.trim()) errs.riskDisclosure = 'Risk disclosure is required for off-plan listings';
+    if (mode === 'create' && !data.offPlan.riskDisclosure?.trim()) errs.riskDisclosure = 'Risk disclosure is required for off-plan listings';
     const milestones = data.offPlan.paymentMilestones ?? [];
     const sequences = new Set(milestones.map((item) => item.sequence));
     if (sequences.size !== milestones.length) errs.paymentMilestones = 'Milestone sequence values must be unique';
@@ -145,16 +189,32 @@ const PropertyForm = ({
   const [bathrooms, setBathrooms] = useState(initialData?.bathrooms?.toString() ?? '1');
   const [squareFeet, setSquareFeet] = useState(initialData?.squareFeet?.toString() ?? '');
   const [structuredFacts, setStructuredFacts] = useState<StructuredPropertyFacts>(() => sellerStructuredFacts(initialData?.structuredFacts ?? {}));
+  const [structuredFactsTouched, setStructuredFactsTouched] = useState(false);
   const [description, setDescription] = useState(initialData?.description ?? '');
-  const [category, setCategory] = useState(initialData?.category ?? 'residential');
-  const [completionStage, setCompletionStage] = useState(initialData?.completionStage ?? 'finished');
-  const [currency, setCurrency] = useState(initialData?.currency ?? 'NGN');
+  const [category, setCategory] = useState(initialData?.category ?? (mode === 'create' ? 'residential' : ''));
+  const [completionStage, setCompletionStage] = useState(initialData?.completionStage ?? (mode === 'create' ? 'finished' : ''));
+  const [currency, setCurrency] = useState(initialData?.currency ?? (mode === 'create' ? 'NGN' : ''));
   const [coordinatesLat, setCoordinatesLat] = useState(initialData?.coordinates?.lat?.toString() ?? '');
   const [coordinatesLng, setCoordinatesLng] = useState(initialData?.coordinates?.lng?.toString() ?? '');
   const [priceChangeReason, setPriceChangeReason] = useState('');
   const [amenities, setAmenities] = useState<string[]>(initialData?.amenities ?? []);
   const [amenityInput, setAmenityInput] = useState('');
   const [media, setMedia] = useState<MediaItem[]>(initialData?.media ?? []);
+  const initialCanonical = initialData?.canonicalFields;
+  const [gatedEstate, setGatedEstate] = useState(() => canonicalBoolean(initialCanonical, 'gatedEstate'));
+  const [estateName, setEstateName] = useState(() => canonicalText(initialCanonical, 'estateName'));
+  const [streetAddress, setStreetAddress] = useState(() => canonicalText(initialCanonical, 'streetAddress'));
+  const [houseNumber, setHouseNumber] = useState(() => canonicalText(initialCanonical, 'houseNumber'));
+  const [unitOrFlatNumber, setUnitOrFlatNumber] = useState(() => canonicalText(initialCanonical, 'unitOrFlatNumber'));
+  const [estateAccessStreet, setEstateAccessStreet] = useState(() => canonicalText(initialCanonical, 'estateAccessStreet'));
+  const [estateInternalStreet, setEstateInternalStreet] = useState(() => canonicalText(initialCanonical, 'estateInternalStreet'));
+  const [estateHouseUnitNumber, setEstateHouseUnitNumber] = useState(() => canonicalText(initialCanonical, 'estateHouseUnitNumber'));
+  const [commercialFrontage, setCommercialFrontage] = useState(() => canonicalText(initialCanonical, 'commercialFrontage'));
+  const [commercialFloorsOrUnits, setCommercialFloorsOrUnits] = useState(() => canonicalText(initialCanonical, 'commercialFloorsOrUnits'));
+  const [loadingVehicleAccess, setLoadingVehicleAccess] = useState(() => canonicalBoolean(initialCanonical, 'loadingVehicleAccess'));
+  const [loadingVehicleAccessType, setLoadingVehicleAccessType] = useState(() => canonicalText(initialCanonical, 'loadingVehicleAccessType'));
+  const [liftCount, setLiftCount] = useState(() => canonicalText(initialCanonical, 'liftCount'));
+  const [fitOut, setFitOut] = useState(() => canonicalText(initialCanonical, 'fitOut'));
   const [paymentTypes, setPaymentTypes] = useState<PropertyPaymentType[]>(() =>
     mode === 'edit'
       ? normalizePaymentTypesForForm(
@@ -172,7 +232,8 @@ const PropertyForm = ({
   const [phase, setPhase] = useState(initialData?.projectUnit?.phase ?? '');
   const [floor, setFloor] = useState(initialData?.projectUnit?.floor ?? '');
   const [plotNumber, setPlotNumber] = useState(initialData?.projectUnit?.plotNumber ?? '');
-  const [listingType, setListingType] = useState<ListingType>(initialData?.listingType ?? 'ready');
+  const [listingType, setListingType] = useState<ListingType | ''>(initialData?.listingType ?? (mode === 'create' ? 'ready' : ''));
+  const [offPlanTouched, setOffPlanTouched] = useState(false);
   const [developmentStatus, setDevelopmentStatus] = useState<OffPlanDevelopmentStatus>(initialData?.offPlan?.developmentStatus ?? 'planned');
   const [constructionProgress, setConstructionProgress] = useState(initialData?.offPlan?.constructionProgress?.toString() ?? '0');
   const [expectedCompletionDate, setExpectedCompletionDate] = useState(initialData?.offPlan?.expectedCompletionDate?.slice(0, 10) ?? '');
@@ -202,6 +263,7 @@ const PropertyForm = ({
   const parsedPrice = Number(price) || 0;
   const initialPrice = Number(initialData?.price ?? 0);
   const priceChanged = mode === 'edit' && Number.isFinite(parsedPrice) && initialPrice > 0 && parsedPrice !== initialPrice;
+  const isCommercial = category === 'commercial' || propertyType === 'commercial';
 
   useEffect(() => {
     setProjectsLoading(true);
@@ -211,12 +273,6 @@ const PropertyForm = ({
       .catch(() => undefined)
       .finally(() => setProjectsLoading(false));
   }, []);
-
-  useEffect(() => {
-    if (!categoryOptions.includes(category)) {
-      setCategory(categoryOptions[0]);
-    }
-  }, [category, categoryOptions]);
 
   const togglePaymentType = (type: PropertyPaymentType) => {
     setPaymentTypes((current) => {
@@ -256,6 +312,44 @@ const PropertyForm = ({
       return;
     }
 
+    const canonicalInputs: Array<[string, string, 'text' | 'number' | 'boolean']> = [
+      ['gatedEstate', gatedEstate, 'boolean'],
+      ['unitOrFlatNumber', unitOrFlatNumber, 'text'],
+      ...(gatedEstate === 'true' ? [
+        ['estateName', estateName, 'text'],
+        ['estateAccessStreet', estateAccessStreet, 'text'],
+        ['estateInternalStreet', estateInternalStreet, 'text'],
+        ['estateHouseUnitNumber', estateHouseUnitNumber, 'text'],
+      ] : gatedEstate === 'false' ? [
+        ['streetAddress', streetAddress, 'text'],
+        ['houseNumber', houseNumber, 'text'],
+      ] : []) as Array<[string, string, 'text' | 'number' | 'boolean']>,
+      ...(isCommercial ? [
+        ['commercialFrontage', commercialFrontage, 'number'],
+        ['commercialFloorsOrUnits', commercialFloorsOrUnits, 'number'],
+        ['loadingVehicleAccess', loadingVehicleAccess, 'boolean'],
+        ...(loadingVehicleAccess === 'true' ? [['loadingVehicleAccessType', loadingVehicleAccessType, 'text']] : []),
+        ['liftCount', liftCount, 'number'],
+        ['fitOut', fitOut, 'text'],
+      ] : []) as Array<[string, string, 'text' | 'number' | 'boolean']>,
+    ];
+    const canonicalErrors: Record<string, string> = {};
+    const canonicalFields: Record<string, unknown> = {};
+    for (const [key, value, kind] of canonicalInputs) {
+      if (value.trim() === '' && initialCanonical?.[key] !== undefined && initialCanonical[key] !== null && initialCanonical[key] !== '') {
+        canonicalErrors[key] = 'Clearing this saved value requires a documented reset operation.';
+      } else if (kind === 'number' && value.trim() !== '' && (!Number.isFinite(Number(value)) || Number(value) < 0 ||
+        ((key === 'commercialFloorsOrUnits' || key === 'liftCount') && !Number.isInteger(Number(value))))) {
+        canonicalErrors[key] = 'Enter a non-negative' + (key === 'commercialFrontage' ? ' number.' : ' whole number.');
+      } else {
+        changedCanonicalValue(canonicalFields, initialCanonical, key, value, kind);
+      }
+    }
+    if (Object.keys(canonicalErrors).length) {
+      setErrors(canonicalErrors);
+      return;
+    }
+
     const latProvided = coordinatesLat.trim() !== '';
     const lngProvided = coordinatesLng.trim() !== '';
     const basePayload: CreatePropertyPayload & { status?: string } = {
@@ -264,20 +358,21 @@ const PropertyForm = ({
       paymentTypes: normalizePaymentTypesForForm(parsedPrice, paymentTypes),
       location: location.trim(),
       propertyType,
-      squareFeet: Number(squareFeet),
-      structuredFacts: sellerStructuredFacts(structuredFacts),
+      ...(squareFeet.trim() === '' ? {} : { squareFeet: Number(squareFeet) }),
+      ...(mode === 'create' || structuredFactsTouched ? { structuredFacts: sellerStructuredFacts(structuredFacts) } : {}),
       description: description.trim(),
       amenities,
       media,
-      category,
-      currency,
+      ...(category ? { category } : {}),
+      ...(currency ? { currency } : {}),
+      ...(Object.keys(canonicalFields).length ? { canonicalFields } : {}),
       coordinates:
         latProvided && lngProvided
           ? { lat: Number(coordinatesLat), lng: Number(coordinatesLng) }
           : undefined,
-      bedrooms: Number(bedrooms),
-      bathrooms: Number(bathrooms),
-      completionStage,
+      bedrooms: isCommercial || bedrooms.trim() === '' ? undefined : Number(bedrooms),
+      bathrooms: isCommercial || bathrooms.trim() === '' ? undefined : Number(bathrooms),
+      ...(completionStage ? { completionStage } : {}),
       ...(priceChanged && priceChangeReason.trim() ? { priceChangeReason: priceChangeReason.trim().slice(0, 500) } : {}),
       ...(mode === 'create' && projectId ? {
         projectId,
@@ -290,8 +385,8 @@ const PropertyForm = ({
           plotNumber: plotNumber.trim() || undefined,
         },
       } : {}),
-      listingType,
-      ...(listingType === 'off_plan' ? {
+      ...(listingType ? { listingType } : {}),
+      ...(listingType === 'off_plan' && (mode === 'create' || offPlanTouched) ? {
         offPlan: {
           developmentStatus,
           constructionProgress: Number(constructionProgress || 0),
@@ -322,7 +417,7 @@ const PropertyForm = ({
       });
       return;
     }
-    const errs = { ...validate(basePayload), ...validateStructuredFacts(basePayload.structuredFacts) };
+    const errs = { ...validate(basePayload, mode, Boolean(initialData?.paymentTypes?.length)), ...validateStructuredFacts(basePayload.structuredFacts) };
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
@@ -397,6 +492,14 @@ const PropertyForm = ({
       setTitleDocumentRows([]);
     } catch (raw) {
       const message = raw instanceof Error ? raw.message : 'Unable to create the property.';
+      if (raw instanceof ApiRequestError && raw.fieldErrors?.length) {
+        const serverErrors: Record<string, string> = {};
+        for (const item of raw.fieldErrors) {
+          if (!item.path || !item.msg) continue;
+          serverErrors[item.path.replace(/^canonicalFields\./, '')] = item.msg;
+        }
+        setErrors((current) => ({ ...current, ...serverErrors }));
+      }
       if (
         raw instanceof ApiRequestError &&
         (
@@ -455,6 +558,7 @@ const PropertyForm = ({
           <div>
             <label className={labelClass}>Property Type</label>
             <select value={propertyType} onChange={(e) => setPropertyType(e.target.value)} className={inputClass}>
+              {propertyType && !propertyTypeOptions.includes(propertyType) ? <option value={propertyType}>{propertyType}</option> : null}
               {propertyTypeOptions.map((t) => (
                 <option key={t} value={t} className="capitalize">
                   {t.replace('_', ' ')}
@@ -467,6 +571,8 @@ const PropertyForm = ({
           <div>
             <label className={labelClass}>Category</label>
             <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
+              {mode === 'edit' ? <option value="">Unanswered</option> : null}
+              {category && !categoryOptions.includes(category) ? <option value={category}>{category.replaceAll('_', ' ')}</option> : null}
               {categoryOptions.map((option) => (
                 <option key={option} value={option}>
                   {option.replace('_', ' ')}
@@ -508,6 +614,7 @@ const PropertyForm = ({
           <div>
             <label className={labelClass}>Currency</label>
             <select value={currency} onChange={(e) => setCurrency(e.target.value)} className={inputClass}>
+              {mode === 'edit' ? <option value="">Unanswered</option> : null}
               {CURRENCY_OPTIONS.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -529,17 +636,18 @@ const PropertyForm = ({
             {errors.location && <p className={errorClass}>{errors.location}</p>}
           </div>
 
-          <div>
-            <label className={labelClass}>Bedrooms</label>
-            <input type="number" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} min={1} className={inputClass} />
-            {errors.bedrooms && <p className={errorClass}>{errors.bedrooms}</p>}
-          </div>
-
-          <div>
-            <label className={labelClass}>Bathrooms</label>
-            <input type="number" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} min={1} className={inputClass} />
-            {errors.bathrooms && <p className={errorClass}>{errors.bathrooms}</p>}
-          </div>
+          {!isCommercial ? <>
+            <div>
+              <label className={labelClass}>Bedrooms</label>
+              <input type="number" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} min={0} className={inputClass} />
+              {errors.bedrooms && <p className={errorClass}>{errors.bedrooms}</p>}
+            </div>
+            <div>
+              <label className={labelClass}>Bathrooms</label>
+              <input type="number" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} min={0} className={inputClass} />
+              {errors.bathrooms && <p className={errorClass}>{errors.bathrooms}</p>}
+            </div>
+          </> : null}
 
           <div>
             <label className={labelClass}>Square Feet</label>
@@ -557,6 +665,8 @@ const PropertyForm = ({
           <div>
             <label className={labelClass}>Completion Stage</label>
             <select value={completionStage} onChange={(e) => setCompletionStage(e.target.value)} className={inputClass}>
+              {mode === 'edit' ? <option value="">Unanswered</option> : null}
+              {completionStage && !STAGE_OPTIONS.includes(completionStage) ? <option value={completionStage}>{completionStage.replaceAll('_', ' ')}</option> : null}
               {STAGE_OPTIONS.map((option) => (
                 <option key={option} value={option}>
                   {option.replace('_', ' ')}
@@ -615,13 +725,91 @@ const PropertyForm = ({
       </div>
 
       <div className="bg-white rounded-2xl p-6 space-y-5 border border-outline-variant/10">
+        <div>
+          <h2 className="text-base font-black text-on-surface tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>Canonical address</h2>
+          <p className="mt-1 text-xs text-secondary">An unanswered field stays unset. False and zero remain explicit values. Existing values are sent only when changed.</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div>
+            <label className={labelClass}>Gated estate</label>
+            <select aria-label="Gated estate" value={gatedEstate} onChange={(e) => setGatedEstate(e.target.value)} className={inputClass}>
+              <option value="">Unanswered</option><option value="true">Yes</option><option value="false">No</option>
+            </select>
+            {errors.gatedEstate && <p className={errorClass}>{errors.gatedEstate}</p>}
+          </div>
+          {gatedEstate === 'true' ? <>
+            <div>
+              <label className={labelClass}>Estate name</label>
+              <input value={estateName} onChange={(e) => setEstateName(e.target.value)} className={inputClass} />
+              {errors.estateName && <p className={errorClass}>{errors.estateName}</p>}
+            </div>
+            <div>
+              <label className={labelClass}>Estate access street</label>
+              <input value={estateAccessStreet} onChange={(e) => setEstateAccessStreet(e.target.value)} className={inputClass} />
+              {errors.estateAccessStreet && <p className={errorClass}>{errors.estateAccessStreet}</p>}
+            </div>
+            <div>
+              <label className={labelClass}>Estate internal street <span className="normal-case tracking-normal">(optional)</span></label>
+              <input value={estateInternalStreet} onChange={(e) => setEstateInternalStreet(e.target.value)} className={inputClass} />
+              {errors.estateInternalStreet && <p className={errorClass}>{errors.estateInternalStreet}</p>}
+            </div>
+            <div>
+              <label className={labelClass}>Estate house or unit number</label>
+              <input value={estateHouseUnitNumber} onChange={(e) => setEstateHouseUnitNumber(e.target.value)} className={inputClass} />
+              {errors.estateHouseUnitNumber && <p className={errorClass}>{errors.estateHouseUnitNumber}</p>}
+            </div>
+          </> : gatedEstate === 'false' ? <>
+            <div>
+              <label className={labelClass}>Street address</label>
+              <input value={streetAddress} onChange={(e) => setStreetAddress(e.target.value)} className={inputClass} />
+              {errors.streetAddress && <p className={errorClass}>{errors.streetAddress}</p>}
+            </div>
+            <div>
+              <label className={labelClass}>House number</label>
+              <input value={houseNumber} onChange={(e) => setHouseNumber(e.target.value)} className={inputClass} />
+              {errors.houseNumber && <p className={errorClass}>{errors.houseNumber}</p>}
+            </div>
+          </> : <p className="text-xs text-secondary md:col-span-2">Choose Yes or No to enter the corresponding address path.</p>}
+          <div>
+            <label className={labelClass}>Unit or flat number <span className="normal-case tracking-normal">(optional)</span></label>
+            <input value={unitOrFlatNumber} onChange={(e) => setUnitOrFlatNumber(e.target.value)} className={inputClass} />
+            {errors.unitOrFlatNumber && <p className={errorClass}>{errors.unitOrFlatNumber}</p>}
+          </div>
+        </div>
+        {gatedEstate === 'true' && (!estateName.trim() || !estateAccessStreet.trim() || !estateHouseUnitNumber.trim()) ?
+          <p className="text-xs text-amber-800">The estate address is incomplete for publication. The server decides draft acceptance and readiness.</p> : null}
+        {gatedEstate === 'false' && (!streetAddress.trim() || !houseNumber.trim()) ?
+          <p className="text-xs text-amber-800">The street address is incomplete for publication. The server decides draft acceptance and readiness.</p> : null}
+        {mode === 'edit' ? <details className="rounded-lg bg-surface-container-low p-3 text-xs text-secondary">
+          <summary className="cursor-pointer font-bold">Saved property values and source</summary>
+          {initialCanonical ? <>
+            <p className="mt-2">These values come from this property's canonical fields. A missing property value may inherit from its project or unit type; the owner response does not identify the effective source.</p>
+            <dl className="mt-3 grid gap-2 sm:grid-cols-2">{savedCanonicalFields.map(([key, label]) => <div key={key}><dt className="font-semibold">{label}</dt><dd>{savedCanonicalValue(initialCanonical, key)}</dd></div>)}</dl>
+          </> : <p className="mt-2">The owner response did not return canonical fields or effective provenance. Existing values are left unchanged unless you enter an explicit value.</p>}
+        </details> : null}
+      </div>
+
+      {isCommercial ? <div className="bg-white rounded-2xl p-6 space-y-5 border border-outline-variant/10">
+        <h2 className="text-base font-black text-on-surface tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>Commercial details</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div><label className={labelClass}>Frontage (m)</label><input aria-label="Commercial frontage in metres" type="number" min={0} step="any" value={commercialFrontage} onChange={(e) => setCommercialFrontage(e.target.value)} className={inputClass} />{errors.commercialFrontage && <p className={errorClass}>{errors.commercialFrontage}</p>}</div>
+          <div><label className={labelClass}>Floors or units</label><input type="number" min={0} step={1} value={commercialFloorsOrUnits} onChange={(e) => setCommercialFloorsOrUnits(e.target.value)} className={inputClass} />{errors.commercialFloorsOrUnits && <p className={errorClass}>{errors.commercialFloorsOrUnits}</p>}</div>
+          <div><label className={labelClass}>Loading vehicle access</label><select value={loadingVehicleAccess} onChange={(e) => setLoadingVehicleAccess(e.target.value)} className={inputClass}><option value="">Unanswered</option><option value="true">Yes</option><option value="false">No</option></select>{errors.loadingVehicleAccess && <p className={errorClass}>{errors.loadingVehicleAccess}</p>}</div>
+          {loadingVehicleAccess === 'true' ? <div><label className={labelClass}>Loading access type</label><input value={loadingVehicleAccessType} onChange={(e) => setLoadingVehicleAccessType(e.target.value)} className={inputClass} />{errors.loadingVehicleAccessType && <p className={errorClass}>{errors.loadingVehicleAccessType}</p>}</div> : null}
+          <div><label className={labelClass}>Lift count</label><input type="number" min={0} step={1} value={liftCount} onChange={(e) => setLiftCount(e.target.value)} className={inputClass} />{errors.liftCount && <p className={errorClass}>{errors.liftCount}</p>}</div>
+          <div><label className={labelClass}>Fit-out</label><select value={fitOut} onChange={(e) => setFitOut(e.target.value)} className={inputClass}><option value="">Unanswered</option><option value="Shell & core">Shell &amp; core</option><option value="Partly fitted">Partly fitted</option><option value="Fully fitted">Fully fitted</option></select>{errors.fitOut && <p className={errorClass}>{errors.fitOut}</p>}</div>
+        </div>
+      </div> : null}
+
+      <div className="bg-white rounded-2xl p-6 space-y-5 border border-outline-variant/10">
         <h2 className="text-base font-black text-on-surface tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
           Project and listing mode
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
             <label htmlFor="property-listing-type" className={labelClass}>Listing type</label>
-            <select id="property-listing-type" value={listingType} onChange={(event) => setListingType(event.target.value as ListingType)} className={inputClass}>
+            <select id="property-listing-type" value={listingType} onChange={(event) => { setListingType(event.target.value as ListingType | ''); setOffPlanTouched(true); }} className={inputClass}>
+              {mode === 'edit' ? <option value="">Unanswered</option> : null}
               {LISTING_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </div>
@@ -666,7 +854,7 @@ const PropertyForm = ({
       </div>
 
       {listingType === 'off_plan' ? (
-        <div className="bg-white rounded-2xl p-6 space-y-5 border border-outline-variant/10">
+        <div onChange={() => setOffPlanTouched(true)} className="bg-white rounded-2xl p-6 space-y-5 border border-outline-variant/10">
           <h2 className="text-base font-black text-on-surface tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
             Off-plan terms
           </h2>
@@ -745,7 +933,7 @@ const PropertyForm = ({
           <div className="rounded-xl border border-outline-variant/10 p-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="font-black">Payment milestones</h3>
-              <button type="button" onClick={() => setMilestones((current) => [...current, { sequence: current.length + 1, title: '' }])} className="rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold">
+              <button type="button" onClick={() => { setOffPlanTouched(true); setMilestones((current) => [...current, { sequence: current.length + 1, title: '' }]); }} className="rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold">
                 Add milestone
               </button>
             </div>
@@ -756,7 +944,7 @@ const PropertyForm = ({
                   <input value={milestone.title ?? ''} onChange={(event) => updateMilestone(index, { title: event.target.value })} placeholder="Title" className={inputClass} />
                   <input type="number" value={milestone.percentage ?? ''} onChange={(event) => updateMilestone(index, { percentage: event.target.value ? Number(event.target.value) : undefined })} placeholder="%" className={inputClass} />
                   <input type="number" value={milestone.amount ?? ''} onChange={(event) => updateMilestone(index, { amount: event.target.value ? Number(event.target.value) : undefined })} placeholder="Amount" className={inputClass} />
-                  <button type="button" onClick={() => setMilestones((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-error">
+                  <button type="button" onClick={() => { setOffPlanTouched(true); setMilestones((current) => current.filter((_, itemIndex) => itemIndex !== index)); }} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-error">
                     Remove
                   </button>
                 </div>
@@ -767,7 +955,7 @@ const PropertyForm = ({
         </div>
       ) : null}
 
-      <StructuredFactsFields value={structuredFacts} onChange={setStructuredFacts} errors={errors} sellerMode />
+      <StructuredFactsFields value={structuredFacts} onChange={(facts) => { setStructuredFacts(facts); setStructuredFactsTouched(true); }} errors={errors} sellerMode />
 
       <fieldset
         aria-describedby={errors.paymentTypes ? 'payment-types-error' : 'payment-types-help'}

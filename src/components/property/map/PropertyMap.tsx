@@ -5,6 +5,7 @@ import { propertyRouteReference, type Property } from '../../../types';
 import PropertyMapPreviewCard from './PropertyMapPreviewCard';
 import LeafletPropertyMap from './LeafletPropertyMap';
 import { MAP_PROVIDER } from '../../../config/maps';
+import type { CanonicalMapMarker } from '../../../types/canonicalMap';
 
 interface Props {
   properties: Property[];
@@ -16,6 +17,8 @@ interface Props {
   onSelectProperty?: (property: Property) => void;
   resolveProperty?: (property: Property) => Promise<Property>;
   onDetailsNavigate?: () => void;
+  canonicalMarkers?: CanonicalMapMarker[];
+  onSelectCanonicalMarker?: (marker: Extract<CanonicalMapMarker, { kind: 'property' }>) => void;
 }
 
 const isMappable = (property: Property) => {
@@ -33,19 +36,22 @@ const priceLabel = (price: number) => {
   return `₦${price}`;
 };
 
-const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, onSelectProperty, resolveProperty, onDetailsNavigate }: Props) => {
+const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, onSelectProperty, resolveProperty, onDetailsNavigate, canonicalMarkers, onSelectCanonicalMarker }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const propertyLookupRef = useRef(new Map<string, Property>());
+  const canonicalLookupRef = useRef(new Map<string, CanonicalMapMarker>());
   const selectPropertyRef = useRef<(property: Property) => void>(() => undefined);
+  const selectCanonicalRef = useRef(onSelectCanonicalMarker);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [selectedPreview, setSelectedPreview] = useState<Property | null>(null);
   const [mapError, setMapError] = useState(!configureMapbox());
-  const mappable = useMemo(() => properties.filter(isMappable), [properties]);
+  const mappable = useMemo(() => canonicalMarkers === undefined ? properties.filter(isMappable) : [], [properties, canonicalMarkers]);
   // The preview is intentionally map-owned: selecting or hovering a card may
   // synchronize the highlighted property, but must not open this map preview.
   const initialFit = useRef(false);
-  const missingCount = properties.length - mappable.length;
+  const missingCount = canonicalMarkers === undefined ? properties.length - mappable.length : 0;
+  useEffect(() => { selectCanonicalRef.current = onSelectCanonicalMarker; }, [onSelectCanonicalMarker]);
   useEffect(() => {
     selectPropertyRef.current = (property) => {
       const reference = propertyRouteReference(property);
@@ -98,6 +104,10 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
         stretchY: [[26, 46]],
       });
       map.addSource('properties', { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, cluster: true, clusterMaxZoom: 14, clusterRadius: 50 });
+      map.addSource('canonical-markers', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: 'canonical-clusters', type: 'circle', source: 'canonical-markers', filter: ['==', ['get', 'kind'], 'cluster'], paint: { 'circle-color': '#173d32', 'circle-radius': 24, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
+      map.addLayer({ id: 'canonical-cluster-count', type: 'symbol', source: 'canonical-markers', filter: ['==', ['get', 'kind'], 'cluster'], layout: { 'text-field': ['get', 'label'], 'text-size': 12 }, paint: { 'text-color': '#ffffff' } });
+      map.addLayer({ id: 'canonical-points', type: 'symbol', source: 'canonical-markers', filter: ['==', ['get', 'kind'], 'property'], layout: { 'icon-image': 'property-price-pin', 'icon-text-fit': 'both', 'icon-text-fit-padding': [7, 12, 7, 12], 'text-field': ['get', 'label'], 'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'], 'text-size': 12, 'text-offset': [0, -2] }, paint: { 'text-color': '#ffffff' } });
       map.addLayer({ id: 'property-clusters', type: 'circle', source: 'properties', filter: ['has', 'point_count'], paint: { 'circle-color': '#173d32', 'circle-radius': ['step', ['get', 'point_count'], 20, 25, 25, 100, 32], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
       map.addLayer({ id: 'property-cluster-count', type: 'symbol', source: 'properties', filter: ['has', 'point_count'], layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12 }, paint: { 'text-color': '#ffffff' } });
       map.addLayer({
@@ -129,7 +139,17 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
         const key = String(event.features?.[0]?.properties?.key ?? ''); const property = propertyLookupRef.current.get(key);
         if (property) selectPropertyRef.current(property);
       });
-      for (const layer of ['property-clusters', 'property-points']) {
+      map.on('click', 'canonical-clusters', (event) => {
+        const key = String(event.features?.[0]?.properties?.key ?? '');
+        const marker = canonicalLookupRef.current.get(key);
+        if (marker?.kind === 'cluster') map.easeTo({ center: [marker.lng, marker.lat], zoom: Math.min(22, map.getZoom() + 2) });
+      });
+      map.on('click', 'canonical-points', (event) => {
+        const key = String(event.features?.[0]?.properties?.key ?? '');
+        const marker = canonicalLookupRef.current.get(key);
+        if (marker?.kind === 'property') selectCanonicalRef.current?.(marker);
+      });
+      for (const layer of ['property-clusters', 'property-points', 'canonical-clusters', 'canonical-points']) {
         map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
       }
@@ -160,6 +180,19 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+    const lookup = new Map<string, CanonicalMapMarker>();
+    const features = (canonicalMarkers ?? []).map((marker, index) => {
+      const key = `${marker.kind}-${marker.id}-${index}`;
+      lookup.set(key, marker);
+      return { type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [marker.lng, marker.lat] }, properties: { key, kind: marker.kind, label: marker.kind === 'cluster' ? String(marker.count) : marker.label } };
+    });
+    canonicalLookupRef.current = lookup;
+    (map.getSource('canonical-markers') as mapboxgl.GeoJSONSource).setData({ type: 'FeatureCollection', features });
+  }, [mapLoaded, canonicalMarkers]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map || (!onVisiblePropertiesChange && !onViewportChange)) return;
     const updateVisible = () => {
       const bounds = map.getBounds();
@@ -181,7 +214,7 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
     <section className={`relative min-h-[55vh] overflow-hidden rounded-xl bg-surface-container-low sm:min-h-[420px] ${className}`} aria-label="Property map">
       {/* Explicit positioning prevents the Mapbox stylesheet from collapsing the host. */}
       <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
-      {mappable.length === 0 && !mapError ? (
+      {canonicalMarkers === undefined && mappable.length === 0 && !mapError ? (
         <div className="absolute left-3 top-3 z-[900] rounded-lg bg-white/95 px-3 py-2 text-xs font-medium text-secondary shadow">
           No property markers in this area
         </div>

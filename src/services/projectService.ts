@@ -113,6 +113,21 @@ export interface ProjectMapResponse {
   projects: ProjectMapItem[];
 }
 
+export interface UnitGridQuery {
+  page?: number;
+  limit?: number;
+  sort?: 'newest' | 'price_asc' | 'price_desc' | 'availability' | 'publication' | 'unit_type';
+  search?: string;
+  unitTypeId?: string;
+  availability?: 'available' | 'under_offer' | 'sold' | 'not_released';
+  publicationState?: 'published' | 'unpublished' | 'blocked' | 'needs_review' | 'archived';
+  problemsOnly?: boolean;
+  minPrice?: number;
+  maxPrice?: number;
+  currency?: 'NGN' | 'USD';
+  propertyType?: string;
+}
+
 export interface CreateProjectRequest {
   name: string;
   developerName?: string;
@@ -151,6 +166,74 @@ export interface AdminPropertyImportListQuery {
   page?: number;
   limit?: number;
 }
+
+export interface UnitGridRow {
+  _id: string;
+  publicReference?: string;
+  rawOverrides: Record<string, unknown>;
+  effectiveFields: Record<string, unknown>;
+  fieldSources: Record<string, { sourceLevel: 'unit' | 'unitType' | 'project' | string; state: string }>;
+  version: number;
+  readiness: { publicationState: string; problems: boolean; blockers?: Array<{ field?: string; code?: string }>; migrationState?: string };
+}
+
+export interface UnitGridResponse {
+  project: { id: string; name: string };
+  projectVersion: number;
+  items: UnitGridRow[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+  filters: Record<string, unknown>;
+}
+
+export interface UnitGridMutation {
+  field: string;
+  operation: 'set' | 'unset' | 'reset_to_inherited';
+  value?: unknown;
+}
+
+export interface UnitGridEditRequest {
+  operationKey: string;
+  expectedProjectVersion: number;
+  rows: Array<{ unitId: string; expectedVersion: number; canonicalFieldMutations: UnitGridMutation[] } | { unitId: string; expectedVersion: number; unitTypeId: string }>;
+}
+
+export interface UnitGridOperation {
+  id: string;
+  state: string;
+  action: string;
+  undoAvailable: boolean;
+  undoExpiresAt?: string | null;
+  rowCount: number;
+  createdAt: string;
+  undoneAt?: string | null;
+  rows: Array<{ propertyId: string; beforeVersion: number; afterVersion: number; fields?: string[] }>;
+}
+
+export interface UnitGridJob {
+  id: string;
+  projectId: string;
+  action: string;
+  state: 'queued' | 'processing' | 'completed' | 'partially_completed' | 'failed' | 'cancelled';
+  operationKey: string;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  progress: { total: number; completed: number; failed: number; cancelled: number; remaining: number };
+  cancellationRequested: boolean;
+  rows: Array<{ index: number; unitId: string; state: string; attempts: number; undoAvailable: boolean; operationId?: string; operationCreatedAt?: string; beforeVersion?: number; afterVersion?: number; error?: { code: string; message: string } }>;
+}
+
+export interface UnitGridJobRequest {
+  operationKey: string;
+  expectedProjectVersion: number;
+  action: 'field_edit' | 'availability' | 'price_adjustment' | 'publish' | 'unpublish' | 'archive' | 'confirm';
+  actionOptions?: Record<string, unknown>;
+  rows: Array<{ unitId: string; expectedVersion: number; canonicalFieldMutations?: UnitGridMutation[] }>;
+}
+
+export type ProjectPublicationRequest =
+  | { expectedVersion: number; publicationAction: 'publish_all_ready' }
+  | { expectedVersion: number; publicationAction: 'publish_selected'; selectedUnitIds: string[] };
 
 export const projectService = {
   async listProjects(query?: ProjectSearchQuery): Promise<ProjectListResponse> {
@@ -195,9 +278,39 @@ export const projectService = {
     return data;
   },
 
+  async getUnitGrid(projectId: string, query?: UnitGridQuery): Promise<UnitGridResponse> {
+    const { data } = await api.get<UnitGridResponse>(`/projects/${encodeURIComponent(projectId)}/unit-grid`, { params: compact(query) });
+    return data;
+  },
+
+  async editUnitGrid(projectId: string, body: UnitGridEditRequest): Promise<{ operation: UnitGridOperation; projectVersion: number; replayed: boolean }> {
+    const { data } = await api.post<{ operation: UnitGridOperation; projectVersion: number; replayed: boolean }>(`/projects/${encodeURIComponent(projectId)}/unit-grid/bulk`, body);
+    return data;
+  },
+
+  async createUnitGridJob(projectId: string, body: UnitGridJobRequest): Promise<UnitGridJob> {
+    const { data } = await api.post<{ job: UnitGridJob }>(`/projects/${encodeURIComponent(projectId)}/unit-grid/jobs`, body);
+    return data.job;
+  },
+
+  async getUnitGridJob(projectId: string, jobId: string): Promise<UnitGridJob> {
+    const { data } = await api.get<{ job: UnitGridJob }>(`/projects/${encodeURIComponent(projectId)}/unit-grid/jobs/${encodeURIComponent(jobId)}`);
+    return data.job;
+  },
+
+  async cancelUnitGridJob(projectId: string, jobId: string): Promise<UnitGridJob> {
+    const { data } = await api.post<{ job: UnitGridJob }>(`/projects/${encodeURIComponent(projectId)}/unit-grid/jobs/${encodeURIComponent(jobId)}/cancel`);
+    return data.job;
+  },
+
   async updateProject(id: string, body: UpdateProjectRequest): Promise<{ project: ProjectDetail }> {
     const { data } = await api.patch<{ project: ProjectDetail }>(`/projects/${encodeURIComponent(id)}`, body);
     return data;
+  },
+
+  async publishProject(id: string, body: ProjectPublicationRequest, challengeId: string): Promise<{ project: ProjectDetail }> {
+    const { data } = await api.patch<{ project: ProjectDetail }>(`/projects/${encodeURIComponent(id)}`, body, { headers: { 'X-Step-Up-Challenge': challengeId } });
+    return { ...data, project: normalizeProjectPublication(data.project) };
   },
 
   async deleteProject(id: string): Promise<{ message: string }> {

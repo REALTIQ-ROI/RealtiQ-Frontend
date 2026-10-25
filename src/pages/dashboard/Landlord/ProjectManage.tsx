@@ -7,12 +7,15 @@ import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
-import { projectService } from '../../../services/projectService';
+import { projectService, type ProjectPublicationRequest, type UnitGridJob } from '../../../services/projectService';
+import { stepUpService } from '../../../services/stepUpService';
 import { virtualTourService } from '../../../services/virtualTourService';
 import { ApiRequestError } from '../../../lib/axios';
 import type { ProjectDetail, Property, VirtualTourProvider } from '../../../types';
 import { formatPriceRange, labelize } from '../../../utils/projectFormatters';
 import { downloadBlob } from '../../../utils/projectImport';
+import UnitGridPanel from '../../../components/project/UnitGridPanel';
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface LandlordProjectManageData {
   project: ProjectDetail;
@@ -27,8 +30,23 @@ const loadLandlordProjectManage = async (id: string): Promise<LandlordProjectMan
 };
 
 const ProjectManage = () => {
+  const { activeProfile } = useAuth();
   const [savingTourPreference, setSavingTourPreference] = useState(false);
   const [exportingGrid, setExportingGrid] = useState(false);
+  const [jobIdInput, setJobIdInput] = useState('');
+  const [monitoredJobId, setMonitoredJobId] = useState('');
+  const [gridJob, setGridJob] = useState<UnitGridJob | null>(null);
+  const [jobLoading, setJobLoading] = useState(false);
+  const [jobError, setJobError] = useState<string | null>(null);
+  const [autoRefreshJob, setAutoRefreshJob] = useState(false);
+  const [publicationOpen, setPublicationOpen] = useState(false);
+  const [publicationMode, setPublicationMode] = useState<'publish_all_ready' | 'publish_selected'>('publish_all_ready');
+  const [publicationUnitIds, setPublicationUnitIds] = useState<string[]>([]);
+  const [publicationChallenge, setPublicationChallenge] = useState<{ challengeId: string; expiresAt: string; body: ProjectPublicationRequest } | null>(null);
+  const [publicationCode, setPublicationCode] = useState('');
+  const [publicationError, setPublicationError] = useState<string | null>(null);
+  const [publicationResult, setPublicationResult] = useState<ProjectDetail['publication'] | null>(null);
+  const [publishing, setPublishing] = useState(false);
   const [extraUnits, setExtraUnits] = useState<Property[]>([]);
   const [nextUnitPage, setNextUnitPage] = useState(2);
   const [loadingMoreUnits, setLoadingMoreUnits] = useState(false);
@@ -49,7 +67,101 @@ const ProjectManage = () => {
     setLoadingMoreUnits(false);
     setUnitPageError(null);
     setUnitPagesExhausted(false);
+    setJobIdInput('');
+    setMonitoredJobId('');
+    setGridJob(null);
+    setJobError(null);
+    setAutoRefreshJob(false);
+    setPublicationUnitIds([]);
+    setPublicationChallenge(null);
+    setPublicationError(null);
+    setPublicationResult(null);
   }, [id]);
+
+  const startPublication = async () => {
+    if (!project || publishing) return;
+    if (publicationMode === 'publish_selected' && !publicationUnitIds.length) { setPublicationError('Select at least one loaded unit.'); return; }
+    setPublishing(true);
+    setPublicationError(null);
+    try {
+      const { project: currentProject } = await projectService.getProjectManage(project._id);
+      if (typeof currentProject.version !== 'number') {
+        setPublicationError('The current project version is unavailable. Refresh before publishing.');
+        return;
+      }
+      if (currentProject.version !== project.version) {
+        await refreshProject();
+        setPublicationError('The project changed since this page loaded. Review the current units and readiness before starting a challenge.');
+        return;
+      }
+      const body: ProjectPublicationRequest = publicationMode === 'publish_selected'
+        ? { expectedVersion: currentProject.version, publicationAction: 'publish_selected', selectedUnitIds: publicationUnitIds }
+        : { expectedVersion: currentProject.version, publicationAction: 'publish_all_ready' };
+      const challenge = await stepUpService.start('PATCH', `/api/projects/${encodeURIComponent(project._id)}`, body);
+      setPublicationChallenge({ ...challenge, body });
+      setPublicationCode('');
+    } catch (raw) { setPublicationError(raw instanceof ApiRequestError && raw.code ? `${raw.message} (${raw.code})` : raw instanceof Error ? raw.message : 'Unable to start publication challenge.'); }
+    finally { setPublishing(false); }
+  };
+
+  const finishPublication = async () => {
+    if (!project || !publicationChallenge || publishing) return;
+    if (!/^\d{6}$/.test(publicationCode)) { setPublicationError('Enter the six-digit authenticator code.'); return; }
+    setPublishing(true);
+    setPublicationError(null);
+    try {
+      await stepUpService.verify(publicationChallenge.challengeId, publicationCode);
+      const result = await projectService.publishProject(project._id, publicationChallenge.body, publicationChallenge.challengeId);
+      setPublicationResult(result.project.publication ?? null);
+      setPublicationChallenge(null);
+      setPublicationUnitIds([]);
+      await refreshProject();
+      toast.success('Publication action completed. Review the returned ready and blocked unit counts.');
+    } catch (raw) {
+      setPublicationError(raw instanceof ApiRequestError && raw.code ? `${raw.message} (${raw.code})` : raw instanceof Error ? raw.message : 'Unable to publish project units.');
+      if (raw instanceof ApiRequestError && raw.status === 409) { setPublicationChallenge(null); await refreshProject(); }
+    } finally { setPublishing(false); }
+  };
+
+  useEffect(() => {
+    if (!autoRefreshJob || !monitoredJobId || !project?._id) return;
+    const projectId = project._id;
+    const timer = window.setInterval(() => {
+      void projectService.getUnitGridJob(projectId, monitoredJobId)
+        .then((job) => { if (currentProjectId.current === id) { setGridJob(job); setJobError(null); } })
+        .catch((raw: unknown) => { if (currentProjectId.current === id) setJobError(raw instanceof Error ? raw.message : 'Unable to refresh grid job.'); });
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [autoRefreshJob, monitoredJobId, project?._id, id]);
+
+  const loadGridJob = async (jobId: string) => {
+    if (!project || !jobId.trim()) return;
+    const requestedProjectId = project._id;
+    setJobLoading(true);
+    setJobError(null);
+    try {
+      const job = await projectService.getUnitGridJob(requestedProjectId, jobId.trim());
+      if (currentProjectId.current !== id) return;
+      setMonitoredJobId(jobId.trim());
+      setGridJob(job);
+    } catch (raw) {
+      if (currentProjectId.current === id) setJobError(raw instanceof Error ? raw.message : 'Unable to load the grid job.');
+    } finally {
+      if (currentProjectId.current === id) setJobLoading(false);
+    }
+  };
+
+  const cancelGridJob = async () => {
+    if (!project || !monitoredJobId) return;
+    setJobLoading(true);
+    setJobError(null);
+    try {
+      setGridJob(await projectService.cancelUnitGridJob(project._id, monitoredJobId));
+      toast.info('Cancellation requested. Already committed rows remain; refresh for final outcomes.');
+    } catch (raw) {
+      setJobError(raw instanceof Error ? raw.message : 'Unable to cancel the grid job.');
+    } finally { setJobLoading(false); }
+  };
 
   const refreshProject = async () => {
     setExtraUnits([]);
@@ -131,11 +243,21 @@ const ProjectManage = () => {
                 <Link to={`/dashboard/landlord/projects/${project._id}/edit`} className="rounded-lg bg-surface-container-low px-4 py-3 text-sm font-bold text-primary">Edit</Link>
                 <Link to={`/dashboard/landlord/projects/${project._id}/imports`} className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary">Bulk Upload Properties</Link>
                 <Button type="button" variant="secondary" loading={exportingGrid} onClick={() => void exportGrid()}>Export unit grid</Button>
-                {!project.isPublished ? <Button type="button" disabled title="Publication request contract and step-up exchange are unavailable">Publish</Button> : null}
-                <Button type="button" variant="secondary" disabled title="Project archive requires the step-up exchange">Archive</Button>
+                <Button type="button" onClick={() => setPublicationOpen((value) => !value)}>Publication</Button>
+                <Button type="button" variant="secondary" disabled title="Project archive is not yet connected to the versioned lifecycle action">Archive</Button>
               </div>
             </header>
-            <p className="text-sm text-secondary">Project editing and archiving require a one-use security challenge. Publication also awaits the exact backend transition request contract.</p>
+            <p className="text-sm text-secondary">Project editing and archiving still need their field and archival UI reconciliation. Publication actions below use a version-bound one-use security challenge.</p>
+
+            {publicationOpen ? <section className="rounded-xl border border-outline-variant/10 bg-white p-5" id="project-publication">
+              <h2 className="text-xl font-black">Project publication</h2>
+              <p className="mt-1 text-sm text-secondary">The server checks each selected unit's current readiness. Publish all ready leaves blocked units unpublished; selected publication checks every chosen unit.</p>
+              <div className="mt-4 flex flex-wrap gap-3 text-sm"><label className="flex items-center gap-2"><input type="radio" name="publication-mode" disabled={Boolean(publicationChallenge)} checked={publicationMode === 'publish_all_ready'} onChange={() => setPublicationMode('publish_all_ready')} />Publish all ready units</label><label className="flex items-center gap-2"><input type="radio" name="publication-mode" disabled={Boolean(publicationChallenge)} checked={publicationMode === 'publish_selected'} onChange={() => setPublicationMode('publish_selected')} />Publish selected units</label></div>
+              {publicationMode === 'publish_selected' ? <div className="mt-3 max-h-44 space-y-1 overflow-y-auto rounded-lg bg-surface-container-low p-3 text-xs">{units.map((unit) => <label key={unit._id} className="flex items-center gap-2"><input type="checkbox" disabled={Boolean(publicationChallenge)} checked={publicationUnitIds.includes(unit._id)} onChange={(event) => setPublicationUnitIds((current) => event.target.checked ? [...current, unit._id] : current.filter((id) => id !== unit._id))} />{unit.publicReference || unit._id} · {unit.title}</label>)}{!units.length ? <p>No loaded units available to select.</p> : null}</div> : null}
+              {!publicationChallenge ? <Button type="button" className="mt-4" disabled={publishing || typeof project.version !== 'number'} onClick={() => void startPublication()}>Start publication challenge</Button> : <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm"><p className="font-bold">Enter your authenticator code</p><p className="text-xs">Bound to {publicationChallenge.body.publicationAction.replaceAll('_', ' ')} at project version {publicationChallenge.body.expectedVersion}. Challenge expires {new Date(publicationChallenge.expiresAt).toLocaleString('en-NG')}. Keep this profile and session selected.</p><div className="mt-2 flex flex-wrap gap-2"><input aria-label="Publication authenticator code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={publicationCode} onChange={(event) => setPublicationCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="rounded-lg border border-amber-300 px-3 py-2" placeholder="6-digit code" /><Button type="button" disabled={publishing || publicationCode.length !== 6} onClick={() => void finishPublication()}>Verify and publish</Button><Button type="button" variant="secondary" onClick={() => setPublicationChallenge(null)}>Dismiss</Button></div></div>}
+              {publicationError ? <p role="alert" className="mt-3 text-sm text-error">{publicationError} A failed readiness response may omit field-level blockers; review current project and grid readiness.</p> : null}
+              {(publicationResult ?? project.publication) ? <div className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm"><p className="font-bold">Publication result</p><p>{(publicationResult ?? project.publication)?.publishedUnitCount ?? 0} published · {(publicationResult ?? project.publication)?.blockedUnitCount ?? 0} blocked</p>{(publicationResult ?? project.publication)?.blockedUnits?.map((unit) => <p key={unit.unitId} className="mt-1 text-xs text-amber-800">{unit.unitId}: {unit.blockers.map((item) => `${item.field} ${item.code}`).join(' · ')}</p>)}</div> : null}
+            </section> : null}
 
             <div className="grid gap-4 md:grid-cols-4">
               {[
@@ -162,11 +284,13 @@ const ProjectManage = () => {
               </div>
             </section>
 
+            <UnitGridPanel key={`${project._id}:${activeProfile?.id ?? 'none'}`} projectId={project._id} />
+
             <section className="rounded-xl border border-outline-variant/10 bg-white p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-xl font-black">Child property units</h2>
-                  <p className="text-sm text-secondary">Create or edit a property and choose this project to attach it as a unit.</p>
+                  <p className="text-sm text-secondary">Create or edit a property and choose this project to attach it as a unit. Use the canonical grid above for effective values, provenance and bulk actions.</p>
                 </div>
                 <Link to={`/dashboard/landlord/add-property?projectId=${project._id}`} className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary">
                   Add unit
@@ -174,7 +298,7 @@ const ProjectManage = () => {
               </div>
               {units.length ? (
                 <div className="mt-5 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                  {units.map((property) => <PropertyCard key={property._id} property={property} />)}
+                  {units.map((property) => <div key={property._id} className="space-y-2"><div className="flex justify-end"><Link className="text-xs font-bold text-primary underline" to={`/dashboard/landlord/edit-property/${property._id}`}>Edit unit</Link></div><PropertyCard property={property} /></div>)}
                 </div>
               ) : (
                 <div className="mt-5 rounded-xl border border-dashed border-outline-variant/20 p-8 text-center text-secondary">
@@ -190,6 +314,16 @@ const ProjectManage = () => {
                   <span className="text-sm text-secondary">Showing {units.length} of {data?.totalUnits ?? 0}</span>
                 </div>
               ) : null}
+            </section>
+            <section className="rounded-xl border border-outline-variant/10 bg-white p-5">
+              <h2 className="text-xl font-black">Unit-grid job progress</h2>
+              <p className="mt-1 text-sm text-secondary">Look up a previous grid job by its server ID. Each row outcome, including partial success and conflicts, remains visible. Cancellation stops remaining work cooperatively.</p>
+              <div className="mt-4 flex flex-wrap gap-2"><input aria-label="Unit-grid job ID" value={jobIdInput} onChange={(event) => setJobIdInput(event.target.value)} className="min-w-[220px] flex-1 rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="Grid job ID" /><Button type="button" variant="secondary" disabled={!jobIdInput.trim() || jobLoading} onClick={() => void loadGridJob(jobIdInput)}>Load job</Button>{monitoredJobId ? <Button type="button" variant="secondary" disabled={jobLoading} onClick={() => void loadGridJob(monitoredJobId)}>Refresh</Button> : null}</div>
+              {jobError ? <p role="alert" className="mt-3 text-sm text-red-700">{jobError}</p> : null}
+              {jobLoading ? <p className="mt-3 text-sm text-secondary">Loading job progress…</p> : null}
+              {gridJob ? <div className="mt-4 rounded-lg bg-surface-container-low p-4 text-sm"><p className="font-bold capitalize">{gridJob.action.replaceAll('_', ' ')} · {gridJob.state.replaceAll('_', ' ')}</p><p className="mt-1 text-xs text-secondary">{gridJob.progress.completed} completed · {gridJob.progress.failed} failed · {gridJob.progress.cancelled} cancelled · {gridJob.progress.remaining} remaining</p>{gridJob.state === 'partially_completed' ? <p className="mt-2 text-xs font-semibold text-amber-800">Some rows committed and others did not.</p> : null}<div className="mt-3 space-y-2">{gridJob.rows.map((row) => <div key={`${row.index}:${row.unitId}`} className="rounded bg-white p-2 text-xs"><span className="font-bold">{row.unitId} · {row.state}</span>{row.error ? <span className="ml-2 text-error">{row.error.code}: {row.error.message}</span> : null}{row.operationId ? <span className="ml-2 text-secondary">Operation {row.operationId}</span> : null}</div>)}</div></div> : null}
+              {monitoredJobId ? <div className="mt-3 flex flex-wrap items-center gap-3">{gridJob && !['completed', 'partially_completed', 'failed', 'cancelled'].includes(gridJob.state) ? <Button type="button" variant="secondary" disabled={jobLoading} onClick={() => void cancelGridJob()}>Cancel remaining work</Button> : null}<label className="flex items-center gap-2 text-xs text-secondary"><input type="checkbox" checked={autoRefreshJob} onChange={(event) => setAutoRefreshJob(event.target.checked)} />Refresh every 10 seconds</label></div> : null}
+              <p className="mt-3 text-xs text-secondary">Use the canonical grid above to start a new job and request version-safe undo with an authenticator challenge.</p>
             </section>
           </div>
         ) : null}

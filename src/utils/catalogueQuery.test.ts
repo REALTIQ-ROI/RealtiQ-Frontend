@@ -78,4 +78,13 @@ describe('canonical catalogue URL', () => {
     expect(changed.has('type')).toBe(false);
     expect(changed.get('min_price')).toBe('0');
   });
+
+  it('replaces the legacy build stage when canonical multi-stage selection changes', () => {
+    const base = new URLSearchParams('completionStage=finished&state=lagos&page=2');
+    const next = writeCatalogueQuery({ buildStage: ['Newly built', 'Renovated'] }, { base, resetPage: true });
+    expect(next.getAll('buildStage')).toEqual(['Newly built', 'Renovated']);
+    expect(next.has('completionStage')).toBe(false);
+    expect(next.get('state')).toBe('lagos');
+    expect(next.has('page')).toBe(false);
+  });
 });

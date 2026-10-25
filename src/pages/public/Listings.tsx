@@ -10,6 +10,9 @@ import LoadingState from "../../components/ui/LoadingState";
 import { useAuth } from "../../contexts/AuthContext";
 import { useProperties as usePropertyCatalog } from "../../hooks/useProperties";
 import { personalisationService } from "../../services/personalisationService";
+import { propertyService } from "../../services/propertyService";
+import type { CanonicalMapMarker } from '../../types/canonicalMap';
+import { canonicalMapMarkers } from '../../utils/canonicalMapMarkers';
 import { cataloguePageFromQuery, readCatalogueQuery, writeCatalogueQuery } from "../../utils/catalogueQuery";
 import {
   propertyPublicReference,
@@ -52,6 +55,12 @@ const Listings = () => {
     west: number;
     zoom: number;
   } | null>(null);
+  const [mapState, setMapState] = useState<{ queryKey: string; count: number | null; error: string | null; markers: CanonicalMapMarker[]; skipped: number; mode: 'properties' | 'clusters' | null; truncated: boolean; categories: Record<string, number> }>({ queryKey: '', count: null, error: null, markers: [], skipped: 0, mode: null, truncated: false, categories: {} });
+  const mapQueryKey = searchParams.toString();
+  const mapLoading = searchParams.get('mapActive') === 'true' && mapState.queryKey !== mapQueryKey;
+  const mapResultCount = mapState.queryKey === mapQueryKey ? mapState.count : null;
+  const mapError = mapState.queryKey === mapQueryKey ? mapState.error : null;
+  const activeMapMarkers = searchParams.get('mapActive') === 'true' ? (mapState.queryKey === mapQueryKey ? mapState.markers : []) : undefined;
   const resultsRef = useRef<HTMLDivElement>(null);
   const viewportKey = useRef("");
   const viewportInteracted = useRef(false);
@@ -63,6 +72,25 @@ const Listings = () => {
     viewportInteracted.current = false;
     applyFilters(new URLSearchParams(searchParams), cataloguePageFromQuery(searchParams));
   }, [searchParams, applyFilters]);
+
+  useEffect(() => {
+    const query = new URLSearchParams(mapQueryKey);
+    if (query.get('mapActive') !== 'true') return;
+    const controller = new AbortController();
+    void propertyService.getCanonicalMap(query, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        const parsed = canonicalMapMarkers(result);
+        setMapState({ queryKey: mapQueryKey, count: Number.isFinite(result.total) ? result.total : null, error: null,
+          markers: parsed.markers, skipped: parsed.skipped, mode: result.mode,
+          truncated: result.mode === 'properties' && result.truncated,
+          categories: result.facets?.categories ?? {} });
+      })
+      .catch((raw: unknown) => {
+        if (!controller.signal.aborted) setMapState({ queryKey: mapQueryKey, count: null, error: raw instanceof Error ? raw.message : 'Map results are unavailable.', markers: [], skipped: 0, mode: null, truncated: false, categories: {} });
+      });
+    return () => controller.abort();
+  }, [mapQueryKey]);
 
   const handleApplyFilters = useCallback(
     (changes: Parameters<typeof writeCatalogueQuery>[0], clearAll = false) => {
@@ -161,6 +189,12 @@ const Listings = () => {
           >
             <PropertyMap
               properties={properties}
+              canonicalMarkers={activeMapMarkers}
+              onSelectCanonicalMarker={(marker) => {
+                const loaded = properties.find((item) => propertyPublicReference(item) === marker.reference);
+                if (loaded) selectProperty(loaded);
+                else navigate(`/properties/${encodeURIComponent(marker.reference)}`);
+              }}
               detailsPath={(property) => {
                 const reference = propertyPublicReference(property);
                 return reference ? `/properties/${reference}` : "";
@@ -174,6 +208,11 @@ const Listings = () => {
                 Updating this area…
               </div>
             ) : null}
+            {searchParams.get('mapActive') === 'true' ? <div className="absolute bottom-4 left-4 z-[1000] max-w-[min(90%,340px)] rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-secondary shadow" role="status">
+              {mapLoading ? 'Checking map results…' : mapError ? `Map results unavailable: ${mapError}` : mapResultCount === null ? 'Map result count unavailable.' : `${mapResultCount} properties match this map area.`}
+              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey ? <span className="mt-1 block font-normal">{mapState.mode === 'clusters' ? `${mapState.markers.length} server clusters shown.` : `${mapState.markers.length} server property markers shown${mapState.truncated ? ' (page limit reached)' : ''}.`}{mapState.skipped ? ` ${mapState.skipped} returned items lacked safe marker coordinates or references.` : ''}</span> : null}
+              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey && Object.keys(mapState.categories).length ? <span className="mt-1 block font-normal">Categories: {Object.entries(mapState.categories).filter(([, count]) => typeof count === 'number').slice(0, 4).map(([name, count]) => `${name.replaceAll('_', ' ')} ${count}`).join(' · ')}</span> : null}
+            </div> : null}
           </section>
           <section
             className="flex min-h-[480px] min-w-0 flex-col border-l border-outline-variant/20 bg-surface lg:min-h-0"

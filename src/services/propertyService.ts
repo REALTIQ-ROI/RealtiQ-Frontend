@@ -37,6 +37,7 @@ export interface TitleDocumentUploadMetadata {
 }
 
 export interface CreatePropertyPayload {
+  canonicalFields?: Record<string, unknown>;
   title: string;
   price: number;
   paymentTypes: PropertyPaymentType[];
@@ -44,7 +45,7 @@ export interface CreatePropertyPayload {
   propertyType: PropertyType | string;
   bedrooms?: number;
   bathrooms?: number;
-  squareFeet: number;
+  squareFeet?: number;
   structuredFacts?: StructuredPropertyFacts;
   description: string;
   amenities?: string[];
@@ -174,6 +175,40 @@ export type PropertyMapResponse =
       properties: Property[];
     });
 
+export interface CanonicalMapProperty {
+  _id: string;
+  publicReference?: string;
+  title?: string;
+  locationPoint?: { type: 'Point'; coordinates: [number, number] };
+  coordinates?: { lat: number; lng: number } | null;
+  canonicalEffectiveFields?: { askingPrice?: number | null; currency?: string };
+}
+
+export interface CanonicalMapCluster {
+  clusterId: string;
+  lat: number;
+  lng: number;
+  propertyCount: number;
+  sponsoredCount?: number;
+  minimumPrice?: number | null;
+  maximumPrice?: number | null;
+}
+
+interface CanonicalMapCommon {
+  bounds: { north: number; south: number; east: number; west: number };
+  zoom: number;
+  total: number;
+  facets: { categories?: Record<string, number>; propertyTypes?: Record<string, number>; [key: string]: unknown };
+  sort: string;
+  page: number;
+  limit: number;
+  normalization: { queryVersion: string; query: unknown; notices?: unknown[] };
+}
+
+export type CanonicalPropertyMapResponse =
+  | (CanonicalMapCommon & { mode: 'properties'; properties: CanonicalMapProperty[]; truncated: boolean })
+  | (CanonicalMapCommon & { mode: 'clusters'; clusters: CanonicalMapCluster[]; priceAggregateState?: string });
+
 export interface PropertyPriceHistoryItem {
   _id: string;
   property: string;
@@ -269,6 +304,13 @@ export const propertyService = {
     if (data.mode === 'properties') {
       return { ...data, properties: data.properties.map(normalizeProperty) };
     }
+    return data;
+  },
+
+  async getCanonicalMap(query: URLSearchParams, signal?: AbortSignal): Promise<CanonicalPropertyMapResponse> {
+    const params = new URLSearchParams(query);
+    if (!params.has('queryVersion')) params.set('queryVersion', 'canonical-v1');
+    const { data } = await api.get<CanonicalPropertyMapResponse>('/properties/map', { params, signal });
     return data;
   },
 

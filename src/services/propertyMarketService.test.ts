@@ -23,6 +23,20 @@ describe('property market service endpoints', () => {
     expect(params.get('queryVersion')).toBe('canonical-v1');
   });
 
+  it('sends the complete canonical URL and consumes the documented map mode envelope', async () => {
+    const response = { mode: 'clusters', bounds: { north: 6.7, south: 6.2, east: 3.7, west: 3.1 }, zoom: 8, total: 2,
+      clusters: [{ clusterId: 'a', lat: 6.5, lng: 3.4, propertyCount: 2 }], facets: { categories: {} }, sort: 'recommended', page: 1, limit: 50,
+      normalization: { queryVersion: 'canonical-v1', query: {}, notices: [] } };
+    vi.mocked(api.get).mockResolvedValue({ data: response });
+    const query = new URLSearchParams('state=lagos&buildStage=Newly+built&buildStage=Renovated&north=6.7&south=6.2&east=3.7&west=3.1&mapActive=true');
+    const result = await propertyService.getCanonicalMap(query);
+    const [path, options] = vi.mocked(api.get).mock.calls[0];
+    expect(path).toBe('/properties/map');
+    expect((options?.params as URLSearchParams).getAll('buildStage')).toEqual(['Newly built', 'Renovated']);
+    expect((options?.params as URLSearchParams).get('queryVersion')).toBe('canonical-v1');
+    expect(result).toBe(response);
+  });
+
   it('calls the viewport map endpoint with bounds and activity filters', async () => {
     vi.mocked(api.get).mockResolvedValue({
       data: {

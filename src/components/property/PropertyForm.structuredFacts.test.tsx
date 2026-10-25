@@ -9,6 +9,14 @@ vi.mock('../../services/documentService', () => ({ documentService: { uploadTitl
 vi.mock('../../services/projectService', () => ({ projectService: { listMyProjects: vi.fn().mockResolvedValue({ projects: [] }) } }));
 const initial: CreatePropertyPayload & { status: string } = { title: 'Terrace', price: 45000000, paymentTypes: ['outright'], location: 'Lekki', propertyType: 'house', bedrooms: 3, bathrooms: 3, squareFeet: 2000, description: 'Completed built property.', media: [{ url: 'image', public_id: '1', type: 'image' }], category: 'residential', completionStage: 'finished', currency: 'NGN', status: 'available', structuredFacts: { verification: { status: 'admin_verified', source: 'admin' } } };
 describe('PropertyForm structured facts', () => {
+  it('does not resend untouched seller facts during an unrelated edit', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(<PropertyForm mode="edit" initialData={initial} onSubmit={onSubmit} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Save Property' }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('structuredFacts');
+  });
+
   it('round-trips square feet independently and forces seller assertion provenance', async () => {
     const onSubmit = vi.fn().mockResolvedValue({ _id: 'p1' });
     render(<PropertyForm mode={'edit'} initialData={initial} onSubmit={onSubmit} />);

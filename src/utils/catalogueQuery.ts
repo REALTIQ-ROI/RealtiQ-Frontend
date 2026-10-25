@@ -15,6 +15,7 @@ const replacedAliases: Record<string, readonly string[]> = {
   bedrooms: ['beds', 'exact_beds', 'min_beds', 'max_beds', 'minBedrooms', 'maxBedrooms'],
   bathrooms: ['fullBathrooms', 'minBathrooms', 'maxBathrooms', 'exactBathrooms'],
   completionStage: ['buildStage'],
+  buildStage: ['completionStage'],
   mapZoom: ['zoom'],
   mapActive: ['search_as_i_move_the_map'],
 };

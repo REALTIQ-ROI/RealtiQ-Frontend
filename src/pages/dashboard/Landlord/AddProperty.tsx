@@ -19,7 +19,7 @@ const AddProperty = () => {
 
     const response = await addProperty(user._id, payload);
     if (response.property) {
-      toast.success(response.message || 'Property submitted for admin approval before public listing.');
+      toast.success(response.message || 'Property saved. Publication depends on the server readiness and approval workflow.');
       if (response.riskDetected) {
         toast.warning('Title document risk signals were detected. Legal review is required before title verification can be published.');
       }
@@ -42,7 +42,7 @@ const AddProperty = () => {
         {activeProfile ? (
           <>
             <p className="mb-5 rounded-lg bg-surface-container-low p-4 text-sm text-secondary">The server checks the selected profile's current verification, permission and publication eligibility when you submit.</p>
-            <PropertyForm onSubmit={handleSubmit} submitLabel="Submit for Approval" />
+            <PropertyForm onSubmit={handleSubmit} submitLabel="Save Listing" />
           </>
         ) : (
           <section className="rounded-2xl border border-dashed border-outline-variant/20 bg-surface-container-lowest p-8 lg:p-12 text-center">

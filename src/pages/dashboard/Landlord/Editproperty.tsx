@@ -10,6 +10,7 @@ import { useAsync } from "../../../hooks/useAsync";
 import { ApiRequestError } from "../../../lib/axios";
 import { propertyService, type UpdatePropertyPayload } from "../../../services/propertyService";
 import { propertyRouteReference } from "../../../types";
+import { propertyEditPatch } from '../../../utils/propertyEditPatch';
 
 const Editproperty = () => {
   const { updateProperty } = useProperties();
@@ -32,9 +33,14 @@ const Editproperty = () => {
     }
 
     try {
+      const changed = propertyEditPatch(property, payload);
+      if (Object.keys(changed).length === 0) {
+        toast.info('No changes to save.');
+        return property;
+      }
       const updated = await updateProperty(
         propertyRouteReference(property),
-        { ...payload, ...(typeof property.version === 'number' ? { expectedVersion: property.version } : {}) },
+        { ...changed, ...(typeof property.version === 'number' ? { expectedVersion: property.version } : {}) },
       );
       toast.success("Property updated successfully");
       navigate("/dashboard/landlord/my-properties");

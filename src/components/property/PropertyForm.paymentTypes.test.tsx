@@ -30,6 +30,7 @@ const initialData: CreatePropertyPayload & { status: string } = {
 const savedProperty = (payload: CreatePropertyPayload): Property => ({
   _id: 'prop1',
   ...payload,
+  squareFeet: payload.squareFeet ?? 0,
   bedrooms: payload.bedrooms ?? 0,
   bathrooms: payload.bathrooms ?? 0,
   status: 'available',
@@ -76,5 +77,29 @@ describe('PropertyForm payment types', () => {
     const installment = screen.getByRole('checkbox', { name: /Installment plan/i });
     expect(installment).not.toBeChecked();
     expect(installment).toBeEnabled();
+  });
+
+  it('preserves canonical catalogue values returned by an owner response', async () => {
+    const onSubmit = vi.fn(async () => undefined);
+    render(<PropertyForm mode="edit" initialData={{ ...initialData, propertyType: 'Terraced House', category: 'land', completionStage: 'Newly built' }} onSubmit={onSubmit} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Save Property' }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ propertyType: 'Terraced House', category: 'land', completionStage: 'Newly built' }));
+  });
+
+  it('serializes explicit false and zero as changed canonical paths', async () => {
+    const onSubmit = vi.fn(async () => undefined);
+    render(<PropertyForm mode="edit" initialData={{ ...initialData, category: 'commercial', propertyType: 'commercial' }} onSubmit={onSubmit} />);
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Gated estate' }), 'false');
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Commercial frontage in metres' }), '0');
+    await userEvent.click(screen.getByRole('button', { name: 'Save Property' }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ canonicalFields: { gatedEstate: false, commercialFrontage: 0 } }));
+  });
+
+  it('keeps an existing empty canonical value without inventing a clear operation', async () => {
+    const onSubmit = vi.fn(async (payload: CreatePropertyPayload) => { void payload; return undefined; });
+    render(<PropertyForm mode="edit" initialData={{ ...initialData, canonicalFields: { gatedEstate: false, streetAddress: '' } }} onSubmit={onSubmit} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Save Property' }));
+    expect(onSubmit).toHaveBeenCalled();
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('canonicalFields');
   });
 });

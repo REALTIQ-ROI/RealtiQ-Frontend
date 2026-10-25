@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet.markercluster';
 import { propertyRouteReference, type Property } from '../../../types';
 import PropertyMapPreviewCard from './PropertyMapPreviewCard';
+import type { CanonicalMapMarker } from '../../../types/canonicalMap';
 
 interface Props {
   properties: Property[];
@@ -14,6 +15,8 @@ interface Props {
   onSelectProperty?: (property: Property) => void;
   resolveProperty?: (property: Property) => Promise<Property>;
   onDetailsNavigate?: () => void;
+  canonicalMarkers?: CanonicalMapMarker[];
+  onSelectCanonicalMarker?: (marker: Extract<CanonicalMapMarker, { kind: 'property' }>) => void;
 }
 
 const isMappable = (property: Property) => {
@@ -31,17 +34,18 @@ const priceLabel = (price: number) => {
   return `₦${price}`;
 };
 
-const LeafletPropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, onSelectProperty, resolveProperty, onDetailsNavigate }: Props) => {
+const LeafletPropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, onSelectProperty, resolveProperty, onDetailsNavigate, canonicalMarkers, onSelectCanonicalMarker }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
+  const canonicalLayerRef = useRef<L.LayerGroup | null>(null);
   const [selectedPreview, setSelectedPreview] = useState<Property | null>(null);
   const [mapError, setMapError] = useState(false);
-  const mappable = useMemo(() => properties.filter(isMappable), [properties]);
+  const mappable = useMemo(() => canonicalMarkers === undefined ? properties.filter(isMappable) : [], [properties, canonicalMarkers]);
   // The preview is intentionally map-owned: selecting or hovering a card may
   // synchronize the highlighted property, but must not open this map preview.
   const initialFit = useRef(false);
-  const missingCount = properties.length - mappable.length;
+  const missingCount = canonicalMarkers === undefined ? properties.length - mappable.length : 0;
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -51,9 +55,12 @@ const LeafletPropertyMap = ({ properties, detailsPath, actions, className = '', 
       maxZoom: 19,
     }).on('tileerror', () => setMapError(true)).addTo(map);
     const cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 });
+    const canonicalLayer = L.layerGroup();
     map.addLayer(cluster);
+    map.addLayer(canonicalLayer);
     mapRef.current = map;
     clusterRef.current = cluster;
+    canonicalLayerRef.current = canonicalLayer;
     const resize = new ResizeObserver(() => map.invalidateSize());
     resize.observe(containerRef.current);
     return () => {
@@ -61,6 +68,7 @@ const LeafletPropertyMap = ({ properties, detailsPath, actions, className = '', 
       map.remove();
       mapRef.current = null;
       clusterRef.current = null;
+      canonicalLayerRef.current = null;
     };
   }, []);
 
@@ -99,6 +107,24 @@ const LeafletPropertyMap = ({ properties, detailsPath, actions, className = '', 
 
   useEffect(() => {
     const map = mapRef.current;
+    const layer = canonicalLayerRef.current;
+    if (!map || !layer) return;
+    layer.clearLayers();
+    for (const marker of canonicalMarkers ?? []) {
+      const isCluster = marker.kind === 'cluster';
+      const icon = L.divIcon({ className: isCluster ? 'realtiq-map-marker realtiq-map-cluster' : 'realtiq-map-marker',
+        html: `<span>${isCluster ? marker.count : marker.label}</span>`, iconSize: [76, 32], iconAnchor: [38, 32] });
+      const point = L.marker([marker.lat, marker.lng], { icon, title: isCluster ? `${marker.count} properties` : marker.title });
+      point.on('click', () => {
+        if (marker.kind === 'cluster') map.setView([marker.lat, marker.lng], Math.min(19, map.getZoom() + 2));
+        else onSelectCanonicalMarker?.(marker);
+      });
+      layer.addLayer(point);
+    }
+  }, [canonicalMarkers, onSelectCanonicalMarker]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map || (!onVisiblePropertiesChange && !onViewportChange)) return;
     const updateVisible = () => {
       const bounds = map.getBounds();
@@ -117,7 +143,7 @@ const LeafletPropertyMap = ({ properties, detailsPath, actions, className = '', 
 
   return <section className={'relative min-h-[55vh] overflow-hidden rounded-xl bg-surface-container-low ' + className}>
     <div ref={containerRef} className={'absolute inset-0'} />
-    {mappable.length === 0 && !mapError ? <div className={'absolute left-3 top-3 z-[900] rounded-lg bg-white p-3 text-xs'}>No property markers in this area</div> : null}
+    {canonicalMarkers === undefined && mappable.length === 0 && !mapError ? <div className={'absolute left-3 top-3 z-[900] rounded-lg bg-white p-3 text-xs'}>No property markers in this area</div> : null}
     {mapError ? <div className={'absolute left-3 right-3 top-3 z-[1000] rounded-lg bg-error-container p-3 text-sm'}>The map tiles could not be loaded.</div> : null}
     {missingCount > 0 ? <div className={'absolute left-3 top-3 z-[900] rounded-lg bg-white p-3 text-xs'}>{missingCount} properties are list-only (no coordinates).</div> : null}
     {selectedPreview ? <PropertyMapPreviewCard property={selectedPreview} detailsPath={detailsPath} actions={actions} onClose={() => setSelectedPreview(null)} onDetailsNavigate={onDetailsNavigate} /> : null}
