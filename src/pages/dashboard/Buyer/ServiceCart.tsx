@@ -173,10 +173,11 @@ const ServiceCart = () => {
             <Button type="button" variant="secondary" disabled={locked || !cart?.items.length} onClick={() => void handleClear()}>
               Clear cart
             </Button>
-            <Button type="button" disabled={checkingOut || !cart?.items.length} onClick={() => void handleCheckout()}>
+            <Button type="button" disabled title="Checkout requires a documented step-up challenge" onClick={() => void handleCheckout()}>
               {checkingOut ? 'Starting checkout...' : locked ? 'Continue checkout' : 'Checkout with Paystack'}
             </Button>
             </div>
+            <p className="text-xs text-amber-800">Checkout initialization requires a verified buyer and a server step-up challenge. Item review and removal remain available.</p>
           </div>
         </section>
         <Button type="button" variant="ghost" onClick={() => navigate('/properties')}>

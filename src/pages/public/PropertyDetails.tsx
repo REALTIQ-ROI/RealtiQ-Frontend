@@ -29,7 +29,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import FavouriteButton from '../../components/phase2/FavouriteButton';
 import { useRecordRecentProperty } from '../../hooks/useRecordRecentProperty';
 import { messageService } from '../../services/messageService';
-import { useCart } from '../../contexts/CartContext';
 import { useProperties } from '../../contexts/PropertiesContext';
 import { useAsync } from '../../hooks/useAsync';
 import { inquiryService } from '../../services/inquiryService';
@@ -70,7 +69,6 @@ const formatCurrency = (value: number, currency = 'NGN') =>
 
 const PROPERTY_TOUR_TYPES = [
   { value: 'open_house', label: 'Open House' },
-  { value: 'virtual_paid', label: 'Virtual Paid' },
   { value: 'staging_view', label: 'Staging View' },
 ] as const;
 
@@ -90,7 +88,6 @@ const PropertyDetails = () => {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
-  const { addItem } = useCart();
   const { buyProperty, refreshProperties } = useProperties();
   const {
     data: property,
@@ -117,9 +114,6 @@ const PropertyDetails = () => {
     useState<(typeof PROPERTY_TOUR_MODES)[number]['value']>('physical');
   const [tourDate, setTourDate] = useState('');
   const [tourNotes, setTourNotes] = useState('');
-  const [tourPaymentOption, setTourPaymentOption] = useState<
-    'pay_now' | 'cart'
-  >('pay_now');
   const [installmentFrequency, setInstallmentFrequency] =
     useState<(typeof INSTALLMENT_FREQUENCIES)[number]['value']>('monthly');
   const [titleSummary, setTitleSummary] =
@@ -139,7 +133,6 @@ const PropertyDetails = () => {
   const mediaSectionRef = useRef<HTMLDivElement>(null);
   const propertyReference = property ? propertyRouteReference(property) : '';
   const gallerySlideCount = propertyGallerySlideCount(property);
-  const virtualTourRequestAvailable = Boolean(property?.virtualTour?.available);
   useRecordRecentProperty(propertyReference);
   const startConversation = async () => {
     if (!isAuthenticated) {
@@ -177,17 +170,6 @@ const PropertyDetails = () => {
       propertyService.getPropertyById(propertyRouteReference(nearbyProperty)),
     [],
   );
-
-  useEffect(() => {
-    if (
-      tourType === 'virtual_paid' &&
-      property &&
-      !virtualTourRequestAvailable
-    ) {
-      setTourType('open_house');
-      setTourMode('physical');
-    }
-  }, [property, tourType, virtualTourRequestAvailable]);
 
   useEffect(() => {
     const mediaSection = mediaSectionRef.current;
@@ -386,8 +368,8 @@ const PropertyDetails = () => {
     event.preventDefault();
     if (!propertyReference) return;
 
-    if (tourType === 'virtual_paid' && !virtualTourRequestAvailable) {
-      toast.error('A virtual tour is not available for this property.');
+    if (!tourDate || Number.isNaN(new Date(tourDate).getTime())) {
+      toast.error('Choose a valid viewing time.');
       return;
     }
 
@@ -402,43 +384,13 @@ const PropertyDetails = () => {
 
     setRequestingTour(true);
     try {
-      const response = await tourService.requestTour({
+      await tourService.requestTour({
         propertyId: propertyReference,
         type: tourType,
-        mode: tourType === 'virtual_paid' ? 'virtual' : tourMode,
-        scheduledAt: tourDate ? new Date(tourDate).toISOString() : undefined,
+        mode: tourMode,
+        scheduledAt: new Date(tourDate).toISOString(),
         notes: tourNotes.trim() || undefined,
-        paymentOption:
-          tourType === 'virtual_paid' && tourPaymentOption === 'cart'
-            ? 'cart'
-            : undefined,
       });
-
-      if (tourType === 'virtual_paid' && tourPaymentOption === 'cart') {
-        const cartItem = response.cartItem ?? {
-          itemType: 'paid_virtual_tour' as const,
-          resourceId: response.tour._id,
-        };
-        try {
-          await addItem(cartItem);
-          toast.success('Paid virtual tour created and added to cart.');
-          setTourNotes('');
-          setTourDate('');
-        } catch (raw) {
-          toast.error(
-            raw instanceof Error
-              ? raw.message
-              : 'Tour was created, but could not be added to cart. Retry from your tours page.',
-          );
-          toast.info(`Pending tour: ${response.tour._id}`);
-        }
-        return;
-      }
-
-      if (response.redirectUrl) {
-        window.location.href = response.redirectUrl;
-        return;
-      }
 
       toast.success('Tour request submitted successfully.');
       setTourNotes('');
@@ -635,12 +587,16 @@ const PropertyDetails = () => {
                     Continue Installment
                   </Button>
                 ) : canPurchase && hasOutrightPayment ? (
+                  <div>
                   <Button
                     onClick={() => void handleBuyProperty()}
-                    disabled={installmentLoading}
+                    disabled
+                    title="Outright checkout requires a documented step-up challenge"
                   >
                     {installmentLoading ? 'Checking...' : 'Buy Property'}
                   </Button>
+                  <p className="mt-2 text-xs text-amber-800">Outright checkout is awaiting the server step-up challenge contract.</p>
+                  </div>
                 ) : canPurchase && hasInstallmentPayment ? (
                   <Button
                     onClick={() => void handleCreateInstallment()}
@@ -1089,31 +1045,17 @@ const PropertyDetails = () => {
                         const nextType = event.target
                           .value as (typeof PROPERTY_TOUR_TYPES)[number]['value'];
                         setTourType(nextType);
-                        if (nextType === 'virtual_paid') setTourMode('virtual');
                       }}
                     >
                       {PROPERTY_TOUR_TYPES.map((option) => (
                         <option
                           key={option.value}
                           value={option.value}
-                          disabled={
-                            option.value === 'virtual_paid' &&
-                            !virtualTourRequestAvailable
-                          }
                         >
-                          {option.value === 'virtual_paid' &&
-                          !virtualTourRequestAvailable
-                            ? `${option.label} (Unavailable)`
-                            : option.label}
+                          {option.label}
                         </option>
                       ))}
                     </select>
-                    {!virtualTourRequestAvailable ? (
-                      <p className='mt-1 text-xs text-secondary'>
-                        This property does not currently have a virtual tour
-                        available.
-                      </p>
-                    ) : null}
                   </div>
                   <div>
                     <label
@@ -1126,7 +1068,6 @@ const PropertyDetails = () => {
                       id='tour-request-mode'
                       className='w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm'
                       value={tourMode}
-                      disabled={tourType === 'virtual_paid'}
                       onChange={(e) =>
                         setTourMode(
                           e.target
@@ -1140,11 +1081,6 @@ const PropertyDetails = () => {
                         </option>
                       ))}
                     </select>
-                    {tourType === 'virtual_paid' ? (
-                      <p className='mt-1 text-xs text-secondary'>
-                        Virtual mode is required for this tour type.
-                      </p>
-                    ) : null}
                   </div>
                   <div>
                     <label className='block text-xs font-bold uppercase tracking-widest text-secondary mb-2'>
@@ -1152,6 +1088,7 @@ const PropertyDetails = () => {
                     </label>
                     <input
                       type='datetime-local'
+                      required
                       value={tourDate}
                       onChange={(e) => setTourDate(e.target.value)}
                       className='w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm'
@@ -1170,29 +1107,6 @@ const PropertyDetails = () => {
                     />
                   </div>
                   <div className='md:col-span-2'>
-                    {tourType === 'virtual_paid' ? (
-                      <div className='mb-4'>
-                        <label className='block text-xs font-bold uppercase tracking-widest text-secondary mb-2'>
-                          Payment Option
-                        </label>
-                        <div className='grid grid-cols-1 gap-2 sm:grid-cols-2'>
-                          <button
-                            type='button'
-                            className={`rounded-lg border px-4 py-3 text-sm font-bold ${tourPaymentOption === 'pay_now' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/20 bg-surface-container-low'}`}
-                            onClick={() => setTourPaymentOption('pay_now')}
-                          >
-                            Pay Now
-                          </button>
-                          <button
-                            type='button'
-                            className={`rounded-lg border px-4 py-3 text-sm font-bold ${tourPaymentOption === 'cart' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/20 bg-surface-container-low'}`}
-                            onClick={() => setTourPaymentOption('cart')}
-                          >
-                            Add to Cart
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
                     <Button
                       type='submit'
                       disabled={requestingTour}
@@ -1200,10 +1114,6 @@ const PropertyDetails = () => {
                     >
                       {requestingTour ? 'Submitting...' : 'Request Tour'}
                     </Button>
-                    <p className='text-xs text-secondary mt-2'>
-                      Virtual paid tours will redirect to Paystack when the
-                      a secure payment link is ready.
-                    </p>
                   </div>
                 </form>
               </Card>
@@ -1468,15 +1378,19 @@ const PropertyDetails = () => {
                   ) : (
                     <>
                       {hasOutrightPayment ? (
+                        <div>
                         <Button
                           fullWidth
-                          disabled={installmentLoading}
+                          disabled
+                          title="Outright checkout requires a documented step-up challenge"
                           onClick={() => void handleBuyProperty()}
                         >
                           {installmentLoading
                             ? 'Checking eligibility...'
                             : 'Buy Property Outright'}
                         </Button>
+                        <p className="mt-2 text-xs text-amber-800">Outright checkout is awaiting the server step-up challenge contract.</p>
+                        </div>
                       ) : null}
                       {hasInstallmentPayment ? (
                         <Button

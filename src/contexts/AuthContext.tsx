@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { authService, type RegisterResponse } from '../services/authService';
 import { userService } from '../services/userService';
+import { profileService, type AccountProfileSummary } from '../services/profileService';
 import type { LoginPayload, RegisterPayload, User } from '../types';
 
 interface AuthContextValue {
@@ -9,6 +10,11 @@ interface AuthContextValue {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  profiles: AccountProfileSummary[];
+  activeProfile: AccountProfileSummary | null;
+  profileError: string | null;
+  refreshProfiles: () => Promise<void>;
+  switchProfile: (id: string) => Promise<void>;
   login: (payload: LoginPayload) => Promise<User>;
   register: (payload: RegisterPayload) => Promise<RegisterResponse>;
   updateUser: (nextUser: User) => void;
@@ -30,15 +36,61 @@ const parseUser = (value: string | null): User | null => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(() => parseUser(localStorage.getItem('user')));
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(() => Boolean(localStorage.getItem('token') && parseUser(localStorage.getItem('user'))));
+  const [profiles, setProfiles] = useState<AccountProfileSummary[]>([]);
+  const [activeProfile, setActiveProfile] = useState<AccountProfileSummary | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  const clearSession = useCallback(() => {
+    window.dispatchEvent(new Event('realtiq:session-changed'));
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('activeProfileId');
+    setUser(null);
+    setToken(null);
+    setProfiles([]);
+    setActiveProfile(null);
+    setProfileError(null);
+    setIsLoading(false);
+  }, []);
 
   const persistSession = (nextUser: User, nextToken: string) => {
     window.dispatchEvent(new Event('realtiq:session-changed'));
+    localStorage.removeItem('activeProfileId');
     localStorage.setItem('token', nextToken);
     localStorage.setItem('user', JSON.stringify(nextUser));
     setUser(nextUser);
     setToken(nextToken);
+    setProfiles([]);
+    setActiveProfile(null);
   };
+
+  const refreshProfiles = useCallback(async () => {
+    await authService.account();
+    const result = await profileService.list();
+    const selectedId = localStorage.getItem('activeProfileId');
+    const selected = result.profiles.find((profile) => profile.id === selectedId) ?? result.profiles[0];
+    if (!selected) {
+      setProfiles([]);
+      setActiveProfile(null);
+      setProfileError('No authorized profile is available for this account.');
+      return;
+    }
+    const current = await profileService.current(selected.id);
+    localStorage.setItem('activeProfileId', selected.id);
+    setProfiles(result.profiles);
+    setActiveProfile(current.profile);
+    setProfileError(null);
+  }, []);
+
+  const switchProfile = useCallback(async (id: string) => {
+    if (!profiles.some((profile) => profile.id === id)) throw new Error('This profile is not available to this account.');
+    const current = await profileService.current(id);
+    window.dispatchEvent(new Event('realtiq:session-changed'));
+    localStorage.setItem('activeProfileId', id);
+    setActiveProfile(current.profile);
+    setProfileError(null);
+  }, [profiles]);
 
   const updateUser = useCallback((nextUser: User) => {
     const previous = parseUser(localStorage.getItem('user'));
@@ -61,13 +113,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     try {
       const response = await authService.login(payload);
+      if (!response.token || !response.user) {
+        throw new Error('Additional sign-in verification is required. The second-factor form is unavailable until its request contract is documented.');
+      }
       persistSession(response.user, response.token);
       return response.user;
     } catch (error) {
+      setIsLoading(false);
       const message = error instanceof Error ? error.message : 'Unable to login.';
       throw new Error(message);
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
@@ -77,49 +131,60 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const response = await authService.register(payload);
       if (response.token) {
         persistSession(response.user, response.token);
+      } else {
+        setIsLoading(false);
       }
       return response;
     } catch (error) {
+      setIsLoading(false);
       const message = error instanceof Error ? error.message : 'Unable to register.';
       throw new Error(message);
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
   const logout = () => {
-    window.dispatchEvent(new Event('realtiq:session-changed'));
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
-    setToken(null);
+    if (token) void authService.logout(token).catch(() => undefined);
+    clearSession();
   };
 
   useEffect(() => {
-    const expire = () => {
-      window.dispatchEvent(new Event('realtiq:session-changed'));
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      setUser(null);
-      setToken(null);
-    };
-    window.addEventListener('realtiq:session-expired', expire);
-    return () => window.removeEventListener('realtiq:session-expired', expire);
-  }, []);
+    window.addEventListener('realtiq:session-expired', clearSession);
+    return () => window.removeEventListener('realtiq:session-expired', clearSession);
+  }, [clearSession]);
+
+  useEffect(() => {
+    if (!token || !user) return;
+    let current = true;
+    queueMicrotask(() => {
+      if (!current) return;
+      setIsLoading(true);
+      void refreshProfiles().catch((error: unknown) => {
+        if (current && localStorage.getItem('token')) setProfileError(error instanceof Error ? error.message : 'Unable to load your current profile.');
+      }).finally(() => {
+        if (current) setIsLoading(false);
+      });
+    });
+    return () => { current = false; };
+  }, [token, user?._id, refreshProfiles]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       token,
-      isAuthenticated: Boolean(user && token),
+      isAuthenticated: Boolean(user && token && activeProfile),
       isLoading,
+      profiles,
+      activeProfile,
+      profileError,
+      refreshProfiles,
+      switchProfile,
       login,
       register,
       updateUser,
       refreshUser,
       logout,
     }),
-    [user, token, isLoading, login, register, updateUser, refreshUser],
+    [user, token, isLoading, profiles, activeProfile, profileError, refreshProfiles, switchProfile, login, register, updateUser, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -39,16 +39,14 @@ describe('propertyService payment types', () => {
     expect(result.property.paymentTypes).toEqual(['outright', 'installment', 'escrow']);
   });
 
-  it('sends update choices and applies server/threshold normalization', async () => {
+  it('sends update choices and consumes the documented property envelope', async () => {
     vi.mocked(api.patch).mockResolvedValue({
       data: {
-        _id: 'prop1',
-        ...payload,
-        bedrooms: 4,
-        bathrooms: 4,
-        status: 'available',
-        price: 65_000_000,
-        paymentTypes: ['installment', 'escrow'],
+        property: {
+          _id: 'prop1', ...payload, bedrooms: 4, bathrooms: 4,
+          status: 'available', price: 65_000_000, paymentTypes: ['installment', 'escrow'],
+        },
+        version: 3,
       },
     });
     const result = await propertyService.updateProperty('prop1', { price: 65_000_000, paymentTypes: ['escrow'] });
@@ -56,11 +54,11 @@ describe('propertyService payment types', () => {
     expect(result.paymentTypes).toEqual(['installment', 'escrow']);
   });
 
-  it('temporarily normalizes a legacy read to outright', async () => {
+  it('does not invent outright payment on an omitted response field', async () => {
     vi.mocked(api.get).mockResolvedValue({
       data: { _id: 'prop1', ...payload, bedrooms: 4, bathrooms: 4, status: 'available', price: 40_000_000, paymentTypes: undefined },
     });
     const result = await propertyService.getPropertyById('prop1');
-    expect(result.paymentTypes).toEqual(['outright']);
+    expect(result.paymentTypes).toEqual([]);
   });
 });

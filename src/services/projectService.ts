@@ -132,10 +132,9 @@ export interface CreateProjectRequest {
   completionDate?: string;
   launchDate?: string;
   status?: ProjectStatus;
-  publish?: boolean;
 }
 
-export type UpdateProjectRequest = Partial<CreateProjectRequest> & { publish?: boolean; isPublished?: boolean };
+export type UpdateProjectRequest = Partial<CreateProjectRequest> & { expectedVersion?: number };
 export type MyProjectQuery = Pick<ProjectSearchQuery, 'search' | 'status' | 'publicationState' | 'page' | 'limit' | 'sort'>;
 
 export interface ProjectImportListResponse {

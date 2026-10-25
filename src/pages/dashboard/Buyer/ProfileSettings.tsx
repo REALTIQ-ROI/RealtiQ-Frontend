@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
 import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
@@ -6,9 +6,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
-import { toast } from 'sonner';
-
-const phoneRegex = /^(\+234|234|0)[789][01]\d{8}$/;
+import DataProtectionRequests from '../../../components/profile/DataProtectionRequests';
 
 const formatDate = (date?: string) =>
   date ? new Date(date).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
@@ -25,42 +23,11 @@ const ProfileSettings = () => {
   const account = profile ?? user;
   const [name, setName] = useState(account?.name ?? '');
   const [phone, setPhone] = useState('');
-  const [formError, setFormError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setName(account?.name ?? '');
     setPhone(account?.phone ?? '');
   }, [account]);
-
-  const onSave = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!user) return;
-    if (!name.trim()) {
-      setFormError('Name is required.');
-      return;
-    }
-    if (phone.trim() && !phoneRegex.test(phone.trim())) {
-      setFormError('Enter a valid Nigerian phone number.');
-      return;
-    }
-
-    setSaving(true);
-    setFormError(null);
-    try {
-      const updated = await userService.updateUser(user._id, {
-        name: name.trim(),
-        phone: phone.trim() || undefined,
-      });
-      localStorage.setItem('user', JSON.stringify({ ...user, ...updated }));
-      toast.success('Profile updated successfully.');
-      await execute();
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Unable to update profile.');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <BuyerPortalLayout
@@ -74,12 +41,12 @@ const ProfileSettings = () => {
         ) : error ? (
           <ErrorState message={error} onRetry={() => void execute()} />
         ) : (
-          <form className="space-y-12" onSubmit={onSave}>
+          <form className="space-y-12" onSubmit={(event) => event.preventDefault()}>
             <section className="bg-surface-container-low p-8 rounded-xl">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div>
                   <h3 className="text-lg font-bold font-headline mb-1">Personal Details</h3>
-                  <p className="text-sm text-secondary leading-relaxed">Update your public identity and contact information.</p>
+                  <p className="text-sm text-secondary leading-relaxed">Review your public identity and contact information.</p>
                 </div>
                 <div className="md:col-span-2 space-y-6">
                   <div className="grid grid-cols-1 gap-4">
@@ -89,7 +56,7 @@ const ProfileSettings = () => {
                         className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 focus:ring-surface-tint rounded-lg px-4 py-3 text-sm transition-all outline-none"
                         type="text"
                         value={name}
-                        onChange={(e) => setName(e.target.value)}
+                        readOnly
                       />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -108,8 +75,8 @@ const ProfileSettings = () => {
                           className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 focus:ring-surface-tint rounded-lg px-4 py-3 text-sm transition-all outline-none"
                           type="tel"
                           value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          placeholder="08012345678"
+                          readOnly
+                          placeholder="+2348012345678"
                         />
                       </div>
                     </div>
@@ -176,8 +143,6 @@ const ProfileSettings = () => {
               </div>
             </section>
 
-            {formError ? <p className="text-error text-sm font-semibold">{formError}</p> : null}
-
             <div className="flex items-center justify-end gap-6 pt-2">
               <button
                 className="text-secondary text-sm font-semibold hover:text-primary transition-colors"
@@ -185,17 +150,18 @@ const ProfileSettings = () => {
                 onClick={() => {
                   setName(profile?.name ?? user?.name ?? '');
                   setPhone(profile?.phone ?? '');
-                  setFormError(null);
                 }}
               >
                 Discard Changes
               </button>
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Saving...' : 'Save Profile Settings'}
+              <Button type="submit" disabled title="Account changes require an undocumented step-up challenge">
+                Save Profile Settings
               </Button>
             </div>
+            <p className="text-sm text-amber-800">Account changes require a server step-up challenge. Profile details remain available to view.</p>
           </form>
         )}
+        <div className="mt-8"><DataProtectionRequests /></div>
       </div>
     </BuyerPortalLayout>
   );

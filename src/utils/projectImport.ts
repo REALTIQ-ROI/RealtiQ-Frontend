@@ -141,10 +141,11 @@ export const rowDataValue = (row: ProjectImportRow, field: string) => {
   return String(value);
 };
 
-export const sanitizeImportRowPayload = (values: Record<string, string>): Record<string, unknown> => {
+export const sanitizeImportRowPayload = (values: Record<string, string>, allowedFields: string[]): Record<string, unknown> => {
+  const allowed = new Set(allowedFields);
   const payload: Record<string, unknown> = {};
   for (const [key, rawValue] of Object.entries(values)) {
-    if (!supportedImportFields.has(key)) continue;
+    if (!allowed.has(key)) continue;
     const value = rawValue.trim();
     if (value === '') continue;
     if (['price', 'bedrooms', 'bathrooms', 'squareFeet', 'latitude', 'longitude', 'constructionProgress', 'reservationAmount', 'minimumInitialDeposit', 'installmentDurationMonths'].includes(key)) {
@@ -153,6 +154,5 @@ export const sanitizeImportRowPayload = (values: Record<string, string>): Record
       payload[key] = value;
     }
   }
-  payload.status = 'available';
   return payload;
 };

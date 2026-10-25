@@ -10,7 +10,9 @@ import { propertyDisplayReference, propertyRouteReference, resolvePropertyOwnerI
 
 const statusConfig = {
   available: { label: 'Active', className: 'bg-emerald-100 text-emerald-800' },
+  under_offer: { label: 'Under offer', className: 'bg-amber-100 text-amber-800' },
   sold: { label: 'Sold', className: 'bg-slate-100 text-slate-800' },
+  not_released: { label: 'Not released', className: 'bg-slate-100 text-slate-800' },
 };
 
 const approvalLabel = (status?: string) => {

@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
 import AdminGlobalSearch from '../admin/AdminGlobalSearch';
+import ProfileSwitcher from './ProfileSwitcher';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -120,6 +121,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         <AdminGlobalSearch />
 
         <div className="flex items-center gap-3 sm:gap-6 text-sm font-medium justify-end">
+          <ProfileSwitcher />
           <button className="hidden text-primary font-bold hover:underline sm:block" onClick={() => void navigate('/contact')}>
             Support
           </button>

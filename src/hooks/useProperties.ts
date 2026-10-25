@@ -7,10 +7,8 @@ import {
   type PropertyFiltersQuery,
   type UpdatePropertyPayload,
 } from '../services/propertyService';
-import { paymentService } from '../services/paymentService';
+import { ApiRequestError } from '../lib/axios';
 import type { Property } from '../types';
-import { normalizePropertyPaymentTypes } from '../utils/propertyPaymentTypes';
-import { isPublicPropertyVisible } from '../utils/projectPublication';
 
 interface UsePropertiesOptions {
   autoFetch?: boolean;
@@ -25,6 +23,7 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notices, setNotices] = useState<unknown[]>([]);
   const [filters, setFilters] = useState<PropertyFiltersQuery>(initialFilters);
   const requestSequence = useRef(0);
 
@@ -33,6 +32,7 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
       const requestId = ++requestSequence.current;
       setLoading(true);
       setError(null);
+      setNotices([]);
       try {
         const res = await propertyService.getProperties({
           ...currentFilters,
@@ -40,13 +40,15 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
           limit,
         });
         if (requestId === requestSequence.current) {
-          const visibleProperties = res.properties.filter(isPublicPropertyVisible);
-          setProperties(visibleProperties);
-          setTotal(visibleProperties.length === res.properties.length ? res.total : visibleProperties.length);
+          setProperties(res.properties);
+          setTotal(res.total);
+          setNotices(res.normalization?.notices ?? []);
         }
       } catch (err) {
         if (requestId === requestSequence.current) {
-          const message = err instanceof Error ? err.message : 'Failed to load properties.';
+          const message = err instanceof ApiRequestError && err.code ? `${err.message} (${err.code})` : err instanceof Error ? err.message : 'Failed to load properties.';
+          setProperties([]);
+          setTotal(0);
           setError(message);
         }
       } finally {
@@ -163,40 +165,8 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
   };
 
   const buyProperty = async (id: string): Promise<void> => {
-    if (!id) {
-      toast.error('Unable to initialize payment. Please try again.');
-      return;
-    }
-
-    const result = await Swal.fire({
-      title: 'Proceed to Payment?',
-      text: 'You will be redirected to the payment gateway.',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Continue',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#000000',
-      cancelButtonColor: '#6b7280',
-    });
-    if (!result.isConfirmed) return;
-
-    try {
-      const property = await propertyService.getPropertyById(id);
-      if (!normalizePropertyPaymentTypes(property.paymentTypes, property.price).includes('outright')) {
-        toast.error('Outright payment is not offered for this property.');
-        return;
-      }
-
-      const checkout = await propertyService.buyProperty(id);
-      paymentService.redirectToCheckout(checkout, id);
-    } catch {
-      try {
-        const checkout = await paymentService.initializePayment(id);
-        paymentService.redirectToCheckout(checkout, id);
-      } catch {
-        toast.error('Unable to initialize payment. Please try again.');
-      }
-    }
+    if (!id) throw new Error('Missing property ID.');
+    throw new Error('Outright purchase requires the documented cart checkout and step-up challenge contract.');
   };
 
   return {
@@ -205,6 +175,7 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
     page,
     loading,
     error,
+    notices,
     filters,
     fetchProperties,
     applyFilters,

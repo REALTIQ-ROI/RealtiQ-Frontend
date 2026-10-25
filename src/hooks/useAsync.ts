@@ -10,7 +10,7 @@ interface ExecuteOptions {
   silent?: boolean;
 }
 
-export const useAsync = <T,>(asyncFn: () => Promise<T>, immediate = true) => {
+export const useAsync = <T,>(asyncFn: () => Promise<T>, immediate = true, refreshKey?: unknown) => {
   const asyncFnRef = useRef(asyncFn);
   const [state, setState] = useState<UseAsyncState<T>>({
     data: null,
@@ -47,7 +47,7 @@ export const useAsync = <T,>(asyncFn: () => Promise<T>, immediate = true) => {
         void execute();
       });
     }
-  }, [execute, immediate]);
+  }, [execute, immediate, refreshKey]);
 
   return { ...state, execute };
 };

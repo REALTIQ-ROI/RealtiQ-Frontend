@@ -6,6 +6,7 @@ import MediaPreview from '../../../components/property/MediaPreview';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useProperties } from '../../../contexts/PropertiesContext';
+import { propertyService } from '../../../services/propertyService';
 
 const formatNGN = (value: number) =>
   new Intl.NumberFormat('en-NG', {
@@ -15,7 +16,7 @@ const formatNGN = (value: number) =>
   }).format(value);
 
 const FeaturedListings = () => {
-  const { properties, loading, error, refreshProperties, updateProperty } = useProperties();
+  const { properties, loading, error, refreshProperties } = useProperties();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const candidates = properties.filter((property) => property.status === 'available');
   const featured = candidates.filter((property) => property.featured);
@@ -24,7 +25,8 @@ const FeaturedListings = () => {
     if (updatingId) return;
     setUpdatingId(id);
     try {
-      await updateProperty(id, { featured: !featuredState });
+      await propertyService.toggleFeatured(id, !featuredState);
+      await refreshProperties();
       toast.success(featuredState ? 'Listing removed from featured.' : 'Listing marked as featured.');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to update featured listing.');

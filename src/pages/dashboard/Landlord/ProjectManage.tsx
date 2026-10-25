@@ -24,8 +24,6 @@ const loadLandlordProjectManage = async (id: string): Promise<LandlordProjectMan
 };
 
 const ProjectManage = () => {
-  const [publishing, setPublishing] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [savingTourPreference, setSavingTourPreference] = useState(false);
   const { id = '' } = useParams();
   const { data, loading, error, execute } = useAsync(() => loadLandlordProjectManage(id), Boolean(id));
@@ -38,43 +36,15 @@ const ProjectManage = () => {
     if (!project) return;
     setSavingTourPreference(true);
     try {
-      await virtualTourService.setProjectVirtualTourProvider(project._id, { provider: tourPreference || null });
+      await virtualTourService.setProjectVirtualTourProvider(project._id, {
+        provider: tourPreference || null,
+        ...(typeof project.version === 'number' ? { expectedVersion: project.version } : {}),
+      });
       toast.success(tourPreference ? 'Project virtual-tour preference saved.' : 'Project now inherits the global default.');
       await execute();
     } catch (raw) {
       toast.error(raw instanceof Error ? raw.message : 'Unable to update the Project preference.');
     } finally { setSavingTourPreference(false); }
-  };
-
-  const publish = async () => {
-    if (!project || publishing) return;
-    setPublishing(true);
-    try {
-      await projectService.updateProject(project._id, { publish: true });
-      toast.success('Project publication requested.');
-      await execute();
-    } catch (raw) {
-      toast.error(raw instanceof Error ? raw.message : 'Unable to publish project.');
-    } finally {
-      setPublishing(false);
-    }
-  };
-
-  const remove = async () => {
-    if (!project || deleting) return;
-    if ((project.propertyCount ?? project.totalUnits ?? 0) > 0) {
-      toast.error('This project contains property listings and cannot be deleted until those properties are removed or reassigned.');
-      return;
-    }
-    setDeleting(true);
-    try {
-      await projectService.deleteProject(project._id);
-      toast.success('Project deleted.');
-    } catch (raw) {
-      toast.error(raw instanceof Error ? raw.message : 'Unable to delete project.');
-    } finally {
-      setDeleting(false);
-    }
   };
 
   return (
@@ -93,10 +63,11 @@ const ProjectManage = () => {
               <div className="flex flex-wrap gap-2">
                 <Link to={`/dashboard/landlord/projects/${project._id}/edit`} className="rounded-lg bg-surface-container-low px-4 py-3 text-sm font-bold text-primary">Edit</Link>
                 <Link to={`/dashboard/landlord/projects/${project._id}/imports`} className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary">Bulk Upload Properties</Link>
-                {!project.isPublished ? <Button type="button" loading={publishing} loadingLabel="Publishing..." onClick={() => void publish()}>Publish</Button> : null}
-                <Button type="button" variant="secondary" loading={deleting} loadingLabel="Deleting..." onClick={() => void remove()}>Delete</Button>
+                {!project.isPublished ? <Button type="button" disabled title="Publication request contract and step-up exchange are unavailable">Publish</Button> : null}
+                <Button type="button" variant="secondary" disabled title="Project archive requires the step-up exchange">Archive</Button>
               </div>
             </header>
+            <p className="text-sm text-secondary">Project editing and archiving require a one-use security challenge. Publication also awaits the exact backend transition request contract.</p>
 
             <div className="grid gap-4 md:grid-cols-4">
               {[

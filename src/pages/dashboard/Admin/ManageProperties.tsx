@@ -5,6 +5,7 @@ import AdminLayout from '../../../components/layout/AdminLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
 import MapListLayout from '../../../components/property/map/MapListLayout';
 import { useProperties } from '../../../contexts/PropertiesContext';
+import { propertyService } from '../../../services/propertyService';
 import type { Property } from '../../../types';
 import { propertyDisplayReference, propertyRouteReference } from '../../../types';
 import { labelize } from '../../../utils/projectFormatters';
@@ -21,7 +22,7 @@ const statusBadge = (status: Property['status']) => {
   }
   return (
     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-200 text-slate-600 tracking-wider">
-      Sold
+      {status.replaceAll('_', ' ')}
     </span>
   );
 };
@@ -52,7 +53,7 @@ const ownerDisplay = (property: Property) => {
 };
 
 const ManageProperties = () => {
-  const { properties, updateProperty, deleteProperty } = useProperties();
+  const { properties, refreshProperties, deleteProperty } = useProperties();
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'price-desc' | 'price-asc'>('recent');
@@ -100,7 +101,8 @@ const ManageProperties = () => {
     if (!reference || updatingId) return;
     setUpdatingId(reference);
     try {
-      await updateProperty(reference, { featured: !property.featured });
+      await propertyService.toggleFeatured(reference, !property.featured);
+      await refreshProperties();
     } finally {
       setUpdatingId(null);
     }
@@ -149,11 +151,11 @@ const ManageProperties = () => {
           </div>
           <div className="flex gap-4">
             <div className="bg-surface-container-low px-5 py-3 rounded-xl">
-              <span className="text-[10px] uppercase tracking-widest text-secondary font-bold block mb-1">Total Assets</span>
+              <span className="text-[10px] uppercase tracking-widest text-secondary font-bold block mb-1">Visible Listings</span>
               <span className="text-xl font-bold font-headline">{properties.length}</span>
             </div>
             <div className="bg-surface-container-low px-5 py-3 rounded-xl">
-              <span className="text-[10px] uppercase tracking-widest text-secondary font-bold block mb-1">Vacancy Rate</span>
+              <span className="text-[10px] uppercase tracking-widest text-secondary font-bold block mb-1">Available Share</span>
               <span className="text-xl font-bold font-headline">
                 {properties.length > 0
                   ? `${Math.round((properties.filter((p) => p.status === 'available').length / properties.length) * 100)}%`
@@ -162,6 +164,7 @@ const ManageProperties = () => {
             </div>
           </div>
         </div>
+        <p className="mb-6 text-sm text-secondary">This view uses public eligible inventory. Listing archive is unavailable until the server step-up challenge contract is documented.</p>
 
         {/* Filter Bar */}
         <div className="flex flex-wrap items-center gap-3 mb-8">
@@ -246,7 +249,8 @@ const ManageProperties = () => {
                 type="button"
                 className="inline-flex items-center gap-1 rounded-lg bg-error-container px-3 py-2 text-xs font-bold text-error disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => void handleDelete(property)}
-                disabled={!propertyRouteReference(property) || Boolean(deletingId)}
+                disabled
+                title="Listing archive requires a documented step-up challenge"
                 aria-busy={deletingId === propertyRouteReference(property) || undefined}
               >
                 {deletingId === propertyRouteReference(property) ? (
@@ -354,8 +358,8 @@ const ManageProperties = () => {
                           </button>
                           <button
                             className="p-2 text-secondary hover:text-error hover:bg-error-container rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-60"
-                            title="Delete"
-                            disabled={!propertyReference || Boolean(deletingId)}
+                            title="Listing archive requires a documented step-up challenge"
+                            disabled
                             aria-busy={deletingId === propertyReference || undefined}
                             onClick={() => void handleDelete(property)}
                           >

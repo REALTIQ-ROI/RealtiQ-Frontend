@@ -10,17 +10,18 @@ import Card from '../../components/ui/Card';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
-import { useCart } from '../../contexts/CartContext';
+import { ApiRequestError } from '../../lib/axios';
 import { useAsync } from '../../hooks/useAsync';
 import { propertyService } from '../../services/propertyService';
 import { tourService } from '../../services/tourService';
-import { propertyRouteReference, type Property, type Tour, type TourMode, type TourPropertySummary, type TourStatus, type TourType } from '../../types';
+import { propertyRouteReference, type Property, type Tour, type TourMode, type TourStatus, type TourType } from '../../types';
 
 const statusClasses: Record<TourStatus, string> = {
   pending: 'bg-amber-100 text-amber-700',
   approved: 'bg-emerald-100 text-emerald-700',
   rejected: 'bg-red-100 text-red-700',
   completed: 'bg-slate-100 text-slate-700',
+  cancelled: 'bg-slate-100 text-slate-700',
 };
 
 const toLabel = (value: string) =>
@@ -28,14 +29,8 @@ const toLabel = (value: string) =>
     .replaceAll('_', ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
-const formatCurrency = (value?: number) =>
-  value
-    ? new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value)
-    : 'N/A';
-
 const TOUR_TYPES: Array<{ value: TourType; label: string }> = [
   { value: 'open_house', label: 'Open House' },
-  { value: 'virtual_paid', label: 'Virtual Paid' },
   { value: 'staging_view', label: 'Staging View' },
 ];
 
@@ -44,33 +39,30 @@ const TOUR_MODES: Array<{ value: TourMode; label: string }> = [
   { value: 'virtual', label: 'Virtual' },
 ];
 
-const propertyKeys = (property: Pick<Property, '_id' | 'id' | 'publicReference'> | TourPropertySummary) =>
+const propertyKeys = (property: { _id?: string; id?: string; publicReference?: string | null }) =>
   [property._id, property.id, property.publicReference].filter(Boolean) as string[];
 
 const formatPropertyRef = (
-  propertyRef: Tour['property'] | Tour['propertyId'],
+  propertyRef: Tour['property'],
   propertyLookup: Map<string, Property>,
 ) => {
   if (!propertyRef) return 'Property unavailable';
-  if (typeof propertyRef !== 'string') {
-    const lookupTitle = propertyKeys(propertyRef).map((key) => propertyLookup.get(key)?.title).find(Boolean);
-    return propertyRef.title ?? lookupTitle ?? propertyRef._id ?? 'Property unavailable';
-  }
-  return propertyLookup.get(propertyRef)?.title ?? propertyRef;
+  const lookupTitle = propertyKeys(propertyRef).map((key) => propertyLookup.get(key)?.title).find(Boolean);
+  return propertyRef.title ?? lookupTitle ?? propertyRef.id;
 };
 
 const Tours = () => {
   const { user } = useAuth();
-  const { addItem } = useCart();
   const [searchParams] = useSearchParams();
   const initialPropertyId = searchParams.get('propertyId') ?? '';
-  const { data: tourData, loading, error, execute } = useAsync(() => tourService.getTours(), true);
+  const [page, setPage] = useState(1);
+  const { data: tourData, loading, error, execute } = useAsync(() => tourService.getTours({ page, limit: 25 }), true, page);
   const {
     data: propertyData,
     loading: loadingProperties,
     error: propertyError,
   } = useAsync(() => propertyService.getProperties({ limit: 500 }), user?.role === 'buyer');
-  const tours = useMemo(() => (Array.isArray(tourData) ? tourData : []), [tourData]);
+  const tours = useMemo(() => tourData?.tours ?? [], [tourData]);
   const allProperties = useMemo(() => propertyData?.properties ?? [], [propertyData]);
   const properties = useMemo(() => allProperties.filter((property) => property.status === 'available'), [allProperties]);
   const propertyLookup = useMemo(() => {
@@ -87,9 +79,7 @@ const Tours = () => {
   const [mode, setMode] = useState<TourMode>('physical');
   const [scheduledAt, setScheduledAt] = useState('');
   const [notes, setNotes] = useState('');
-  const [paymentOption, setPaymentOption] = useState<'pay_now' | 'cart'>('pay_now');
   const [submitting, setSubmitting] = useState(false);
-  const [cartingTourId, setCartingTourId] = useState<string | null>(null);
   const [statusUpdates, setStatusUpdates] = useState<Record<string, TourStatus>>({});
   const [query, setQuery] = useState('');
 
@@ -97,9 +87,9 @@ const Tours = () => {
     const needle = query.trim().toLowerCase();
     if (!needle) return tours;
     return tours.filter((tour) => {
-      const propertyRef = tour.property ?? tour.propertyId;
+      const propertyRef = tour.property;
       const haystack = [
-        tour._id,
+        tour.id,
         formatPropertyRef(propertyRef, propertyLookup),
         tour.type,
         tour.mode,
@@ -114,8 +104,8 @@ const Tours = () => {
 
   const handleRequestTour = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!propertyId.trim()) {
-      toast.error('Property is required.');
+    if (!propertyId.trim() || !scheduledAt || Number.isNaN(new Date(scheduledAt).getTime())) {
+      toast.error('Choose a property and a valid viewing time.');
       return;
     }
 
@@ -124,33 +114,12 @@ const Tours = () => {
       const requestPropertyId = propertyLookup.get(propertyId.trim())?._id ?? propertyId.trim();
       const response = await tourService.requestTour({
         propertyId: requestPropertyId,
-        type,
+        type: type as 'open_house' | 'staging_view',
         mode,
-        scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
+        scheduledAt: new Date(scheduledAt).toISOString(),
         notes: notes.trim() || undefined,
-        paymentOption: type === 'virtual_paid' && paymentOption === 'cart' ? 'cart' : undefined,
       });
-
-      if (type === 'virtual_paid' && paymentOption === 'cart') {
-        const cartItem = response.cartItem ?? { itemType: 'paid_virtual_tour' as const, resourceId: response.tour._id };
-        try {
-          await addItem(cartItem);
-          toast.success('Paid virtual tour created and added to cart.');
-          setNotes('');
-          setScheduledAt('');
-          await execute();
-        } catch (raw) {
-          toast.error(raw instanceof Error ? raw.message : 'Tour was created, but could not be added to cart. Retry adding the pending tour.');
-        }
-        return;
-      }
-
-      if (response.redirectUrl) {
-        window.location.href = response.redirectUrl;
-        return;
-      }
-
-      toast.success('Tour request submitted.');
+      toast.success(`Viewing request ${response.tour.id} submitted.`);
       setNotes('');
       setScheduledAt('');
       await execute();
@@ -162,27 +131,17 @@ const Tours = () => {
   };
 
   const updateTourStatus = async (tour: Tour) => {
-    const nextStatus = statusUpdates[tour._id];
+    const nextStatus = statusUpdates[tour.id];
     if (!nextStatus || nextStatus === tour.status) return;
 
     try {
-      await tourService.updateTourStatus(tour._id, { status: nextStatus });
+      if (nextStatus === 'cancelled') return;
+      await tourService.updateTourStatus(tour.id, { status: nextStatus, expectedVersion: tour.version });
       toast.success('Tour status updated.');
       await execute();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Unable to update tour status.');
-    }
-  };
-
-  const addTourToCart = async (tour: Tour) => {
-    setCartingTourId(tour._id);
-    try {
-      await addItem({ itemType: 'paid_virtual_tour', resourceId: tour._id });
-      toast.success('Paid virtual tour added to cart.');
-    } catch (raw) {
-      toast.error(raw instanceof Error ? raw.message : 'Unable to add tour to cart.');
-    } finally {
-      setCartingTourId(null);
+      toast.error(err instanceof ApiRequestError && err.status === 409 ? 'This viewing changed on the server. The list has been refreshed; review it before updating again.' : err instanceof Error ? err.message : 'Unable to update tour status.');
+      if (err instanceof ApiRequestError && err.status === 409) await execute();
     }
   };
 
@@ -263,6 +222,7 @@ const Tours = () => {
                 <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Scheduled At</label>
                 <input
                   type="datetime-local"
+                  required
                   value={scheduledAt}
                   onChange={(e) => setScheduledAt(e.target.value)}
                   className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm outline-none"
@@ -279,33 +239,9 @@ const Tours = () => {
                 />
               </div>
               <div className="md:col-span-2">
-                {type === 'virtual_paid' ? (
-                  <div className="mb-4">
-                    <label className="block text-xs font-bold uppercase tracking-widest text-secondary mb-2">Payment Option</label>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <button
-                        type="button"
-                        className={`rounded-lg border px-4 py-3 text-sm font-bold ${paymentOption === 'pay_now' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/20 bg-surface-container-low'}`}
-                        onClick={() => setPaymentOption('pay_now')}
-                      >
-                        Pay Now
-                      </button>
-                      <button
-                        type="button"
-                        className={`rounded-lg border px-4 py-3 text-sm font-bold ${paymentOption === 'cart' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/20 bg-surface-container-low'}`}
-                        onClick={() => setPaymentOption('cart')}
-                      >
-                        Add to Cart
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
                 <Button type="submit" disabled={submitting} className="w-full">
                   {submitting ? 'Submitting...' : 'Request Tour'}
                 </Button>
-                <p className="text-xs text-secondary mt-2">
-                  Virtual paid tours will redirect to Paystack when the secure payment link is ready.
-                </p>
               </div>
             </form>
           </Card>
@@ -319,10 +255,10 @@ const Tours = () => {
         filteredTours.length > 0 ? (
           <div className="space-y-4">
             {filteredTours.map((tour) => (
-              <article key={tour._id} className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 p-5 space-y-4">
+              <article key={tour.id} className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 p-5 space-y-4">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                   <div>
-                    <h3 className="font-bold text-lg">{tour._id}</h3>
+                    <h3 className="font-bold text-lg">{tour.id}</h3>
                     <p className="text-sm text-secondary">
                       {toLabel(tour.type)} - {toLabel(tour.mode)}
                     </p>
@@ -331,35 +267,26 @@ const Tours = () => {
                     {tour.status}
                   </span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-[10px] uppercase tracking-widest text-secondary">Property</p>
-                    <p className="font-semibold">{formatPropertyRef(tour.property ?? tour.propertyId, propertyLookup)}</p>
+                    <p className="font-semibold">{formatPropertyRef(tour.property, propertyLookup)}</p>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-widest text-secondary">Scheduled</p>
                     <p className="font-semibold">{tour.scheduledAt ? new Date(tour.scheduledAt).toLocaleString() : 'Not scheduled'}</p>
                   </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest text-secondary">Price</p>
-                    <p className="font-semibold">{formatCurrency(tour.price)}</p>
-                  </div>
                 </div>
                 {tour.notes ? <p className="text-sm text-secondary">{tour.notes}</p> : null}
-                {user?.role === 'buyer' && tour.type === 'virtual_paid' && tour.status === 'pending' ? (
-                  <Button type="button" variant="secondary" disabled={cartingTourId === tour._id} onClick={() => void addTourToCart(tour)}>
-                    {cartingTourId === tour._id ? 'Adding...' : 'Add to Cart'}
-                  </Button>
-                ) : null}
                 {user?.role !== 'buyer' ? (
                   <div className="flex flex-col sm:flex-row gap-3">
                     <select
                       className="bg-surface-container-low rounded-lg px-4 py-3 text-sm"
-                      value={statusUpdates[tour._id] ?? tour.status}
+                      value={statusUpdates[tour.id] ?? tour.status}
                       onChange={(e) =>
                         setStatusUpdates((current) => ({
                           ...current,
-                          [tour._id]: e.target.value as TourStatus,
+                          [tour.id]: e.target.value as TourStatus,
                         }))
                       }
                     >
@@ -368,7 +295,7 @@ const Tours = () => {
                       <option value="rejected">Rejected</option>
                       <option value="completed">Completed</option>
                     </select>
-                    <Button type="button" variant="secondary" onClick={() => void updateTourStatus(tour)}>
+                    <Button type="button" variant="secondary" onClick={() => void updateTourStatus(tour)} disabled={tour.status === 'cancelled'}>
                       Update Status
                     </Button>
                   </div>
@@ -382,6 +309,11 @@ const Tours = () => {
           </div>
         )
       ) : null}
+      {tourData && tourData.pageCount > 1 ? <nav aria-label="Viewing pages" className="mt-6 flex items-center justify-end gap-3 text-sm">
+        <Button type="button" variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
+        <span>Page {page} of {tourData.pageCount}</span>
+        <Button type="button" variant="secondary" disabled={page >= tourData.pageCount} onClick={() => setPage(page + 1)}>Next</Button>
+      </nav> : null}
     </div>
   );
 

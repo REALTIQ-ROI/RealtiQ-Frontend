@@ -33,6 +33,14 @@ export interface AuthMessageResponse {
 }
 
 export const authService = {
+  async account(): Promise<unknown> {
+    const { data } = await api.get<unknown>('/auth/account');
+    return data;
+  },
+
+  async logout(token: string): Promise<void> {
+    await api.post('/auth/logout', undefined, { headers: { Authorization: `Bearer ${token}` } });
+  },
   async login(payload: LoginPayload): Promise<LoginResponse> {
     const { data } = await api.post<LoginResponse>('/auth/login', payload);
     return data;

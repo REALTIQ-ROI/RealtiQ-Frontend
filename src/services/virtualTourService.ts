@@ -84,8 +84,8 @@ export const virtualTourService = {
     return data;
   },
 
-  async setProjectVirtualTourProvider(projectId: string, body: { provider: VirtualTourProvider | null }): Promise<{ projectId: string; virtualTourProviderOverride: VirtualTourProvider | null }> {
-    const { data } = await api.patch<{ projectId: string; virtualTourProviderOverride: VirtualTourProvider | null }>(`/projects/${encode(projectId)}/virtual-tour/provider`, body);
+  async setProjectVirtualTourProvider(projectId: string, body: { provider: VirtualTourProvider | null; expectedVersion?: number }): Promise<{ projectId: string; version: number; virtualTourProviderOverride: VirtualTourProvider | null }> {
+    const { data } = await api.patch<{ projectId: string; version: number; virtualTourProviderOverride: VirtualTourProvider | null }>(`/projects/${encode(projectId)}/virtual-tour/provider`, body);
     viewerCache.clear();
     return data;
   },

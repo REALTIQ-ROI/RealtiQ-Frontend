@@ -67,7 +67,7 @@ describe('LandlordTitleVerifications', () => {
     await waitFor(() => expect(service.submitTitleVerification).toHaveBeenCalledWith(expect.objectContaining({
       propertyId: 'RTQ-PROP-00000001',
       documentId: 'RTQ-DOC-00000001',
-      metadata: { source: 'landlord_dashboard' },
+      metadata: { source: 'title_document_upload' },
     })));
     expect(await screen.findByText('A matching title-document fingerprint already exists and requires legal review.')).toBeInTheDocument();
     expect(screen.getAllByText(/requires legal review/i).length).toBeGreaterThan(0);

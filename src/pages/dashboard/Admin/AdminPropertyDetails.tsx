@@ -8,13 +8,14 @@ import TitleDocumentManagement from '../../../components/title/TitleDocumentMana
 import PaymentTypeBadges from '../../../components/property/PaymentTypeBadges';
 import StructuredFactsPanel from '../../../components/property/StructuredFactsPanel';
 import { useProperties } from '../../../contexts/PropertiesContext';
+import { propertyService } from '../../../services/propertyService';
 import { propertyDisplayReference, propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
 import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
 
 // const sparkHeights = ['50%', '66%', '100%', '75%', '66%', '80%', '83%'];
 
 const AdminPropertyDetails = () => {
-  const { properties, updateProperty } = useProperties();
+  const { properties, refreshProperties } = useProperties();
   const location = useLocation();
   const navigate = useNavigate();
   const { id } = useParams();
@@ -50,7 +51,8 @@ const AdminPropertyDetails = () => {
     if (!propertyReference || updatingFeatured) return;
     setUpdatingFeatured(true);
     try {
-      await updateProperty(propertyReference, { featured: !property.featured });
+      await propertyService.toggleFeatured(propertyReference, !property.featured);
+      await refreshProperties();
     } finally {
       setUpdatingFeatured(false);
     }

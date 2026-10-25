@@ -1,6 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { toast } from 'sonner';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
@@ -10,8 +9,7 @@ import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
 import SellerTrustBadge from '../../../components/trust/SellerTrustBadge';
 import SellerPayoutAccountSettings from '../../../components/escrow/SellerPayoutAccountSettings';
-
-const phoneRegex = /^(\+234|234|0)[789][01]\d{8}$/;
+import DataProtectionRequests from '../../../components/profile/DataProtectionRequests';
 
 const formatDate = (date?: string) =>
   date ? new Date(date).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
@@ -24,7 +22,7 @@ const formatLabel = (value?: string) =>
     : 'N/A';
 
 const LandlordSettings = () => {
-  const { user, updateUser } = useAuth();
+  const { user } = useAuth();
   const { data: profile, loading, error, execute } = useAsync(
     () => (user?._id ? userService.fetchUserById(user._id) : Promise.reject(new Error('Missing user id'))),
     Boolean(user?._id),
@@ -32,44 +30,11 @@ const LandlordSettings = () => {
   const account = profile ?? user;
   const [name, setName] = useState(account?.name ?? '');
   const [phone, setPhone] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     setName(account?.name ?? '');
     setPhone(account?.phone ?? '');
   }, [account]);
-
-  const onSave = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!user) return;
-
-    if (!name.trim()) {
-      setFormError('Name is required.');
-      return;
-    }
-
-    if (phone.trim() && !phoneRegex.test(phone.trim())) {
-      setFormError('Enter a valid Nigerian phone number.');
-      return;
-    }
-
-    setSaving(true);
-    setFormError(null);
-    try {
-      const updated = await userService.updateUser(user._id, {
-        name: name.trim(),
-        phone: phone.trim() || undefined,
-      });
-      updateUser({ ...user, ...updated });
-      toast.success('Settings saved successfully.');
-      await execute();
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Unable to update settings.');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <LandlordPortalLayout active="settings" title="Settings">
@@ -77,7 +42,7 @@ const LandlordSettings = () => {
         <div className="mb-10">
           <p className="text-[10px] uppercase tracking-[0.2em] text-secondary font-bold">Account Management</p>
           <h2 className="text-4xl font-extrabold tracking-tight text-primary">Settings</h2>
-          <p className="text-sm text-secondary mt-2">Manage your landlord profile, verification status, and contact details.</p>
+          <p className="text-sm text-secondary mt-2">Review your landlord profile, verification status, and contact details.</p>
         </div>
 
         {loading ? (
@@ -86,12 +51,12 @@ const LandlordSettings = () => {
           <ErrorState message={error} onRetry={() => void execute()} />
         ) : (
           <>
-          <form className="space-y-8" onSubmit={onSave}>
+          <form className="space-y-8" onSubmit={(event) => event.preventDefault()}>
             <section className="bg-surface-container-lowest p-8 rounded-xl">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div>
                   <h3 className="text-lg font-bold mb-1">Profile</h3>
-                  <p className="text-sm text-secondary">Update the information shown across the landlord portal.</p>
+                  <p className="text-sm text-secondary">View the information shown across the landlord portal.</p>
                 </div>
                 <div className="md:col-span-2 space-y-6">
                   <div className="space-y-1.5">
@@ -99,7 +64,7 @@ const LandlordSettings = () => {
                     <input
                       className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 focus:ring-surface-tint rounded-lg px-4 py-3 text-sm transition-all outline-none"
                       value={name}
-                      onChange={(event) => setName(event.target.value)}
+                      readOnly
                       type="text"
                     />
                   </div>
@@ -118,7 +83,7 @@ const LandlordSettings = () => {
                       <input
                         className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 focus:ring-surface-tint rounded-lg px-4 py-3 text-sm transition-all outline-none"
                         value={phone}
-                        onChange={(event) => setPhone(event.target.value)}
+                        readOnly
                         placeholder="08012345678"
                         type="tel"
                       />
@@ -211,7 +176,6 @@ const LandlordSettings = () => {
               </div>
             </section>
 
-            {formError ? <p className="text-error text-sm font-semibold">{formError}</p> : null}
 
             <div className="flex items-center justify-end gap-3">
               <button
@@ -220,16 +184,17 @@ const LandlordSettings = () => {
                 onClick={() => {
                   setName(profile?.name ?? user?.name ?? '');
                   setPhone(profile?.phone ?? '');
-                  setFormError(null);
                 }}
               >
                 Reset
               </button>
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Saving...' : 'Save Changes'}
+              <Button type="submit" disabled title="Account changes require an undocumented step-up challenge">
+                Save Changes
               </Button>
             </div>
+            <p className="text-sm text-amber-800">Account changes require a server step-up challenge. Profile details remain available to view.</p>
           </form>
+          <DataProtectionRequests />
           <SellerPayoutAccountSettings />
           </>
         )}

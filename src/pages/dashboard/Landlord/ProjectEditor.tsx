@@ -15,10 +15,9 @@ const ProjectEditor = () => {
 
   const handleSubmit = async (payload: CreateProjectRequest) => {
     try {
-      const response = isEdit && id
-        ? await projectService.updateProject(id, payload)
-        : await projectService.createProject(payload);
-      toast.success(isEdit ? 'Project updated.' : 'Project created.');
+      if (isEdit) return;
+      const response = await projectService.createProject(payload);
+      toast.success('Project created.');
       navigate(`/dashboard/landlord/projects/${response.project._id}`);
     } catch (raw) {
       toast.error(raw instanceof Error ? raw.message : 'Unable to save project.');
@@ -36,7 +35,10 @@ const ProjectEditor = () => {
         {loading ? <LoadingState label="Loading project..." /> : null}
         {error ? <ErrorState message={error} onRetry={() => void execute()} /> : null}
         {!loading && !error ? (
-          <ProjectForm initialData={data?.project} onSubmit={handleSubmit} submitLabel={isEdit ? 'Save Project' : 'Create Project'} />
+          <>
+            {isEdit ? <p className="mb-4 text-sm text-secondary">Project editing requires a one-use security challenge. The challenge request contract is not yet available.</p> : null}
+            <ProjectForm initialData={data?.project} onSubmit={handleSubmit} submitLabel={isEdit ? 'Save Project' : 'Create Project'} readOnly={isEdit} />
+          </>
         ) : null}
       </main>
     </LandlordPortalLayout>

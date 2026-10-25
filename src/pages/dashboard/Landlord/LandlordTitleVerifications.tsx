@@ -182,7 +182,7 @@ const LandlordTitleVerifications = () => {
         propertyId: selectedPropertyPublicReference,
         documentId: selectedDocumentId,
         documentType: document.documentType || documentType,
-        metadata: { source: 'landlord_dashboard' },
+        metadata: { source: 'title_document_upload' },
       });
       setVerifications((current) => [
         response.verification,
@@ -206,7 +206,7 @@ const LandlordTitleVerifications = () => {
       <main className="mx-auto max-w-7xl space-y-8 p-4 sm:p-8">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">Title Verification</h1>
-          <p className="mt-2 max-w-3xl text-sm text-secondary">Upload restricted title documents for your properties. A title review record is created automatically after upload.</p>
+          <p className="mt-2 max-w-3xl text-sm text-secondary">Review restricted title documents and submit eligible records for legal review.</p>
         </div>
 
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
@@ -296,11 +296,12 @@ const LandlordTitleVerifications = () => {
                   {titleDocumentTypeOptions.map((option) => <option key={option.value} value={option.label}>{option.label}</option>)}
                 </select>
                 <input className="rounded-lg bg-white px-3 py-2 text-sm" type="file" accept={TITLE_DOCUMENT_ACCEPT} onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} />
-                <Button type="button" variant="secondary" onClick={() => void uploadTitleDocument()} disabled={uploading || !selectedPropertyPublicReference}>
+                <Button type="button" variant="secondary" onClick={() => void uploadTitleDocument()} disabled title="Title upload requires an undocumented step-up challenge">
                   {uploading ? 'Uploading...' : 'Upload'}
                 </Button>
               </div>
             </div>
+            <p className="mt-3 text-xs text-amber-800">Title-file upload needs the server step-up challenge contract. Existing document review remains available.</p>
             <p className="mt-3 text-xs text-secondary">Title document formats accepted: PDF, JPEG, PNG, and WebP. PDFs are stored as raw files; images are stored as image files.</p>
             {riskFlags.length ? (
               <div role="alert" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">

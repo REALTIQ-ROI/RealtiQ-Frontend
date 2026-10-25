@@ -10,6 +10,7 @@ interface ProjectFormProps {
   initialData?: ProjectDetail;
   onSubmit: (payload: CreateProjectRequest) => Promise<void>;
   submitLabel?: string;
+  readOnly?: boolean;
 }
 
 const projectTypes: ProjectType[] = ['estate', 'apartment_development', 'residential', 'commercial', 'mixed_use', 'housing_project', 'other'];
@@ -87,7 +88,7 @@ const ChipInput = ({ id, label, placeholder, value, draft, onDraftChange, onAdd,
   );
 };
 
-const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project' }: ProjectFormProps) => {
+const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', readOnly = false }: ProjectFormProps) => {
   const [name, setName] = useState(initialData?.name ?? '');
   const [developerName, setDeveloperName] = useState(initialData?.developer?.name ?? '');
   const [projectType, setProjectType] = useState<ProjectType>(initialData?.projectType ?? 'estate');
@@ -123,10 +124,6 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project' }: Pr
       toast.error('Name, description, state, and city are required.');
       return;
     }
-    if (media.length === 0) {
-      toast.error('At least one project image is required before publishing.');
-      return;
-    }
     const coordinates = lat.trim() && lng.trim() ? { lat: Number(lat), lng: Number(lng) } : undefined;
     if (coordinates && (!Number.isFinite(coordinates.lat) || !Number.isFinite(coordinates.lng))) {
       toast.error('Project coordinates must be valid numbers.');
@@ -159,6 +156,7 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project' }: Pr
 
   return (
     <form onSubmit={(event) => void handleSubmit(event)} className="space-y-6">
+      <fieldset disabled={readOnly} className="space-y-6">
       <section className="rounded-xl border border-outline-variant/10 bg-white p-6">
         <h2 className="text-xl font-black">Project information</h2>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -273,6 +271,7 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project' }: Pr
       <Button type="submit" disabled={saving}>
         {saving ? 'Saving...' : submitLabel}
       </Button>
+      </fieldset>
     </form>
   );
 };

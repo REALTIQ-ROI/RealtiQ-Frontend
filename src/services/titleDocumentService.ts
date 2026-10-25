@@ -108,7 +108,6 @@ export const titleDocumentService = {
     const { data } = await api.post<UploadPropertyTitleDocumentResponse>(
       `/properties/${propertyId}/title-documents`,
       form,
-      { headers: { 'Content-Type': 'multipart/form-data' } },
     );
     return data;
   },

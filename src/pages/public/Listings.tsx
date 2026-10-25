@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import PublicLayout from "../../components/layout/PublicLayout";
 import PropertyCard from "../../components/property/PropertyCard";
@@ -10,6 +10,7 @@ import LoadingState from "../../components/ui/LoadingState";
 import { useAuth } from "../../contexts/AuthContext";
 import { useProperties as usePropertyCatalog } from "../../hooks/useProperties";
 import { personalisationService } from "../../services/personalisationService";
+import { readCatalogueQuery, writeCatalogueQuery } from "../../utils/catalogueQuery";
 import {
   propertyPublicReference,
   propertyRouteReference,
@@ -24,22 +25,25 @@ const formatRange = (page: number, total: number) =>
 
 const Listings = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialFilters = useRef(readCatalogueQuery(searchParams));
+  const appliedQueryKey = useRef(searchParams.toString());
   const { user } = useAuth();
   const {
     properties,
     loading,
     error,
+    notices,
     total,
     page,
     filters,
     fetchProperties,
     applyFilters,
     goToPage,
-  } = usePropertyCatalog({ autoFetch: true, limit: LIMIT });
+  } = usePropertyCatalog({ autoFetch: true, limit: LIMIT, initialFilters: initialFilters.current });
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(
     null,
   );
-  const [localSearch, setLocalSearch] = useState("");
   const [viewport, setViewport] = useState<{
     north: number;
     south: number;
@@ -49,20 +53,22 @@ const Listings = () => {
   } | null>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const viewportKey = useRef("");
-  const normalizedSearch = localSearch.trim().toLowerCase();
-  const visibleProperties = normalizedSearch
-    ? properties.filter((property) =>
-        `${property.title} ${property.location} ${property.propertyType} ${property.project?.name ?? ""}`
-          .toLowerCase()
-          .includes(normalizedSearch),
-      )
-    : properties;
+  useEffect(() => {
+    const key = searchParams.toString();
+    if (key === appliedQueryKey.current) return;
+    appliedQueryKey.current = key;
+    applyFilters(readCatalogueQuery(searchParams));
+  }, [searchParams, applyFilters]);
 
   const handleApplyFilters = useCallback(
     (nextFilters: typeof filters) => {
-      applyFilters(viewport ? { ...nextFilters, ...viewport } : nextFilters);
+      const activeFilters = viewport ? { ...nextFilters, ...viewport, mapActive: true, mapZoom: viewport.zoom } : nextFilters;
+      const nextParams = writeCatalogueQuery(activeFilters);
+      appliedQueryKey.current = nextParams.toString();
+      setSearchParams(nextParams);
+      applyFilters(activeFilters);
     },
-    [applyFilters, viewport],
+    [applyFilters, viewport, setSearchParams],
   );
 
   const handleViewportChange = useCallback(
@@ -74,9 +80,13 @@ const Listings = () => {
       viewportKey.current = key;
       setViewport(nextViewport);
       if (!viewport) return;
-      applyFilters({ ...filters, ...nextViewport });
+      const nextFilters = { ...filters, ...nextViewport, mapActive: true, mapZoom: nextViewport.zoom };
+      const nextParams = writeCatalogueQuery(nextFilters);
+      appliedQueryKey.current = nextParams.toString();
+      setSearchParams(nextParams);
+      applyFilters(nextFilters);
     },
-    [applyFilters, filters, viewport],
+    [applyFilters, filters, viewport, setSearchParams],
   );
 
   const selectProperty = useCallback((property: Property) => {
@@ -119,9 +129,9 @@ const Listings = () => {
     <PublicLayout fullHeight>
       <section className="flex h-full min-h-0 flex-col lg:h-full">
         <PropertyFiltersPanel
+          key={searchParams.toString()}
           initialFilters={filters}
           onApply={handleApplyFilters}
-          onSearchChange={setLocalSearch}
         />
         <div className="min-h-0 flex-1 lg:grid lg:grid-cols-[minmax(0,1.45fr)_minmax(380px,1fr)]">
           <section
@@ -152,14 +162,10 @@ const Listings = () => {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h1 className="font-headline text-xl font-extrabold tracking-tight text-on-surface">
-                    {normalizedSearch
-                      ? "Matching loaded properties"
-                      : "Properties"}
+                    Properties
                   </h1>
                   <p className="mt-1 text-xs font-semibold text-secondary">
-                    {normalizedSearch
-                      ? `${visibleProperties.length} loaded ${visibleProperties.length === 1 ? "property" : "properties"} match`
-                      : formatRange(page, total)}
+                    {formatRange(page, total)}
                   </p>
                 </div>
                 <button
@@ -175,6 +181,9 @@ const Listings = () => {
                 </button>
               </div>
             </header>
+            {notices.length > 0 ? <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900" role="status">
+              {notices.map((notice, index) => <p key={index}>{typeof notice === 'string' ? notice : notice && typeof notice === 'object' && 'code' in notice ? String(notice.code) : 'Search results were adjusted by the server.'}</p>)}
+            </div> : null}
             <div
               ref={resultsRef}
               className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5"
@@ -188,26 +197,22 @@ const Listings = () => {
               {loading && properties.length === 0 ? (
                 <LoadingState label="Loading properties..." />
               ) : null}
-              {!loading && !error && visibleProperties.length === 0 ? (
+              {!loading && !error && properties.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-outline-variant/20 bg-surface-container-lowest p-8 text-center">
                   <span className="material-symbols-outlined mb-3 block text-4xl text-secondary/40">
                     search_off
                   </span>
                   <h2 className="font-bold text-on-surface">
-                    {normalizedSearch
-                      ? "No loaded properties match your search."
-                      : "No properties found in this area."}
+                    No properties match this search.
                   </h2>
                   <p className="mt-2 text-sm text-secondary">
-                    {normalizedSearch
-                      ? "Try a different search."
-                      : "Try zooming out or adjusting your filters."}
+                    Try adjusting your filters or map area.
                   </p>
                 </div>
               ) : null}
-              {visibleProperties.length > 0 ? (
+              {properties.length > 0 ? (
                 <div className="grid grid-cols-1 gap-4">
-                  {visibleProperties.map((property) => (
+                  {properties.map((property) => (
                     <div
                       id={`property-card-${propertyRouteReference(property)}`}
                       key={propertyRouteReference(property)}

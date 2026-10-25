@@ -1,19 +1,16 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
-import { ApiRequestError } from '../../../lib/axios';
 import { projectService } from '../../../services/projectService';
 import type { ImportRowStatus, ProjectDetail, ProjectImportListItem, ProjectImportRow, ProjectImportSchema, ProjectImportSession } from '../../../types';
-import { buildLocalProjectImportCsv, downloadBlob, importTemplateColumns, rowDataValue, sanitizeImportRowPayload } from '../../../utils/projectImport';
+import { downloadBlob, rowDataValue, sanitizeImportRowPayload } from '../../../utils/projectImport';
 import { formatDate, labelize } from '../../../utils/projectFormatters';
 
 const numericFields = new Set(['price', 'bedrooms', 'bathrooms', 'squareFeet', 'constructionProgress', 'reservationAmount', 'minimumInitialDeposit', 'installmentDurationMonths']);
-const editableFields = importTemplateColumns;
 const statusOptions: Array<ImportRowStatus | 'all'> = ['all', 'valid', 'invalid', 'removed', 'imported', 'failed'];
 const rowStatusClasses: Record<ImportRowStatus, string> = {
   valid: 'bg-emerald-50 text-emerald-700',
@@ -24,27 +21,6 @@ const rowStatusClasses: Record<ImportRowStatus, string> = {
 };
 
 const sessionId = (session: ProjectImportSession | ProjectImportListItem) => 'importSessionId' in session ? session.importSessionId : session._id;
-
-const validateRowEdit = (values: Record<string, string>) => {
-  const errors: string[] = [];
-  if (!values.title?.trim()) errors.push('Title is required.');
-  if (!values.price?.trim()) errors.push('Price is required.');
-  if (!values.propertyType?.trim()) errors.push('Property type is required.');
-  if (values.propertyType?.trim().toLowerCase() === 'land') errors.push('Land listings are not supported.');
-  if (values.listingType === 'off_plan') {
-    if (!values.developmentStatus?.trim()) errors.push('Development status is required for off-plan rows.');
-    if (!values.expectedCompletionDate?.trim()) errors.push('Expected completion date is required for off-plan rows.');
-    if (!values.riskDisclosure?.trim()) errors.push('Risk disclosure is required for off-plan rows.');
-    const progress = Number(values.constructionProgress || 0);
-    if (!Number.isFinite(progress) || progress < 0 || progress > 100) errors.push('Construction progress must be between 0 and 100.');
-    const price = Number((values.price || '').replace(/[₦,\s]/g, ''));
-    const deposit = Number((values.minimumInitialDeposit || '0').replace(/[₦,\s]/g, ''));
-    const reservation = Number((values.reservationAmount || '0').replace(/[₦,\s]/g, ''));
-    if (deposit < 0 || reservation < 0) errors.push('Deposit amounts cannot be negative.');
-    if (Number.isFinite(price) && deposit > price) errors.push('Minimum initial deposit cannot exceed price.');
-  }
-  return errors;
-};
 
 const ProjectPropertyImports = () => {
   const { id = '', importId = '' } = useParams();
@@ -63,6 +39,7 @@ const ProjectPropertyImports = () => {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [editingRow, setEditingRow] = useState<ProjectImportRow | null>(null);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
+  const editableFields = useMemo(() => schema?.fields.map((field) => field.name) ?? [], [schema]);
 
   const load = async () => {
     if (!id) return;
@@ -71,7 +48,7 @@ const ProjectPropertyImports = () => {
     try {
       const [manage, schemaResponse, history] = await Promise.all([
         projectService.getProjectManage(id),
-        projectService.getProjectPropertyImportSchema(id).catch(() => null),
+        projectService.getProjectPropertyImportSchema(id),
         projectService.listProjectPropertyImports(id, { page: 1, limit: 20 }),
       ]);
       setProject(manage.project);
@@ -115,7 +92,7 @@ const ProjectPropertyImports = () => {
     try {
       const next = await projectService.uploadProjectPropertyImport(id, file);
       setSession(next);
-      toast.success('Import preview is ready. No properties have been created yet.');
+      toast.success('Import file staged. Review the returned preview before submitting.');
       await projectService.listProjectPropertyImports(id, { page: 1, limit: 20 }).then((history) => setImports(history.imports ?? []));
       navigate(`/dashboard/landlord/projects/${id}/imports/${next.importSessionId}`, { replace: true });
     } catch (raw) {
@@ -130,9 +107,8 @@ const ProjectPropertyImports = () => {
     try {
       const blob = await projectService.downloadProjectPropertyImportTemplate(id);
       downloadBlob(blob, 'project-property-import-template.csv');
-    } catch {
-      downloadBlob(new Blob([buildLocalProjectImportCsv()], { type: 'text/csv;charset=utf-8' }), 'project-property-import-template.csv');
-      toast.warning('The standard template was unavailable, so a compatible CSV template was generated.');
+    } catch (raw) {
+      toast.error(raw instanceof Error ? raw.message : 'Unable to download the current project template.');
     } finally {
       setTemplateLoading(false);
     }
@@ -145,7 +121,6 @@ const ProjectPropertyImports = () => {
   const beginEdit = (row: ProjectImportRow) => {
     const nextValues: Record<string, string> = {};
     for (const field of editableFields) nextValues[field] = rowDataValue(row, field);
-    nextValues.status = 'available';
     setEditValues(nextValues);
     setEditingRow(row);
   };
@@ -153,14 +128,9 @@ const ProjectPropertyImports = () => {
   const submitEdit = async (event: FormEvent) => {
     event.preventDefault();
     if (!editingRow || pendingAction) return;
-    const validation = validateRowEdit(editValues);
-    if (validation.length) {
-      toast.error(validation.join(' '));
-      return;
-    }
     setPendingAction(`edit:${editingRow.rowNumber}`);
     try {
-      replaceSession(await projectService.editProjectPropertyImportRow(id, sessionId(session!), editingRow.rowNumber, sanitizeImportRowPayload(editValues)));
+      replaceSession(await projectService.editProjectPropertyImportRow(id, sessionId(session!), editingRow.rowNumber, sanitizeImportRowPayload(editValues, editableFields)));
       setEditingRow(null);
       toast.success(`Row ${editingRow.rowNumber} updated and revalidated.`);
     } catch (raw) {
@@ -185,54 +155,12 @@ const ProjectPropertyImports = () => {
     }
   };
 
-  const confirm = async () => {
-    if (!session || !canConfirm) return;
-    const confirmed = await Swal.fire({
-      title: 'Import properties?',
-      text: 'Valid active rows will create pending-review Properties under this Project. Media and title documents must be added after import.',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Import Properties',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#000000',
-    });
-    if (!confirmed.isConfirmed) return;
-    setPendingAction('confirm');
-    try {
-      replaceSession(await projectService.confirmProjectPropertyImport(id, sessionId(session)));
-      toast.success('Import completed.');
-      await load();
-    } catch (raw) {
-      if (raw instanceof ApiRequestError && raw.status === 422) {
-        setStatusFilter('invalid');
-        toast.error(raw.message || 'Some property rows contain validation errors.');
-      } else {
-        toast.error(raw instanceof Error ? raw.message : 'Unable to confirm import.');
-      }
-    } finally {
-      setPendingAction('');
-    }
-  };
-
-  const retryFailed = async () => {
-    if (!session || pendingAction) return;
-    setPendingAction('retry');
-    try {
-      replaceSession(await projectService.retryFailedProjectPropertyImportRows(id, sessionId(session)));
-      toast.success('Failed rows retried.');
-    } catch (raw) {
-      toast.error(raw instanceof Error ? raw.message : 'Unable to retry failed rows.');
-    } finally {
-      setPendingAction('');
-    }
-  };
-
   const cancel = async () => {
     if (!session || pendingAction) return;
     setPendingAction('cancel');
     try {
       replaceSession(await projectService.cancelProjectPropertyImport(id, sessionId(session)));
-      toast.success('Import cancelled. No created properties were deleted.');
+      toast.success('Cancellation requested. Any rows already committed remain in the project.');
     } catch (raw) {
       toast.error(raw instanceof Error ? raw.message : 'Unable to cancel import.');
     } finally {
@@ -264,7 +192,7 @@ const ProjectPropertyImports = () => {
             <section className="grid gap-6 lg:grid-cols-[1fr_0.55fr]">
               <div className="rounded-xl bg-white p-6">
                 <h2 className="text-xl font-black">Template requirements</h2>
-                <p className="mt-2 text-sm text-secondary">Required fields: {(schema?.requiredFields ?? ['title', 'price', 'propertyType']).join(', ')}. Amenities and features use the pipe delimiter.</p>
+                <p className="mt-2 text-sm text-secondary">Required fields for this project: {schema?.requiredFields.join(', ') || 'See the current server template and schema'}. {schema ? `Multi-value delimiter: ${schema.delimiter}.` : ''}</p>
                 {schema ? (
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-lg bg-surface-container-low p-4"><p className="text-xs font-bold uppercase text-secondary">Max rows</p><p className="font-black">{schema.limits.maxRows}</p></div>
@@ -275,8 +203,8 @@ const ProjectPropertyImports = () => {
                 <div className="mt-5 overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead><tr className="border-b"><th className="py-2">Column</th><th className="py-2">Allowed values</th></tr></thead>
-                    <tbody>{(schema?.fields ?? importTemplateColumns.map((name) => ({ name, required: ['title', 'price', 'propertyType'].includes(name), allowedValues: undefined }))).map((field) => (
-                      <tr key={field.name} className="border-b border-outline-variant/10"><td className="py-2 font-bold">{field.name}{field.required ? ' *' : ''}</td><td className="py-2 text-secondary">{field.allowedValues?.filter((value) => field.name !== 'propertyType' || value.toLowerCase() !== 'land').join(', ') || 'Text/value'}</td></tr>
+                    <tbody>{(schema?.fields ?? []).map((field) => (
+                      <tr key={field.name} className="border-b border-outline-variant/10"><td className="py-2 font-bold">{field.name}{field.required ? ' *' : ''}</td><td className="py-2 text-secondary">{field.allowedValues?.join(', ') || 'Text/value'}</td></tr>
                     ))}</tbody>
                   </table>
                 </div>
@@ -303,11 +231,12 @@ const ProjectPropertyImports = () => {
                     <p className="mt-2 text-sm text-amber-800">Imported Properties start as pending review and will not include media or title documents.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" loading={pendingAction === 'confirm'} loadingLabel="Importing..." disabled={!canConfirm} onClick={() => void confirm()}>Import Properties</Button>
-                    {canRetry ? <Button type="button" variant="secondary" loading={pendingAction === 'retry'} loadingLabel="Retrying..." onClick={() => void retryFailed()}>Retry failed rows</Button> : null}
+                    {canConfirm ? <Button type="button" disabled title="Step-up challenge contract is not documented">Import Properties</Button> : null}
+                    {canRetry ? <Button type="button" variant="secondary" disabled title="Step-up challenge contract is not documented">Retry failed rows</Button> : null}
                     {canCancel ? <Button type="button" variant="ghost" loading={pendingAction === 'cancel'} loadingLabel="Cancelling..." onClick={() => void cancel()}>Cancel import</Button> : null}
                   </div>
                 </div>
+                {(canConfirm || canRetry) ? <p className="mt-3 text-sm text-amber-800">Import submission and retry require a server step-up challenge. Those actions are unavailable until the challenge request contract is supplied.</p> : null}
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
                   {Object.entries(session.summary).map(([key, value]) => (
@@ -376,7 +305,7 @@ const ProjectPropertyImports = () => {
           <div className="fixed inset-0 z-[2000] overflow-y-auto bg-black/50 p-4">
             <form onSubmit={(event) => void submitEdit(event)} className="mx-auto my-8 max-w-5xl rounded-xl bg-white p-6 shadow-xl">
               <div className="flex items-start justify-between gap-4">
-                <div><h2 className="text-2xl font-black">Edit row {editingRow.rowNumber}</h2><p className="text-sm text-secondary">Only supported import fields are submitted. Status is locked to available.</p></div>
+                <div><h2 className="text-2xl font-black">Edit row {editingRow.rowNumber}</h2><p className="text-sm text-secondary">Fields come from this project's server schema. Save revalidates the row.</p></div>
                 <button type="button" className="rounded-full p-2 hover:bg-surface-container-low" onClick={() => setEditingRow(null)}><span className="material-symbols-outlined">close</span></button>
               </div>
               <div className="mt-6 grid gap-4 md:grid-cols-3">
@@ -386,7 +315,7 @@ const ProjectPropertyImports = () => {
                     {field === 'description' || field === 'paymentPlanDescription' || field === 'riskDisclosure' ? (
                       <textarea value={editValues[field] ?? ''} rows={3} onChange={(event) => setEditValues((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm normal-case outline-none disabled:opacity-60" />
                     ) : (
-                      <input type={numericFields.has(field) ? 'text' : field.includes('Date') ? 'date' : 'text'} value={editValues[field] ?? ''} disabled={field === 'status'} onChange={(event) => setEditValues((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm normal-case outline-none disabled:opacity-60" />
+                      <input type={numericFields.has(field) ? 'text' : field.includes('Date') ? 'date' : 'text'} value={editValues[field] ?? ''} onChange={(event) => setEditValues((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm normal-case outline-none disabled:opacity-60" />
                     )}
                   </label>
                 ))}

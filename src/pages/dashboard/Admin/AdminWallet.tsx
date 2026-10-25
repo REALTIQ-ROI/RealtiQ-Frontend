@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
-import { normalizeProxyPricing } from '../../../features/proxyNetwork/pricing';
 import { adminService, type WalletTransactionFilters } from '../../../services/adminService';
 import type { WalletSummary, WalletTransactionStatus, WalletTransactionType } from '../../../types';
 
@@ -19,6 +18,8 @@ const toIsoBoundary = (value: string, end = false): string | undefined => {
 const transactionTypeLabel = (type: WalletTransactionType) => ({
   proxy_inspection_commission: 'Proxy Inspector Commission',
   proxy_inspection_buyer_fee: 'Buyer Platform & Protection Fee',
+  proxy_inspection_refund: 'Property Agent refund',
+  property_analytics_access: 'Property analytics access',
   title_document_view: 'Title document view',
   tour_payment: 'Tour payment',
   platform_fee: 'Platform fee',
@@ -59,6 +60,8 @@ const AdminWallet = () => {
       setSummary(wallet);
       setTransactions(ledger);
     } catch (raw) {
+      setSummary(null);
+      setTransactions(null);
       setError(raw instanceof Error ? raw.message : 'Unable to load the RealtIQ platform ledger.');
     } finally {
       setLoading(false);
@@ -94,7 +97,7 @@ const AdminWallet = () => {
     ['Total credits', summary.totalCredits],
     ['Total debits / refunds', summary.totalDebits],
     ['Net revenue', summary.netRevenue],
-    ['Available revenue', summary.availableRevenue],
+    ['Available ledger revenue', summary.availableRevenue],
     ['Title-document views', summary.breakdown.titleDocumentViews],
     ['Tour payments', summary.breakdown.tourPayments],
     ['Property Agent revenue', summary.breakdown.proxyInspectionRevenue ?? 0],
@@ -136,6 +139,8 @@ const AdminWallet = () => {
                   <option value="platform_fee">Platform fee</option>
                   <option value="proxy_inspection_commission">Proxy Inspector Commission</option>
                   <option value="proxy_inspection_buyer_fee">Buyer Platform & Protection Fee</option>
+                  <option value="proxy_inspection_refund">Property Agent refund</option>
+                  <option value="property_analytics_access">Property analytics access</option>
                   <option value="other">Other</option>
                 </select>
                 <select aria-label="Transaction status" value={searchParams.get('status') ?? ''} onChange={(event) => updateFilter('status', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm">
@@ -147,7 +152,7 @@ const AdminWallet = () => {
                 </select>
                 <input aria-label="Date from" type="date" value={searchParams.get('from') ?? ''} onChange={(event) => updateFilter('from', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
                 <input aria-label="Date to" type="date" value={searchParams.get('to') ?? ''} onChange={(event) => updateFilter('to', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
-                <input aria-label="Property filter" placeholder="Property ID/reference" value={searchParams.get('property') ?? ''} onChange={(event) => updateFilter('property', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
+                <input aria-label="Property filter" placeholder="Property ID" value={searchParams.get('property') ?? ''} onChange={(event) => updateFilter('property', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
                 <input aria-label="User filter" placeholder="User ID" value={searchParams.get('user') ?? ''} onChange={(event) => updateFilter('user', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
                 <input aria-label="Exact payment reference" placeholder="Exact payment reference" value={reference} onChange={(event) => setReference(event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
                 <input aria-label="Payment status" placeholder="Payment status" value={searchParams.get('paymentStatus') ?? ''} onChange={(event) => updateFilter('paymentStatus', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
@@ -157,24 +162,20 @@ const AdminWallet = () => {
               <div className="mt-5 overflow-x-auto">
                 <table className="w-full min-w-[1050px] text-left text-sm">
                   <thead className="border-b text-xs uppercase tracking-widest text-secondary">
-                    <tr><th className="p-3">Created</th><th className="p-3">Type</th><th className="p-3">Direction</th><th className="p-3">Amount</th><th className="p-3">Status</th><th className="p-3">Reference</th><th className="p-3">Property / document</th><th className="p-3">Viewer</th><th className="p-3">Description</th></tr>
+                    <tr><th className="p-3">Created</th><th className="p-3">Type</th><th className="p-3">Direction</th><th className="p-3">Amount</th><th className="p-3">Status</th><th className="p-3">Payment reference</th><th className="p-3">Property reference</th></tr>
                   </thead>
                   <tbody>
-                    {transactions?.transactions.map((transaction) => {
-                      const pricing = transaction.serviceEscrow ? normalizeProxyPricing(transaction.serviceEscrow) : null;
-                      return (
-                      <tr key={transaction._id} className="border-b border-outline-variant/10 align-top">
+                    {transactions?.transactions.map((transaction) => (
+                      <tr key={transaction.id} className="border-b border-outline-variant/10 align-top">
                         <td className="p-3 whitespace-nowrap">{new Date(transaction.createdAt).toLocaleString('en-NG')}</td>
                         <td className="p-3">{transactionTypeLabel(transaction.type)}</td>
                         <td className={`p-3 font-bold ${transaction.direction === 'credit' ? 'text-emerald-700' : 'text-red-700'}`}>{transaction.direction}</td>
                         <td className="p-3 font-bold">{formatNaira(transaction.amount)}</td>
                         <td className="p-3 capitalize">{transaction.status}</td>
                         <td className="p-3 font-mono text-xs">{transaction.paymentReference || '—'}</td>
-                        <td className="p-3"><p>{transaction.property?.title || (transaction.inspectionRequest ? `Property Agent job · ${transaction.inspectionRequest.status || 'job'}` : '—')}</p><p className="text-xs text-secondary">{transaction.document?.title || transaction.property?.publicReference || (transaction.inspectionRequest?.agreedPrice ? formatNaira(transaction.inspectionRequest.agreedPrice) : '')}</p>{pricing ? <dl className="mt-2 grid gap-1 text-xs text-secondary"><div><dt className="inline font-bold">Agreed:</dt> <dd className="inline">{formatNaira(pricing.agreedPrice ?? 0)}</dd></div><div><dt className="inline font-bold">Buyer fee:</dt> <dd className="inline">{formatNaira(pricing.buyerFeeAmount)}</dd></div><div><dt className="inline font-bold">Buyer total:</dt> <dd className="inline">{formatNaira(pricing.buyerTotalAmount ?? 0)}</dd></div><div><dt className="inline font-bold">Inspector commission:</dt> <dd className="inline">{formatNaira(pricing.inspectorCommissionAmount ?? 0)}</dd></div><div><dt className="inline font-bold">Inspector payout:</dt> <dd className="inline">{formatNaira(pricing.inspectorPayoutAmount ?? 0)}</dd></div><div><dt className="inline font-bold">RealtIQ revenue:</dt> <dd className="inline">{formatNaira(pricing.totalPlatformRevenue ?? 0)}</dd></div><div><dt className="inline font-bold">Escrow:</dt> <dd className="inline capitalize">{transaction.serviceEscrow?.status || 'unknown'}</dd></div></dl> : null}</td>
-                        <td className="p-3">{transaction.user?.name || 'Guest'}{transaction.provider ? <p className="text-xs text-secondary">Inspector: {transaction.provider.name}</p> : null}</td>
-                        <td className="p-3">{transaction.description || '—'}</td>
+                        <td className="p-3">{transaction.propertyReference || '—'}</td>
                       </tr>
-                    );})}
+                    ))}
                   </tbody>
                 </table>
                 {transactions?.transactions.length === 0 ? <p className="p-8 text-center text-sm text-secondary">No ledger entries match these filters.</p> : null}

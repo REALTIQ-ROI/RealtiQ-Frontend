@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  INSTALLMENT_THRESHOLD_NGN,
   normalizePaymentTypesForForm,
   normalizePropertyPaymentTypes,
 } from './propertyPaymentTypes';
@@ -15,18 +14,18 @@ describe('property payment type normalization', () => {
     expect(normalizePaymentTypesForForm(45_000_000, selected)).toEqual(expected);
   });
 
-  it('forces installment only when price is strictly above ₦50,000,000', () => {
-    expect(normalizePaymentTypesForForm(INSTALLMENT_THRESHOLD_NGN + 1, ['escrow'])).toEqual(['installment', 'escrow']);
-    expect(normalizePaymentTypesForForm(INSTALLMENT_THRESHOLD_NGN, ['escrow'])).toEqual(['escrow']);
+  it('does not infer a payment method from asking price', () => {
+    expect(normalizePaymentTypesForForm(50_000_001, ['escrow'])).toEqual(['escrow']);
+    expect(normalizePaymentTypesForForm(50_000_000, ['escrow'])).toEqual(['escrow']);
   });
 
   it('retains a landlord-selected installment below the threshold', () => {
     expect(normalizePaymentTypesForForm(40_000_000, ['installment'])).toEqual(['installment']);
   });
 
-  it('falls back to outright only when a legacy response omits the field', () => {
-    expect(normalizePropertyPaymentTypes(undefined, 20_000_000)).toEqual(['outright']);
-    expect(normalizePropertyPaymentTypes(undefined, 75_000_000)).toEqual(['outright']);
+  it('does not invent outright when a response omits payment methods', () => {
+    expect(normalizePropertyPaymentTypes(undefined, 20_000_000)).toEqual([]);
+    expect(normalizePropertyPaymentTypes(undefined, 75_000_000)).toEqual([]);
     expect(normalizePropertyPaymentTypes([], 20_000_000)).toEqual([]);
   });
 

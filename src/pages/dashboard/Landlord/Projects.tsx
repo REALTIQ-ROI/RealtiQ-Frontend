@@ -1,6 +1,4 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
-import { toast } from 'sonner';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import ProjectCard from '../../../components/project/ProjectCard';
 import ErrorState from '../../../components/ui/ErrorState';
@@ -9,23 +7,8 @@ import { useAsync } from '../../../hooks/useAsync';
 import { projectService } from '../../../services/projectService';
 
 const LandlordProjects = () => {
-  const [publishingId, setPublishingId] = useState<string | null>(null);
   const { data, loading, error, execute } = useAsync(() => projectService.listMyProjects({ page: 1, limit: 50 }), true);
   const projects = data?.projects ?? [];
-
-  const publishProject = async (id: string) => {
-    if (publishingId) return;
-    setPublishingId(id);
-    try {
-      await projectService.updateProject(id, { publish: true });
-      toast.success('Project submitted for publication.');
-      await execute();
-    } catch (raw) {
-      toast.error(raw instanceof Error ? raw.message : 'Unable to publish project.');
-    } finally {
-      setPublishingId(null);
-    }
-  };
 
   return (
     <LandlordPortalLayout active="projects" title="Projects">
@@ -52,23 +35,20 @@ const LandlordProjects = () => {
                   {!project.isPublished ? (
                     <button
                       type="button"
-                      disabled={Boolean(publishingId)}
-                      aria-busy={publishingId === project._id || undefined}
-                      onClick={() => void publishProject(project._id)}
+                      disabled
+                      title="The project publication transition requires a backend request contract."
                       className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {publishingId === project._id ? (
-                        <>
-                          <span className="material-symbols-outlined animate-spin text-base" aria-hidden="true">progress_activity</span>
-                          Publishing...
-                        </>
-                      ) : 'Publish'}
+                      Publish
                     </button>
                   ) : null}
                 </div>
               </div>
             ))}
           </div>
+        ) : null}
+        {!loading && !error && projects.some((project) => !project.isPublished) ? (
+          <p className="mt-4 text-sm text-secondary">Project publishing is unavailable until the publication request contract and required step-up exchange are supplied.</p>
         ) : null}
         {!loading && !error && !projects.length ? (
           <div className="rounded-xl border border-dashed border-outline-variant/20 p-12 text-center text-secondary">

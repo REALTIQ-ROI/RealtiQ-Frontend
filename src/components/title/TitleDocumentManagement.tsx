@@ -135,11 +135,12 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
           <h2 className="text-xl font-extrabold">Private title-document vault</h2>
           <p className="mt-1 text-sm text-secondary">Each document is a separate private record with independent verification, policy, history, and analytics.</p>
         </div>
-        <Button type="button" disabled={sold} onClick={() => setShowUpload((current) => !current)}>
+        <Button type="button" disabled onClick={() => setShowUpload((current) => !current)} title="Title upload requires an undocumented step-up challenge">
           Upload a missing type
         </Button>
       </div>
       {sold ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">This property has been sold. Upload, resubmission, and seller policy changes are unavailable; existing history and permitted protected viewing remain available.</p> : null}
+      {!sold ? <p className="mt-4 text-sm text-amber-800">New title-file uploads require a server step-up challenge. Existing vault records and permitted viewing remain available.</p> : null}
 
       {showUpload && !sold ? (
         <form onSubmit={(event) => void submitDocument(event)} className="mt-5 grid gap-4 rounded-xl bg-surface-container-low p-4 md:grid-cols-2">
@@ -176,7 +177,7 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
               <option value="paid_view_once">Paid — one view</option>
               <option value="paid_view_multiple">Paid — multiple views</option>
             </select>
-            {mode !== 'private' ? <p className="mt-2 text-xs text-secondary">₦5,000 set by RealtIQ. Price is not sent by this form.</p> : null}
+            {mode !== 'private' ? <p className="mt-2 text-xs text-secondary">The server controls the current viewing price and policy.</p> : null}
           </div>
           <div className="md:col-span-2">
             <Button type="submit" disabled={busyId === 'upload'}>{busyId === 'upload' ? 'Submitting…' : 'Submit new vault record'}</Button>

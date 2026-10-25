@@ -1,9 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { propertyService, type CreatePropertyPayload, type CreatePropertyResponse } from '../services/propertyService';
-import { paymentService } from '../services/paymentService';
+import { propertyService, type CreatePropertyPayload, type CreatePropertyResponse, type UpdatePropertyPayload } from '../services/propertyService';
 import type { Property, User } from '../types';
-import { normalizePropertyPaymentTypes } from '../utils/propertyPaymentTypes';
 import { isPublicPropertyVisible } from '../utils/projectPublication';
 
 interface PropertiesContextValue {
@@ -12,7 +10,7 @@ interface PropertiesContextValue {
   error: string | null;
   refreshProperties: (limitOverride?: number) => Promise<void>;
   addProperty: (ownerId: string, payload: CreatePropertyPayload) => Promise<CreatePropertyResponse>;
-  updateProperty: (propertyId: string, payload: Partial<Property>) => Promise<Property>;
+  updateProperty: (propertyId: string, payload: UpdatePropertyPayload) => Promise<Property>;
   deleteProperty: (propertyId: string) => Promise<void>;
   buyProperty: (propertyId: string, buyerId: string) => Promise<void>;
 }
@@ -31,7 +29,19 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
       const storedUser = localStorage.getItem('user');
       const user = storedUser ? (JSON.parse(storedUser) as User) : null;
       const res = user?.role === 'landlord'
-        ? await propertyService.getMyProperties()
+        ? await (async () => {
+            const pageSize = 20;
+            const first = await propertyService.getMyProperties(1, pageSize);
+            const properties = [...first.properties];
+            let page = 1;
+            while (properties.length < Math.min(first.total, limitOverride) && page < first.page + Math.ceil(first.total / pageSize)) {
+              page += 1;
+              const next = await propertyService.getMyProperties(page, pageSize);
+              if (!next.properties.length) break;
+              properties.push(...next.properties);
+            }
+            return { ...first, properties: properties.slice(0, limitOverride) };
+          })()
         : await propertyService.getProperties({ limit: limitOverride });
       const nextProperties = Array.isArray(res)
         ? res
@@ -58,7 +68,7 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
     return created;
   };
 
-  const updateProperty = async (propertyId: string, payload: Partial<Property>): Promise<Property> => {
+  const updateProperty = async (propertyId: string, payload: UpdatePropertyPayload): Promise<Property> => {
     const updated = await propertyService.updateProperty(propertyId, payload);
     setProperties((current) =>
       current.map((property) =>
@@ -82,19 +92,7 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
     if (!propertyId) {
       throw new Error('Missing property ID.');
     }
-
-    const property = await propertyService.getPropertyById(propertyId);
-    if (!normalizePropertyPaymentTypes(property.paymentTypes, property.price).includes('outright')) {
-      throw new Error('Outright payment is not offered for this property.');
-    }
-
-    try {
-      const result = await propertyService.buyProperty(propertyId);
-      paymentService.redirectToCheckout(result, propertyId);
-    } catch {
-      const result = await paymentService.initializePayment(propertyId);
-      paymentService.redirectToCheckout(result, propertyId);
-    }
+    throw new Error('Outright purchase requires the documented cart checkout and step-up challenge contract.');
   };
 
   const value = useMemo<PropertiesContextValue>(

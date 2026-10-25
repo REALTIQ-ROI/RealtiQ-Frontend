@@ -139,8 +139,21 @@ export interface EscrowDisputeListQuery {
 }
 
 export interface EscrowDisputeListResponse {
-  items: EscrowDispute[];
+  items: Array<SafeEscrowDispute & { escrow: Record<string, unknown> | null }>;
   pagination: { page: number; limit: number; total: number; pages: number };
+}
+
+export interface SafeEscrowDispute {
+  id: string;
+  reason: string;
+  description: string | null;
+  status: EscrowDisputeStatus;
+  preDisputeStatus: string;
+  resolution: string | null;
+  openedAt: string;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface EscrowFinancialRecord {
@@ -153,20 +166,20 @@ export interface EscrowFinancialRecord {
 }
 
 export interface AdminEscrowDisputeDetail {
-  dispute: EscrowDispute;
-  escrow: Escrow;
+  dispute: SafeEscrowDispute;
+  escrow: Record<string, unknown> | null;
   milestones: {
-    all: EscrowRule[];
-    satisfied: EscrowRule[];
-    outstanding: EscrowRule[];
+    all: unknown[];
+    satisfied: unknown[];
+    outstanding: unknown[];
   };
   financialState: {
     paymentStatus?: string;
     refund?: EscrowFinancialRecord | null;
     sellerPayout?: EscrowFinancialRecord | null;
   };
-  history: EscrowDispute[];
-  logs: EscrowLog[];
+  history: unknown[];
+  logs: unknown[];
   availableActions: AvailableDisputeActions;
 }
 

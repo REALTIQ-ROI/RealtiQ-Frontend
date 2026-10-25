@@ -41,7 +41,7 @@ const Editproperty = () => {
 
     const success = await updateProperty(
       propertyRouteReference(property),
-      payload,
+      { ...payload, ...(typeof property.version === 'number' ? { expectedVersion: property.version } : {}) },
     );
     if (success) {
       toast.success("Property updated successfully");

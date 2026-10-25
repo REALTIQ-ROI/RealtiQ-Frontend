@@ -3,6 +3,8 @@ import axios, { type AxiosError } from 'axios';
 export class ApiRequestError extends Error {
   status?: number;
   code?: string;
+  requestId?: string;
+  retryAfter?: string;
   provider?: string;
   missing?: string[];
   missingRules?: unknown;
@@ -16,7 +18,7 @@ export class ApiRequestError extends Error {
   invalidItems?: unknown;
   fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }>;
 
-  constructor(message: string, details?: { status?: number; code?: string; provider?: string; missing?: string[]; missingRules?: unknown; eligibleAt?: string; existingPayment?: unknown; details?: unknown; requiresAccountDetails?: boolean; requiresSellerAccount?: boolean; reconciliationRequired?: boolean; existingAccess?: boolean; invalidItems?: unknown; fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }> }) {
+  constructor(message: string, details?: { status?: number; code?: string; requestId?: string; retryAfter?: string; provider?: string; missing?: string[]; missingRules?: unknown; eligibleAt?: string; existingPayment?: unknown; details?: unknown; requiresAccountDetails?: boolean; requiresSellerAccount?: boolean; reconciliationRequired?: boolean; existingAccess?: boolean; invalidItems?: unknown; fieldErrors?: Array<{ path?: string; msg?: string; value?: unknown }> }) {
     super(message);
     this.name = 'ApiRequestError';
     Object.assign(this, details);
@@ -37,6 +39,10 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  const profileId = localStorage.getItem('activeProfileId');
+  if (token && profileId && !config.headers['X-Profile-ID']) {
+    config.headers['X-Profile-ID'] = profileId;
+  }
   return config;
 });
 
@@ -51,6 +57,8 @@ api.interceptors.response.use(
     }
 
     const status = error.response.status;
+    const requestId = error.response.headers['x-request-id'] as string | undefined;
+    const retryAfter = error.response.headers['retry-after'] as string | undefined;
     if (status === 401) {
       window.dispatchEvent(new Event('realtiq:session-expired'));
     }
@@ -64,6 +72,8 @@ api.interceptors.response.use(
       const details = responseData as { code?: string; provider?: string; missing?: unknown; missingRules?: unknown; eligibleAt?: string; payment?: unknown; details?: unknown; requiresAccountDetails?: boolean; requiresSellerAccount?: boolean; reconciliationRequired?: boolean; existingAccess?: boolean; invalidItems?: unknown; errors?: Array<{ path?: string; msg?: string; value?: unknown }> };
       return Promise.reject(new ApiRequestError(message, {
         status,
+        requestId,
+        retryAfter,
         code: details.code,
         provider: details.provider,
         missing: Array.isArray(details.missing) ? details.missing.map(String) : undefined,
@@ -85,15 +95,15 @@ api.interceptors.response.use(
         status === 502
           ? 'The provider response is uncertain. Refresh the latest status before retrying.'
           : 'Something went wrong. Please try again later.',
-        { status },
+        { status, requestId, retryAfter },
       ));
     }
 
     if (status === 403) {
-      return Promise.reject(new ApiRequestError('You do not have access to perform this action.', { status }));
+      return Promise.reject(new ApiRequestError('You do not have access to perform this action.', { status, requestId }));
     }
     if (status === 413) {
-      return Promise.reject(new ApiRequestError('The selected file is larger than the server allows. Choose a smaller file and try again.', { status }));
+      return Promise.reject(new ApiRequestError('The selected file is larger than the server allows. Choose a smaller file and try again.', { status, requestId }));
     }
 
     const validationErrors =
@@ -103,7 +113,7 @@ api.interceptors.response.use(
     const validationMessage = validationErrors?.map((item) => item.msg).filter(Boolean).join(' ');
     return Promise.reject(new ApiRequestError(
       validationMessage || 'Something went wrong. Please try again later.',
-      { status, fieldErrors: validationErrors },
+      { status, requestId, retryAfter, code: typeof responseData === 'object' && responseData !== null && 'code' in responseData ? String(responseData.code) : undefined, fieldErrors: validationErrors },
     ));
   },
 );

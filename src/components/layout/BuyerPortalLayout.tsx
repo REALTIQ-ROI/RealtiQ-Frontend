@@ -3,6 +3,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
+import ProfileSwitcher from './ProfileSwitcher';
 
 interface BuyerPortalLayoutProps {
   children: ReactNode;
@@ -99,6 +100,7 @@ const BuyerPortalLayout = ({
           </div>
         </div>
         <div className="flex items-center gap-3 sm:gap-6 justify-end">
+          <ProfileSwitcher />
           <div className="hidden md:block">{topbarRight}</div>
           <div className="flex gap-3">
             <Link to="/dashboard/buyer/cart" className="text-slate-500 hover:text-slate-900 transition-colors relative" aria-label="Service cart">

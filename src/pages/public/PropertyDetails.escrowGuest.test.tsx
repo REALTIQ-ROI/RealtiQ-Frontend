@@ -114,7 +114,7 @@ describe('public property escrow action for guests', () => {
     )).toBeInTheDocument();
   });
 
-  it('forces and locks virtual mode while the paid virtual tour type is selected', async () => {
+  it('offers ordinary viewings with a selectable mode and no paid branch', async () => {
     render(
       <MemoryRouter initialEntries={['/properties/RTQ-PROP-1']}>
         <Routes>
@@ -128,16 +128,17 @@ describe('public property escrow action for guests', () => {
     expect(tourMode).toHaveValue('physical');
     expect(tourMode).toBeEnabled();
 
-    await userEvent.selectOptions(tourType, 'virtual_paid');
+    expect(screen.queryByRole('option', { name: /Virtual Paid/ })).not.toBeInTheDocument();
+    await userEvent.selectOptions(tourType, 'staging_view');
+    await userEvent.selectOptions(tourMode, 'virtual');
     expect(tourMode).toHaveValue('virtual');
-    expect(tourMode).toBeDisabled();
-    expect(screen.getByText('Virtual mode is required for this tour type.')).toBeInTheDocument();
+    expect(tourMode).toBeEnabled();
 
     await userEvent.selectOptions(tourType, 'open_house');
     expect(tourMode).toBeEnabled();
   });
 
-  it('prevents selecting a paid virtual tour when the Property has no available virtual tour', () => {
+  it('keeps paid viewing unavailable regardless of the property virtual tour', () => {
     currentProperty = {
       ...property,
       virtualTour: {
@@ -156,7 +157,7 @@ describe('public property escrow action for guests', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('option', { name: 'Virtual Paid (Unavailable)' })).toBeDisabled();
-    expect(screen.getByText('This property does not currently have a virtual tour available.')).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Virtual Paid/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Open House' })).toBeInTheDocument();
   });
 });

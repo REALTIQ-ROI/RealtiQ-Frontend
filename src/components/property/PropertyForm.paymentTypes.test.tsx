@@ -58,17 +58,16 @@ describe('PropertyForm payment types', () => {
     }));
   });
 
-  it('forces and locks installment above the threshold, then unlocks without removing it when price falls', async () => {
+  it('keeps installment optional regardless of the asking price', async () => {
     render(<PropertyForm mode="edit" initialData={{ ...initialData, price: 75_000_000, paymentTypes: ['escrow'] }} onSubmit={vi.fn()} />);
     const installment = screen.getByRole('checkbox', { name: /Installment plan/i });
-    expect(installment).toBeChecked();
-    expect(installment).toBeDisabled();
-    expect(screen.getByText('Installment is required for properties above ₦50,000,000')).toBeInTheDocument();
+    expect(installment).not.toBeChecked();
+    expect(installment).toBeEnabled();
 
     const priceInput = screen.getByDisplayValue('75000000');
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, '40000000');
-    expect(installment).toBeChecked();
+    expect(installment).not.toBeChecked();
     expect(installment).toBeEnabled();
   });
 

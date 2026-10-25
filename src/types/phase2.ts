@@ -142,25 +142,24 @@ export type NotificationCategory =
   | "payments"
   | "legal";
 export interface RealtiqNotification {
-  _id: string;
+  id: string;
+  profileId: string;
   type: string;
   category: NotificationCategory;
   title: string;
   body: string;
   navigation?: { route?: string; publicReference?: string };
   readAt: string | null;
-  archivedAt: string | null;
   createdAt: string;
-  updatedAt?: string;
 }
 export type PreferenceKey =
   "messages" | "savedSearches" | "listingChanges" | "inquiries" | "marketplace";
 export type NotificationPreferenceValues = Record<
   PreferenceKey,
-  { inApp: boolean; email: boolean }
+  { inApp: boolean; email: boolean; sms?: boolean; whatsapp?: boolean; push?: boolean }
 >;
 export interface NotificationPreferences {
-  _id: string;
+  profileId: string;
   categories: NotificationPreferenceValues;
   updatedAt?: string;
 }

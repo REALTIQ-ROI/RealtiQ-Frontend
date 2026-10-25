@@ -68,7 +68,7 @@ const realtimeOrigin = () => {
 };
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
-  const { token, user } = useAuth();
+  const { token, user, activeProfile } = useAuth();
   const socketRef = useRef<Socket | null>(null);
   const activeRef = useRef<string | null>(null);
   const cursors = useRef<Record<string, string | null>>({});
@@ -93,7 +93,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       setConversations(
         (await messageService.inbox({ page: 1, limit: 50 })).conversations,
       );
-  }, [token]);
+  }, [token, activeProfile?.id]);
   const refreshNotifications = useCallback(async () => {
     if (!token) return;
     const [list, count] = await Promise.all([
@@ -102,7 +102,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     ]);
     setNotifications(list.notifications);
     setNotificationUnread(count);
-  }, [token]);
+  }, [token, activeProfile?.id]);
   const refreshHistory = useCallback(async (id: string) => {
     const result = await messageService.history(id, { limit: 30 });
     setMessages((current) => ({
@@ -113,7 +113,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!token || !user?._id) {
+    if (!token || !user?._id || !activeProfile?.id) {
       socketRef.current?.disconnect();
       socketRef.current = null;
       activeRef.current = null;
@@ -128,7 +128,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     }
     setConnectionState("connecting");
     const socket = io(realtimeOrigin(), {
-      auth: { token },
+      auth: { token, profileId: activeProfile.id },
       transports: ["websocket", "polling"],
       withCredentials: true,
     });
@@ -236,7 +236,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       ({ notification }: { notification: RealtiqNotification }) => {
         setNotifications((items) => [
           notification,
-          ...items.filter((item) => item._id !== notification._id),
+          ...items.filter((item) => item.id !== notification.id),
         ]);
         if (!notification.readAt) setNotificationUnread((count) => count + 1);
       },
@@ -252,7 +252,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       }) => {
         setNotifications((items) =>
           items.map((item) =>
-            item._id === notificationId ? { ...item, readAt } : item,
+            item.id === notificationId ? { ...item, readAt } : item,
           ),
         );
         void notificationService.unreadCount().then(setNotificationUnread);
@@ -268,7 +268,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       "notification:archived",
       ({ notificationId }: { notificationId: string }) => {
         setNotifications((items) =>
-          items.filter((item) => item._id !== notificationId),
+          items.filter((item) => item.id !== notificationId),
         );
         void notificationService.unreadCount().then(setNotificationUnread);
       },
@@ -281,7 +281,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [token, user?._id, refreshInbox, refreshNotifications, refreshHistory]);
+  }, [token, user?._id, activeProfile?.id, refreshInbox, refreshNotifications, refreshHistory]);
 
   const openConversation = useCallback(
     async (id: string) => {

@@ -6,7 +6,7 @@ import type { StructuredPropertyFacts } from './phase45';
 import type { VirtualTourProvider, VirtualTourSummary } from './virtualTour';
 
 export type PropertyType = 'house' | 'apartment' | 'commercial' | 'villa' | 'penthouse' | 'estate';
-export type PropertyStatus = 'available' | 'sold';
+export type PropertyStatus = 'available' | 'under_offer' | 'sold' | 'not_released';
 export type PropertyPaymentType = 'outright' | 'installment' | 'escrow';
 export type PropertyCategory = 'residential' | 'commercial' | 'mixed_use' | string;
 export type PropertyCompletionStage = 'off_plan' | 'unfinished' | 'finished' | 'renovation' | string;
@@ -37,7 +37,7 @@ export type OffPlanDevelopmentStatus =
   | 'completed';
 export type TourType = 'open_house' | 'virtual_paid' | 'staging_view';
 export type TourMode = 'physical' | 'virtual';
-export type TourStatus = 'pending' | 'approved' | 'rejected' | 'completed';
+export type TourStatus = 'pending' | 'approved' | 'rejected' | 'completed' | 'cancelled';
 export type CartItemType =
   | 'title_document_view'
   | 'proxy_inspection_escrow'
@@ -183,6 +183,7 @@ export interface ProjectOwnerSummary {
 }
 
 export interface ProjectDetail extends ProjectCard {
+  version?: number;
   description?: string;
   address?: string;
   country?: string;
@@ -362,6 +363,7 @@ export interface Property {
   completionStage?: PropertyCompletionStage;
   currency?: PropertyCurrency;
   paymentTypes: PropertyPaymentType[];
+  version?: number;
   coordinates?: PropertyCoordinates | null;
   media: MediaItem[];
   status: PropertyStatus;
@@ -566,7 +568,9 @@ export interface RegisterPayload {
 }
 
 export interface PropertyFilters {
+  queryVersion?: 'canonical-v1';
   search?: string;
+  sort?: 'recommended' | 'newest' | 'price_asc' | 'price_desc' | 'handover_soonest' | 'verified_first' | 'recently_reduced' | 'largest_reduction' | 'bedrooms_desc' | 'floor_area_desc' | 'highest_rated' | 'trust_tier';
   minPrice?: number;
   maxPrice?: number;
   propertyType?: string;
@@ -577,7 +581,7 @@ export interface PropertyFilters {
   completionStage?: PropertyCompletionStage;
   currency?: PropertyCurrency;
   featured?: boolean;
-  status?: PropertyStatus;
+  status?: PropertyStatus | 'all' | 'under_offer';
   projectId?: string;
   projectSlug?: string;
   hasProject?: boolean;
@@ -593,6 +597,8 @@ export interface PropertyFilters {
   east?: number;
   west?: number;
   zoom?: number;
+  mapActive?: boolean;
+  mapZoom?: number;
   verified?: boolean;
   activityMetric?: 'market_interest' | 'views' | 'saves' | 'inquiries' | 'purchases';
   activityLevel?: 'low' | 'medium' | 'high' | 'very_high';
@@ -664,6 +670,14 @@ export interface TourPropertySummary {
   media?: MediaItem[];
 }
 
+export interface TourListingPropertySummary {
+  id: string;
+  publicReference?: string | null;
+  title?: string;
+  location?: string;
+  status?: string;
+}
+
 export interface TourParticipant {
   _id: string;
   name: string;
@@ -672,32 +686,24 @@ export interface TourParticipant {
 }
 
 export interface Tour {
-  _id: string;
-  property?: string | TourPropertySummary;
-  propertyId?: string | TourPropertySummary;
-  buyerId?: string | TourParticipant;
-  ownerId?: string | TourParticipant;
+  id: string;
+  property: TourListingPropertySummary | null;
   type: TourType;
   mode: TourMode;
-  scheduledAt?: string;
+  scheduledAt: string;
   notes?: string;
   status: TourStatus;
-  price?: number;
-  requiresPayment?: boolean;
-  reference?: string;
-  redirectUrl?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TourRequestPayload {
   propertyId: string;
-  type: TourType;
+  type: Exclude<TourType, 'virtual_paid'>;
   mode: TourMode;
-  scheduledAt?: string;
+  scheduledAt: string;
   notes?: string;
-  paymentOption?: 'cart';
-  addToCart?: boolean;
 }
 
 export interface CartItemResponse {
@@ -972,45 +978,19 @@ export interface WalletSummary {
   };
 }
 
-export type WalletTransactionType = 'title_document_view' | 'tour_payment' | 'platform_fee' | 'proxy_inspection_commission' | 'proxy_inspection_buyer_fee' | 'other';
+export type WalletTransactionType = 'title_document_view' | 'tour_payment' | 'platform_fee' | 'proxy_inspection_commission' | 'proxy_inspection_buyer_fee' | 'proxy_inspection_refund' | 'property_analytics_access' | 'other';
 export type WalletTransactionStatus = 'pending' | 'completed' | 'reversed' | 'refunded';
 
 export interface WalletTransaction {
-  _id: string;
+  id: string;
   type: WalletTransactionType;
   direction: 'credit' | 'debit';
   amount: number;
-  paymentReference?: string;
-  user?: { _id: string; name: string; email: string } | null;
-  guestIdentity?: unknown;
-  property?: { _id: string; title: string; publicReference?: string } | null;
-  provider?: { _id: string; name: string; email?: string } | null;
-  inspectionRequest?: { _id: string; status?: string; agreedPrice?: number } | null;
-  serviceEscrow?: {
-    _id: string;
-    status?: string;
-    agreedPrice?: number;
-    buyerFeePercentage?: number;
-    buyerFeeAmount?: number;
-    buyerTotalAmount?: number;
-    inspectorCommissionPercentage?: number;
-    inspectorCommissionAmount?: number;
-    inspectorPayoutAmount?: number;
-    totalPlatformRevenue?: number;
-    grossAmount?: number;
-    platformFeePercentage?: number;
-    platformFeeAmount?: number;
-    providerAmount?: number;
-  } | null;
-  document?: {
-    _id: string;
-    title: string;
-    publicReference?: string;
-    documentType: TitleDocumentType;
-  } | null;
-  description?: string;
+  paymentReference: string;
+  propertyReference?: string;
   status: WalletTransactionStatus;
   createdAt: string;
+  updatedAt: string;
 }
 
 export type TitleRiskSeverity = 'low' | 'medium' | 'high' | 'critical' | string;

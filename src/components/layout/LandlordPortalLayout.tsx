@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
+import ProfileSwitcher from './ProfileSwitcher';
 
 type LandlordNavKey =
   | 'messages'
@@ -106,6 +107,7 @@ const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: La
         >
           <div className="flex min-w-0 items-center gap-3"><button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-container-low lg:hidden" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><span className="material-symbols-outlined">menu</span></button>{topLeft ?? <h2 className="truncate text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{title}</h2>}</div>
           <div className="flex items-center gap-4 sm:gap-6 flex-wrap justify-end">
+            <ProfileSwitcher />
             {topRight ?? (
               <>
                 <div className="flex items-center gap-3">

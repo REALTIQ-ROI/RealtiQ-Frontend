@@ -37,7 +37,6 @@ const TitleVerificationReview = () => {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
-  const mutating = pendingAction !== null;
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -47,6 +46,8 @@ const TitleVerificationReview = () => {
       setSelectedId((current) => current ?? response.verifications[0]?.verificationId ?? null);
     } catch (raw) {
       toast.error(raw instanceof Error ? raw.message : 'Unable to load title verifications.');
+      setVerifications([]);
+      setSelected(null);
     } finally {
       setLoading(false);
     }
@@ -275,26 +276,27 @@ const TitleVerificationReview = () => {
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                   {['pending', 'under_review'].includes(selected.status) ? (
-                    <Button disabled={mutating} aria-busy={pendingAction === 'approve'} onClick={() => void review('approve')}>
+                    <Button disabled title="Legal review requires an undocumented step-up challenge" aria-busy={pendingAction === 'approve'} onClick={() => void review('approve')}>
                       {pendingAction === 'approve' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Approving...</> : 'Approve'}
                     </Button>
                   ) : null}
                   {['pending', 'under_review'].includes(selected.status) ? (
-                    <Button variant="secondary" disabled={mutating} aria-busy={pendingAction === 'reject'} onClick={() => void review('reject')}>
+                    <Button variant="secondary" disabled title="Legal review requires an undocumented step-up challenge" aria-busy={pendingAction === 'reject'} onClick={() => void review('reject')}>
                       {pendingAction === 'reject' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Rejecting...</> : 'Reject'}
                     </Button>
                   ) : null}
                   {selected.status === 'published' ? (
-                    <Button variant="secondary" disabled={mutating} aria-busy={pendingAction === 'revoke'} onClick={() => void revoke()}>
+                    <Button variant="secondary" disabled title="Revocation requires an undocumented step-up challenge" aria-busy={pendingAction === 'revoke'} onClick={() => void revoke()}>
                       {pendingAction === 'revoke' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Revoking...</> : 'Revoke'}
                     </Button>
                   ) : null}
                   {selected.status === 'published' && selected.publicVerificationId ? (
-                    <Button variant="ghost" disabled={mutating} aria-busy={pendingAction === 'external-anchor'} onClick={() => void requestExternalAnchor()}>
+                    <Button variant="ghost" disabled title="External anchoring requires an undocumented step-up challenge" aria-busy={pendingAction === 'external-anchor'} onClick={() => void requestExternalAnchor()}>
                       {pendingAction === 'external-anchor' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Requesting...</> : 'Request External Anchor'}
                     </Button>
                   ) : null}
                 </div>
+                <p className="text-xs text-amber-800">Review decisions, revocation and external anchoring require a server step-up challenge. The challenge request contract is not documented yet.</p>
                 <RegistryAuditDetails publicVerificationId={selected.publicVerificationId} />
                 <div>
                   <h3 className="font-bold">Audit Logs</h3>

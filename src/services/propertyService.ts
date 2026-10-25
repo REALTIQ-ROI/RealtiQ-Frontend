@@ -65,6 +65,7 @@ export interface CreatePropertyPayload {
 export interface UpdatePropertyPayload extends Partial<CreatePropertyPayload> {
   status?: PropertyStatus;
   featured?: boolean;
+  expectedVersion?: number;
 }
 
 export interface PropertiesResponse {
@@ -72,6 +73,10 @@ export interface PropertiesResponse {
   total: number;
   page: number;
   limit: number;
+  sort?: string;
+  facets?: unknown;
+  normalization?: { queryVersion: string; query: unknown; notices?: unknown[] };
+  diagnostics?: unknown;
 }
 
 export interface MediaUploadResponse {
@@ -258,7 +263,7 @@ const normalizePropertiesResponse = (response: PropertiesResponse): PropertiesRe
 
 export const propertyService = {
   async getProperties(filters?: PropertyFiltersQuery): Promise<PropertiesResponse> {
-    const { data } = await api.get<PropertiesResponse>('/properties', { params: filters });
+    const { data } = await api.get<PropertiesResponse>('/properties', { params: { queryVersion: 'canonical-v1', ...filters } });
     return normalizePropertiesResponse(data);
   },
 
@@ -285,27 +290,25 @@ export const propertyService = {
   },
 
   async createProperty(payload: CreatePropertyPayload): Promise<Property> {
-    const { data } = await api.post<Property | CreatePropertyResponse>('/properties', payload);
-    return normalizeProperty('property' in data ? data.property : data);
+    const { data } = await api.post<CreatePropertyResponse>('/properties', payload);
+    return normalizeProperty(data.property);
   },
 
   async createPropertyWithResponse(payload: CreatePropertyPayload): Promise<CreatePropertyResponse> {
-    const { data } = await api.post<Property | CreatePropertyResponse>('/properties', payload);
-    return 'property' in data
-      ? { ...data, property: normalizeProperty(data.property) }
-      : { property: normalizeProperty(data) };
+    const { data } = await api.post<CreatePropertyResponse>('/properties', payload);
+    return { ...data, property: normalizeProperty(data.property) };
   },
 
-  async getMyProperties(): Promise<PropertiesResponse> {
-    const { data } = await api.get<PropertiesResponse | Property[]>('/properties/mine');
+  async getMyProperties(page = 1, limit = 20): Promise<PropertiesResponse> {
+    const { data } = await api.get<PropertiesResponse | Property[]>('/properties/mine', { params: { page, limit } });
     return normalizePropertiesResponse(Array.isArray(data)
       ? { properties: data, total: data.length, page: 1, limit: data.length }
       : data);
   },
 
   async updateProperty(id: string, payload: UpdatePropertyPayload): Promise<Property> {
-    const { data } = await api.patch<Property>(`/properties/${id}`, payload);
-    return normalizeProperty(data);
+    const { data } = await api.patch<{ property: Property; version?: number }>(`/properties/${encodeURIComponent(id)}`, payload);
+    return normalizeProperty(data.property);
   },
 
   async deleteProperty(id: string): Promise<{ message: string }> {
@@ -424,7 +427,6 @@ export const propertyService = {
     const formData = new FormData();
     files.forEach((file) => formData.append('files', file));
     const { data } = await api.post<MediaUploadResponse>('/media/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (event) => {
         if (event.total && onProgress) {
           onProgress(Math.round((event.loaded * 100) / event.total));
@@ -436,21 +438,7 @@ export const propertyService = {
       return data;
     }
 
-    if (typeof data.url === 'string') {
-      const file = files[0];
-      return {
-        url: data.url,
-        media: [
-          {
-            url: data.url,
-            public_id: `upload-${Date.now()}`,
-            type: file?.type.startsWith('video/') ? 'video' : 'image',
-          },
-        ],
-      };
-    }
-
-    return { media: [] };
+    throw new Error('Media upload did not return the documented safe media array.');
   },
 
   // Legacy shim kept so existing callers continue to compile while they are migrated.

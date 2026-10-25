@@ -11,7 +11,6 @@ import StructuredFactsFields from './StructuredFactsFields';
 import { sellerStructuredFacts, validateStructuredFacts } from '../../features/phase45/structuredFacts';
 import type { StructuredPropertyFacts } from '../../types/phase45';
 import {
-  INSTALLMENT_THRESHOLD_NGN,
   normalizePaymentTypesForForm,
   PROPERTY_PAYMENT_TYPE_ORDER,
   propertyPaymentTypeIcons,
@@ -36,8 +35,7 @@ const PROPERTY_TYPES = [
 ];
 const CATEGORY_OPTIONS = ['residential', 'commercial', 'mixed_use'];
 const STAGE_OPTIONS = ['off_plan', 'unfinished', 'finished', 'renovation'];
-const CURRENCY_OPTIONS = ['NGN', 'USD', 'GBP'];
-const STATUS_OPTIONS = ['available', 'sold'];
+const CURRENCY_OPTIONS = ['NGN', 'USD'];
 const LISTING_TYPE_OPTIONS: Array<{ value: ListingType; label: string }> = [
   { value: 'ready', label: 'Ready' },
   { value: 'off_plan', label: 'Off-Plan' },
@@ -77,15 +75,15 @@ const errorClass = 'text-error text-xs mt-1';
 const validate = (data: CreatePropertyPayload & { status?: string }): Record<string, string> => {
   const errs: Record<string, string> = {};
   if (!data.title.trim()) errs.title = 'Title is required';
-  if (!data.price || data.price <= 0) errs.price = 'Price must be greater than 0';
+  if (data.price < 0) errs.price = 'Price cannot be negative';
   if (!Number.isFinite(data.price)) errs.price = 'Price must be a valid number';
   if (!data.location.trim()) errs.location = 'Location is required';
   if (!data.propertyType) errs.propertyType = 'Property type is required';
   else if (!PROPERTY_TYPES.includes(data.propertyType)) errs.propertyType = 'Select a supported property type';
-  if (!data.bedrooms || data.bedrooms < 1) errs.bedrooms = 'At least 1 bedroom required';
-  if (!data.bathrooms || data.bathrooms < 1) errs.bathrooms = 'At least 1 bathroom required';
+  if (data.bedrooms !== undefined && (!Number.isInteger(data.bedrooms) || data.bedrooms < 0)) errs.bedrooms = 'Bedrooms must be a non-negative whole number';
+  if (data.bathrooms !== undefined && (!Number.isInteger(data.bathrooms) || data.bathrooms < 0)) errs.bathrooms = 'Bathrooms must be a non-negative whole number';
   if (!data.completionStage) errs.completionStage = 'Completion stage is required';
-  if (!data.squareFeet || data.squareFeet <= 0) errs.squareFeet = 'Square footage must be greater than 0';
+  if (!Number.isFinite(data.squareFeet) || data.squareFeet < 0) errs.squareFeet = 'Square footage must be non-negative';
   if (!data.description.trim()) errs.description = 'Description is required';
   if (!data.media || data.media.length === 0) errs.media = 'At least one media file is required';
   if (!data.category) errs.category = 'Category is required';
@@ -157,12 +155,11 @@ const PropertyForm = ({
   const [amenities, setAmenities] = useState<string[]>(initialData?.amenities ?? []);
   const [amenityInput, setAmenityInput] = useState('');
   const [media, setMedia] = useState<MediaItem[]>(initialData?.media ?? []);
-  const [status, setStatus] = useState(initialData?.status ?? 'available');
   const [paymentTypes, setPaymentTypes] = useState<PropertyPaymentType[]>(() =>
     mode === 'edit'
       ? normalizePaymentTypesForForm(
           Number(initialData?.price ?? 0),
-          initialData?.paymentTypes ?? ['outright'],
+          initialData?.paymentTypes ?? [],
         )
       : [],
   );
@@ -205,7 +202,6 @@ const PropertyForm = ({
   const parsedPrice = Number(price) || 0;
   const initialPrice = Number(initialData?.price ?? 0);
   const priceChanged = mode === 'edit' && Number.isFinite(parsedPrice) && initialPrice > 0 && parsedPrice !== initialPrice;
-  const installmentForced = parsedPrice > INSTALLMENT_THRESHOLD_NGN;
 
   useEffect(() => {
     setProjectsLoading(true);
@@ -222,15 +218,7 @@ const PropertyForm = ({
     }
   }, [category, categoryOptions]);
 
-  useEffect(() => {
-    if (!installmentForced) return;
-    setPaymentTypes((current) =>
-      current.includes('installment') ? current : normalizePaymentTypesForForm(parsedPrice, current),
-    );
-  }, [installmentForced, parsedPrice]);
-
   const togglePaymentType = (type: PropertyPaymentType) => {
-    if (type === 'installment' && installmentForced) return;
     setPaymentTypes((current) => {
       const selected = current.includes(type)
         ? current.filter((item) => item !== type)
@@ -263,6 +251,11 @@ const PropertyForm = ({
     e.preventDefault();
     if (saving) return;
 
+    if (price.trim() === '') {
+      setErrors((current) => ({ ...current, price: 'Enter an asking price, including 0 when explicitly intended.' }));
+      return;
+    }
+
     const latProvided = coordinatesLat.trim() !== '';
     const lngProvided = coordinatesLng.trim() !== '';
     const basePayload: CreatePropertyPayload & { status?: string } = {
@@ -285,9 +278,8 @@ const PropertyForm = ({
       bedrooms: Number(bedrooms),
       bathrooms: Number(bathrooms),
       completionStage,
-      ...(mode === 'edit' && { status }),
       ...(priceChanged && priceChangeReason.trim() ? { priceChangeReason: priceChangeReason.trim().slice(0, 500) } : {}),
-      ...(projectId ? {
+      ...(mode === 'create' && projectId ? {
         projectId,
         projectUnit: {
           unitName: unitName.trim() || undefined,
@@ -602,14 +594,9 @@ const PropertyForm = ({
 
           {mode === 'edit' && (
             <div>
-              <label className={labelClass}>Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value as 'available' | 'sold')} className={inputClass}>
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s} className="capitalize">
-                    {s.charAt(0).toUpperCase() + s.slice(1)}
-                  </option>
-                ))}
-              </select>
+              <label className={labelClass}>Current listing status</label>
+              <p className="mt-1 rounded-lg bg-surface-container-low px-4 py-3 text-sm capitalize">{initialData?.status ?? 'Not returned'}</p>
+              <p className="mt-1 text-xs text-secondary">Sale and publication state change through their authorized workflows.</p>
             </div>
           )}
 
@@ -793,20 +780,18 @@ const PropertyForm = ({
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           {PROPERTY_PAYMENT_TYPE_ORDER.map((type) => {
             const checked = paymentTypes.includes(type);
-            const disabled = type === 'installment' && installmentForced;
             return (
               <label
                 key={type}
                 className={`flex items-start gap-3 rounded-xl border p-4 ${
                   checked ? 'border-primary bg-primary/5' : 'border-outline-variant/20'
-                } ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                } cursor-pointer`}
               >
                 <input
                   type="checkbox"
                   name="paymentTypes"
                   value={type}
                   checked={checked}
-                  disabled={disabled}
                   onChange={() => togglePaymentType(type)}
                   className="mt-1"
                 />
@@ -817,7 +802,7 @@ const PropertyForm = ({
                   </span>
                   <span className="mt-1 block text-xs text-secondary">
                     {type === 'outright'
-                      ? 'Existing direct-purchase checkout'
+                      ? 'Buyer can use the approved outright checkout when available'
                       : type === 'installment'
                         ? 'Buyer can create an installment plan'
                         : 'Buyer can create a protected escrow'}
@@ -827,11 +812,6 @@ const PropertyForm = ({
             );
           })}
         </div>
-        {installmentForced ? (
-          <p className="mt-3 text-xs font-semibold text-amber-800">
-            Installment is required for properties above ₦50,000,000
-          </p>
-        ) : null}
         {errors.paymentTypes ? <p id="payment-types-error" role="alert" className={errorClass}>{errors.paymentTypes}</p> : null}
       </fieldset>
 
@@ -899,12 +879,15 @@ const PropertyForm = ({
             </div>
             <button
               type="button"
+              disabled
+              title="Title asset upload requires an undocumented step-up challenge"
               onClick={() => setTitleDocumentRows((current) => [...current, createTitleDocumentRow()])}
-              className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-on-primary"
+              className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               Add document
             </button>
           </div>
+          <p className="text-xs text-amber-800">Title-file upload requires a server step-up challenge that is not yet documented. You can save the ordinary listing details now.</p>
           {titleDocumentRows.length === 0 ? (
             <p className="rounded-xl border border-dashed border-outline-variant/20 p-5 text-sm text-secondary">
               Title documents are optional. You can add or resubmit them later from the property vault.
@@ -963,7 +946,7 @@ const PropertyForm = ({
                     <option value="paid_view_once">Paid — one view</option>
                     <option value="paid_view_multiple">Paid — multiple views</option>
                   </select>
-                  {row.mode !== 'private' ? <p className="mt-2 text-xs text-secondary">₦5,000 — set by RealtIQ.</p> : null}
+                  {row.mode !== 'private' ? <p className="mt-2 text-xs text-secondary">The server controls the current document-view price.</p> : null}
                 </div>
                 <div>
                   <label className={labelClass}>Restricted file</label>
