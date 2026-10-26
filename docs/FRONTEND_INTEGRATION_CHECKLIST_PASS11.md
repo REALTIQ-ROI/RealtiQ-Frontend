@@ -212,6 +212,10 @@ The five prior exhaustive-deps warnings were inspected. The EscrowDetails effect
 - docs/FRONTEND_RECONCILIATION_POST_BACKEND_REMEDIATION.md
 - docs/FRONTEND_INTEGRATION_CHECKLIST_PASS11.md
 
+### Post-Pass 11 source follow-up
+
+Pass 12 subsequently corrected current map/discovery behavior: Mapbox now falls back to the existing Leaflet renderer when the public token is absent; canonical project-map aggregates and `fx_unconfigured` state are validated and shown safely; stale results are hidden while a new map query is pending; and gazetteer-unavailable errors retain their documented code. These are later source changes and do not alter the historical Pass 11 initial/final checklist counts or its PARTIAL verdict. See [Pass 12 configuration readiness](CONFIGURATION_GATES_AND_OPEN_DECISIONS_PASS12.md).
+
 ## Overall verdict
 
 **PARTIAL.** The source/UI foundation and most first-batch workflows are connected, and the two Pass 11 frontend-owned gaps above are closed. The Chapter 11 checklist still contains blocked or partial multi-operation journeys whose exact DTO, policy, product decision or deployment setting is absent from the local authoritative handoff. They remain explicit and safely disabled; no missing behavior is inferred.

@@ -128,7 +128,7 @@ const Listings = () => {
           normalizationNotices: result.normalization?.notices ?? [] });
       })
       .catch((raw: unknown) => {
-        if (!controller.signal.aborted) setMapState({ queryKey: mapQueryKey, count: null, error: raw instanceof Error ? raw.message : 'Map results are unavailable.', markers: [], skipped: 0, mode: null, truncated: false, facets: {}, priceAggregateState: null, normalizationNotices: [] });
+        if (!controller.signal.aborted) setMapState({ queryKey: mapQueryKey, count: null, error: raw instanceof ApiRequestError && raw.code ? `${raw.message} (${raw.code})` : raw instanceof Error ? raw.message : 'Map results are unavailable.', markers: [], skipped: 0, mode: null, truncated: false, facets: {}, priceAggregateState: null, normalizationNotices: [] });
       });
     return () => controller.abort();
   }, [mapQueryKey]);

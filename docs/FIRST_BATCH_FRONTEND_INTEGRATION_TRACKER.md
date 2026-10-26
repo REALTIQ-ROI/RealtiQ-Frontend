@@ -596,8 +596,8 @@ This section supersedes earlier blocker statements only where the corrected loca
 
 | Result | Count | Notes |
 |---|---:|---|
-| COMPLETE at source/UI level | 18 | Includes connected profile/session controls, location suggestions, staff access changes, legal holds, notification-delivery reconciliation, allocation retry and bound trust-appeal decisions, plus corrected flows already wired. |
-| PARTIAL | 15 | A supported subset is connected; exact remaining steps are listed in the detailed report. |
+| COMPLETE at source/UI level | 19 | Current row-derived count after Pass 11 completed B02-01 property/project association at source/UI level; includes connected profile/session controls, location suggestions, staff access changes, legal holds, notification-delivery reconciliation, allocation retry and bound trust-appeal decisions, plus corrected flows already wired. |
+| PARTIAL | 14 | A supported subset is connected; exact remaining steps are listed in the detailed report. |
 | BLOCKED by product, contract or specification | 7 | Paid tours, seat/payout plan selection, listing verification, ownership history/transfer, per-media access, construction milestone count and unspecified admin aggregates. |
 | DEFERRED | 1 | Exhaustive per-route error/state/retry documentation (B10-01). |
 | **Total** | **41** | No live backend acceptance was performed. |
@@ -662,3 +662,24 @@ See [the detailed 41-row reconciliation](FRONTEND_RECONCILIATION_POST_BACKEND_RE
 ### Verdict and Pass 12 readiness
 
 **Pass 11 verdict: PARTIAL.** The checklist’s supported frontend-owned association and payment-detail gaps are closed, and stale hook closures were fixed. The remaining partial/blocked items require missing route-specific DTOs, product/specification decisions, approved policies or provider/deployment configuration. They remain accurately represented in the Pass 11 report and the Pass 01–10 reconciliation. **Pass 12 is ready to begin**; no Pass 11 dependency requires additional backend access.
+
+## PASS 12 — CONFIGURATION GATES AND OPEN DECISIONS
+
+### Initial audit
+
+- Read Chapter 12 from beginning to end and audited its 11 search/ranking/geography gates, 4 document/verification/provider gates, data-rights execution gate, 4 numbered source decisions, and 9-item activation checklist. The configuration matrix and decision register are in [the Pass 12 report](CONFIGURATION_GATES_AND_OPEN_DECISIONS_PASS12.md).
+- Recalculated the 41-row post-remediation reconciliation rather than carrying forward its old summary: **19 COMPLETE, 14 PARTIAL, 7 BLOCKED, 1 DEFERRED**. B02-01 was completed at source/UI level in Pass 11. Earlier Pass 01–10 and Pass 11 verdicts remain unchanged.
+- Source audit found a frontend-owned map-provider assumption: Mapbox was selected even when the existing public token was absent. The project map also lacked canonical FX-unconfigured aggregate handling and treated absent unit counts as zero. Gazetteer 503s lost their specific capability code in one input, and the project-map result state could briefly retain pins from an older query.
+
+### Implementation and status
+
+| Area | Initial status | Final status | Change / remaining dependency |
+|---|---|---|---|
+| Map provider readiness | PARTIAL | **COMPLETE for safe client selection** | `src/config/maps.ts` now chooses existing Leaflet when the existing Mapbox token is blank and retains Mapbox when configured. Provider licensing/data-handling approval still requires deployment evidence. |
+| Canonical project map DTO and FX state | PARTIAL | **COMPLETE at source/UI level** | Project pins validate documented counts, bounds, price state and currency; FX-unconfigured aggregates are not rendered as prices. Map provider/tile errors offer list recovery. |
+| Gazetteer-unavailable state | PARTIAL | **COMPLETE at source/UI level** | Location suggestion UI recognizes `FEATURE_SEARCH_GAZETTEER_UNCONFIGURED`; no ID is fabricated. Gazetteer status is not queried because the endpoint’s response DTO is unspecified. |
+| Other capability gates | PARTIAL / BLOCKED | **PARTIAL** | No unsupported capability endpoint or active configuration was inferred. API responses and existing policy/readiness DTOs remain authoritative. |
+
+- Focused tests, TypeScript, edited-file ESLint and `git diff --check` all passed; details are recorded in the report. No live provider/backend acceptance was run.
+- **Pass 12 verdict: PARTIAL.** The source-owned UI gaps were closed. Production readiness still depends on backend policy/provider activation, legal/product decisions, deployment checklist completion and live acceptance. No previous pass verdict is changed.
+- Pass 13 readiness: source-level gate handling is ready for backend acceptance review; the 9 deployment activations and unresolved decisions remain explicit prerequisites.

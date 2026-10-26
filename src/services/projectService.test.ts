@@ -34,7 +34,7 @@ describe('projectService', () => {
   });
 
   it('uses the canonical query version and preserves repeated URL criteria for project maps', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: { mode: 'projects', bounds: {}, total: 0, projects: [] } });
+    vi.mocked(api.get).mockResolvedValue({ data: { mode: 'projects', bounds: null, total: 0, projects: [] } });
     const query = new URLSearchParams('amenities=Pool&amenities=Lift&minPrice=0&page=4&limit=20&north=14&south=4&east=14&west=2&mapZoom=6');
     await projectService.getProjectMap(query);
     expect(api.get).toHaveBeenCalledWith('/projects/map', expect.objectContaining({ params: expect.any(URLSearchParams), signal: undefined }));
@@ -46,9 +46,29 @@ describe('projectService', () => {
     expect(params.get('queryVersion')).toBe('canonical-v1');
   });
 
+  it('preserves documented project-map unit counts and FX aggregate state', async () => {
+    const mapProject = {
+      _id: 'project-1', name: 'Palm Court', slug: 'palm-court', projectType: 'estate',
+      coordinates: null, matchingUnitCount: 12, availableUnitCount: 8, underOfferUnitCount: 2,
+      minimumPrice: null, maximumPrice: null, currency: 'NGN', priceAggregateState: 'fx_unconfigured' as const,
+    };
+    vi.mocked(api.get).mockResolvedValue({ data: { mode: 'projects', bounds: null, total: 1, projects: [mapProject] } });
+
+    const result = await projectService.getProjectMap(new URLSearchParams());
+
+    expect(result.projects[0]).toEqual(mapProject);
+    expect(result.projects[0].priceAggregateState).toBe('fx_unconfigured');
+  });
+
   it('does not report an undocumented project-map cluster envelope as an empty result', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { mode: 'clusters', total: 4, clusters: [{ id: 'cluster-1', count: 4 }] } });
     await expect(projectService.getProjectMap(new URLSearchParams('north=14&south=4&east=14&west=2&mapZoom=6')))
+      .rejects.toThrow('Project map marker fields are not fully specified');
+  });
+
+  it('rejects project markers missing the canonical configuration and availability fields', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { mode: 'projects', bounds: null, total: 1, projects: [{ _id: 'project-1', name: 'Palm Court', slug: 'palm', projectType: 'estate' }] } });
+    await expect(projectService.getProjectMap(new URLSearchParams()))
       .rejects.toThrow('Project map marker fields are not fully specified');
   });
 

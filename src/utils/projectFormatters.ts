@@ -44,5 +44,17 @@ export const formatPriceRange = (minimum?: number, maximum?: number, currency = 
   return `${formatNgn(minimum, currency)} - ${formatNgn(maximum, currency)}`;
 };
 
+export const projectMapPricePresentation = (
+  minimum: number | null | undefined,
+  maximum: number | null | undefined,
+  currency: string | undefined,
+  state: 'configured' | 'fx_unconfigured',
+) => state === 'fx_unconfigured'
+  ? {
+      label: 'Price comparison unavailable',
+      notice: 'Some foreign-currency prices could not be normalized with approved current rates.',
+    }
+  : { label: formatPriceRange(minimum ?? undefined, maximum ?? undefined, currency), notice: null };
+
 export const formatDate = (value?: string) =>
   value ? new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Not set';

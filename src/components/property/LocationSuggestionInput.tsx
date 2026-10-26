@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { locationService, type LocationSuggestion, type LocationSuggestionLevel } from '../../services/locationService';
+import { locationService, locationSuggestionFailureMessage, type LocationSuggestion, type LocationSuggestionLevel } from '../../services/locationService';
 
 interface Props {
   label: string;
@@ -38,7 +38,7 @@ const LocationSuggestionInput = ({ label, level, value, parentId, onChange, onSe
         })
         .catch((raw: unknown) => {
           if (!controller.signal.aborted) {
-            setResult({ key: requestKey, suggestions: [], loading: false, error: raw instanceof Error ? raw.message : 'Location suggestions are unavailable.' });
+            setResult({ key: requestKey, suggestions: [], loading: false, error: locationSuggestionFailureMessage(raw) });
           }
         });
     }, 250);

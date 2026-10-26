@@ -73,6 +73,11 @@ describe('API error normalization', () => {
     expect(unavailable.message).toMatch(/check operation status before submitting again/i);
   });
 
+  it('preserves the gazetteer configuration code for the suggestion UI', () => {
+    const unavailable = normalizeApiError(responseError(503, { code: 'FEATURE_SEARCH_GAZETTEER_UNCONFIGURED' }));
+    expect(unavailable).toMatchObject({ status: 503, code: 'FEATURE_SEARCH_GAZETTEER_UNCONFIGURED' });
+  });
+
   it('preserves durable payment references and reconciliation state from the corrected error DTO', () => {
     const normalized = normalizeApiError(responseError(503, {
       code: 'PAYMENT_INITIALIZATION_OUTCOME_UNKNOWN', message: 'Provider status is unresolved.',

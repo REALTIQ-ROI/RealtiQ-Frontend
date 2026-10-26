@@ -9,11 +9,13 @@ The remediation results classify 6 blockers as resolved by backend implementatio
 
 | Frontend outcome | Count |
 |---|---:|
-| Complete at source/UI level | 18 |
-| Partial | 15 |
+| Complete at source/UI level | 19 |
+| Partial | 14 |
 | Blocked by product decision, contract or specification | 7 |
 | Deferred documentation scope | 1 |
 | **Total** | **41** |
+
+These are current row-derived classifications after the Pass 11 completion of B02-01. The earlier 18/15 summary is retained in historical pass records where it described the state before that change; the Pass 11 verdict itself remains PARTIAL.
 
 The results document's summary says P0 6 / P1 23 / P2 12, while its actual blocker headings total P0 6 / P1 22 / P2 13. Both add to 41. The rows below retain the heading-level IDs and do not reassign priorities.
 

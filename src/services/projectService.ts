@@ -94,10 +94,13 @@ export interface ProjectMapItem {
   name: string;
   slug: string;
   projectType: ProjectType | string;
-  minimumPrice?: number;
-  maximumPrice?: number;
+  matchingUnitCount: number;
+  availableUnitCount: number;
+  underOfferUnitCount: number;
+  minimumPrice: number | null;
+  maximumPrice: number | null;
   currency?: string;
-  availableUnits?: number;
+  priceAggregateState: 'configured' | 'fx_unconfigured';
   coordinates?: { lat: number; lng: number } | null;
 }
 
@@ -122,7 +125,7 @@ export interface ProjectPropertiesResponse {
 
 export interface ProjectMapResponse {
   mode: 'projects';
-  bounds: { north: number; south: number; east: number; west: number; zoom: number };
+  bounds: { north: number; south: number; east: number; west: number; zoom: number } | null;
   total: number;
   projects: ProjectMapItem[];
   facets?: Record<string, unknown>;
@@ -134,7 +137,23 @@ const parseProjectMapResponse = (value: unknown): ProjectMapResponse => {
     throw new Error('Project map response is not available in a supported format. Use list view to continue.');
   }
   const response = value as Partial<ProjectMapResponse>;
-  if (!Array.isArray(response.projects) || typeof response.total !== 'number' || !Number.isFinite(response.total)) {
+  const hasValidBounds = response.bounds === null || Boolean(response.bounds &&
+    ['north', 'south', 'east', 'west', 'zoom'].every((key) => Number.isFinite(response.bounds?.[key as keyof NonNullable<ProjectMapResponse['bounds']>])));
+  const hasValidProjects = Array.isArray(response.projects) && response.projects.every((candidate) => {
+    if (!candidate || typeof candidate !== 'object') return false;
+    const item = candidate as Partial<ProjectMapItem>;
+    const validCoordinate = item.coordinates === null || Boolean(item.coordinates &&
+      Number.isFinite(item.coordinates.lat) && item.coordinates.lat >= -90 && item.coordinates.lat <= 90 &&
+      Number.isFinite(item.coordinates.lng) && item.coordinates.lng >= -180 && item.coordinates.lng <= 180);
+    return typeof item._id === 'string' && typeof item.name === 'string' && typeof item.slug === 'string' &&
+      typeof item.projectType === 'string' &&
+      [item.matchingUnitCount, item.availableUnitCount, item.underOfferUnitCount].every((count) => typeof count === 'number' && Number.isFinite(count) && count >= 0) &&
+      (item.minimumPrice === null || (typeof item.minimumPrice === 'number' && Number.isFinite(item.minimumPrice))) &&
+      (item.maximumPrice === null || (typeof item.maximumPrice === 'number' && Number.isFinite(item.maximumPrice))) &&
+      (item.priceAggregateState === 'configured' || item.priceAggregateState === 'fx_unconfigured') &&
+      (item.currency === undefined || typeof item.currency === 'string') && validCoordinate;
+  });
+  if (response.mode !== 'projects' || !hasValidBounds || !hasValidProjects || typeof response.total !== 'number' || !Number.isFinite(response.total)) {
     throw new Error('Project map marker fields are not fully specified for this response. Use list view to continue.');
   }
   return value as ProjectMapResponse;
