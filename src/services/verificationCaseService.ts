@@ -92,6 +92,23 @@ export const verificationCaseService = {
     return data;
   },
 
+  async retryEvidence(id: string, body: { expectedVersion: number }, challengeId: string): Promise<ProfileEvidence> {
+    const { data } = await api.post<ProfileEvidence>(
+      `${holderBase}/onboarding/evidence/${encodeURIComponent(id)}/retry`,
+      body,
+      { headers: { 'X-Step-Up-Challenge': challengeId } },
+    );
+    return data;
+  },
+
+  async deleteEvidence(id: string, body: { expectedVersion: number }, challengeId: string): Promise<ProfileEvidence> {
+    const { data } = await api.delete<ProfileEvidence>(
+      `${holderBase}/onboarding/evidence/${encodeURIComponent(id)}`,
+      { data: body, headers: { 'X-Step-Up-Challenge': challengeId } },
+    );
+    return data;
+  },
+
   async listHolderCases(query: { limit?: number; before?: string; state?: string } = {}): Promise<VerificationCasePage> {
     const { data } = await api.get<VerificationCasePage>(`${holderBase}/verification-cases`, { params: query });
     return data;

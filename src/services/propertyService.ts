@@ -1,4 +1,5 @@
 import api from '../lib/axios';
+import { validatePublicMediaBatch } from '../utils/projectMedia';
 import type {
   MediaItem,
   ConstructionUpdate,
@@ -491,6 +492,8 @@ export const propertyService = {
   },
 
   async uploadMedia(files: File[], onProgress?: (percent: number) => void): Promise<MediaUploadResponse> {
+    const validationError = validatePublicMediaBatch(files);
+    if (validationError) throw new Error(validationError);
     const formData = new FormData();
     files.forEach((file) => formData.append('files', file));
     const { data } = await api.post<MediaUploadResponse>('/media/upload', formData, {

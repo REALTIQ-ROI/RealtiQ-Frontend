@@ -2,6 +2,9 @@ import type { ProfileEvidenceContract } from '../services/verificationCaseServic
 
 export const HARD_EVIDENCE_UPLOAD_LIMIT = 50 * 1024 * 1024;
 export const STEP_UP_FILE_DIGEST_FIELD = '__stepUpFileSha256';
+const processingEvidenceStates = new Set(['migration_pending', 'awaiting_upload', 'quarantined', 'scanning', 'activation_pending', 'deleting', 'privacy_deleting']);
+
+export const isProfileEvidenceProcessing = (state: string): boolean => processingEvidenceStates.has(state);
 
 export interface BoundEvidenceMetadata {
   purpose: string;

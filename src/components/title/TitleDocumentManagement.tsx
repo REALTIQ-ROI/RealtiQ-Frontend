@@ -56,37 +56,7 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
 
   const submitDocument = async (event: FormEvent) => {
     event.preventDefault();
-    if (sold) {
-      toast.error('This property is sold. Title-document uploads and resubmissions are locked.');
-      return;
-    }
-    if (!file) {
-      toast.error('Choose a title-document file.');
-      return;
-    }
-    if (unavailableTypes.has(documentType)) {
-      toast.error(`An active ${documentTypeLabel(documentType)} submission already exists.`);
-      return;
-    }
-    setBusyId('upload');
-    try {
-      await titleDocumentService.upload(propertyId, {
-        file,
-        documentType,
-        title: title.trim() || documentTypeLabel(documentType),
-        accessPolicy: { enabled: mode !== 'private', mode },
-      });
-      toast.success(documents.some((document) => document.documentType === documentType && document.verificationStatus === 'rejected')
-        ? 'A new document version was submitted. The rejected history remains available.'
-        : 'Title document submitted for independent verification.');
-      setFile(null);
-      setShowUpload(false);
-      await refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to submit title document.');
-    } finally {
-      setBusyId(null);
-    }
+    toast.error('Title-file submission is unavailable until the backend provides a file-bound step-up protocol for this route. Your selected file remains in this form.');
   };
 
   const updatePolicy = async (document: ManagedTitleDocument, nextMode: TitleDocumentPolicyMode) => {
@@ -135,12 +105,12 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
           <h2 className="text-xl font-extrabold">Private title-document vault</h2>
           <p className="mt-1 text-sm text-secondary">Each document is a separate private record with independent verification, policy, history, and analytics.</p>
         </div>
-        <Button type="button" disabled onClick={() => setShowUpload((current) => !current)} title="Title upload requires an undocumented step-up challenge">
+      <Button type="button" disabled onClick={() => setShowUpload((current) => !current)} title="Title upload requires a route-specific file-bound step-up contract">
           Upload a missing type
         </Button>
       </div>
       {sold ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">This property has been sold. Upload, resubmission, and seller policy changes are unavailable; existing history and permitted protected viewing remain available.</p> : null}
-      {!sold ? <p className="mt-4 text-sm text-amber-800">New title-file uploads require a server step-up challenge. Existing vault records and permitted viewing remain available.</p> : null}
+      {!sold ? <p className="mt-4 text-sm text-amber-800">New title-file uploads and resubmissions require a route-specific file-bound step-up protocol. Existing vault records and permitted viewing remain available.</p> : null}
 
       {showUpload && !sold ? (
         <form onSubmit={(event) => void submitDocument(event)} className="mt-5 grid gap-4 rounded-xl bg-surface-container-low p-4 md:grid-cols-2">
@@ -167,8 +137,9 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
             <input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-lg bg-white px-4 py-3 text-sm" />
           </div>
           <div>
-            <label className="text-xs font-bold uppercase tracking-widest text-secondary">Restricted file</label>
-            <input type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="mt-2 w-full rounded-lg bg-white px-4 py-3 text-sm" />
+            <label htmlFor="title-document-file" className="text-xs font-bold uppercase tracking-widest text-secondary">Restricted file</label>
+            <input id="title-document-file" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="mt-2 w-full rounded-lg bg-white px-4 py-3 text-sm" />
+            {file ? <p role="status" className="mt-2 text-xs text-secondary">Selected file retained: {file.name} · {Math.ceil(file.size / 1024)} KB</p> : null}
           </div>
           <div>
             <label className="text-xs font-bold uppercase tracking-widest text-secondary">Access policy</label>
@@ -180,7 +151,10 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
             {mode !== 'private' ? <p className="mt-2 text-xs text-secondary">The server controls the current viewing price and policy.</p> : null}
           </div>
           <div className="md:col-span-2">
-            <Button type="submit" disabled={busyId === 'upload'}>{busyId === 'upload' ? 'Submitting…' : 'Submit new vault record'}</Button>
+            <div>
+              <Button type="submit" disabled title="The file-binding protocol is not documented for this title-upload route">Submit new vault record</Button>
+              <p role="status" className="mt-2 text-xs text-amber-800">Submission is withheld because the backend requires step-up before buffering this file, but does not document a byte-bound challenge protocol for this route.</p>
+            </div>
           </div>
         </form>
       ) : null}

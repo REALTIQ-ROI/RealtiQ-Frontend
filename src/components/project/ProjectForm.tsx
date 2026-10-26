@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type FormEvent, type KeyboardEvent, type SetStateAction } from 'react';
 import { toast } from 'sonner';
 import type { CreateProjectRequest } from '../../services/projectService';
-import type { MediaItem, ProjectDetail, ProjectMedia, ProjectType } from '../../types';
+import type { MediaItem, ProjectDetail, ProjectType } from '../../types';
 import { nigeriaStateCities, nigeriaStates } from '../../utils/nigeriaLocations';
 import { getCanonicalField, parseCanonicalInput, serializeCanonicalChanges } from '../../utils/canonicalFieldRegistry';
 import MediaUploader from '../property/MediaUploader';
@@ -9,6 +9,7 @@ import Button from '../ui/Button';
 import CanonicalFieldMutationsEditor from '../canonical/CanonicalFieldMutationsEditor';
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
 import { reconcileCanonicalFieldRegistry, serializeCanonicalMutationDrafts, type CanonicalMutationDraft } from '../../utils/canonicalFieldRegistry';
+import { mediaItemsToProjectMedia, projectMediaToItems } from '../../utils/projectMedia';
 
 interface ProjectFormProps {
   initialData?: ProjectDetail;
@@ -27,21 +28,12 @@ const buildStages = getCanonicalField('buildStage')?.options ?? [];
 const paymentOptionValues = getCanonicalField('paymentOptions')?.options ?? [];
 const inputClass = 'w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20';
 const labelClass = 'block text-xs font-bold uppercase tracking-widest text-secondary mb-2';
-
-const toMediaItems = (media?: ProjectMedia[]): MediaItem[] =>
-  (media ?? []).map((item) => ({
-    url: item.url,
-    public_id: item.public_id ?? item.publicId ?? item.url,
-    type: item.type,
-  }));
-
-const toProjectMedia = (media: MediaItem[]): ProjectMedia[] =>
-  media.map((item, index) => ({
-    url: item.url,
-    public_id: item.public_id,
-    type: item.type === 'video' ? 'video' : 'image',
-    isCover: index === 0,
-  }));
+const dateTimeLocalValue = (value?: string) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+};
 
 interface ChipInputProps {
   id: string;
@@ -141,7 +133,7 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
   const [accessRoadConditions, setAccessRoadConditions] = useState<string[]>(Array.isArray(canonical.accessRoadConditions) ? canonical.accessRoadConditions.filter((item): item is string => typeof item === 'string') : []);
   const [accessRoadTouched, setAccessRoadTouched] = useState(false);
   const [buildStage, setBuildStage] = useState(canonicalText('buildStage'));
-  const [media, setMedia] = useState<MediaItem[]>(toMediaItems(initialData?.media));
+  const [media, setMedia] = useState<MediaItem[]>(projectMediaToItems(initialData?.media));
   const [canonicalMutationDrafts, setCanonicalMutationDrafts] = useState<CanonicalMutationDraft[]>([]);
   const { dictionary } = useCanonicalFieldDictionary();
   const [saving, setSaving] = useState(false);
@@ -313,7 +305,7 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
         coordinates,
         amenities,
         features,
-        media: toProjectMedia(media),
+        media: mediaItemsToProjectMedia(media),
         completionDate: completionDate || (preserveEmptyValues ? '' : undefined),
         launchDate: launchDate || (preserveEmptyValues ? '' : undefined),
       });
@@ -538,7 +530,17 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
           <h3 id="project-media-label" className={labelClass}>Project media</h3>
           <MediaUploader value={media} onChange={setMedia} />
           {preserveEmptyValues ? <p className="mt-2 text-xs text-secondary">Saving replaces the complete project media association list. Removing every item clears the list.</p> : null}
-          <p className="mt-2 text-xs text-secondary">The first uploaded media item is used as the cover image.</p>
+          <p className="mt-2 text-xs text-secondary">Choose the cover image explicitly. Ordering and documented captions/attribution are saved with the complete media array.</p>
+          {media.map((item, index) => <fieldset key={item.public_id || item.url || index} className="mt-4 grid gap-3 rounded-lg border border-outline-variant/10 p-3 sm:grid-cols-2">
+              <legend className="px-1 text-xs font-bold">Media {index + 1} · {item.type}</legend>
+              <label className="text-xs font-bold">Caption<input className="mt-1 w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm font-normal" value={item.caption ?? ''} onChange={(event) => setMedia((current) => current.map((mediaItem, mediaIndex) => mediaIndex === index ? { ...mediaItem, caption: event.target.value } : mediaItem))} /></label>
+              <label className="text-xs font-bold">Alt text<input className="mt-1 w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm font-normal" value={item.altText ?? ''} onChange={(event) => setMedia((current) => current.map((mediaItem, mediaIndex) => mediaIndex === index ? { ...mediaItem, altText: event.target.value } : mediaItem))} /></label>
+              <label className="text-xs font-bold">Source<input className="mt-1 w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm font-normal" value={item.source ?? ''} onChange={(event) => setMedia((current) => current.map((mediaItem, mediaIndex) => mediaIndex === index ? { ...mediaItem, source: event.target.value } : mediaItem))} /></label>
+              <label className="text-xs font-bold">Attribution<input className="mt-1 w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm font-normal" value={item.attribution ?? ''} onChange={(event) => setMedia((current) => current.map((mediaItem, mediaIndex) => mediaIndex === index ? { ...mediaItem, attribution: event.target.value } : mediaItem))} /></label>
+              <label className="text-xs font-bold">Captured at<input type="datetime-local" className="mt-1 w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm font-normal" value={dateTimeLocalValue(item.capturedAt)} onChange={(event) => setMedia((current) => current.map((mediaItem, mediaIndex) => mediaIndex === index ? { ...mediaItem, capturedAt: event.target.value ? new Date(event.target.value).toISOString() : undefined } : mediaItem))} /></label>
+              <label className="text-xs font-bold">Construction milestone<input className="mt-1 w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm font-normal" value={item.milestone ?? ''} onChange={(event) => setMedia((current) => current.map((mediaItem, mediaIndex) => mediaIndex === index ? { ...mediaItem, milestone: event.target.value } : mediaItem))} /></label>
+              <label className="flex items-center gap-2 text-sm"><input type="radio" name="project-media-cover" checked={Boolean(item.isCover)} onChange={() => setMedia((current) => current.map((mediaItem, mediaIndex) => ({ ...mediaItem, isCover: mediaIndex === index })))} />Use as project cover</label>
+            </fieldset>)}
         </div>
       </section>
 

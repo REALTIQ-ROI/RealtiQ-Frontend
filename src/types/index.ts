@@ -75,6 +75,16 @@ export interface MediaItem {
   resourceType?: 'image' | 'video' | 'raw' | string;
   type: 'image' | 'video' | 'raw';
   _id?: string;
+  assetId?: string;
+  versionId?: string;
+  uploadSection?: string;
+  caption?: string;
+  altText?: string;
+  source?: string;
+  attribution?: string;
+  capturedAt?: string;
+  milestone?: string;
+  isCover?: boolean;
 }
 
 export interface ProjectUnit {
@@ -101,7 +111,15 @@ export interface ProjectMedia {
   public_id?: string;
   publicId?: string;
   type: 'image' | 'video';
+  assetId?: string;
+  versionId?: string;
+  uploadSection?: string;
   caption?: string;
+  altText?: string;
+  source?: string;
+  attribution?: string;
+  capturedAt?: string;
+  milestone?: string;
   isCover?: boolean;
 }
 

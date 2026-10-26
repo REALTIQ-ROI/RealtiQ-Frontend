@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProfileEvidenceContract } from '../services/verificationCaseService';
-import { buildBoundEvidenceFormData, buildEvidenceStepUpBody, sha256File, validateEvidenceUpload } from './profileEvidenceUpload';
+import { buildBoundEvidenceFormData, buildEvidenceStepUpBody, isProfileEvidenceProcessing, sha256File, validateEvidenceUpload } from './profileEvidenceUpload';
 
 const contract: ProfileEvidenceContract = {
   version: 1, formats: ['application/pdf', 'image/png'], purposes: ['nin'], documentKinds: { nin: ['nin_slip'] }, maxBytes: 1024,
@@ -21,13 +21,33 @@ describe('profile evidence byte-bound multipart request', () => {
     expect(form.get('file')).toBeInstanceOf(File);
   });
 
+  it('binds the exact previous evidence reference for a replacement upload', () => {
+    const file = new File(['replacement'], 'id.pdf', { type: 'application/pdf' });
+    const metadata = { purpose: 'nin', subject: 'self', documentKind: 'nin_slip', operationKey: 'evidence_nin_2026_b2c3', previousEvidenceId: 'evidence-current' };
+    const digest = 'a'.repeat(64);
+    const body = buildEvidenceStepUpBody(metadata, digest);
+    const form = buildBoundEvidenceFormData(file, metadata, digest);
+
+    expect(body).toEqual({ ...metadata, __stepUpFileSha256: digest });
+    expect(form.get('previousEvidenceId')).toBe('evidence-current');
+    expect(form.get('__stepUpFileSha256')).toBe(digest);
+  });
+
   it('enforces active purpose, subject, document-kind, MIME and size policy', () => {
     const metadata = { purpose: 'nin', subject: 'self', documentKind: 'nin_slip', operationKey: 'evidence_123456' };
     expect(validateEvidenceUpload(new File(['abc'], 'id.pdf', { type: 'application/pdf' }), metadata, contract)).toBeNull();
     expect(validateEvidenceUpload(new File(['abc'], 'id.pdf', { type: 'application/pdf' }), { ...metadata, purpose: 'other' }, contract)).toContain('purpose');
     expect(validateEvidenceUpload(new File(['abc'], 'id.pdf', { type: 'application/pdf' }), { ...metadata, subject: 'someone' }, contract)).toContain('subject');
     expect(validateEvidenceUpload(new File(['abc'], 'id.pdf', { type: 'application/pdf' }), { ...metadata, documentKind: 'wrong' }, contract)).toContain('document kind');
-    expect(validateEvidenceUpload(new File(['x'], 'bad.txt', { type: 'text/plain' }), metadata, contract)).toContain('format');
+    expect(validateEvidenceUpload(new File(['x'], 'bad.txt', { type: 'text/plain' }), metadata, contract)).toContain('PDF');
     expect(validateEvidenceUpload(new File(['x'.repeat(2048)], 'large.pdf', { type: 'application/pdf' }), metadata, contract)).toContain('no larger');
+  });
+
+  it('polls only backend-reported processing states and leaves terminal outcomes alone', () => {
+    expect(isProfileEvidenceProcessing('quarantined')).toBe(true);
+    expect(isProfileEvidenceProcessing('scanning')).toBe(true);
+    expect(isProfileEvidenceProcessing('deleting')).toBe(true);
+    expect(isProfileEvidenceProcessing('clean')).toBe(false);
+    expect(isProfileEvidenceProcessing('rejected')).toBe(false);
   });
 });

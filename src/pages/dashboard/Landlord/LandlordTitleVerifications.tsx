@@ -296,12 +296,12 @@ const LandlordTitleVerifications = () => {
                   {titleDocumentTypeOptions.map((option) => <option key={option.value} value={option.label}>{option.label}</option>)}
                 </select>
                 <input className="rounded-lg bg-white px-3 py-2 text-sm" type="file" accept={TITLE_DOCUMENT_ACCEPT} onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} />
-                <Button type="button" variant="secondary" onClick={() => void uploadTitleDocument()} disabled title="Title upload requires an undocumented step-up challenge">
+                <Button type="button" variant="secondary" onClick={() => void uploadTitleDocument()} disabled title="This multipart route has no documented byte-bound step-up protocol">
                   {uploading ? 'Uploading...' : 'Upload'}
                 </Button>
               </div>
             </div>
-            <p className="mt-3 text-xs text-amber-800">Title-file upload needs the server step-up challenge contract. Existing document review remains available.</p>
+            <p className="mt-3 text-xs text-amber-800">Title-file upload requires step-up before the backend buffers the file, but this route has no documented byte-bound challenge protocol. Existing document review remains available.</p>
             <p className="mt-3 text-xs text-secondary">Title document formats accepted: PDF, JPEG, PNG, and WebP. PDFs are stored as raw files; images are stored as image files.</p>
             {riskFlags.length ? (
               <div role="alert" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">

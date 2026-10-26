@@ -1225,14 +1225,14 @@ const PropertyForm = ({
             <button
               type="button"
               disabled
-              title="Title asset upload requires an undocumented step-up challenge"
+              title="This multipart route has no documented byte-bound step-up protocol"
               onClick={() => setTitleDocumentRows((current) => [...current, createTitleDocumentRow()])}
               className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               Add document
             </button>
           </div>
-          <p className="text-xs text-amber-800">Title-file upload requires a server step-up challenge that is not yet documented. You can save the ordinary listing details now.</p>
+          <p className="text-xs text-amber-800">Title-file staging requires step-up before the backend buffers the file, but the handoff does not document a byte-bound protocol for this route. You can save ordinary listing details now.</p>
           {titleDocumentRows.length === 0 ? (
             <p className="rounded-xl border border-dashed border-outline-variant/20 p-5 text-sm text-secondary">
               Title documents are optional. You can add or resubmit them later from the property vault.

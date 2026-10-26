@@ -13,7 +13,7 @@ import type { BoundStepUpChallenge } from '../../../hooks/useBoundStepUp';
 import { stepUpService } from '../../../services/stepUpService';
 import { profileService, type AccountProfileSummary } from '../../../services/profileService';
 import { verificationCaseService, type ProfileEvidence, type ProfileEvidenceContract, type VerificationCase, type VerificationCaseHistoryPage } from '../../../services/verificationCaseService';
-import { buildBoundEvidenceFormData, buildEvidenceStepUpBody, sha256File, validateEvidenceUpload, type BoundEvidenceMetadata } from '../../../utils/profileEvidenceUpload';
+import { buildBoundEvidenceFormData, buildEvidenceStepUpBody, isProfileEvidenceProcessing, sha256File, validateEvidenceUpload, type BoundEvidenceMetadata } from '../../../utils/profileEvidenceUpload';
 
 const formatStatus = (value?: string) => value ? value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Not submitted';
 const formatDate = (date?: string | null) => date ? new Date(date).toLocaleString('en-NG') : 'Not recorded';
@@ -22,6 +22,7 @@ const statusClass = (state: string) => ['clean', 'approved'].includes(state) ? '
 const LandlordVerification = () => {
   const { activeProfile, token } = useAuth();
   const [profile, setProfile] = useState<AccountProfileSummary | null>(null);
+  const [loadedProfileId, setLoadedProfileId] = useState<string | null>(null);
   const [contract, setContract] = useState<ProfileEvidenceContract | null>(null);
   const [evidence, setEvidence] = useState<ProfileEvidence[]>([]);
   const [evidenceCursor, setEvidenceCursor] = useState<string | null>(null);
@@ -38,19 +39,42 @@ const LandlordVerification = () => {
   const [uploadPurpose, setUploadPurpose] = useState('');
   const [uploadSubject, setUploadSubject] = useState('');
   const [uploadDocumentKind, setUploadDocumentKind] = useState('');
+  const [uploadPreviousEvidenceId, setUploadPreviousEvidenceId] = useState('');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [pendingUpload, setPendingUpload] = useState<{ challenge: BoundStepUpChallenge; file: File; metadata: BoundEvidenceMetadata; digest: string; profileId: string; token: string } | null>(null);
+  const [pendingEvidenceAction, setPendingEvidenceAction] = useState<{ id: string; action: 'retry' | 'delete' } | null>(null);
   const operationKeyRef = useRef<{ signature: string; key: string } | null>(null);
   const withdrawStepUp = useBoundStepUp<VerificationCase>();
+  const evidenceStepUp = useBoundStepUp<ProfileEvidence>();
   const profileId = activeProfile?.id;
   const previousProfileId = useRef(profileId);
+  const currentProfileIdRef = useRef(profileId);
+  const loadRequestRef = useRef(0);
+  currentProfileIdRef.current = profileId;
 
   useEffect(() => {
     if (previousProfileId.current !== profileId) {
+      loadRequestRef.current += 1;
       setPendingUpload(null);
+      setPendingEvidenceAction(null);
       operationKeyRef.current = null;
-      setUploadError('The active profile changed. Any pending upload challenge was discarded; the selected file remains available for a new challenge.');
+      setProfile(null);
+      setLoadedProfileId(null);
+      setContract(null);
+      setEvidence([]);
+      setEvidenceCursor(null);
+      setCases([]);
+      setCaseCursor(null);
+      setSelectedEvidence(null);
+      setSelectedCase(null);
+      setHistory(null);
+      setFilePreview(null);
+      setBusy(false);
+      setLoading(false);
+      setUploadPreviousEvidenceId('');
+      setError(null);
+      setUploadError('The active profile changed. Pending verification data and security challenges were cleared; the selected file remains available for a new challenge.');
       previousProfileId.current = profileId;
     }
   }, [profileId]);
@@ -62,7 +86,9 @@ const LandlordVerification = () => {
   }, [contract]);
 
   const load = useCallback(async () => {
-    if (!profileId) { setProfile(null); setContract(null); setEvidence([]); setCases([]); setError('Select an authorized profile to view verification.'); return; }
+    const requestId = ++loadRequestRef.current;
+    const requestedProfileId = profileId;
+    if (!requestedProfileId) { setProfile(null); setLoadedProfileId(null); setContract(null); setEvidence([]); setCases([]); setLoading(false); setError('Select an authorized profile to view verification.'); return; }
     setLoading(true); setError(null);
     try {
       const [current, evidencePage, casePage, evidenceContract] = await Promise.all([
@@ -71,61 +97,134 @@ const LandlordVerification = () => {
         verificationCaseService.listHolderCases({ limit: 25 }),
         verificationCaseService.getEvidenceContract(),
       ]);
-      if (current.profile.id !== profileId) throw new Error('The active profile changed while verification data was loading. Refresh this page.');
+      if (requestId !== loadRequestRef.current || currentProfileIdRef.current !== requestedProfileId) return;
+      if (current.profile.id !== requestedProfileId) throw new Error('The active profile changed while verification data was loading. Refresh this page.');
       setProfile(current.profile);
+      setLoadedProfileId(requestedProfileId);
       setEvidence(evidencePage.evidence);
       setEvidenceCursor(evidencePage.nextCursor);
       setCases(casePage.cases);
       setCaseCursor(casePage.nextCursor);
       setContract(evidenceContract);
-    } catch (raw) { setError(raw instanceof Error ? raw.message : 'Unable to load verification data.'); }
-    finally { setLoading(false); }
+    } catch (raw) { if (requestId === loadRequestRef.current && currentProfileIdRef.current === requestedProfileId) setError(raw instanceof Error ? raw.message : 'Unable to load verification data.'); }
+    finally { if (requestId === loadRequestRef.current) setLoading(false); }
   }, [profileId]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => () => { if (filePreview) URL.revokeObjectURL(filePreview.url); }, [filePreview]);
 
   const cleanEvidenceCount = useMemo(() => evidence.filter((item) => item.state === 'clean').length, [evidence]);
+  const profileDataCurrent = Boolean(profileId && loadedProfileId === profileId);
+  const pendingEvidenceIds = useMemo(() => evidence.filter((item) => isProfileEvidenceProcessing(item.state)).map((item) => item.id).join(','), [evidence]);
+
+  useEffect(() => {
+    if (!profileId || !pendingEvidenceIds) return;
+    const ids = pendingEvidenceIds.split(',');
+    let cancelled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      attempts += 1;
+      const records = await Promise.all(ids.map(async (id) => {
+        try { return await verificationCaseService.getEvidence(id); }
+        catch { return null; }
+      }));
+      if (cancelled || currentProfileIdRef.current !== profileId) return;
+      const updated = new Map(records.filter((item): item is ProfileEvidence => Boolean(item)).map((item) => [item.id, item]));
+      setEvidence((current) => current.map((item) => updated.get(item.id) ?? item));
+      if (attempts < 6 && records.some((item) => item === null || isProfileEvidenceProcessing(item.state))) {
+        timer = setTimeout(() => void poll(), 4000);
+      }
+    };
+    timer = setTimeout(() => void poll(), 2500);
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [pendingEvidenceIds, profileId]);
 
   const loadMoreEvidence = async () => {
     if (!evidenceCursor) return;
+    const requestedProfileId = profileId;
     setBusy(true);
-    try { const page = await verificationCaseService.listEvidence({ limit: 25, before: evidenceCursor }); setEvidence((current) => [...current, ...page.evidence]); setEvidenceCursor(page.nextCursor); }
-    catch (raw) { setError(raw instanceof Error ? raw.message : 'Unable to load more evidence.'); }
-    finally { setBusy(false); }
+    try { const page = await verificationCaseService.listEvidence({ limit: 25, before: evidenceCursor }); if (currentProfileIdRef.current !== requestedProfileId) return; setEvidence((current) => [...current, ...page.evidence]); setEvidenceCursor(page.nextCursor); }
+    catch (raw) { if (currentProfileIdRef.current === requestedProfileId) setError(raw instanceof Error ? raw.message : 'Unable to load more evidence.'); }
+    finally { if (currentProfileIdRef.current === requestedProfileId) setBusy(false); }
   };
 
   const loadMoreCases = async () => {
     if (!caseCursor) return;
+    const requestedProfileId = profileId;
     setBusy(true);
-    try { const page = await verificationCaseService.listHolderCases({ limit: 25, before: caseCursor }); setCases((current) => [...current, ...page.cases]); setCaseCursor(page.nextCursor); }
-    catch (raw) { setError(raw instanceof Error ? raw.message : 'Unable to load more cases.'); }
-    finally { setBusy(false); }
+    try { const page = await verificationCaseService.listHolderCases({ limit: 25, before: caseCursor }); if (currentProfileIdRef.current !== requestedProfileId) return; setCases((current) => [...current, ...page.cases]); setCaseCursor(page.nextCursor); }
+    catch (raw) { if (currentProfileIdRef.current === requestedProfileId) setError(raw instanceof Error ? raw.message : 'Unable to load more cases.'); }
+    finally { if (currentProfileIdRef.current === requestedProfileId) setBusy(false); }
   };
 
   const openEvidence = async (item: ProfileEvidence) => {
+    const requestedProfileId = profileId;
     setBusy(true);
     try {
       const detail = await verificationCaseService.getEvidence(item.id);
+      if (currentProfileIdRef.current !== requestedProfileId) return;
       setSelectedEvidence(detail);
       if (detail.state !== 'clean') return;
       const blob = await verificationCaseService.getEvidenceContent(item.id);
+      if (currentProfileIdRef.current !== requestedProfileId) return;
       setFilePreview({ url: URL.createObjectURL(blob), mimeType: detail.mimeType, id: detail.id });
-    } catch (raw) { setError(raw instanceof Error ? raw.message : 'Unable to open protected evidence.'); }
-    finally { setBusy(false); }
+    } catch (raw) { if (currentProfileIdRef.current === requestedProfileId) setError(raw instanceof Error ? raw.message : 'Unable to open protected evidence.'); }
+    finally { if (currentProfileIdRef.current === requestedProfileId) setBusy(false); }
   };
 
   const openCase = async (item: VerificationCase) => {
+    const requestedProfileId = profileId;
     setBusy(true);
     try {
       const [detail, events] = await Promise.all([
         verificationCaseService.getHolderCase(item.id),
         verificationCaseService.holderHistory(item.id),
       ]);
+      if (currentProfileIdRef.current !== requestedProfileId) return;
       setSelectedCase(detail);
       setHistory(events);
-    } catch (raw) { setError(raw instanceof Error ? raw.message : 'Unable to load case details.'); }
-    finally { setBusy(false); }
+    } catch (raw) { if (currentProfileIdRef.current === requestedProfileId) setError(raw instanceof Error ? raw.message : 'Unable to load case details.'); }
+    finally { if (currentProfileIdRef.current === requestedProfileId) setBusy(false); }
+  };
+
+  const beginEvidenceAction = async (item: ProfileEvidence, action: 'retry' | 'delete') => {
+    if (action === 'retry' && item.state !== 'retry') return;
+    if (action === 'delete' && ['deleting', 'privacy_deleting', 'deleted'].includes(item.state)) return;
+    if (action === 'delete' && !window.confirm('Request removal of this evidence? The server will reject removal when it is still referenced by an onboarding draft, submitted case or signatory record.')) return;
+    const body = { expectedVersion: item.version };
+    const path = `/api/profiles/current/onboarding/evidence/${encodeURIComponent(item.id)}${action === 'retry' ? '/retry' : ''}`;
+    setPendingEvidenceAction({ id: item.id, action });
+    const started = await evidenceStepUp.begin({
+      method: action === 'retry' ? 'POST' : 'DELETE',
+      path,
+      body,
+      label: action === 'retry' ? `Retry evidence scan ${item.id}` : `Remove profile evidence ${item.id}`,
+      execute: (challengeId, exactBody) => action === 'retry'
+        ? verificationCaseService.retryEvidence(item.id, exactBody, challengeId)
+        : verificationCaseService.deleteEvidence(item.id, exactBody, challengeId),
+    });
+    if (!started) setPendingEvidenceAction(null);
+  };
+
+  const completeEvidenceAction = async (code: string) => {
+    const requestedProfileId = profileId;
+    const action = pendingEvidenceAction?.action;
+    const result = await evidenceStepUp.complete(code);
+    if (!result.ok) {
+      if (!evidenceStepUp.challenge) {
+        setPendingEvidenceAction(null);
+        toast.error(result.error ?? 'The evidence operation could not be completed. Refresh the evidence list before trying again.');
+      }
+      return false;
+    }
+    if (currentProfileIdRef.current !== requestedProfileId) { setPendingEvidenceAction(null); return false; }
+    setEvidence((current) => current.map((item) => item.id === result.value.id ? result.value : item));
+    setSelectedEvidence((current) => current?.id === result.value.id ? result.value : current);
+    setPendingEvidenceAction(null);
+    toast.success(action === 'retry' ? 'Evidence scan retry was queued. The existing file remains subject to scan review.' : 'Evidence removal was queued. Its current state remains visible until processing completes.');
+    await load();
+    return true;
   };
 
   const beginWithdraw = async () => {
@@ -139,8 +238,13 @@ const LandlordVerification = () => {
   };
 
   const completeWithdraw = async (code: string) => {
+    const requestedProfileId = profileId;
     const result = await withdrawStepUp.complete(code);
-    if (!result.ok) return false;
+    if (!result.ok) {
+      if (!withdrawStepUp.challenge) toast.error(result.error ?? 'The verification case could not be withdrawn. Refresh its status before trying again.');
+      return false;
+    }
+    if (currentProfileIdRef.current !== requestedProfileId) return false;
     setSelectedCase(result.value);
     setCases((current) => current.map((item) => item.id === result.value.id ? result.value : item));
     toast.success('Verification case withdrawn.');
@@ -152,10 +256,16 @@ const LandlordVerification = () => {
     if (!profileId || !token || !contract || !uploadFile || uploadBusy || pendingUpload) return;
     const allowedKinds = contract.documentKinds[uploadPurpose] ?? [];
     const documentKind = uploadDocumentKind || (allowedKinds.length ? '' : uploadPurpose);
-    const signature = [uploadFile.name, uploadFile.size, uploadFile.type, uploadFile.lastModified, uploadPurpose, uploadSubject, documentKind].join('|');
+    const signature = [uploadFile.name, uploadFile.size, uploadFile.type, uploadFile.lastModified, uploadPurpose, uploadSubject, documentKind, uploadPreviousEvidenceId].join('|');
     const operationKey = operationKeyRef.current?.signature === signature ? operationKeyRef.current.key : crypto.randomUUID();
     operationKeyRef.current = { signature, key: operationKey };
-    const metadata: BoundEvidenceMetadata = { purpose: uploadPurpose, subject: uploadSubject, documentKind, operationKey };
+    const metadata: BoundEvidenceMetadata = {
+      purpose: uploadPurpose,
+      subject: uploadSubject,
+      documentKind,
+      operationKey,
+      ...(uploadPreviousEvidenceId ? { previousEvidenceId: uploadPreviousEvidenceId } : {}),
+    };
     const invalid = validateEvidenceUpload(uploadFile, metadata, contract);
     if (invalid) { setUploadError(invalid); return; }
     setUploadBusy(true); setUploadError(null);
@@ -189,12 +299,14 @@ const LandlordVerification = () => {
       setPendingUpload(null);
       const form = buildBoundEvidenceFormData(pending.file, pending.metadata, pending.digest);
       const created = await verificationCaseService.uploadEvidence(form, pending.challenge.challengeId);
+      if (currentProfileIdRef.current !== pending.profileId) return false;
       setEvidence((current) => [created, ...current.filter((item) => item.id !== created.id)]);
       setUploadFile(null); setUploadDocumentKind(''); operationKeyRef.current = null;
       toast.success('Evidence upload accepted. The file is quarantined while the configured scan completes.');
       await load();
       return true;
     } catch (raw) {
+      if (currentProfileIdRef.current !== pending.profileId) return false;
       const codeValue = raw instanceof ApiRequestError ? raw.code : undefined;
       if (codeValue === 'AUTH_FACTOR_CODE_INVALID' || codeValue === 'AUTH_FACTOR_RATE_LIMITED') {
         setUploadError(raw instanceof Error ? raw.message : 'Authenticator verification was not accepted.');
@@ -225,11 +337,12 @@ const LandlordVerification = () => {
         </header>
         {loading ? <LoadingState label="Loading profile verification..." /> : null}
         {error ? <ErrorState message={error} onRetry={() => void load()} /> : null}
-        {profile ? <section className="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6 lg:p-8">
+        {!profileDataCurrent && profileId && !loading && !error ? <LoadingState label="Refreshing data for the selected profile..." /> : null}
+        {profileDataCurrent && profile ? <section className="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6 lg:p-8">
           <p className="text-xs font-bold uppercase tracking-widest text-secondary">Current profile</p><h2 className="mt-2 text-2xl font-extrabold">{profile.name}</h2>
           <dl className="mt-6 grid gap-4 text-sm md:grid-cols-4"><div className="rounded-xl bg-white/70 p-4"><dt className="text-xs font-bold uppercase text-secondary">Verification</dt><dd className="mt-2 font-semibold">{formatStatus(profile.verification?.status)}</dd></div><div className="rounded-xl bg-white/70 p-4"><dt className="text-xs font-bold uppercase text-secondary">Profile state</dt><dd className="mt-2 font-semibold">{formatStatus(profile.status)}</dd></div><div className="rounded-xl bg-white/70 p-4"><dt className="text-xs font-bold uppercase text-secondary">Last reviewed</dt><dd className="mt-2 font-semibold">{formatDate(profile.verification?.reviewedAt)}</dd></div><div className="rounded-xl bg-white/70 p-4"><dt className="text-xs font-bold uppercase text-secondary">Clean evidence</dt><dd className="mt-2 font-semibold">{cleanEvidenceCount}</dd></div></dl>
         </section> : null}
-        {contract ? <section className="rounded-2xl border border-outline-variant/10 bg-white p-6">
+        {profileDataCurrent && contract ? <section className="rounded-2xl border border-outline-variant/10 bg-white p-6">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Evidence requirements</h2><p className="mt-1 text-sm text-secondary">Current policy version {contract.version} · maximum file size {Math.ceil(contract.maxBytes / 1024 / 1024)} MB · accepted formats {contract.formats.join(', ')}</p></div><span className="text-xs text-secondary">Upload policy: {formatStatus(contract.policies.upload?.state)} · identity policy: {formatStatus(contract.policies.acceptedIdentity?.state)}</span></div>
           <p className="mt-3 text-sm"><strong>Supported purposes:</strong> {contract.purposes.map((purpose) => purpose.replaceAll('_', ' ')).join(' · ')}</p>
           {Object.keys(contract.documentKinds).length ? <p className="mt-2 text-sm"><strong>Configured document kinds:</strong> {Object.entries(contract.documentKinds).map(([purpose, kinds]) => `${purpose.replaceAll('_', ' ')}: ${kinds.map((kind) => kind.replaceAll('_', ' ')).join(', ')}`).join(' · ')}</p> : null}
@@ -240,28 +353,30 @@ const LandlordVerification = () => {
             <h3 className="font-bold">Upload private evidence</h3>
             <p className="mt-1 text-xs text-secondary">The actual file bytes are SHA-256 hashed and bound with every upload metadata field to a one-use authenticator challenge. The private upload begins in quarantine while scanning runs.</p>
             {contract.policies.upload?.state !== 'configured' ? <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">The evidence upload policy is {formatStatus(contract.policies.upload?.state)}. Submission is unavailable until the backend policy is configured.</p> : <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="text-xs font-bold">Purpose<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadPurpose} onChange={(event) => { setUploadPurpose(event.target.value); setUploadDocumentKind(''); setPendingUpload(null); operationKeyRef.current = null; }}><option value="">Choose purpose</option>{contract.purposes.map((purpose) => <option key={purpose} value={purpose}>{purpose.replaceAll('_', ' ')}</option>)}</select></label>
-              <label className="text-xs font-bold">Subject<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadSubject} onChange={(event) => { setUploadSubject(event.target.value); setPendingUpload(null); operationKeyRef.current = null; }}><option value="">Choose subject</option>{[...contract.subjects.fixed, ...contract.subjects.personFields].map((subject) => <option key={subject} value={subject}>{subject}</option>)}</select></label>
+              <label className="text-xs font-bold">Purpose<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadPurpose} onChange={(event) => { setUploadPurpose(event.target.value); setUploadDocumentKind(''); setUploadPreviousEvidenceId(''); setPendingUpload(null); operationKeyRef.current = null; }}><option value="">Choose purpose</option>{contract.purposes.map((purpose) => <option key={purpose} value={purpose}>{purpose.replaceAll('_', ' ')}</option>)}</select></label>
+              <label className="text-xs font-bold">Subject<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadSubject} onChange={(event) => { setUploadSubject(event.target.value); setUploadPreviousEvidenceId(''); setPendingUpload(null); operationKeyRef.current = null; }}><option value="">Choose subject</option>{[...contract.subjects.fixed, ...contract.subjects.personFields].map((subject) => <option key={subject} value={subject}>{subject}</option>)}</select></label>
               <label className="text-xs font-bold">Document kind<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadDocumentKind || (contract.documentKinds[uploadPurpose]?.length ? '' : uploadPurpose)} onChange={(event) => { setUploadDocumentKind(event.target.value); setPendingUpload(null); operationKeyRef.current = null; }}><option value={contract.documentKinds[uploadPurpose]?.length ? '' : uploadPurpose}>{contract.documentKinds[uploadPurpose]?.length ? 'Choose document kind' : `Use documented default: ${uploadPurpose || 'purpose'}`}</option>{(contract.documentKinds[uploadPurpose] ?? []).map((kind) => <option key={kind} value={kind}>{kind.replaceAll('_', ' ')}</option>)}</select></label>
               <label className="text-xs font-bold">File<input type="file" accept={contract.formats.join(',')} className="mt-1 block w-full text-sm font-normal" onChange={(event) => { setUploadFile(event.target.files?.[0] ?? null); setPendingUpload(null); operationKeyRef.current = null; setUploadError(null); }} /><span className="mt-1 block font-normal text-secondary">Maximum {Math.ceil(Math.min(contract.maxBytes, 50 * 1024 * 1024) / 1024 / 1024)} MB</span></label>
+              <label className="text-xs font-bold">Replace existing evidence version (optional)<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadPreviousEvidenceId} onChange={(event) => { setUploadPreviousEvidenceId(event.target.value); setPendingUpload(null); operationKeyRef.current = null; }}><option value="">Submit as a new evidence record</option>{evidence.filter((item) => item.purpose === uploadPurpose && item.subject === uploadSubject && !['deleted', 'deleting', 'privacy_deleting'].includes(item.state)).map((item) => <option key={item.id} value={item.id}>{formatStatus(item.state)} · v{item.version} · {item.id}</option>)}</select><span className="mt-1 block font-normal text-secondary">The server verifies that the selected record is the current version for this purpose and subject.</span></label>
               <div className="md:col-span-2"><Button type="button" disabled={uploadBusy || Boolean(pendingUpload) || !uploadFile || !uploadPurpose || !uploadSubject || !profileId} onClick={() => void beginEvidenceUpload()}>{uploadBusy ? 'Preparing secure upload…' : 'Continue with authenticator'}</Button>{uploadError ? <p role="alert" className="mt-2 text-sm text-error">{uploadError}</p> : null}</div>
             </div>}
           </div>
         </section> : null}
-        <section className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-2xl border border-outline-variant/10 bg-white p-6"><div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-extrabold">Private evidence</h2><p className="mt-1 text-xs text-secondary">Only clean evidence can be opened; the server rechecks authorization.</p></div><Button type="button" variant="secondary" disabled={busy || !evidenceCursor} onClick={() => void loadMoreEvidence()}>Load more</Button></div>
-            <div className="mt-4 space-y-2">{evidence.map((item) => <article key={item.id} className="rounded-lg bg-surface-container-low p-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold">{item.purpose.replaceAll('_', ' ')} · {item.documentKind.replaceAll('_', ' ')}</p><p className="mt-1 text-xs text-secondary">{item.subject} · Version {item.version} · {Math.ceil(item.size / 1024)} KB · Added {formatDate(item.createdAt)}</p></div><span className={`text-xs font-bold ${statusClass(item.state)}`}>{formatStatus(item.state)}</span></div>{item.errorCode ? <p className="mt-2 text-xs text-error">{item.errorCode}</p> : null}<Button type="button" variant="ghost" disabled={busy || item.state !== 'clean'} onClick={() => void openEvidence(item)}>Open authorized file</Button></article>)}{!evidence.length ? <p className="rounded-lg border border-dashed p-4 text-sm text-secondary">No evidence records returned for this profile.</p> : null}</div>
+        {profileDataCurrent ? <section className="grid gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl border border-outline-variant/10 bg-white p-6"><div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-extrabold">Private evidence</h2><p className="mt-1 text-xs text-secondary">Only clean evidence can be opened; the server rechecks authorization. Pending scan/removal states refresh automatically for a bounded period.</p></div><Button type="button" variant="secondary" disabled={busy || !evidenceCursor} onClick={() => void loadMoreEvidence()}>Load more</Button></div>
+            <div className="mt-4 space-y-2">{evidence.map((item) => <article key={item.id} className="rounded-lg bg-surface-container-low p-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold">{item.purpose.replaceAll('_', ' ')} · {item.documentKind.replaceAll('_', ' ')}</p><p className="mt-1 text-xs text-secondary">{item.subject} · Version {item.version} · {Math.ceil(item.size / 1024)} KB · Added {formatDate(item.createdAt)}</p>{item.previousEvidenceId ? <p className="mt-1 break-all text-xs text-secondary">Replaces evidence version {item.previousEvidenceId}</p> : null}</div><span className={`text-xs font-bold ${statusClass(item.state)}`}>{formatStatus(item.state)}</span></div>{item.errorCode ? <p className="mt-2 text-xs text-error">{item.errorCode}</p> : null}<div className="mt-2 flex flex-wrap gap-2"><Button type="button" variant="ghost" disabled={busy || item.state !== 'clean'} onClick={() => void openEvidence(item)}>Open authorized file</Button>{item.state === 'retry' ? <Button type="button" variant="secondary" disabled={busy || evidenceStepUp.busy || Boolean(evidenceStepUp.challenge)} onClick={() => void beginEvidenceAction(item, 'retry')}>Retry scan with authenticator</Button> : null}{!['deleting', 'privacy_deleting', 'deleted'].includes(item.state) ? <Button type="button" variant="secondary" disabled={busy || evidenceStepUp.busy || Boolean(evidenceStepUp.challenge)} onClick={() => void beginEvidenceAction(item, 'delete')}>Request removal</Button> : null}{item.state === 'deleting' || item.state === 'privacy_deleting' ? <span role="status" className="self-center text-xs text-secondary">Removal is processing.</span> : null}</div></article>)}{!evidence.length ? <p className="rounded-lg border border-dashed p-4 text-sm text-secondary">No evidence records returned for this profile.</p> : null}</div>
           </div>
           <div className="rounded-2xl border border-outline-variant/10 bg-white p-6"><div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-extrabold">Verification cases</h2><p className="mt-1 text-xs text-secondary">Case state and history are returned by the current-profile API.</p></div><Button type="button" variant="secondary" disabled={busy || !caseCursor} onClick={() => void loadMoreCases()}>Load more</Button></div>
             <div className="mt-4 space-y-2">{cases.map((item) => <article key={item.id} className="rounded-lg bg-surface-container-low p-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold capitalize">{item.kind} · {item.structure}</p><p className="mt-1 text-xs text-secondary">Case {item.id} · Version {item.version} · Draft version {item.draftVersion}</p></div><span className={`text-xs font-bold ${statusClass(item.state)}`}>{formatStatus(item.state)}</span></div><p className="mt-1 text-xs text-secondary">Submitted {formatDate(item.submittedAt)} · Reviewed {formatDate(item.reviewedAt)} · Expires {formatDate(item.expiresAt)}</p><Button type="button" variant="ghost" disabled={busy} onClick={() => void openCase(item)}>Details and history</Button></article>)}{!cases.length ? <p className="rounded-lg border border-dashed p-4 text-sm text-secondary">No verification cases returned for this profile.</p> : null}</div>
             <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4"><h3 className="font-bold text-amber-950">Submit a verification case</h3><p className="mt-1 text-sm text-amber-900">Submission is withheld because the handoff does not define the response DTO for <code>GET /api/profiles/current/onboarding</code>, including the current draft version and declared person-field paths needed to construct the exact request. Existing clean evidence is not enough to safely infer those fields.</p><Button type="button" className="mt-3" disabled title="Current onboarding draft response contract is incomplete">Case submission unavailable</Button></div>
           </div>
-        </section>
-        {selectedEvidence ? <section className="rounded-2xl border border-outline-variant/10 bg-white p-6"><div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Evidence detail</h2><p className="mt-1 text-sm text-secondary">{selectedEvidence.id} · {selectedEvidence.mimeType} · Version {selectedEvidence.version}</p></div><Button type="button" variant="secondary" onClick={() => setSelectedEvidence(null)}>Close details</Button></div><p className="mt-3 text-sm">Purpose {selectedEvidence.purpose} · Subject {selectedEvidence.subject} · State {formatStatus(selectedEvidence.state)} · Scan date {formatDate(selectedEvidence.scannedAt)}</p></section> : null}
-        {selectedCase ? <section className="rounded-2xl border border-outline-variant/10 bg-white p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Case detail and history</h2><p className="mt-1 text-sm text-secondary">{selectedCase.kind} · {selectedCase.state} · Version {selectedCase.version}</p></div><Button type="button" variant="secondary" onClick={() => setSelectedCase(null)}>Close case</Button></div><p className="mt-3 text-sm">Rejection codes: {selectedCase.rejectionCodes.length ? selectedCase.rejectionCodes.join(', ') : 'None returned.'}</p><div className="mt-4 space-y-2">{history?.events.map((event) => <div key={event.id} className="rounded-lg bg-surface-container-low p-3 text-sm"><strong>{event.action}</strong><span className="ml-2 text-xs text-secondary">Version {event.version} · {formatDate(event.at)}</span></div>)}{!history?.events.length ? <p className="text-sm text-secondary">No case history events returned.</p> : null}</div>{history?.nextCursor ? <Button type="button" variant="secondary" disabled={busy} className="mt-3" onClick={async () => { setBusy(true); try { const page = await verificationCaseService.holderHistory(selectedCase.id, history.nextCursor ?? undefined); setHistory((current) => current ? { events: [...current.events, ...page.events], nextCursor: page.nextCursor } : page); } catch (raw) { setError(raw instanceof Error ? raw.message : 'Unable to load history.'); } finally { setBusy(false); } }}>Load more history</Button> : null}{['submitted', 'under_review'].includes(selectedCase.state) ? <Button type="button" variant="secondary" className="mt-4" disabled={busy || withdrawStepUp.busy || Boolean(withdrawStepUp.challenge)} onClick={() => void beginWithdraw()}>Withdraw case</Button> : null}</section> : null}
-        {filePreview ? <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 p-4" role="presentation"><section role="dialog" aria-modal="true" aria-label="Private evidence viewer" className="flex h-[90vh] w-full max-w-5xl flex-col rounded-xl bg-white p-4"><div className="flex items-center justify-between"><h2 className="font-bold">Authorized private evidence · {filePreview.id}</h2><Button type="button" variant="secondary" onClick={() => { URL.revokeObjectURL(filePreview.url); setFilePreview(null); }}>Close viewer</Button></div><div className="mt-3 min-h-0 flex-1">{filePreview.mimeType.startsWith('image/') ? <img src={filePreview.url} alt="Private profile evidence" className="mx-auto h-full max-w-full object-contain" /> : <iframe title="Private evidence document" src={filePreview.url} sandbox="" className="h-full w-full rounded border" />}</div></section></div> : null}
-        <StepUpDialog challenge={withdrawStepUp.challenge} busy={withdrawStepUp.busy} error={withdrawStepUp.error} onCancel={withdrawStepUp.cancel} onSubmit={completeWithdraw} />
-        <StepUpDialog challenge={pendingUpload?.challenge ?? null} busy={uploadBusy} error={uploadError} onCancel={() => { setPendingUpload(null); setUploadError(null); }} onSubmit={completeEvidenceUpload} />
+        </section> : null}
+        {profileDataCurrent && selectedEvidence ? <section className="rounded-2xl border border-outline-variant/10 bg-white p-6"><div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Evidence detail</h2><p className="mt-1 text-sm text-secondary">{selectedEvidence.id} · {selectedEvidence.mimeType} · Version {selectedEvidence.version}</p></div><Button type="button" variant="secondary" onClick={() => setSelectedEvidence(null)}>Close details</Button></div><p className="mt-3 text-sm">Purpose {selectedEvidence.purpose} · Subject {selectedEvidence.subject} · State {formatStatus(selectedEvidence.state)} · Scan date {formatDate(selectedEvidence.scannedAt)}{selectedEvidence.previousEvidenceId ? ` · Previous evidence ${selectedEvidence.previousEvidenceId}` : ''}</p></section> : null}
+        {profileDataCurrent && selectedCase ? <section className="rounded-2xl border border-outline-variant/10 bg-white p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Case detail and history</h2><p className="mt-1 text-sm text-secondary">{selectedCase.kind} · {selectedCase.state} · Version {selectedCase.version}</p></div><Button type="button" variant="secondary" onClick={() => setSelectedCase(null)}>Close case</Button></div><p className="mt-3 text-sm">Rejection codes: {selectedCase.rejectionCodes.length ? selectedCase.rejectionCodes.join(', ') : 'None returned.'}</p><div className="mt-4 space-y-2">{history?.events.map((event) => <div key={event.id} className="rounded-lg bg-surface-container-low p-3 text-sm"><strong>{event.action}</strong><span className="ml-2 text-xs text-secondary">Version {event.version} · {formatDate(event.at)}</span></div>)}{!history?.events.length ? <p className="text-sm text-secondary">No case history events returned.</p> : null}</div>{history?.nextCursor ? <Button type="button" variant="secondary" disabled={busy} className="mt-3" onClick={async () => { const requestedProfileId = profileId; setBusy(true); try { const page = await verificationCaseService.holderHistory(selectedCase.id, history.nextCursor ?? undefined); if (currentProfileIdRef.current === requestedProfileId) setHistory((current) => current ? { events: [...current.events, ...page.events], nextCursor: page.nextCursor } : page); } catch (raw) { if (currentProfileIdRef.current === requestedProfileId) setError(raw instanceof Error ? raw.message : 'Unable to load history.'); } finally { if (currentProfileIdRef.current === requestedProfileId) setBusy(false); } }}>Load more history</Button> : null}{['submitted', 'under_review'].includes(selectedCase.state) ? <Button type="button" variant="secondary" className="mt-4" disabled={busy || withdrawStepUp.busy || Boolean(withdrawStepUp.challenge)} onClick={() => void beginWithdraw()}>Withdraw case</Button> : null}</section> : null}
+        {profileDataCurrent && filePreview ? <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 p-4" role="presentation"><section role="dialog" aria-modal="true" aria-label="Private evidence viewer" className="flex h-[90vh] w-full max-w-5xl flex-col rounded-xl bg-white p-4"><div className="flex items-center justify-between"><h2 className="font-bold">Authorized private evidence · {filePreview.id}</h2><Button type="button" variant="secondary" onClick={() => { URL.revokeObjectURL(filePreview.url); setFilePreview(null); }}>Close viewer</Button></div><div className="mt-3 min-h-0 flex-1">{filePreview.mimeType.startsWith('image/') ? <img src={filePreview.url} alt="Private profile evidence" className="mx-auto h-full max-w-full object-contain" /> : <iframe title="Private evidence document" src={filePreview.url} sandbox="" className="h-full w-full rounded border" />}</div></section></div> : null}
+        <StepUpDialog challenge={profileDataCurrent ? withdrawStepUp.challenge : null} busy={withdrawStepUp.busy} error={withdrawStepUp.error} onCancel={withdrawStepUp.cancel} onSubmit={completeWithdraw} />
+        <StepUpDialog challenge={profileDataCurrent ? evidenceStepUp.challenge : null} busy={evidenceStepUp.busy} error={evidenceStepUp.error} onCancel={() => { evidenceStepUp.cancel(); setPendingEvidenceAction(null); }} onSubmit={completeEvidenceAction} />
+        <StepUpDialog challenge={profileDataCurrent && pendingUpload && pendingUpload.profileId === profileId ? pendingUpload.challenge : null} busy={uploadBusy} error={uploadError} onCancel={() => { setPendingUpload(null); setUploadError(null); }} onSubmit={completeEvidenceUpload} />
       </main>
     </LandlordPortalLayout>
   );

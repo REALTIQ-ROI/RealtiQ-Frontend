@@ -35,6 +35,44 @@ describe('titleVerificationService', () => {
     await titleVerificationService.revokeTitleVerification('tv1', { revocationReason: 'Corrected document.' });
     expect(mockedApi.patch).toHaveBeenCalledWith('/title-verifications/tv1/revoke', {
       revocationReason: 'Corrected document.',
+    }, undefined);
+  });
+
+  it('attaches the bound step-up challenge to the exact review and revoke requests', async () => {
+    mockedApi.patch.mockResolvedValue({ data: { verification: { verificationId: 'tv1', status: 'published' } } });
+
+    const approveBody = { decision: 'approve' as const, reviewNotes: 'Reviewed.' };
+    await titleVerificationService.reviewTitleVerification('tv1', approveBody, 'access-token', 'challenge-1');
+    expect(mockedApi.patch).toHaveBeenCalledWith('/title-verifications/tv1/review', approveBody, {
+      headers: { Authorization: 'Bearer access-token', 'X-Step-Up-Challenge': 'challenge-1' },
+    });
+
+    const revokeBody = { revocationReason: 'Superseded.' };
+    await titleVerificationService.revokeTitleVerification('tv1', revokeBody, 'challenge-2');
+    expect(mockedApi.patch).toHaveBeenCalledWith('/title-verifications/tv1/revoke', revokeBody, {
+      headers: { 'X-Step-Up-Challenge': 'challenge-2' },
+    });
+  });
+
+  it('sends an empty JSON body and the one-use challenge for external-anchor requests', async () => {
+    mockedApi.post.mockResolvedValue({ data: { record: { publicVerificationId: 'RTQ-TV-2026-000001' } } });
+
+    await titleVerificationService.requestRegistryExternalAnchor('RTQ-TV-2026-000001', 'challenge-3');
+
+    expect(mockedApi.post).toHaveBeenCalledWith(
+      '/title-registry/RTQ-TV-2026-000001/request-external-anchor',
+      {},
+      { headers: { 'X-Step-Up-Challenge': 'challenge-3' } },
+    );
+  });
+
+  it('binds the retry-anchor request to the step-up challenge', async () => {
+    mockedApi.post.mockResolvedValue({ data: { verification: { verificationId: 'tv1', status: 'published' } } });
+
+    await titleVerificationService.retryTitleVerificationExternalAnchor('tv1', 'challenge-4');
+
+    expect(mockedApi.post).toHaveBeenCalledWith('/title-verifications/tv1/retry-anchor', {}, {
+      headers: { 'X-Step-Up-Challenge': 'challenge-4' },
     });
   });
 
@@ -52,11 +90,11 @@ describe('titleVerificationService', () => {
     expect(form.get('file')).toBe(file);
   });
 
-  it('requests optional external anchoring through the registry endpoint', async () => {
+  it('requests optional external anchoring through the registry endpoint without a challenge', async () => {
     mockedApi.post.mockResolvedValue({ data: { record: { publicVerificationId: 'RTQ-TV-2026-000001' } } });
 
     await titleVerificationService.requestRegistryExternalAnchor('RTQ-TV-2026-000001');
 
-    expect(mockedApi.post).toHaveBeenCalledWith('/title-registry/RTQ-TV-2026-000001/request-external-anchor');
+    expect(mockedApi.post).toHaveBeenCalledWith('/title-registry/RTQ-TV-2026-000001/request-external-anchor', {}, undefined);
   });
 });

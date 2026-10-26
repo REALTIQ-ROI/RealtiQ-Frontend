@@ -4,11 +4,13 @@ import { Link } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 import AdminLayout from '../../../components/layout/AdminLayout';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
 import Button from '../../../components/ui/Button';
 import LoadingState from '../../../components/ui/LoadingState';
 import RegistryAuditDetails from '../../../components/title/RegistryAuditDetails';
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../../lib/axios';
 import { documentService } from '../../../services/documentService';
 import { titleVerificationService } from '../../../services/titleVerificationService';
@@ -16,7 +18,7 @@ import type { TitleDocumentRecord, TitleDocumentType, TitleRiskFlag, TitleVerifi
 import { documentTypeLabel, externalAnchorLabel, formatDateTime, riskFlagText, shortenHash, titleDocumentTypeOptions } from '../../../utils/titleVerification';
 
 const statusOptions: Array<TitleVerificationStatus | 'all'> = ['all', 'pending', 'under_review', 'approved', 'published', 'rejected', 'revoked', 'superseded'];
-type PendingAction = 'approve' | 'reject' | 'revoke' | 'external-anchor';
+type PendingAction = 'approve' | 'reject' | 'revoke' | 'external-anchor' | 'retry-anchor';
 
 const propertyName = (verification: TitleVerification) => {
   const ref = verification.property ?? verification.propertyId;
@@ -37,6 +39,7 @@ const TitleVerificationReview = () => {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const stepUp = useBoundStepUp<string>();
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -103,22 +106,27 @@ const TitleVerificationReview = () => {
       inputValidator: (value) => decision === 'reject' && !value.trim() ? 'Enter a rejection reason.' : undefined,
     });
     if (!result.isConfirmed) return;
+    const verificationId = selected.verificationId;
+    const body = decision === 'approve'
+      ? { decision, reviewNotes: result.value || 'Title documents reviewed and approved.' }
+      : { decision, rejectionReason: result.value };
     setPendingAction(decision);
-    try {
-      const response = await titleVerificationService.reviewTitleVerification(selected.verificationId, {
-        decision,
-        reviewNotes: decision === 'approve' ? result.value || 'Title documents reviewed and approved.' : undefined,
-        rejectionReason: decision === 'reject' ? result.value : undefined,
-      }, token);
-      toast.success(decision === 'approve' ? 'Title verification approved and published in the RealtIQ registry.' : 'Title verification rejected.');
-      await refreshAll(response.verification.verificationId);
-    } catch (raw) {
-      const err = raw instanceof ApiRequestError ? raw : null;
-      toast.error(err?.message ?? (raw instanceof Error ? raw.message : 'Unable to review title verification.'));
-      if (err?.status === 409) await refreshAll(selected.verificationId);
-    } finally {
-      setPendingAction(null);
-    }
+    const started = await stepUp.begin({
+      method: 'PATCH',
+      path: `/api/title-verifications/${encodeURIComponent(verificationId)}/review`,
+      body,
+      label: `${decision === 'approve' ? 'Approve' : 'Reject'} title verification ${verificationId}`,
+      execute: async (challengeId, exactBody) => {
+        try {
+          const response = await titleVerificationService.reviewTitleVerification(verificationId, exactBody, token, challengeId);
+          return response.verification.verificationId;
+        } catch (raw) {
+          if (raw instanceof ApiRequestError && raw.status === 409) await refreshAll(verificationId);
+          throw raw;
+        }
+      },
+    });
+    if (!started) setPendingAction(null);
   };
 
   const revoke = async () => {
@@ -134,31 +142,90 @@ const TitleVerificationReview = () => {
       inputValidator: (value) => !value.trim() ? 'Enter a revocation reason.' : undefined,
     });
     if (!result.isConfirmed) return;
+    const verificationId = selected.verificationId;
+    const body = { revocationReason: result.value ?? '' };
     setPendingAction('revoke');
-    try {
-      await titleVerificationService.revokeTitleVerification(selected.verificationId, { revocationReason: result.value ?? '' });
-      toast.success('Title verification revoked. The public registry page remains visible with revoked status.');
-      await refreshAll(selected.verificationId);
-    } catch (raw) {
-      toast.error(raw instanceof Error ? raw.message : 'Unable to revoke title verification.');
-    } finally {
-      setPendingAction(null);
-    }
+    const started = await stepUp.begin({
+      method: 'PATCH',
+      path: `/api/title-verifications/${encodeURIComponent(verificationId)}/revoke`,
+      body,
+      label: `Revoke title verification ${verificationId}`,
+      execute: async (challengeId, exactBody) => {
+        try {
+          const response = await titleVerificationService.revokeTitleVerification(verificationId, exactBody, challengeId);
+          return response.verification.verificationId;
+        } catch (raw) {
+          if (raw instanceof ApiRequestError && raw.status === 409) await refreshAll(verificationId);
+          throw raw;
+        }
+      },
+    });
+    if (!started) setPendingAction(null);
   };
 
   const requestExternalAnchor = async () => {
     if (!selected?.publicVerificationId) return;
     setPendingAction('external-anchor');
-    try {
-      await titleVerificationService.requestRegistryExternalAnchor(selected.publicVerificationId);
-      toast.success('External anchor requested.');
-      await refreshAll(selected.verificationId);
-    } catch (raw) {
-      const err = raw instanceof ApiRequestError ? raw : null;
-      toast[err?.status === 409 ? 'info' : 'error'](raw instanceof Error ? raw.message : 'Unable to request external anchor.');
-    } finally {
-      setPendingAction(null);
+    const verificationId = selected.verificationId;
+    const publicVerificationId = selected.publicVerificationId;
+    const started = await stepUp.begin({
+      method: 'POST',
+      path: `/api/title-registry/${encodeURIComponent(publicVerificationId)}/request-external-anchor`,
+      body: {},
+      label: `Request external anchor for ${publicVerificationId}`,
+      execute: async (challengeId) => {
+        try {
+          await titleVerificationService.requestRegistryExternalAnchor(publicVerificationId, challengeId);
+          return verificationId;
+        } catch (raw) {
+          if (raw instanceof ApiRequestError && raw.status === 409) await refreshAll(verificationId);
+          throw raw;
+        }
+      },
+    });
+    if (!started) setPendingAction(null);
+  };
+
+  const retryExternalAnchor = async () => {
+    if (!selected || (selected.externalAnchor?.status ?? selected.externalAnchorStatus) !== 'failed') return;
+    const verificationId = selected.verificationId;
+    setPendingAction('retry-anchor');
+    const started = await stepUp.begin({
+      method: 'POST',
+      path: `/api/title-verifications/${encodeURIComponent(verificationId)}/retry-anchor`,
+      body: {},
+      label: `Retry external anchor for title verification ${verificationId}`,
+      execute: async (challengeId) => {
+        try {
+          const response = await titleVerificationService.retryTitleVerificationExternalAnchor(verificationId, challengeId);
+          return response.verification.verificationId;
+        } catch (raw) {
+          if (raw instanceof ApiRequestError && raw.status === 409) await refreshAll(verificationId);
+          throw raw;
+        }
+      },
+    });
+    if (!started) setPendingAction(null);
+  };
+
+  const completeProtectedAction = async (code: string) => {
+    const action = pendingAction;
+    const result = await stepUp.complete(code);
+    if (!result.ok) {
+      if (!stepUp.challenge) {
+        setPendingAction(null);
+        toast.error(result.error ?? 'The protected title-verification action could not be completed.');
+      }
+      return false;
     }
+    setPendingAction(null);
+    if (action === 'approve') toast.success('Title verification approved and published in the RealtIQ registry.');
+    else if (action === 'reject') toast.success('Title verification rejected.');
+    else if (action === 'revoke') toast.success('Title verification revoked. The public registry page remains visible with revoked status.');
+    else if (action === 'external-anchor') toast.success('External anchor requested.');
+    else if (action === 'retry-anchor') toast.success('External anchor retry was accepted.');
+    await refreshAll(result.value);
+    return true;
   };
 
   return (
@@ -276,27 +343,35 @@ const TitleVerificationReview = () => {
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                   {['pending', 'under_review'].includes(selected.status) ? (
-                    <Button disabled title="Legal review requires an undocumented step-up challenge" aria-busy={pendingAction === 'approve'} onClick={() => void review('approve')}>
+                    <Button disabled={stepUp.busy || Boolean(stepUp.challenge) || pendingAction === 'approve'} aria-busy={pendingAction === 'approve'} onClick={() => void review('approve')}>
                       {pendingAction === 'approve' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Approving...</> : 'Approve'}
                     </Button>
                   ) : null}
                   {['pending', 'under_review'].includes(selected.status) ? (
-                    <Button variant="secondary" disabled title="Legal review requires an undocumented step-up challenge" aria-busy={pendingAction === 'reject'} onClick={() => void review('reject')}>
+                    <Button variant="secondary" disabled={stepUp.busy || Boolean(stepUp.challenge) || pendingAction === 'reject'} aria-busy={pendingAction === 'reject'} onClick={() => void review('reject')}>
                       {pendingAction === 'reject' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Rejecting...</> : 'Reject'}
                     </Button>
                   ) : null}
                   {selected.status === 'published' ? (
-                    <Button variant="secondary" disabled title="Revocation requires an undocumented step-up challenge" aria-busy={pendingAction === 'revoke'} onClick={() => void revoke()}>
+                    <Button variant="secondary" disabled={stepUp.busy || Boolean(stepUp.challenge) || pendingAction === 'revoke'} aria-busy={pendingAction === 'revoke'} onClick={() => void revoke()}>
                       {pendingAction === 'revoke' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Revoking...</> : 'Revoke'}
                     </Button>
                   ) : null}
                   {selected.status === 'published' && selected.publicVerificationId ? (
-                    <Button variant="ghost" disabled title="External anchoring requires an undocumented step-up challenge" aria-busy={pendingAction === 'external-anchor'} onClick={() => void requestExternalAnchor()}>
-                      {pendingAction === 'external-anchor' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Requesting...</> : 'Request External Anchor'}
-                    </Button>
+                    (() => {
+                      const anchorStatus = selected.externalAnchor?.status ?? selected.externalAnchorStatus ?? 'not_requested';
+                      if (anchorStatus === 'not_configured') return <span className="self-center text-xs text-secondary">External anchoring is unavailable until the backend provider is configured.</span>;
+                      if (anchorStatus === 'failed') return <Button variant="ghost" disabled={stepUp.busy || Boolean(stepUp.challenge) || pendingAction === 'retry-anchor'} aria-busy={pendingAction === 'retry-anchor'} onClick={() => void retryExternalAnchor()}>
+                        {pendingAction === 'retry-anchor' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Retrying...</> : 'Retry External Anchor'}
+                      </Button>;
+                      if (anchorStatus === 'not_requested') return <Button variant="ghost" disabled={stepUp.busy || Boolean(stepUp.challenge) || pendingAction === 'external-anchor'} aria-busy={pendingAction === 'external-anchor'} onClick={() => void requestExternalAnchor()}>
+                        {pendingAction === 'external-anchor' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Requesting...</> : 'Request External Anchor'}
+                      </Button>;
+                      return null;
+                    })()
                   ) : null}
                 </div>
-                <p className="text-xs text-amber-800">Review decisions, revocation and external anchoring require a server step-up challenge. The challenge request contract is not documented yet.</p>
+                <p className="text-xs text-secondary">These staff actions use the current-profile TOTP challenge and send the exact request through the shared bound step-up flow. Department authority, reviewer independence and provider configuration remain server-checked.</p>
                 <RegistryAuditDetails publicVerificationId={selected.publicVerificationId} />
                 <div>
                   <h3 className="font-bold">Audit Logs</h3>
@@ -309,6 +384,7 @@ const TitleVerificationReview = () => {
             ) : <p className="text-sm text-secondary">Select a title verification to inspect.</p>}
           </aside>
         </section>
+        <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy} error={stepUp.error} onCancel={() => { stepUp.cancel(); setPendingAction(null); }} onSubmit={completeProtectedAction} />
       </main>
     </AdminLayout>
   );

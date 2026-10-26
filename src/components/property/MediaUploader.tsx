@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { propertyService } from '../../services/propertyService';
 import type { MediaItem } from '../../types';
+import { MAX_PUBLIC_MEDIA_FILES_PER_UPLOAD, moveMediaItem, validatePublicMediaBatch } from '../../utils/projectMedia';
 
 interface MediaUploaderProps {
   value: MediaItem[];
@@ -58,6 +59,11 @@ const MediaUploader = ({ value, onChange, error, disabled = false }: MediaUpload
 
   const uploadFiles = async (fileArray: File[]) => {
     if (disabled || fileArray.length === 0) return;
+    const validationError = validatePublicMediaBatch(fileArray);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
     setUploading(true);
     setProgress(0);
     try {
@@ -109,12 +115,22 @@ const MediaUploader = ({ value, onChange, error, disabled = false }: MediaUpload
       {/* Drop Zone */}
       <div
         onClick={() => !disabled && !uploading && inputRef.current?.click()}
+        onKeyDown={(event) => {
+          if ((event.key === 'Enter' || event.key === ' ') && !disabled && !uploading) {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
         onDrop={handleDrop}
         onDragOver={(e) => {
           e.preventDefault();
           if (!disabled) setDragActive(true);
         }}
         onDragLeave={() => setDragActive(false)}
+        role="button"
+        tabIndex={disabled || uploading ? -1 : 0}
+        aria-label="Select image or video files"
+        aria-disabled={disabled || uploading}
         className={`relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 ${
           dragActive
             ? 'border-primary bg-primary/5'
@@ -129,7 +145,10 @@ const MediaUploader = ({ value, onChange, error, disabled = false }: MediaUpload
           disabled={disabled}
           multiple
           accept="image/*,video/*"
-          className="hidden"
+          tabIndex={-1}
+          aria-hidden="true"
+          className="sr-only"
+          onClick={(event) => event.stopPropagation()}
           onChange={(e) => void handleFiles(e.target.files)}
         />
 
@@ -153,7 +172,7 @@ const MediaUploader = ({ value, onChange, error, disabled = false }: MediaUpload
               Drag & drop or{' '}
               <span className="text-primary underline underline-offset-2">browse</span>
             </p>
-            <p className="text-xs text-secondary">Images and videos supported</p>
+            <p className="text-xs text-secondary">Images and videos supported · Up to {MAX_PUBLIC_MEDIA_FILES_PER_UPLOAD} files per upload</p>
           </div>
         )}
       </div>
@@ -203,10 +222,7 @@ const MediaUploader = ({ value, onChange, error, disabled = false }: MediaUpload
                 {item.type === 'image' ? (
                   <img src={item.previewUrl} alt={item.file.name} className="h-full w-full object-cover" />
                 ) : (
-                  <div className="flex h-full w-full flex-col items-center justify-center gap-1">
-                    <span className="material-symbols-outlined text-2xl text-on-surface-variant/60">videocam</span>
-                    <span className="text-[10px] uppercase tracking-wider text-secondary">Video</span>
-                  </div>
+                  <video src={item.previewUrl} controls muted playsInline preload="metadata" className="h-full w-full object-cover" aria-label="Preview selected video" />
                 )}
                 <div className="absolute inset-x-0 bottom-0 bg-black/65 p-1 text-[10px] text-white">
                   <p className="truncate">{item.file.name}</p>
@@ -230,7 +246,7 @@ const MediaUploader = ({ value, onChange, error, disabled = false }: MediaUpload
       {value.length > 0 && (
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
           {value.map((item, i) => (
-            <div key={i} className="relative aspect-square rounded-lg overflow-hidden group bg-surface-container-low">
+            <div key={item.public_id || item.url || i} className="relative aspect-square rounded-lg overflow-hidden group bg-surface-container-low">
               {item.type === 'image' ? (
                 <img
                   src={item.url}
@@ -238,18 +254,30 @@ const MediaUploader = ({ value, onChange, error, disabled = false }: MediaUpload
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-1">
-                  <span className="material-symbols-outlined text-2xl text-on-surface-variant/60">
-                    videocam
-                  </span>
-                  <span className="text-[10px] text-secondary uppercase tracking-wider">Video</span>
-                </div>
+                <video src={item.url} controls muted playsInline preload="metadata" className="w-full h-full object-cover" aria-label="Preview uploaded video" />
               )}
 
               {/* Type badge */}
               <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide bg-black/60 text-white">
-                {item.type}
+                {item.isCover ? 'Cover' : item.type}
               </span>
+
+              {!disabled && value.length > 1 ? <div className="absolute inset-x-1 top-1 flex justify-between gap-1">
+                <button
+                  type="button"
+                  onClick={() => onChange(moveMediaItem(value, i, -1))}
+                  disabled={i === 0}
+                  className="rounded bg-black/65 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-40"
+                  aria-label={`Move media ${i + 1} earlier`}
+                >↑</button>
+                <button
+                  type="button"
+                  onClick={() => onChange(moveMediaItem(value, i, 1))}
+                  disabled={i === value.length - 1}
+                  className="rounded bg-black/65 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-40"
+                  aria-label={`Move media ${i + 1} later`}
+                >↓</button>
+              </div> : null}
 
               {/* Remove button */}
               {!disabled ? <button

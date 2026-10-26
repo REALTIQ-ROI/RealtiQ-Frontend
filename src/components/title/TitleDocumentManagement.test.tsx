@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { titleDocumentService } from '../../services/titleDocumentService';
@@ -44,6 +44,13 @@ describe('TitleDocumentManagement', () => {
     expect(screen.getByText(/Submission version 1/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Submit a new version' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /replace|delete/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit a new version' }));
+    expect(screen.getByRole('button', { name: 'Submit new vault record' })).toBeDisabled();
+    expect(screen.getByText(/route-specific file-bound step-up protocol/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Restricted file'), { target: { files: [new File(['private'], 'title.pdf', { type: 'application/pdf' })] } });
+    fireEvent.submit(screen.getByRole('button', { name: 'Submit new vault record' }).closest('form')!);
+    expect(titleDocumentService.upload).not.toHaveBeenCalled();
   });
 
   it('locks upload, resubmission, and policy editing after sale while retaining the document', async () => {
