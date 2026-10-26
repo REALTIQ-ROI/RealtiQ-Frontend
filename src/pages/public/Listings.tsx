@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import PublicLayout from "../../components/layout/PublicLayout";
 import PropertyCard from "../../components/property/PropertyCard";
+import ActiveCatalogueFilters from "../../components/property/ActiveCatalogueFilters";
 import PropertyFiltersPanel from "../../components/property/PropertyFiltersPanel";
 import PropertyMap from "../../components/property/map/PropertyMap";
 import ErrorState from "../../components/ui/ErrorState";
@@ -14,6 +15,9 @@ import { propertyService } from "../../services/propertyService";
 import type { CanonicalMapMarker } from '../../types/canonicalMap';
 import { canonicalMapMarkers } from '../../utils/canonicalMapMarkers';
 import { cataloguePageFromQuery, readCatalogueQuery, writeCatalogueQuery } from "../../utils/catalogueQuery";
+import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
+import { summarizeCatalogueFacets } from '../../utils/catalogueFacets';
+import { writeCatalogueMapViewport } from '../../utils/catalogueMapViewport';
 import {
   propertyPublicReference,
   propertyRouteReference,
@@ -25,13 +29,6 @@ const formatRange = (page: number, total: number) =>
   total === 0
     ? "0 properties"
     : `${(page - 1) * LIMIT + 1}–${Math.min(page * LIMIT, total)} of ${total}`;
-const facetSummary = (facets: Record<string, unknown>): string => Object.entries(facets)
-  .flatMap(([group, value]) => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]));
-    return entries.length ? [`${group.replaceAll('_', ' ')}: ${entries.slice(0, 3).map(([name, count]) => `${name.replaceAll('_', ' ')} ${count}`).join(', ')}`] : [];
-  }).slice(0, 4).join(' · ');
 const mapNoticeText = (notice: unknown): string => {
   if (typeof notice === 'string') return notice;
   if (!notice || typeof notice !== 'object') return '';
@@ -45,12 +42,14 @@ const Listings = () => {
   const [initialFilters] = useState(() => new URLSearchParams(searchParams));
   const [initialPage] = useState(() => cataloguePageFromQuery(searchParams));
   const appliedQueryKey = useRef(searchParams.toString());
-  const { user } = useAuth();
+  const { user, activeProfile } = useAuth();
   const {
     properties,
     loading,
     error,
     notices,
+    diagnostics,
+    facets,
     total,
     page,
     filters,
@@ -69,11 +68,25 @@ const Listings = () => {
     zoom: number;
   } | null>(null);
   const [mapState, setMapState] = useState<{ queryKey: string; count: number | null; error: string | null; markers: CanonicalMapMarker[]; skipped: number; mode: 'properties' | 'clusters' | null; truncated: boolean; facets: Record<string, unknown>; priceAggregateState: string | null; normalizationNotices: unknown[] }>({ queryKey: '', count: null, error: null, markers: [], skipped: 0, mode: null, truncated: false, facets: {}, priceAggregateState: null, normalizationNotices: [] });
-  const mapQueryKey = searchParams.toString();
-  const mapLoading = searchParams.get('mapActive') === 'true' && mapState.queryKey !== mapQueryKey;
+  const mapQuery = new URLSearchParams(searchParams);
+  mapQuery.delete('page');
+  mapQuery.delete('limit');
+  const mapQueryKey = mapQuery.toString();
+  const mapActive = searchParams.get('mapActive') === 'true';
+  const requestedViewport = useMemo(() => {
+    const keys = ['north', 'south', 'east', 'west', 'mapZoom'] as const;
+    const values = keys.map((key) => Number(searchParams.get(key)));
+    if (!keys.every((key) => searchParams.has(key)) || values.some((value) => !Number.isFinite(value))) return null;
+    const [north, south, east, west, zoom] = values;
+    if (north! <= south! || east! <= west! || zoom! < 0) return null;
+    return { north: north!, south: south!, east: east!, west: west!, zoom: zoom! };
+  }, [searchParams]);
+  const mapLoading = mapActive && mapState.queryKey !== mapQueryKey;
   const mapResultCount = mapState.queryKey === mapQueryKey ? mapState.count : null;
   const mapError = mapState.queryKey === mapQueryKey ? mapState.error : null;
-  const activeMapMarkers = searchParams.get('mapActive') === 'true' ? (mapState.queryKey === mapQueryKey ? mapState.markers : []) : undefined;
+  const activeMapMarkers = mapActive && mapState.queryKey === mapQueryKey ? mapState.markers : [];
+  const catalogueFacets = summarizeCatalogueFacets(facets);
+  const mapFacets = summarizeCatalogueFacets(mapState.facets);
   const resultsRef = useRef<HTMLDivElement>(null);
   const viewportKey = useRef("");
   const viewportInteracted = useRef(false);
@@ -125,23 +138,19 @@ const Listings = () => {
   );
 
   const handleViewportChange = useCallback(
-    (nextViewport: typeof viewport & object) => {
+    (nextViewport: typeof viewport & object, userInitiated = false) => {
       const key = Object.values(nextViewport)
-        .map((value) => Math.round(value * 100) / 100)
+        .map((value) => Math.round(value * 100_000) / 100_000)
         .join(":");
       const previous = viewportKey.current;
       if (key === previous) return;
       viewportKey.current = key;
       setViewport(nextViewport);
-      if (!previous) return;
-      viewportInteracted.current = true;
-      const nextParams = writeCatalogueQuery({
-        north: nextViewport.north, south: nextViewport.south, east: nextViewport.east, west: nextViewport.west,
-        mapActive: true, mapZoom: nextViewport.zoom,
-      }, { base: searchParams, resetPage: true });
+      if (userInitiated) viewportInteracted.current = true;
+      const nextParams = writeCatalogueMapViewport(searchParams, nextViewport, userInitiated);
       appliedQueryKey.current = nextParams.toString();
       setSearchParams(nextParams);
-      applyFilters(nextParams);
+      applyFilters(nextParams, userInitiated ? 1 : cataloguePageFromQuery(nextParams));
     },
     [applyFilters, searchParams, setSearchParams],
   );
@@ -186,6 +195,12 @@ const Listings = () => {
     goToPage(nextPage);
     resultsRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
+  const clearFilterChip = (key: string, index: number) => {
+    const next = removeCatalogueFilterChip(searchParams, { key, index });
+    appliedQueryKey.current = next.toString();
+    setSearchParams(next);
+    applyFilters(next);
+  };
 
   return (
     <PublicLayout fullHeight>
@@ -194,6 +209,7 @@ const Listings = () => {
           key={searchParams.toString()}
           initialFilters={readCatalogueQuery(searchParams)}
           initialQuery={searchParams}
+          activeProfile={activeProfile}
           onApply={handleApplyFilters}
         />
         <div className="min-h-0 flex-1 lg:grid lg:grid-cols-[minmax(0,1.45fr)_minmax(380px,1fr)]">
@@ -204,10 +220,17 @@ const Listings = () => {
             <PropertyMap
               properties={properties}
               canonicalMarkers={activeMapMarkers}
-              onSelectCanonicalMarker={(marker) => {
+              onSelectCanonicalMarker={async (marker) => {
                 const loaded = properties.find((item) => propertyPublicReference(item) === marker.reference);
-                if (loaded) selectProperty(loaded);
-                else navigate(`/properties/${encodeURIComponent(marker.reference)}`);
+                if (loaded) { selectProperty(loaded); return loaded; }
+                try {
+                  const property = await propertyService.getPublicProperty(marker.reference);
+                  selectProperty(property);
+                  return property;
+                } catch (raw) {
+                  toast.error(raw instanceof Error ? raw.message : 'Unable to load this property preview.');
+                  return undefined;
+                }
               }}
               detailsPath={(property) => {
                 const reference = propertyPublicReference(property);
@@ -215,6 +238,7 @@ const Listings = () => {
               }}
               className="h-full min-h-0 rounded-none"
               onViewportChange={handleViewportChange}
+              requestedViewport={requestedViewport}
               onSelectProperty={selectProperty}
             />
             {loading ? (
@@ -225,7 +249,7 @@ const Listings = () => {
             {searchParams.get('mapActive') === 'true' ? <div className="absolute bottom-4 left-4 z-[1000] max-w-[min(90%,340px)] rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-secondary shadow" role="status">
               {mapLoading ? 'Checking map results…' : mapError ? `Map results unavailable: ${mapError}` : mapResultCount === null ? 'Map result count unavailable.' : `${mapResultCount} properties match this map area.`}
               {!mapLoading && !mapError && mapState.queryKey === mapQueryKey ? <span className="mt-1 block font-normal">{mapState.mode === 'clusters' ? `${mapState.markers.length} server clusters shown.` : `${mapState.markers.length} server property markers shown${mapState.truncated ? ' (page limit reached)' : ''}.`}{mapState.skipped ? ` ${mapState.skipped} returned items lacked safe marker coordinates or references.` : ''}</span> : null}
-              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey && facetSummary(mapState.facets) ? <span className="mt-1 block font-normal">Facets: {facetSummary(mapState.facets)}</span> : null}
+              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey && mapFacets ? <span className="mt-1 block font-normal">Facets: {mapFacets}</span> : null}
               {!mapLoading && !mapError && mapState.queryKey === mapQueryKey && mapState.priceAggregateState === 'fx_unconfigured' ? <span className="mt-1 block font-semibold text-amber-800">Price aggregates are unavailable because currency conversion is not configured.</span> : null}
               {!mapLoading && !mapError && mapState.queryKey === mapQueryKey ? mapState.normalizationNotices.map((notice, index) => mapNoticeText(notice) ? <span key={`map-notice-${index}`} className="mt-1 block font-normal">Search notice: {mapNoticeText(notice)}</span> : null) : null}
             </div> : null}
@@ -243,6 +267,7 @@ const Listings = () => {
                   <p className="mt-1 text-xs font-semibold text-secondary">
                     {formatRange(page, total)}
                   </p>
+                  {catalogueFacets ? <p className="mt-1 text-[11px] text-secondary">Available facets: {catalogueFacets}</p> : null}
                 </div>
                 <button
                   type="button"
@@ -260,6 +285,7 @@ const Listings = () => {
             {notices.length > 0 ? <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900" role="status">
               {notices.map((notice, index) => <p key={index}>{typeof notice === 'string' ? notice : notice && typeof notice === 'object' && 'code' in notice ? String(notice.code) : 'Search results were adjusted by the server.'}</p>)}
             </div> : null}
+            <ActiveCatalogueFilters params={searchParams} onClear={clearFilterChip} />
             <div
               ref={resultsRef}
               className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5"
@@ -284,6 +310,7 @@ const Listings = () => {
                   <p className="mt-2 text-sm text-secondary">
                     Try adjusting your filters or map area.
                   </p>
+                  {diagnostics ? <p className="mt-2 text-xs text-secondary">The server has search diagnostics for this result. Try removing one filter at a time; your current search was not changed.</p> : null}
                 </div>
               ) : null}
               {properties.length > 0 ? (

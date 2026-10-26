@@ -28,20 +28,28 @@ describe('projectService', () => {
       page: 1,
       limit: 20,
     });
-    expect(api.get).toHaveBeenCalledWith('/projects', {
-      params: {
-        search: 'palm',
-        projectType: 'estate',
-        city: 'Lekki',
-        propertyType: 'apartment',
-        bedrooms: 3,
-        listingType: 'off_plan',
-        developmentStatus: 'foundation',
-        availableOnly: true,
-        page: 1,
-        limit: 20,
-      },
-    });
+    expect(api.get).toHaveBeenCalledWith('/projects', expect.objectContaining({ params: expect.any(URLSearchParams) }));
+    const params = vi.mocked(api.get).mock.calls[0][1]?.params as URLSearchParams;
+    expect(params.toString()).toBe('search=palm&projectType=estate&city=Lekki&propertyType=apartment&bedrooms=3&listingType=off_plan&developmentStatus=foundation&availableOnly=true&page=1&limit=20&queryVersion=canonical-v1');
+  });
+
+  it('uses the canonical query version and preserves repeated URL criteria for project maps', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { mode: 'projects', bounds: {}, total: 0, projects: [] } });
+    const query = new URLSearchParams('amenities=Pool&amenities=Lift&minPrice=0&page=4&limit=20&north=14&south=4&east=14&west=2&mapZoom=6');
+    await projectService.getProjectMap(query);
+    expect(api.get).toHaveBeenCalledWith('/projects/map', expect.objectContaining({ params: expect.any(URLSearchParams), signal: undefined }));
+    const params = vi.mocked(api.get).mock.calls[0][1]?.params as URLSearchParams;
+    expect(params.getAll('amenities')).toEqual(['Pool', 'Lift']);
+    expect(params.get('minPrice')).toBe('0');
+    expect(params.has('page')).toBe(false);
+    expect(params.has('limit')).toBe(false);
+    expect(params.get('queryVersion')).toBe('canonical-v1');
+  });
+
+  it('does not report an undocumented project-map cluster envelope as an empty result', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { mode: 'clusters', total: 4, clusters: [{ id: 'cluster-1', count: 4 }] } });
+    await expect(projectService.getProjectMap(new URLSearchParams('north=14&south=4&east=14&west=2&mapZoom=6')))
+      .rejects.toThrow('Project map marker fields are not fully specified');
   });
 
   it('does not send owner id from create project payload', async () => {

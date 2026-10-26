@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { configureMapbox, fitCoordinates, MAPBOX_STYLE, nigeriaCenter } from '../../../lib/mapbox';
-import { propertyRouteReference, type Property } from '../../../types';
+import { propertyPublicReference, propertyRouteReference, type Property } from '../../../types';
 import PropertyMapPreviewCard from './PropertyMapPreviewCard';
 import LeafletPropertyMap from './LeafletPropertyMap';
 import { MAP_PROVIDER } from '../../../config/maps';
@@ -13,12 +13,13 @@ interface Props {
   actions?: (property: Property) => ReactNode;
   className?: string;
   onVisiblePropertiesChange?: (properties: Property[]) => void;
-  onViewportChange?: (bounds: { north: number; south: number; east: number; west: number; zoom: number }) => void;
+  onViewportChange?: (bounds: { north: number; south: number; east: number; west: number; zoom: number }, userInitiated?: boolean) => void;
+  requestedViewport?: { north: number; south: number; east: number; west: number; zoom: number } | null;
   onSelectProperty?: (property: Property) => void;
   resolveProperty?: (property: Property) => Promise<Property>;
   onDetailsNavigate?: () => void;
   canonicalMarkers?: CanonicalMapMarker[];
-  onSelectCanonicalMarker?: (marker: Extract<CanonicalMapMarker, { kind: 'property' }>) => void;
+  onSelectCanonicalMarker?: (marker: Extract<CanonicalMapMarker, { kind: 'property' }>) => void | Property | Promise<Property | void>;
 }
 
 const isMappable = (property: Property) => {
@@ -36,22 +37,33 @@ const priceLabel = (price: number) => {
   return `₦${price}`;
 };
 
-const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, onSelectProperty, resolveProperty, onDetailsNavigate, canonicalMarkers, onSelectCanonicalMarker }: Props) => {
+const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, requestedViewport, onSelectProperty, resolveProperty, onDetailsNavigate, canonicalMarkers, onSelectCanonicalMarker }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const propertyLookupRef = useRef(new Map<string, Property>());
   const canonicalLookupRef = useRef(new Map<string, CanonicalMapMarker>());
   const selectPropertyRef = useRef<(property: Property) => void>(() => undefined);
-  const selectCanonicalRef = useRef(onSelectCanonicalMarker);
+  const selectCanonicalRef = useRef<Props['onSelectCanonicalMarker']>(onSelectCanonicalMarker);
+  const visiblePropertiesRef = useRef(onVisiblePropertiesChange);
+  const viewportChangeRef = useRef(onViewportChange);
+  const userViewportChangeRef = useRef(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [selectedPreview, setSelectedPreview] = useState<Property | null>(null);
+  const [canonicalPreviewLoading, setCanonicalPreviewLoading] = useState(false);
+  const canonicalPreviewRequest = useRef(0);
   const [mapError, setMapError] = useState(!configureMapbox());
   const mappable = useMemo(() => canonicalMarkers === undefined ? properties.filter(isMappable) : [], [properties, canonicalMarkers]);
+  const mappableRef = useRef(mappable);
   // The preview is intentionally map-owned: selecting or hovering a card may
   // synchronize the highlighted property, but must not open this map preview.
   const initialFit = useRef(false);
   const missingCount = canonicalMarkers === undefined ? properties.length - mappable.length : 0;
   useEffect(() => { selectCanonicalRef.current = onSelectCanonicalMarker; }, [onSelectCanonicalMarker]);
+  useEffect(() => {
+    visiblePropertiesRef.current = onVisiblePropertiesChange;
+    viewportChangeRef.current = onViewportChange;
+    mappableRef.current = mappable;
+  }, [mappable, onVisiblePropertiesChange, onViewportChange]);
   useEffect(() => {
     selectPropertyRef.current = (property) => {
       const reference = propertyRouteReference(property);
@@ -147,7 +159,16 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
       map.on('click', 'canonical-points', (event) => {
         const key = String(event.features?.[0]?.properties?.key ?? '');
         const marker = canonicalLookupRef.current.get(key);
-        if (marker?.kind === 'property') selectCanonicalRef.current?.(marker);
+        if (marker?.kind === 'property') {
+          const request = ++canonicalPreviewRequest.current;
+          setSelectedPreview(null);
+          setCanonicalPreviewLoading(true);
+          Promise.resolve(selectCanonicalRef.current?.(marker)).then((property) => {
+            if (request === canonicalPreviewRequest.current && property && propertyPublicReference(property) === marker.reference) setSelectedPreview(property);
+          }).catch(() => undefined).finally(() => {
+            if (request === canonicalPreviewRequest.current) setCanonicalPreviewLoading(false);
+          });
+        }
       });
       for (const layer of ['property-clusters', 'property-points', 'canonical-clusters', 'canonical-points']) {
         map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
@@ -185,7 +206,7 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
     const features = (canonicalMarkers ?? []).map((marker, index) => {
       const key = `${marker.kind}-${marker.id}-${index}`;
       lookup.set(key, marker);
-      return { type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [marker.lng, marker.lat] }, properties: { key, kind: marker.kind, label: marker.kind === 'cluster' ? String(marker.count) : marker.label } };
+      return { type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [marker.lng, marker.lat] }, properties: { key, kind: marker.kind, label: marker.kind === 'cluster' ? (marker.sponsoredCount ? `${marker.count}\n${marker.sponsoredCount} sponsored` : String(marker.count)) : marker.label } };
     });
     canonicalLookupRef.current = lookup;
     (map.getSource('canonical-markers') as mapboxgl.GeoJSONSource).setData({ type: 'FeatureCollection', features });
@@ -193,22 +214,50 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || (!onVisiblePropertiesChange && !onViewportChange)) return;
-    const updateVisible = () => {
+    if (!map || !mapLoaded || !requestedViewport) return;
+    const current = map.getBounds();
+    if (current && Math.abs(current.getNorth() - requestedViewport.north) < 0.0001 &&
+      Math.abs(current.getSouth() - requestedViewport.south) < 0.0001 &&
+      Math.abs(current.getEast() - requestedViewport.east) < 0.0001 &&
+      Math.abs(current.getWest() - requestedViewport.west) < 0.0001 && Math.abs(map.getZoom() - requestedViewport.zoom) < 0.01) return;
+    map.fitBounds([[requestedViewport.west, requestedViewport.south], [requestedViewport.east, requestedViewport.north]], { duration: 0, maxZoom: requestedViewport.zoom });
+  }, [mapLoaded, requestedViewport?.north, requestedViewport?.south, requestedViewport?.east, requestedViewport?.west, requestedViewport?.zoom]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+    const markUserViewportChange = () => { userViewportChangeRef.current = true; };
+    const canvas = map.getCanvasContainer();
+    canvas.addEventListener('wheel', markUserViewportChange, { passive: true });
+    canvas.addEventListener('touchstart', markUserViewportChange, { passive: true });
+    map.on('dragstart', markUserViewportChange);
+    map.on('dblclick', markUserViewportChange);
+    const updateVisible = (userInitiated: boolean) => {
       const bounds = map.getBounds();
       if (!bounds) return;
-      onVisiblePropertiesChange?.(mappable.filter((property) => bounds.contains([property.coordinates!.lng, property.coordinates!.lat])));
-      onViewportChange?.({ north: bounds.getNorth(), south: bounds.getSouth(), east: bounds.getEast(), west: bounds.getWest(), zoom: map.getZoom() });
+      visiblePropertiesRef.current?.(mappableRef.current.filter((property) => bounds.contains([property.coordinates!.lng, property.coordinates!.lat])));
+      viewportChangeRef.current?.({ north: bounds.getNorth(), south: bounds.getSouth(), east: bounds.getEast(), west: bounds.getWest(), zoom: map.getZoom() }, userInitiated);
     };
     let timer = 0;
-    const settled = () => { window.clearTimeout(timer); timer = window.setTimeout(updateVisible, 300); };
-    const first = window.setTimeout(updateVisible, 0);
+    const settled = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const userInitiated = userViewportChangeRef.current;
+        userViewportChangeRef.current = false;
+        updateVisible(userInitiated);
+      }, 300);
+    };
+    const first = window.setTimeout(() => updateVisible(false), 0);
     map.on('moveend', settled);
     return () => {
       window.clearTimeout(first); window.clearTimeout(timer);
       map.off('moveend', settled);
+      map.off('dragstart', markUserViewportChange);
+      map.off('dblclick', markUserViewportChange);
+      canvas.removeEventListener('wheel', markUserViewportChange);
+      canvas.removeEventListener('touchstart', markUserViewportChange);
     };
-  }, [mappable, onVisiblePropertiesChange, onViewportChange]);
+  }, [mapLoaded]);
 
   return (
     <section className={`relative min-h-[55vh] overflow-hidden rounded-xl bg-surface-container-low sm:min-h-[420px] ${className}`} aria-label="Property map">
@@ -221,6 +270,7 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
       ) : null}
       {mapError ? <div className="absolute left-3 right-3 top-3 z-[1000] rounded-lg bg-error-container p-3 text-sm text-on-error-container">The map tiles could not be loaded. List results are still available.</div> : null}
       {missingCount > 0 ? <div className="absolute left-3 top-3 z-[900] rounded-lg bg-white/95 px-3 py-2 text-xs font-medium text-secondary shadow">{missingCount} {missingCount === 1 ? 'property is' : 'properties are'} list-only (no coordinates).</div> : null}
+      {canonicalPreviewLoading ? <div role="status" className="absolute bottom-4 left-4 z-[1000] rounded-lg bg-white/95 px-4 py-3 text-sm font-semibold text-secondary shadow">Loading property preview…</div> : null}
       {selectedPreview ? <PropertyMapPreviewCard property={selectedPreview} detailsPath={detailsPath} actions={actions} onClose={() => setSelectedPreview(null)} onDetailsNavigate={onDetailsNavigate} /> : null}
     </section>
   );

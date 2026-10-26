@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { Property } from '../../../types';
 import MediaPreview from '../MediaPreview';
 import PaymentTypeBadges from '../PaymentTypeBadges';
@@ -21,8 +21,9 @@ const formatPrice = (property: Property) => property.price > 0
   }).format(property.price)
   : 'Price unavailable';
 
-const PropertyMapPreviewCard = ({ property, detailsPath, actions, onClose, onDetailsNavigate }: Props) => (
-  <article className="absolute bottom-4 left-4 right-4 z-[1000] overflow-hidden rounded-xl bg-white shadow-2xl sm:left-auto sm:w-80">
+const PropertyMapPreviewCard = ({ property, detailsPath, actions, onClose, onDetailsNavigate }: Props) => {
+  const location = useLocation();
+  return <article className="absolute bottom-4 left-4 right-4 z-[1000] overflow-hidden rounded-xl bg-white shadow-2xl sm:left-auto sm:w-80">
     <button
       type="button"
       aria-label="Close property preview"
@@ -54,13 +55,13 @@ const PropertyMapPreviewCard = ({ property, detailsPath, actions, onClose, onDet
       )}
       <PaymentTypeBadges paymentTypes={normalizePropertyPaymentTypes(property.paymentTypes, property.price)} />
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        <Link className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-on-primary" to={detailsPath(property)} onClick={onDetailsNavigate}>
+        <Link className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-on-primary" to={detailsPath(property)} state={{ from: `${location.pathname}${location.search}` }} onClick={onDetailsNavigate}>
           View Details
         </Link>
         {actions?.(property)}
       </div>
     </div>
   </article>
-);
+};
 
 export default PropertyMapPreviewCard;

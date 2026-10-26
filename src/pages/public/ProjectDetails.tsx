@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
 import ProjectMediaGallery from '../../components/project/ProjectMediaGallery';
 import PropertyCard from '../../components/property/PropertyCard';
@@ -11,6 +11,13 @@ import { formatDate, formatPriceRange, labelize } from '../../utils/projectForma
 
 const ProjectDetails = () => {
   const { slug = '' } = useParams();
+  const location = useLocation();
+  const projectNavigationState = location.state as { from?: string; discoveryFrom?: string } | null;
+  const searchReturn = typeof projectNavigationState?.discoveryFrom === 'string' && projectNavigationState.discoveryFrom.startsWith('/projects')
+    ? projectNavigationState.discoveryFrom
+    : typeof projectNavigationState?.from === 'string' && projectNavigationState.from.startsWith('/projects')
+      ? projectNavigationState.from
+      : '/projects';
   const { data, loading, error, execute } = useAsync(() => projectService.getProject(slug), Boolean(slug));
   const project = data?.project;
   const preview = project?.propertyPreview ?? [];
@@ -24,6 +31,7 @@ const ProjectDetails = () => {
           <div className="space-y-10">
             <header className="grid gap-8 lg:grid-cols-[1.3fr_0.7fr] lg:items-start">
               <div>
+                <Link to={searchReturn} className="mb-4 inline-flex text-sm font-bold text-primary hover:underline">← Back to project results</Link>
                 <div className="mb-4 flex flex-wrap gap-2">
                   <span className="rounded-full bg-primary px-3 py-1 text-xs font-black uppercase tracking-widest text-on-primary">{labelize(project.projectType)}</span>
                   <span className="rounded-full bg-surface-container-low px-3 py-1 text-xs font-black uppercase tracking-widest">{labelize(project.status)}</span>
@@ -75,7 +83,7 @@ const ProjectDetails = () => {
                   <p className="text-xs font-bold uppercase tracking-widest text-secondary">Launch</p>
                   <p className="mt-1 font-semibold">{formatDate(project.launchDate)}</p>
                 </div>
-                <Link to={`/projects/${project.slug || project._id}/properties`} className="block rounded-lg bg-primary px-5 py-3 text-center text-sm font-bold text-on-primary">
+                <Link to={`/projects/${project.slug || project._id}/properties`} state={projectNavigationState} className="block rounded-lg bg-primary px-5 py-3 text-center text-sm font-bold text-on-primary">
                   View all units
                 </Link>
               </aside>
@@ -114,7 +122,7 @@ const ProjectDetails = () => {
                   <h2 className="text-2xl font-black">Available unit preview</h2>
                   <p className="text-sm text-secondary">Open a unit to use normal Property purchase, title, escrow, tour, installment, and cart flows.</p>
                 </div>
-                <Link to={`/projects/${project.slug || project._id}/properties`} className="text-sm font-bold text-primary hover:underline">View all</Link>
+                <Link to={`/projects/${project.slug || project._id}/properties`} state={projectNavigationState} className="text-sm font-bold text-primary hover:underline">View all</Link>
               </div>
               {preview.length ? (
                 <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">

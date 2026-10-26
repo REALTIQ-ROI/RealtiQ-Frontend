@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { titleDocumentService } from '../../services/titleDocumentService';
 import {
   propertyPublicReference,
@@ -33,12 +33,13 @@ const PropertyCard = ({
   showSaveAction?: boolean;
   onSave?: (property: Property) => void;
 }) => {
+  const location = useLocation();
   const cover = property.media?.[0];
   const coverUrl = cover?.url;
   const isVideo = cover?.type === 'video';
   const routeReference = propertyPublicReference(property);
   const title = property.title || property.publicReference || 'Untitled property';
-  const location = property.location || [property.projectUnit?.block, property.projectUnit?.phase, property.projectUnit?.unitNumber].filter(Boolean).join(' - ') || 'Location unavailable';
+  const propertyLocation = property.location || [property.projectUnit?.block, property.projectUnit?.phase, property.projectUnit?.unitNumber].filter(Boolean).join(' - ') || 'Location unavailable';
   const paymentTypes = normalizePropertyPaymentTypes(property.paymentTypes, property.price ?? 0);
   const [fetchedTitleDocuments, setFetchedTitleDocuments] = useState<{
     propertyReference: string;
@@ -146,7 +147,7 @@ const PropertyCard = ({
             </h3>
             <p className="text-secondary text-xs mt-1 flex items-center gap-1 truncate">
               <span className="material-symbols-outlined text-xs shrink-0">location_on</span>
-              {location}
+              {propertyLocation}
             </p>
           </div>
           <span
@@ -207,7 +208,7 @@ const PropertyCard = ({
         </div>
 
         {routeReference ? (
-          <Link to={`/properties/${routeReference}`} className="inline-flex items-center gap-1 text-primary font-bold text-sm hover:underline underline-offset-4">
+          <Link to={`/properties/${routeReference}`} state={{ from: `${location.pathname}${location.search}`, discoveryFrom: (location.state as { discoveryFrom?: string } | null)?.discoveryFrom }} className="inline-flex items-center gap-1 text-primary font-bold text-sm hover:underline underline-offset-4">
             View details
             <span className="material-symbols-outlined text-base">arrow_forward</span>
           </Link>

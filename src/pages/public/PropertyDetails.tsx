@@ -6,7 +6,7 @@ import {
   useState,
   type FormEvent,
 } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 import InquiryForm from '../../components/forms/InquiryForm';
@@ -86,7 +86,13 @@ const INSTALLMENT_FREQUENCIES = [
 
 const PropertyDetails = () => {
   const { id = '' } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const returnTo = typeof (location.state as { from?: unknown } | null)?.from === 'string' &&
+    ((location.state as { from: string }).from.startsWith('/properties') || (location.state as { from: string }).from.startsWith('/projects')) &&
+    !(location.state as { from: string }).from.startsWith('//')
+    ? (location.state as { from: string }).from
+    : '/properties';
   const { user, isAuthenticated } = useAuth();
   const { buyProperty, refreshProperties } = useProperties();
   const {
@@ -454,7 +460,7 @@ const PropertyDetails = () => {
         <div className='max-w-4xl mx-auto px-8 py-16 text-center'>
           <h1 className='text-3xl font-bold mb-4'>Property not found</h1>
           <p className='text-secondary mb-6'>We could not load this listing.</p>
-          <Button onClick={() => navigate('/properties')}>
+          <Button onClick={() => navigate(returnTo)}>
             Back to Listings
           </Button>
         </div>
@@ -491,6 +497,7 @@ const PropertyDetails = () => {
   return (
     <PublicLayout>
       <section className='mx-auto max-w-7xl space-y-8 px-4 sm:space-y-10 sm:px-6 lg:px-8'>
+        <Link to={returnTo} className='inline-flex pt-5 text-sm font-bold text-primary hover:underline'>← Back to search results</Link>
         <PropertyGallery
           property={property}
           activeIndex={activeMediaIndex}

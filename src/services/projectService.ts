@@ -80,6 +80,14 @@ export interface ProjectMapQuery extends ProjectSearchQuery {
   zoom: number;
 }
 
+const canonicalProjectParams = (query?: ProjectSearchQuery | URLSearchParams) => {
+  const params = query instanceof URLSearchParams
+    ? new URLSearchParams(query)
+    : new URLSearchParams(Object.entries(compact(query)).map(([key, value]) => [key, String(value)]));
+  params.set('queryVersion', 'canonical-v1');
+  return params;
+};
+
 export interface ProjectMapItem {
   _id: string;
   name: string;
@@ -87,6 +95,7 @@ export interface ProjectMapItem {
   projectType: ProjectType | string;
   minimumPrice?: number;
   maximumPrice?: number;
+  currency?: string;
   availableUnits?: number;
   coordinates?: { lat: number; lng: number } | null;
 }
@@ -96,6 +105,8 @@ export interface ProjectListResponse {
   total: number;
   page: number;
   limit: number;
+  facets?: Record<string, unknown>;
+  normalization?: { queryVersion?: string; query?: unknown; notices?: unknown[] };
 }
 
 export interface ProjectPropertiesResponse {
@@ -104,6 +115,8 @@ export interface ProjectPropertiesResponse {
   total: number;
   page: number;
   limit: number;
+  facets?: Record<string, unknown>;
+  normalization?: { queryVersion?: string; query?: unknown; notices?: unknown[] };
 }
 
 export interface ProjectMapResponse {
@@ -111,7 +124,20 @@ export interface ProjectMapResponse {
   bounds: { north: number; south: number; east: number; west: number; zoom: number };
   total: number;
   projects: ProjectMapItem[];
+  facets?: Record<string, unknown>;
+  normalization?: { queryVersion?: string; query?: unknown; notices?: unknown[] };
 }
+
+const parseProjectMapResponse = (value: unknown): ProjectMapResponse => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Project map response is not available in a supported format. Use list view to continue.');
+  }
+  const response = value as Partial<ProjectMapResponse>;
+  if (!Array.isArray(response.projects) || typeof response.total !== 'number' || !Number.isFinite(response.total)) {
+    throw new Error('Project map marker fields are not fully specified for this response. Use list view to continue.');
+  }
+  return value as ProjectMapResponse;
+};
 
 export interface UnitGridQuery {
   page?: number;
@@ -254,8 +280,8 @@ export type ProjectPublicationRequest =
   | { expectedVersion: number; publicationAction: 'save_draft' };
 
 export const projectService = {
-  async listProjects(query?: ProjectSearchQuery): Promise<ProjectListResponse> {
-    const { data } = await api.get<ProjectListResponse>('/projects', { params: compact(query) });
+  async listProjects(query?: ProjectSearchQuery | URLSearchParams, signal?: AbortSignal): Promise<ProjectListResponse> {
+    const { data } = await api.get<ProjectListResponse>('/projects', { params: canonicalProjectParams(query), signal });
     return data;
   },
 
@@ -264,16 +290,22 @@ export const projectService = {
     return data;
   },
 
-  async getProjectProperties(idOrSlug: string, query?: ProjectPropertyQuery): Promise<ProjectPropertiesResponse> {
+  async getProjectProperties(idOrSlug: string, query?: ProjectPropertyQuery | URLSearchParams, signal?: AbortSignal): Promise<ProjectPropertiesResponse> {
     const { data } = await api.get<ProjectPropertiesResponse>(`/projects/${encodeURIComponent(idOrSlug)}/properties`, {
-      params: compact(query),
+      params: query instanceof URLSearchParams ? canonicalProjectParams(query) : compact(query),
+      signal,
     });
     return data;
   },
 
-  async getProjectMap(query: ProjectMapQuery): Promise<ProjectMapResponse> {
-    const { data } = await api.get<ProjectMapResponse>('/projects/map', { params: compact(query) });
-    return data;
+  async getProjectMap(query: ProjectMapQuery | URLSearchParams, signal?: AbortSignal): Promise<ProjectMapResponse> {
+    const params = canonicalProjectParams(query);
+    // Project map results summarize all matching projects in the bounds; page
+    // state belongs to the list view and must not limit the map request.
+    params.delete('page');
+    params.delete('limit');
+    const { data } = await api.get<unknown>('/projects/map', { params, signal });
+    return parseProjectMapResponse(data);
   },
 
   async createProject(body: CreateProjectRequest, challengeId?: string): Promise<{ project: ProjectDetail }> {

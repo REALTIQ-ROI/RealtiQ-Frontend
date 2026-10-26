@@ -164,6 +164,7 @@ export interface ProjectCard extends ProjectSummary {
   location: { state?: string; city?: string; area?: string };
   minimumPrice?: number;
   maximumPrice?: number;
+  currency?: string;
   totalUnits: number;
   availableUnits: number;
   soldUnits?: number;

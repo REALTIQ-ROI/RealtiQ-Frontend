@@ -25,6 +25,8 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notices, setNotices] = useState<unknown[]>([]);
+  const [diagnostics, setDiagnostics] = useState<unknown>(null);
+  const [facets, setFacets] = useState<unknown>(null);
   const [filters, setFilters] = useState<PropertyFiltersQuery | URLSearchParams>(initialFilters);
   const requestSequence = useRef(0);
 
@@ -34,6 +36,8 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
       setLoading(true);
       setError(null);
       setNotices([]);
+      setDiagnostics(null);
+      setFacets(null);
       try {
         const requestFilters = currentFilters instanceof URLSearchParams
           ? new URLSearchParams(currentFilters)
@@ -47,12 +51,16 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
           setProperties(res.properties);
           setTotal(res.total);
           setNotices(res.normalization?.notices ?? []);
+          setDiagnostics(res.diagnostics ?? null);
+          setFacets(res.facets ?? null);
         }
       } catch (err) {
         if (requestId === requestSequence.current) {
           const message = err instanceof ApiRequestError && err.code ? `${err.message} (${err.code})` : err instanceof Error ? err.message : 'Failed to load properties.';
           setProperties([]);
           setTotal(0);
+          setDiagnostics(null);
+          setFacets(null);
           setError(message);
         }
       } finally {
@@ -155,6 +163,8 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
     loading,
     error,
     notices,
+    diagnostics,
+    facets,
     filters,
     fetchProperties,
     applyFilters,

@@ -7,12 +7,16 @@ const validPoint = (lat: unknown, lng: unknown): lat is number =>
 
 const priceLabel = (price: number | null | undefined, currency: string | undefined): string => {
   if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) return 'View';
-  const symbol = currency === 'USD' ? '$' : currency === 'NGN' ? '₦' : '';
-  if (!symbol) return 'View';
-  if (price >= 1_000_000_000) return `${symbol}${(price / 1_000_000_000).toFixed(1)}B`;
-  if (price >= 1_000_000) return `${symbol}${(price / 1_000_000).toFixed(1)}M`;
-  if (price >= 1_000) return `${symbol}${Math.round(price / 1_000)}K`;
-  return `${symbol}${price}`;
+  if (!currency) return 'View';
+  try {
+    const symbol = new Intl.NumberFormat('en-NG', { style: 'currency', currency, currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 })
+      .formatToParts(0).find((part) => part.type === 'currency')?.value;
+    if (!symbol) return 'View';
+    if (price >= 1_000_000_000) return `${symbol}${(price / 1_000_000_000).toFixed(1)}B`;
+    if (price >= 1_000_000) return `${symbol}${(price / 1_000_000).toFixed(1)}M`;
+    if (price >= 1_000) return `${symbol}${Math.round(price / 1_000)}K`;
+    return `${symbol}${price}`;
+  } catch { return 'View'; }
 };
 
 export const canonicalMapMarkers = (response: CanonicalPropertyMapResponse): { markers: CanonicalMapMarker[]; skipped: number } => {
@@ -24,7 +28,8 @@ export const canonicalMapMarkers = (response: CanonicalPropertyMapResponse): { m
         skipped += 1;
         continue;
       }
-      markers.push({ kind: 'cluster', id: cluster.clusterId, lat: cluster.lat, lng: cluster.lng, count: cluster.propertyCount });
+      markers.push({ kind: 'cluster', id: cluster.clusterId, lat: cluster.lat, lng: cluster.lng, count: cluster.propertyCount,
+        sponsoredCount: typeof cluster.sponsoredCount === 'number' && Number.isFinite(cluster.sponsoredCount) && cluster.sponsoredCount >= 0 ? cluster.sponsoredCount : undefined });
     }
   } else {
     for (const property of response.properties) {

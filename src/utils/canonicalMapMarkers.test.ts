@@ -15,15 +15,21 @@ describe('canonical map markers', () => {
 
   it('retains server cluster counts and skips unsafe coordinates', () => {
     const response: CanonicalPropertyMapResponse = { ...common, mode: 'clusters', clusters: [
-      { clusterId: 'good', lat: 6.4, lng: 3.2, propertyCount: 18 },
+      { clusterId: 'good', lat: 6.4, lng: 3.2, propertyCount: 18, sponsoredCount: 3 },
       { clusterId: 'bad', lat: 999, lng: 3.2, propertyCount: 2 },
     ] };
-    expect(canonicalMapMarkers(response)).toEqual({ skipped: 1, markers: [{ kind: 'cluster', id: 'good', lat: 6.4, lng: 3.2, count: 18 }] });
+    expect(canonicalMapMarkers(response)).toEqual({ skipped: 1, markers: [{ kind: 'cluster', id: 'good', lat: 6.4, lng: 3.2, count: 18, sponsoredCount: 3 }] });
   });
 
   it('does not fall back to legacy coordinate fields when canonical locationPoint is missing', () => {
     const response: CanonicalPropertyMapResponse = { ...common, mode: 'properties', truncated: false,
       properties: [{ _id: 'legacy', publicReference: 'RTQ-LEGACY' }] };
     expect(canonicalMapMarkers(response)).toEqual({ skipped: 1, markers: [] });
+  });
+
+  it('uses the canonical currency code for public map pin labels', () => {
+    const response: CanonicalPropertyMapResponse = { ...common, mode: 'properties', truncated: false,
+      properties: [{ _id: 'one', publicReference: 'RTQ-ONE', locationPoint: { type: 'Point', coordinates: [3.35, 6.45] }, canonicalEffectiveFields: { askingPrice: 2_500_000, currency: 'GBP' } }] };
+    expect(canonicalMapMarkers(response).markers[0]).toMatchObject({ kind: 'property', label: '£2.5M' });
   });
 });

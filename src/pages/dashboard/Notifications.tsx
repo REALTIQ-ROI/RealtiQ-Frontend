@@ -14,6 +14,13 @@ const editable: Array<{ key: PreferenceKey; label: string; description: string; 
   { key: 'inquiries', label: 'Inquiries', description: 'Updates about property inquiries', icon: 'contact_support' },
   { key: 'marketplace', label: 'Marketplace', description: 'Important marketplace activity', icon: 'storefront' },
 ];
+const preferenceChannels = [
+  { key: 'inApp', label: 'In app' },
+  { key: 'email', label: 'Email' },
+  { key: 'sms', label: 'SMS' },
+  { key: 'whatsapp', label: 'WhatsApp' },
+  { key: 'push', label: 'Push' },
+] as const;
 const categoryMeta: Record<NotificationCategory, { label: string; icon: string; tone: string }> = {
   messages: { label: 'Messages', icon: 'forum', tone: 'bg-blue-50 text-blue-700' },
   saved_searches: { label: 'Saved search', icon: 'manage_search', tone: 'bg-violet-50 text-violet-700' },
@@ -88,10 +95,10 @@ export default function Notifications() {
         <aside className='h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-6'>
           <div className='mb-5'><span className='grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-700'><span className='material-symbols-outlined'>tune</span></span><h2 className='mt-3 text-xl font-black text-slate-950'>Delivery preferences</h2><p className='mt-1 text-sm leading-6 text-slate-500'>Choose where optional updates reach you.</p></div>
           {prefs ? <form onSubmit={(event) => { event.preventDefault(); setSaving(true); void notificationService.updatePreferences(prefs).then((data) => { setPrefs(data.preferences.categories); setMandatory(data.mandatoryCategories); toast.success('Preferences saved.'); }, (nextError: Error) => setError(nextError.message)).finally(() => setSaving(false)); }}>
-            <div className='divide-y divide-slate-100'>{editable.map(({ key, label, description, icon }) => <fieldset key={key} className='py-4 first:pt-0'><legend className='flex items-center gap-2 font-bold text-slate-800'><span className='material-symbols-outlined text-lg text-slate-500'>{icon}</span>{label}</legend><p className='mb-3 mt-1 text-xs leading-5 text-slate-500'>{description}</p><div className='flex gap-4'>{(['inApp','email'] as const).map((channel) => <label key={channel} className='flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-600'><input className='h-4 w-4 accent-emerald-700' aria-label={`${label} ${channel}`} type='checkbox' checked={prefs[key][channel]} onChange={(event) => setPrefs({ ...prefs, [key]: { ...prefs[key], [channel]: event.target.checked } })} />{channel === 'inApp' ? 'In app' : 'Email'}</label>)}</div></fieldset>)}</div>
+            <div className='divide-y divide-slate-100'>{editable.map(({ key, label, description, icon }) => <fieldset key={key} className='py-4 first:pt-0'><legend className='flex items-center gap-2 font-bold text-slate-800'><span className='material-symbols-outlined text-lg text-slate-500'>{icon}</span>{label}</legend><p className='mb-3 mt-1 text-xs leading-5 text-slate-500'>{description}</p><div className='flex flex-wrap gap-x-4 gap-y-2'>{preferenceChannels.map(({ key: channel, label: channelLabel }) => <label key={channel} className='flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-600'><input className='h-4 w-4 accent-emerald-700' aria-label={`${label} ${channelLabel}`} type='checkbox' checked={Boolean(prefs[key][channel])} onChange={(event) => setPrefs({ ...prefs, [key]: { ...prefs[key], [channel]: event.target.checked } })} />{channelLabel}</label>)}</div></fieldset>)}</div>
             <button className='mt-2 h-11 w-full rounded-xl bg-primary font-bold text-white shadow-sm transition hover:brightness-110 disabled:opacity-50' disabled={saving}>{saving ? 'Saving…' : 'Save preferences'}</button>
           </form> : <div className='space-y-3'>{[1,2,3].map((item) => <div key={item} className='h-20 animate-pulse rounded-xl bg-slate-100' />)}</div>}
-          <div className='mt-5 rounded-xl border border-amber-200 bg-amber-50 p-3'><div className='flex gap-2'><span className='material-symbols-outlined text-lg text-amber-700'>verified_user</span><div><p className='text-sm font-bold text-amber-900'>Always delivered</p><p className='mt-1 text-xs leading-5 text-amber-800'>Security, payment and legal notices cannot be disabled.</p>{mandatory.length > 0 && <p className='mt-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700'>{mandatory.join(' · ')}</p>}</div></div></div>
+          <div className='mt-5 rounded-xl border border-amber-200 bg-amber-50 p-3'><div className='flex gap-2'><span className='material-symbols-outlined text-lg text-amber-700'>verified_user</span><div><p className='text-sm font-bold text-amber-900'>Delivery settings</p><p className='mt-1 text-xs leading-5 text-amber-800'>Security, payment and legal notices cannot be disabled. SMS, WhatsApp, push and email delivery also require approved provider configuration and usable contact details.</p>{mandatory.length > 0 && <p className='mt-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700'>{mandatory.join(' · ')}</p>}</div></div></div>
         </aside>
       </div>
     </main>
