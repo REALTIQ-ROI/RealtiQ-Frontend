@@ -317,14 +317,20 @@ const PropertyDetails = () => {
   const hasOutrightPayment = paymentTypes.includes('outright');
   const hasInstallmentPayment = paymentTypes.includes('installment');
   const hasEscrowPayment = paymentTypes.includes('escrow');
+  const paymentResourceId = property?._id || propertyReference;
 
   useEffect(() => {
-    const propertyResourceId = property?._id || propertyReference;
-    if (propertyResourceId && paymentService.getPendingPaymentReference(`property:${propertyResourceId}`)) {
-      setPaymentOutcomeUnknown(true);
+    const hasPendingAttempt = Boolean(
+      paymentResourceId &&
+      paymentService.getPendingPaymentReference(`property:${paymentResourceId}`),
+    );
+    setPaymentOutcomeUnknown(hasPendingAttempt);
+    if (hasPendingAttempt) {
       setPaymentStatusMessage('A previous payment attempt for this property is still recorded. Check the server status before starting another attempt.');
+    } else {
+      setPaymentStatusMessage('');
     }
-  }, [propertyReference]);
+  }, [paymentResourceId]);
 
   const handleBuyProperty = async () => {
     if (!propertyReference) {

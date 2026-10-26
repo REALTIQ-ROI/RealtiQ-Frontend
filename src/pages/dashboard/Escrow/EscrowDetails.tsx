@@ -148,7 +148,7 @@ const EscrowDetails = () => {
       setPaymentOutcomeUnknown(true);
       setPaymentStatusMessage('A previous escrow payment attempt is recorded. Check its status before starting another attempt.');
     }
-  }, [displayedEscrow?._id]);
+  }, [displayedEscrow]);
   const progress = useMemo(
     () => (displayedEscrow ? requiredProgress(displayedEscrow) : null),
     [displayedEscrow],

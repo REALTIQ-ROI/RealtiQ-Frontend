@@ -7,6 +7,9 @@ import ManagePayments from './ManagePayments';
 vi.mock('../../../components/layout/AdminLayout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
+vi.mock('../../../contexts/AuthContext', () => ({
+  useAuth: () => ({ activeProfile: { id: 'finance-profile' }, token: 'session-token' }),
+}));
 vi.mock('../../../services/paymentService', () => ({
   paymentService: {
     getPayments: vi.fn(),
@@ -61,7 +64,7 @@ describe('ManagePayments', () => {
     expect(screen.getByText('Related record unavailable')).toBeInTheDocument();
   });
 
-  it('withholds cancellation because its exact request DTO is not documented', async () => {
+  it('offers cancellation only through the documented pending-payment flow', async () => {
     vi.mocked(paymentService.getPayments).mockResolvedValue([
       {
         _id: 'payment-2',
@@ -79,7 +82,7 @@ describe('ManagePayments', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('button', { name: 'Cancel payment' })).toBeDisabled();
-    expect(screen.getByText(/Payment cancellation stays disabled/)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Cancel payment' })).toBeEnabled();
+    expect(screen.getByText(/cancels only a pending attempt and does not issue a refund/i)).toBeInTheDocument();
   });
 });

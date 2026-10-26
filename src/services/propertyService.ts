@@ -389,14 +389,29 @@ export const propertyService = {
     return data;
   },
 
-  async attachPropertyToProject(propertyId: string, body: { projectId: string; projectUnit?: ProjectUnit }): Promise<{ property: Property }> {
-    const { data } = await api.patch<{ property: Property }>(`/properties/${propertyId}/project`, body);
-    return { property: normalizeProperty(data.property) };
+  async attachPropertyToProject(
+    propertyId: string,
+    body: { projectId: string; projectUnit?: ProjectUnit; expectedVersion?: number },
+    challengeId: string,
+  ): Promise<{ property: Property; version: number }> {
+    const { data } = await api.patch<{ property: Property; version: number }>(
+      `/properties/${encodeURIComponent(propertyId)}/project`,
+      body,
+      { headers: { 'X-Step-Up-Challenge': challengeId } },
+    );
+    return { ...data, property: normalizeProperty(data.property) };
   },
 
-  async detachPropertyFromProject(propertyId: string): Promise<{ property: Property }> {
-    const { data } = await api.delete<{ property: Property }>(`/properties/${propertyId}/project`);
-    return { property: normalizeProperty(data.property) };
+  async detachPropertyFromProject(
+    propertyId: string,
+    body: { expectedVersion?: number },
+    challengeId: string,
+  ): Promise<{ property: Property; version: number }> {
+    const { data } = await api.delete<{ property: Property; version: number }>(
+      `/properties/${encodeURIComponent(propertyId)}/project`,
+      { data: body, headers: { 'X-Step-Up-Challenge': challengeId } },
+    );
+    return { ...data, property: normalizeProperty(data.property) };
   },
 
   async createConstructionUpdate(propertyId: string, body: ConstructionUpdateRequest): Promise<{ update: ConstructionUpdate; property: Property }> {

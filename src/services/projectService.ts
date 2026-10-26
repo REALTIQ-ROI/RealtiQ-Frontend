@@ -14,6 +14,7 @@ import type {
   Property,
 } from '../types';
 import { normalizeProjectPublication } from '../utils/projectPublication';
+import { propertyService } from './propertyService';
 
 const compact = <T extends object>(value?: T) =>
   Object.fromEntries(
@@ -409,14 +410,16 @@ export const projectService = {
     return data;
   },
 
-  async attachPropertyToProject(propertyId: string, body: { projectId: string; projectUnit?: ProjectUnit }): Promise<{ property: Property }> {
-    const { data } = await api.patch<{ property: Property }>(`/properties/${encodeURIComponent(propertyId)}/project`, body);
-    return data;
+  attachPropertyToProject(
+    propertyId: string,
+    body: { projectId: string; projectUnit?: ProjectUnit; expectedVersion?: number },
+    challengeId: string,
+  ) {
+    return propertyService.attachPropertyToProject(propertyId, body, challengeId);
   },
 
-  async detachPropertyFromProject(propertyId: string): Promise<{ property: Property }> {
-    const { data } = await api.delete<{ property: Property }>(`/properties/${encodeURIComponent(propertyId)}/project`);
-    return data;
+  detachPropertyFromProject(propertyId: string, body: { expectedVersion?: number }, challengeId: string) {
+    return propertyService.detachPropertyFromProject(propertyId, body, challengeId);
   },
 
   async adminListProjects(query?: ProjectSearchQuery): Promise<ProjectListResponse> {

@@ -634,3 +634,31 @@ The remediation results document's overview says P0 6 / P1 23 / P2 12, while its
 - Canonical field classifications remain as recorded in [Pass 03 coverage](CANONICAL_FIELD_COVERAGE_PASS03.md). This reconciliation adds no canonical editability claims; B03-02 and B03-03 remain blocked.
 
 See [the detailed 41-row reconciliation](FRONTEND_RECONCILIATION_POST_BACKEND_REMEDIATION.md) for each original issue, initial/final frontend status, affected files, UI entry point, focused checks and dependencies.
+
+## PASS 11 — FRONTEND INTEGRATION CHECKLIST
+
+### Initial audit and implementation
+
+- Read Chapter 11 in source order and audited all **62 checklist items**, the route tree, shared API/session/profile infrastructure, service families and reachable UI entry points. The checklist-level matrix with initial/final status, route/service coverage, user journeys, blockers and exact checks is [FRONTEND_INTEGRATION_CHECKLIST_PASS11.md](FRONTEND_INTEGRATION_CHECKLIST_PASS11.md).
+- Initial coverage was strong across auth bootstrap, canonical search/maps, property/project/unit management, imports/jobs, protected evidence, payments, privacy, notifications/realtime and staff tools. Remaining gaps included missing association UI despite the corrected Chapter 02 route, contradictory disabled payment-cancel copy on the admin detail route, and five hook dependency warnings.
+- Added owner project association to the existing property editor. It uses `GET /api/projects/mine`, `PATCH /api/properties/:id/project` and `DELETE /api/properties/:id/project`, preserves optional project-unit identifiers, supplies returned property version when available, binds the exact request to TOTP, prevents Sold/history-protected changes and refreshes authoritative property state after mutation/conflict.
+- Connected pending payment cancellation on `/dashboard/admin/payment-details/:id` to `PATCH /api/admin/payments/:id/cancel` with optional bounded reason and bound TOTP; refreshed from the returned payment DTO, corrected stale copy and added failure-state recovery. Cancellation is not represented as a refund.
+- Fixed the five `react-hooks/exhaustive-deps` warnings in EscrowDetails, LandlordVerification, OrganizationManagement and PropertyDetails. Also corrected the ManageProperties archive explanation.
+
+### Checklist result and remaining work
+
+- Checklist items: **62 audited**; final classifications appear individually in the linked Pass 11 report. One item moved from PARTIAL to COMPLETE at frontend source/UI level: seller property/project/type/unit journey now includes project association. The admin payment detail route inconsistency was corrected; the existing payment-cancellation blocker had already been marked complete for the list route.
+- Previously supported journeys and their state handling were source-reviewed; no backend request or live provider operation was made. Follow management, organization seat/payout/mandate/signatory gaps, import explicit row decisions, parts of verification/privacy/admin review, ownership history/transfer, and broad application-wide 409/503/accessibility coverage remain partial or blocked as itemized in the report.
+- `mockStore.ts` has no source imports in the inspected frontend; no reachable page was found using it as its backend substitute.
+- Revisited all 15 rows previously classified PARTIAL in the 41-blocker reconciliation: B02-01 is now COMPLETE at source/UI level; 14 remain PARTIAL with their exact frontend, configuration or specification dependencies listed in the Pass 11 report.
+
+### Files and verification
+
+- Source/tests: `src/components/property/PropertyProjectAssociation.tsx`, `src/components/property/PropertyProjectAssociation.test.tsx`, `src/pages/dashboard/Landlord/Editproperty.tsx`, `src/services/propertyService.ts`, `src/services/projectService.ts`, `src/services/propertyService.projectAssociation.test.ts`, `src/pages/dashboard/Admin/AdminPaymentDetails.tsx`, `src/pages/dashboard/Admin/AdminPaymentDetails.test.tsx`, `src/pages/dashboard/Admin/ManagePayments.test.tsx`, `src/pages/dashboard/Admin/ManageProperties.tsx`, `src/pages/dashboard/Escrow/EscrowDetails.tsx`, `src/pages/dashboard/Landlord/LandlordVerification.tsx`, `src/pages/dashboard/OrganizationManagement.tsx`, `src/pages/public/PropertyDetails.tsx`.
+- Focused tests: 8 files / 33 tests passed (exit 0), including association service/UI, admin payment detail and route-change recovery, ManagePayments, escrow, step-up/profile, realtime and public property-view cases.
+- TypeScript no-emit passed (exit 0). Edited-file ESLint passed with `--max-warnings 0` (exit 0). `git diff --check` passed (exit 0; only line-ending normalization notices).
+- No full suite/build or live backend acceptance was run.
+
+### Verdict and Pass 12 readiness
+
+**Pass 11 verdict: PARTIAL.** The checklist’s supported frontend-owned association and payment-detail gaps are closed, and stale hook closures were fixed. The remaining partial/blocked items require missing route-specific DTOs, product/specification decisions, approved policies or provider/deployment configuration. They remain accurately represented in the Pass 11 report and the Pass 01–10 reconciliation. **Pass 12 is ready to begin**; no Pass 11 dependency requires additional backend access.

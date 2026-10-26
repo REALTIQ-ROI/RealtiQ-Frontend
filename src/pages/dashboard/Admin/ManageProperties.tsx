@@ -138,7 +138,7 @@ const ManageProperties = () => {
             </div>
           </div>
         </div>
-        <p className="mb-6 text-sm text-secondary">This view uses public eligible inventory. Listing archive is unavailable until the server step-up challenge contract is documented.</p>
+        <p className="mb-6 text-sm text-secondary">This view uses public eligible inventory. Staff archive is not exposed here; owners and authorized editors can use the versioned, step-up-protected archive action from property management.</p>
 
         {/* Filter Bar */}
         <div className="flex flex-wrap items-center gap-3 mb-8">

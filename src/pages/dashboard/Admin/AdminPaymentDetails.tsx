@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 import AdminLayout from '../../../components/layout/AdminLayout';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { paymentService } from '../../../services/paymentService';
 import type { ApiPayment } from '../../../types';
 
@@ -37,19 +39,39 @@ const AdminPaymentDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const cancelStepUp = useBoundStepUp<Awaited<ReturnType<typeof paymentService.cancelPayment>>>();
+  const requestSequence = useRef(0);
+  const paymentIdRef = useRef(id);
+  paymentIdRef.current = id;
+  const cancelPendingChallenge = cancelStepUp.cancel;
 
-  useEffect(() => {
+  const refreshPayment = useCallback(async () => {
+    const requestId = ++requestSequence.current;
     if (!id) { setError('No payment ID provided.'); setLoading(false); return; }
     setLoading(true);
-    paymentService
-      .getPaymentById(id)
-      .then(setPayment)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Payment not found.'))
-      .finally(() => setLoading(false));
+    setError(null);
+    setPayment(null);
+    try {
+      const nextPayment = await paymentService.getPaymentById(id);
+      if (requestId === requestSequence.current) setPayment(nextPayment);
+    } catch (err) {
+      if (requestId === requestSequence.current) setError(err instanceof Error ? err.message : 'Payment not found.');
+    } finally {
+      if (requestId === requestSequence.current) setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    cancelPendingChallenge();
+    void refreshPayment();
+    return () => { requestSequence.current += 1; cancelPendingChallenge(); };
+  }, [cancelPendingChallenge, refreshPayment]);
 
   const handleVerify = async () => {
     if (!payment) return;
+    const requestId = requestSequence.current;
     const confirmed = await Swal.fire({
       title: 'Verify Payment?',
       text: 'This will check payment status with Paystack',
@@ -61,22 +83,25 @@ const AdminPaymentDetails = () => {
       cancelButtonColor: '#6b7280',
       reverseButtons: true,
     });
-    if (!confirmed.isConfirmed) return;
+    if (!confirmed.isConfirmed || requestSequence.current !== requestId) return;
 
     setVerifying(true);
     try {
       const result = await paymentService.verifyPayment(payment.reference);
+      if (requestSequence.current !== requestId) return;
       if (result.verified) {
         toast.success('Provider verification completed. Refreshing the authorized payment record.');
-        setPayment(await paymentService.getPaymentById(payment._id || payment.reference));
+        const refreshed = await paymentService.getPaymentById(payment._id || payment.reference);
+        if (requestSequence.current === requestId) setPayment(refreshed);
       } else {
         toast.info('The provider has not confirmed payment yet. No success or failure is assumed.');
-        setPayment(await paymentService.getPaymentById(payment._id || payment.reference));
+        const refreshed = await paymentService.getPaymentById(payment._id || payment.reference);
+        if (requestSequence.current === requestId) setPayment(refreshed);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Unable to verify payment');
+      if (requestSequence.current === requestId) toast.error(err instanceof Error ? err.message : 'Unable to verify payment');
     } finally {
-      setVerifying(false);
+      if (requestSequence.current === requestId) setVerifying(false);
     }
   };
 
@@ -110,8 +135,59 @@ const AdminPaymentDetails = () => {
   }
 
   const canVerify = payment.status === 'pending' || payment.status === 'failed';
-  const canCancel = payment.status === 'pending' || payment.status === 'failed';
-  const busy = verifying;
+  const canCancel = payment.status === 'pending' && Boolean(payment._id);
+  const busy = verifying || cancelling || cancelStepUp.busy;
+
+  const beginCancel = async () => {
+    if (!canCancel || busy || cancelStepUp.challenge) return;
+    const review = await Swal.fire({
+      title: 'Cancel pending payment?',
+      text: 'This requires Finance authorization and a fresh authenticator check. Cancellation does not issue a refund.',
+      input: 'textarea',
+      inputLabel: 'Reason (optional)',
+      inputAttributes: { maxlength: '1000' },
+      showCancelButton: true,
+      confirmButtonText: 'Review with authenticator',
+      confirmButtonColor: '#9f1239',
+      inputValidator: (value) => value.length > 1000 ? 'The reason must be 1,000 characters or fewer.' : undefined,
+    });
+    if (!review.isConfirmed) return;
+    const reason = typeof review.value === 'string' ? review.value.trim() : '';
+    const body = reason ? { reason } : {};
+    setCancelError(null);
+    setCancelling(true);
+    const started = await cancelStepUp.begin({
+      method: 'PATCH',
+      path: `/api/admin/payments/${encodeURIComponent(payment._id)}/cancel`,
+      body,
+      label: 'Cancel this pending payment attempt',
+      execute: (challengeId, exactBody) => {
+        if (paymentIdRef.current !== id) throw new Error('The payment detail changed. Reload the current payment before starting cancellation again.');
+        return paymentService.cancelPayment(payment._id, exactBody, challengeId);
+      },
+    });
+    setCancelling(false);
+    if (!started) setCancelError(cancelStepUp.error ?? 'The secure cancellation challenge could not be started. Try again or refresh this payment.');
+  };
+
+  const completeCancel = async (code: string): Promise<boolean> => {
+    const requestId = requestSequence.current;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      const result = await cancelStepUp.complete(code);
+      if (requestSequence.current !== requestId) return false;
+      if (!result.ok) {
+        setCancelError(result.error ?? 'The payment was not canceled. Refresh the current payment before reviewing another action.');
+        return false;
+      }
+      setPayment(result.value.payment);
+      toast.success(result.value.alreadyCanceled ? 'Payment was already canceled.' : result.value.message || 'Payment canceled. No refund was issued.');
+      return true;
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     <AdminLayout>
@@ -141,12 +217,12 @@ const AdminPaymentDetails = () => {
             )}
             {canCancel && (
               <button
-                disabled
-                title="Payment cancellation requires the one-use security challenge."
+                disabled={busy || Boolean(cancelStepUp.challenge)}
+                onClick={() => void beginCancel()}
                 className="flex items-center gap-2 border border-rose-200 text-rose-700 px-6 py-3 rounded-md font-bold text-sm hover:bg-rose-50 transition-all disabled:opacity-50"
               >
-                <span className="material-symbols-outlined text-sm">block</span>
-                Cancel payment
+                <span className="material-symbols-outlined text-sm" aria-hidden="true">block</span>
+                {cancelling ? 'Preparing…' : 'Cancel payment'}
               </button>
             )}
             <button
@@ -158,7 +234,8 @@ const AdminPaymentDetails = () => {
             </button>
           </div>
         </div>
-        {canCancel ? <p className="mb-6 text-sm text-secondary">Payment cancellation is unavailable until the one-use security challenge contract is supplied.</p> : null}
+        <p className="mb-6 text-sm text-secondary">Payment cancellation is available only for a pending attempt, requires the current Finance staff profile and a bound authenticator challenge, and does not issue a refund.</p>
+        {cancelError && !cancelStepUp.challenge ? <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-900"><span>{cancelError}</span><button type="button" className="font-bold underline" onClick={() => void refreshPayment()}>Reload current payment</button></div> : null}
 
         {/* Status banner */}
         {payment.status === 'pending' && (
@@ -297,6 +374,13 @@ const AdminPaymentDetails = () => {
           </div>
         </div>
       </div>
+      <StepUpDialog
+        challenge={cancelStepUp.challenge}
+        busy={cancelling || cancelStepUp.busy}
+        error={cancelStepUp.error ?? cancelError}
+        onCancel={() => { cancelStepUp.cancel(); setCancelling(false); }}
+        onSubmit={completeCancel}
+      />
     </AdminLayout>
   );
 };

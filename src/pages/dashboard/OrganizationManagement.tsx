@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import BuyerPortalLayout from '../../components/layout/BuyerPortalLayout';
 import Button from '../../components/ui/Button';
 import ErrorState from '../../components/ui/ErrorState';
@@ -121,7 +121,7 @@ const OrganizationManagement = () => {
     } finally { setWorking(false); }
   };
 
-  const canManageRoles = useMemo(() => permissions.includes('roles.manage'), [permissions]);
+  const canManageRoles = permissions.includes('roles.manage');
 
   return <BuyerPortalLayout pageEyebrow="Organization" pageTitle="Team and invitations" pageSubtitle="Manage current organization memberships and invitations using the active profile's server-granted authority.">
     <div className="space-y-6">

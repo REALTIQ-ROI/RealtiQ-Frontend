@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import LandlordPortalLayout from "../../../components/layout/LandlordPortalLayout";
 import PropertyForm from "../../../components/property/PropertyForm";
+import PropertyProjectAssociation from '../../../components/property/PropertyProjectAssociation';
 import LoadingState from "../../../components/ui/LoadingState";
 import ErrorState from "../../../components/ui/ErrorState";
 import StepUpDialog from '../../../components/auth/StepUpDialog';
@@ -112,13 +113,16 @@ const Editproperty = () => {
         {hasConflict ? <div role="alert" className="mb-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">The server has a newer version. Your draft remains on this page. <button type="button" className="font-bold underline" onClick={() => { setHasConflict(false); void execute(); }}>Reload latest and discard draft</button></div> : null}
         {stepUp.error && !stepUp.challenge ? <p role="alert" className="mb-5 rounded-lg bg-error-container p-4 text-sm text-on-error-container">{stepUp.error}</p> : null}
         {property && !error ? (
-          <PropertyForm
-            key={`${property._id}:${property.version ?? 'unversioned'}`}
-            initialData={property}
-            mode="edit"
-            submitLabel="Save Changes"
-            onSubmit={handleSubmit}
-          />
+          <>
+            <PropertyForm
+              key={`${property._id}:${property.version ?? 'unversioned'}`}
+              initialData={property}
+              mode="edit"
+              submitLabel="Save Changes"
+              onSubmit={handleSubmit}
+            />
+            <PropertyProjectAssociation property={property} onChanged={async () => { await execute(); }} />
+          </>
         ) : loading ? (
           <LoadingState label="Loading property..." />
         ) : !error ? <p role="alert" className="text-sm text-secondary">The owner listing could not be loaded.</p> : null}

@@ -55,6 +55,7 @@ const LandlordVerification = () => {
   const operationKeyRef = useRef<{ signature: string; key: string } | null>(null);
   const withdrawStepUp = useBoundStepUp<VerificationCase>();
   const createCaseStepUp = useBoundStepUp<VerificationCase>();
+  const cancelCreateCaseStepUp = createCaseStepUp.cancel;
   const evidenceStepUp = useBoundStepUp<ProfileEvidence>();
   const profileId = activeProfile?.id;
   const previousProfileId = useRef(profileId);
@@ -90,11 +91,11 @@ const LandlordVerification = () => {
       setIdentityCountry('');
       setIdentityEvidence({});
       caseOperationKeyRef.current = null;
-      createCaseStepUp.cancel();
+      cancelCreateCaseStepUp();
       setUploadError('The active profile changed. Pending verification data and security challenges were cleared; the selected file remains available for a new challenge.');
       previousProfileId.current = profileId;
     }
-  }, [profileId]);
+  }, [profileId, cancelCreateCaseStepUp]);
 
   useEffect(() => {
     if (!contract) return;
@@ -128,7 +129,7 @@ const LandlordVerification = () => {
       setContract(evidenceContract);
     } catch (raw) { if (requestId === loadRequestRef.current && currentProfileIdRef.current === requestedProfileId) setError(raw instanceof Error ? raw.message : 'Unable to load verification data.'); }
     finally { if (requestId === loadRequestRef.current) setLoading(false); }
-  }, [profileId, createCaseStepUp.cancel]);
+  }, [profileId]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => () => { if (filePreview) URL.revokeObjectURL(filePreview.url); }, [filePreview]);
