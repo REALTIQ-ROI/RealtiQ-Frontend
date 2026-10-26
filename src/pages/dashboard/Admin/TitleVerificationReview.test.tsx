@@ -65,7 +65,7 @@ describe('title verification step-up boundary', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Verify and continue' }));
 
     await waitFor(() => expect(titleVerificationService.reviewTitleVerification).toHaveBeenCalledWith(
-      'verification-1', { decision: 'approve', reviewNotes: 'Reviewed.' }, 'admin-token', 'challenge-title',
+      'verification-1', { decision: 'approve', reviewNotes: 'Reviewed.' }, 'challenge-title', 'admin-token',
     ));
     expect(stepUpService.verify).toHaveBeenCalledWith('challenge-title', '123456');
   });

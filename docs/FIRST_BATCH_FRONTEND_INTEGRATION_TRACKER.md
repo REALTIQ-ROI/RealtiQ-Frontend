@@ -708,3 +708,25 @@ See [the detailed 41-row reconciliation](FRONTEND_RECONCILIATION_POST_BACKEND_RE
 ### Pass 14 readiness
 
 The source and mocked evidence is ready to inform authorized staging acceptance for the documented representative contracts. Pass 14 must retain the outstanding 222 route-template documentation gap, initial-login MFA response gap, product/specification decisions, provider/configuration dependencies, payment-attempt index deployment proof and other live/security acceptance gates. Earlier pass verdicts remain unchanged.
+
+
+## PASS 14 — MOUNTED ENDPOINT INDEX
+
+### Initial audit and endpoint alignment
+
+- Parsed Chapter 14's complete endpoint table and scanned frontend source call sites in both directions. The table has **595 unique method/full-path rows**, while the copied index summary states 594; table classifications produce **333 frontend-facing + 79 staff-facing = 412 first-batch rows**, while the prose says 332 + 79 = 411. The handoff was preserved; the discrepancy is documented in the Pass 14 report.
+- Frontend source scan: **346 source invocation locations**, expanding to **348 method/path mappings** after finite path branches and a conditional PUT/PATCH alias, **337 normalized method/path patterns**, and **336 distinct Chapter 14 rows directly used**; **0 unmatched frontend API route expressions**. Exact generated totals and methodology are in [the Pass 14 report](MOUNTED_ENDPOINT_INDEX_PASS14.md).
+- **287/412** first-batch endpoint rows have direct frontend service call evidence; **125/412** have no direct API call in the scoped scan. No direct browser call was found for provider callbacks, operational/internal routes, deprecated routes or compatibility aliases. Unused first-batch routes remain candidates, not automatic defects.
+- The earlier Pass 13 `222/411` route documentation-gap figure does not reproduce on the current local handoff corpus: conservative current scan finds exact method/path pairs on one line for **277/412** first-batch table rows; 135 do not repeat that literal pair. This is not a DTO-completeness measure. Chapter 15 and 16 route-path mentions are selective and often family-based.
+
+### Implemented corrections and test evidence
+
+- Tightened title verification review, retry-anchor, revoke and external-anchor services to require a non-empty challenge and send `X-Step-Up-Challenge`; corrected the review UI argument ordering.
+- Restricted protected title document content retrieval to the documented viewer-content path, rejecting arbitrary same-origin/external/protocol-relative URLs and query/hash-bearing paths before authenticated retrieval.
+- Focused Vitest: **3 files / 19 tests passed** (exit 0). TypeScript no-emit passed (exit 0). Edited-file ESLint passed with zero warnings (exit 0). `git diff --check` is recorded after report generation.
+- No live API calls, payment operations or backend acceptance tests were run.
+
+### Remaining findings and verdict
+
+- Chapter 14 does not itself define per-route query/body/media type, authorization, profile, step-up, version, DTO or response behavior; linked feature contracts remain authoritative. Existing incomplete specifications/configuration and product blockers remain in the earlier tracker sections.
+- **Pass 14 verdict: PARTIAL.** All discovered frontend route patterns map to a mounted method/path, but one-row index count discrepancies, first-batch rows without a direct call, partial route-level DTO documentation and no live backend acceptance remain. Pass 15 is ready for DTO/schema-level review.

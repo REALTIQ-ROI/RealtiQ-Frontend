@@ -78,4 +78,11 @@ describe('titleDocumentService', () => {
     );
     expect(api.get).not.toHaveBeenCalled();
   });
+
+  it('rejects same-origin routes outside the documented protected viewer content endpoint', async () => {
+    await expect(titleDocumentService.fetchViewerContent('/api/admin/users')).rejects.toThrow('invalid content route');
+    await expect(titleDocumentService.fetchViewerContent('//storage.example/private.pdf')).rejects.toThrow('invalid content route');
+    await expect(titleDocumentService.fetchViewerContent('/api/title-document-viewer/token/content?download=1')).rejects.toThrow('invalid content route');
+    expect(api.get).not.toHaveBeenCalled();
+  });
 });

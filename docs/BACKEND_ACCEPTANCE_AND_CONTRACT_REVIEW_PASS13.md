@@ -234,3 +234,10 @@ All scenarios require an authorized dedicated staging environment, synthetic acc
 ## L. Readiness for Pass 14
 
 Source-level endpoint behavior is ready for a staged backend acceptance cycle for contracts represented in the local handoff and in the 44-row matrix. Focused mock tests cover 35 matrix rows and related security/error slices. The frontend is not production/deployment accepted. The 222 undocumented first-batch route paths, Chapter 13’s four family boundaries, configuration gates, product decisions and live provider/storage dependencies remain open. **Pass 13 verdict: PARTIAL.**
+
+
+## Pass 14 evidence addendum — mounted endpoint reconciliation
+
+The Pass 13 route-path counts above are preserved as historical findings. Pass 14 rechecked the **current** copied Chapter 14 table and supporting files: the table parses to 595 unique method/path rows (its summary says 594), and its classifications contain 412 first-batch rows (its summary says 411). A conservative current exact literal method/path scan finds 277/412 first-batch pairs repeated on one line outside Chapter 14; the historical 189/411 and 222/411 figures do not reproduce with the current local corpus and Pass 14 method. Neither scan proves complete request/response/security DTOs.
+
+Pass 14 also closed a frontend source defect: title-verification protected mutations now require/bind the documented step-up header, and protected title viewer retrieval is constrained to its documented route. Three focused files / 19 tests passed; no live backend call was made. See [the Pass 14 report](MOUNTED_ENDPOINT_INDEX_PASS14.md) for the complete 595-row inventory and 346-call-site reconciliation. Historical Pass 13 verdict and acceptance findings remain unchanged.

@@ -68,30 +68,31 @@ export const titleVerificationService = {
     return data;
   },
 
-  async reviewTitleVerification(id: string, input: ReviewTitleVerificationInput, authToken?: string | null, challengeId?: string): Promise<{ verification: TitleVerification }> {
+  async reviewTitleVerification(id: string, input: ReviewTitleVerificationInput, challengeId: string, authToken?: string | null): Promise<{ verification: TitleVerification }> {
+    if (!challengeId.trim()) throw new Error('A step-up challenge is required to review title verification.');
     const url = `/title-verifications/${id}/review`;
     const headers = {
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-      ...(challengeId ? { 'X-Step-Up-Challenge': challengeId } : {}),
+      'X-Step-Up-Challenge': challengeId,
     };
-    const { data } = Object.keys(headers).length
-      ? await api.patch<{ verification: TitleVerification }>(url, input, { headers })
-      : await api.patch<{ verification: TitleVerification }>(url, input);
+    const { data } = await api.patch<{ verification: TitleVerification }>(url, input, { headers });
     return data;
   },
 
-  async retryTitleVerificationExternalAnchor(id: string, challengeId?: string): Promise<{ verification: TitleVerification }> {
+  async retryTitleVerificationExternalAnchor(id: string, challengeId: string): Promise<{ verification: TitleVerification }> {
+    if (!challengeId.trim()) throw new Error('A step-up challenge is required to retry external anchoring.');
     const { data } = await api.post<{ verification: TitleVerification }>(
       `/title-verifications/${id}/retry-anchor`, {},
-      challengeId ? { headers: { 'X-Step-Up-Challenge': challengeId } } : undefined,
+      { headers: { 'X-Step-Up-Challenge': challengeId } },
     );
     return data;
   },
 
-  async revokeTitleVerification(id: string, input: { revocationReason: string }, challengeId?: string): Promise<{ verification: TitleVerification }> {
+  async revokeTitleVerification(id: string, input: { revocationReason: string }, challengeId: string): Promise<{ verification: TitleVerification }> {
+    if (!challengeId.trim()) throw new Error('A step-up challenge is required to revoke title verification.');
     const { data } = await api.patch<{ verification: TitleVerification }>(
       `/title-verifications/${id}/revoke`, input,
-      challengeId ? { headers: { 'X-Step-Up-Challenge': challengeId } } : undefined,
+      { headers: { 'X-Step-Up-Challenge': challengeId } },
     );
     return data;
   },
@@ -149,11 +150,12 @@ export const titleVerificationService = {
     return data;
   },
 
-  async requestRegistryExternalAnchor(publicVerificationId: string, challengeId?: string): Promise<{ record: PublicRegistryRecord }> {
+  async requestRegistryExternalAnchor(publicVerificationId: string, challengeId: string): Promise<{ record: PublicRegistryRecord }> {
+    if (!challengeId.trim()) throw new Error('A step-up challenge is required to request external anchoring.');
     const { data } = await api.post<{ record: PublicRegistryRecord }>(
       `/title-registry/${encodeURIComponent(publicVerificationId)}/request-external-anchor`,
       {},
-      challengeId ? { headers: { 'X-Step-Up-Challenge': challengeId } } : undefined,
+      { headers: { 'X-Step-Up-Challenge': challengeId } },
     );
     return data;
   },

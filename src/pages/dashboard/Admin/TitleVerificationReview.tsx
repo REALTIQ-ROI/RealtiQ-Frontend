@@ -118,7 +118,7 @@ const TitleVerificationReview = () => {
       label: `${decision === 'approve' ? 'Approve' : 'Reject'} title verification ${verificationId}`,
       execute: async (challengeId, exactBody) => {
         try {
-          const response = await titleVerificationService.reviewTitleVerification(verificationId, exactBody, token, challengeId);
+          const response = await titleVerificationService.reviewTitleVerification(verificationId, exactBody, challengeId, token);
           return response.verification.verificationId;
         } catch (raw) {
           if (raw instanceof ApiRequestError && raw.status === 409) await refreshAll(verificationId);

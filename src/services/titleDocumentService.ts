@@ -61,11 +61,16 @@ export interface UploadPropertyTitleDocumentResponse {
 }
 
 const normalizeProtectedContentPath = (contentUrl: string): string => {
-  if (/^https?:\/\//i.test(contentUrl)) {
+  if (typeof contentUrl !== 'string' || /^(?:[a-z][a-z\d+.-]*:)?\/\//i.test(contentUrl)) {
     throw new Error('The protected viewer returned an invalid content route.');
   }
-  if (contentUrl.startsWith('/api/')) return contentUrl.slice(4);
-  return contentUrl;
+  const parsed = new URL(contentUrl, 'https://realtiq.invalid');
+  if (parsed.origin !== 'https://realtiq.invalid' || parsed.search || parsed.hash) {
+    throw new Error('The protected viewer returned an invalid content route.');
+  }
+  const route = parsed.pathname.match(/^\/(?:api\/)?title-document-viewer\/([^/]+)\/content$/);
+  if (!route) throw new Error('The protected viewer returned an invalid content route.');
+  return `/title-document-viewer/${route[1]}/content`;
 };
 
 export const titleDocumentService = {
