@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import StepUpDialog from "../../components/auth/StepUpDialog";
 import AdminLayout from "../../components/layout/AdminLayout";
 import AdminKycMediaViewer from "../../components/proxyNetwork/AdminKycMediaViewer";
 import AgentApprovalModal from "../../components/proxyNetwork/AgentApprovalModal";
@@ -8,6 +9,7 @@ import ActionTextModal from "../../components/proxyNetwork/ActionTextModal";
 import SecureImageThumbnail from "../../components/proxyNetwork/SecureImageThumbnail";
 import ErrorState from "../../components/ui/ErrorState";
 import LoadingState from "../../components/ui/LoadingState";
+import { useBoundStepUp } from "../../hooks/useBoundStepUp";
 import { formatLabel } from "../../features/proxyNetwork/config";
 import {
   getKycMediaKind,
@@ -358,7 +360,10 @@ export const AdminInspectorDetailPage = () => {
     (signal) => proxyNetworkService.getAdminInspector(profileId, signal),
     [profileId],
   );
+  const stepUp = useBoundStepUp<unknown>();
+  const cancelStepUp = stepUp.cancel;
   const [pending, setPending] = useState(false);
+  const [protectedActionLabel, setProtectedActionLabel] = useState("Property Agent decision");
   const [preview, setPreview] = useState<{
     title: string;
     url: string;
@@ -375,14 +380,59 @@ export const AdminInspectorDetailPage = () => {
     tone?: "primary" | "danger";
     onSubmit: (value: string) => void;
   } | null>(null);
-  const act = async (fn: () => Promise<unknown>, message: string) => {
+  useEffect(() => {
+    cancelStepUp();
+    return () => cancelStepUp();
+  }, [profileId, cancelStepUp]);
+
+  const beginReview = async (body: { decision: "approve"; notes: string } | { decision: "reject"; reason: string }) => {
+    const path = `/api/admin/proxy-inspectors/${encodeURIComponent(profileId)}/review`;
+    setProtectedActionLabel(body.decision === "approve" ? "Approve Property Agent" : "Reject Property Agent");
+    const started = await stepUp.begin({
+      method: "PATCH",
+      path,
+      body,
+      label: `${body.decision === "approve" ? "Approve" : "Reject"} Property Agent profile`,
+      execute: (challengeId, exactBody) => proxyNetworkService.reviewInspector(profileId, challengeId, exactBody),
+    });
+    if (!started) toast.error(stepUp.getError() ?? "Unable to start the protected review.");
+    return started;
+  };
+
+  const beginTextMutation = async (kind: "suspend" | "reactivate", value: string) => {
+    const suspend = kind === "suspend";
+    const path = `/api/admin/proxy-inspectors/${encodeURIComponent(profileId)}/${kind}`;
+    setProtectedActionLabel(suspend ? "Suspend Property Agent" : "Reactivate Property Agent");
+    const started = suspend
+      ? await stepUp.begin({
+        method: "PATCH",
+        path,
+        body: { reason: value },
+        label: "Suspend Property Agent profile",
+        execute: (challengeId, exactBody) => proxyNetworkService.suspendInspector(profileId, challengeId, exactBody.reason),
+      })
+      : await stepUp.begin({
+        method: "PATCH",
+        path,
+        body: { notes: value },
+        label: "Reactivate Property Agent profile",
+        execute: (challengeId, exactBody) => proxyNetworkService.reactivateInspector(profileId, challengeId, exactBody.notes),
+      });
+    if (!started) toast.error(stepUp.getError() ?? "Unable to start the protected profile action.");
+    return started;
+  };
+
+  const completeProtectedAction = async (code: string): Promise<boolean> => {
     setPending(true);
     try {
-      await fn();
-      toast.success(message);
+      const result = await stepUp.complete(code);
+      if (!result.ok) {
+        if (/conflict|changed|stale/i.test(result.error ?? "")) await resource.reload();
+        return false;
+      }
+      toast.success(`${protectedActionLabel} was confirmed by the server. Profile state refreshed.`);
       await resource.reload();
-    } catch (raw) {
-      toast.error(raw instanceof Error ? raw.message : "Action failed.");
+      return true;
     } finally {
       setPending(false);
     }
@@ -428,38 +478,16 @@ export const AdminInspectorDetailPage = () => {
       requiredMessage: "Rejection reason is required.",
       tone: "danger",
       onSubmit: (reason) => {
-        setTextAction(null);
-        void act(
-          () =>
-            proxyNetworkService.reviewInspector(profileId, {
-              decision: "reject",
-              reason,
-            }),
-          "Property Agent rejected.",
-        );
+        void beginReview({ decision: "reject", reason }).then((started) => {
+          if (started) setTextAction(null);
+        });
       },
     });
   const approve = async (notes: string) => {
-    setPending(true);
-    try {
-      await proxyNetworkService.reviewInspector(profileId, {
-        decision: "approve",
-        notes,
-      });
-      toast.success("Property Agent approved.");
-      await resource.reload();
-      setApprovalOpen(false);
-      return null;
-    } catch (raw) {
-      const message =
-        raw instanceof Error
-          ? raw.message
-          : "Unable to approve this Property Agent.";
-      toast.error(message);
-      return message;
-    } finally {
-      setPending(false);
-    }
+    const started = await beginReview({ decision: "approve", notes });
+    if (!started) return stepUp.getError() ?? "Unable to start the protected approval.";
+    setApprovalOpen(false);
+    return null;
   };
   return (
     <AdminLayout>
@@ -754,18 +782,18 @@ export const AdminInspectorDetailPage = () => {
           </div>
           <aside className="h-fit rounded-2xl bg-white p-5 shadow-sm">
             <h2 className="font-black">Profile actions</h2>
-            <p className="mt-2 text-xs text-secondary">Staff decisions require a one-use security challenge. These actions are unavailable until its request contract is supplied.</p>
+            <p className="mt-2 text-xs text-secondary">Staff decisions use a one-use authenticator challenge bound to the exact action and profile. The profile changes only after the server confirms the mutation.</p>
             {profile.verificationStatus === "under_review" ? (
               <div className="mt-4 space-y-3">
                 <button
-                  disabled
+                  disabled={pending || stepUp.busy || Boolean(stepUp.challenge)}
                   onClick={() => setApprovalOpen(true)}
                   className="w-full rounded-lg bg-emerald-700 px-4 py-3 font-bold text-white"
                 >
                   Approve
                 </button>
                 <button
-                  disabled
+                  disabled={pending || stepUp.busy || Boolean(stepUp.challenge)}
                   onClick={reject}
                   className="w-full rounded-lg bg-red-700 px-4 py-3 font-bold text-white"
                 >
@@ -775,7 +803,7 @@ export const AdminInspectorDetailPage = () => {
             ) : null}
             {profile.verificationStatus === "approved" ? (
               <button
-                disabled
+                disabled={pending || stepUp.busy || Boolean(stepUp.challenge)}
                 onClick={() =>
                   setTextAction({
                     title: "Suspend Property Agent",
@@ -786,15 +814,9 @@ export const AdminInspectorDetailPage = () => {
                     requiredMessage: "Suspension reason is required.",
                     tone: "danger",
                     onSubmit: (reason) => {
-                      setTextAction(null);
-                      void act(
-                        () =>
-                          proxyNetworkService.suspendInspector(
-                            profileId,
-                            reason,
-                          ),
-                        "Inspector suspended and hidden.",
-                      );
+                      void beginTextMutation("suspend", reason).then((started) => {
+                        if (started) setTextAction(null);
+                      });
                     },
                   })
                 }
@@ -805,7 +827,7 @@ export const AdminInspectorDetailPage = () => {
             ) : null}
             {profile.verificationStatus === "suspended" ? (
               <button
-                disabled
+                disabled={pending || stepUp.busy || Boolean(stepUp.challenge)}
                 onClick={() =>
                   setTextAction({
                     title: "Reactivate Property Agent",
@@ -815,15 +837,9 @@ export const AdminInspectorDetailPage = () => {
                     confirmLabel: "Reactivate Property Agent",
                     requiredMessage: "Reactivation notes are required.",
                     onSubmit: (notes) => {
-                      setTextAction(null);
-                      void act(
-                        () =>
-                          proxyNetworkService.reactivateInspector(
-                            profileId,
-                            notes,
-                          ),
-                        "Inspector reactivated.",
-                      );
+                      void beginTextMutation("reactivate", notes).then((started) => {
+                        if (started) setTextAction(null);
+                      });
                     },
                   })
                 }
@@ -844,7 +860,7 @@ export const AdminInspectorDetailPage = () => {
         {approvalOpen ? (
           <AgentApprovalModal
             agentName={user?.name || "this Property Agent"}
-            pending={pending}
+            pending={pending || stepUp.busy || Boolean(stepUp.challenge)}
             onClose={() => setApprovalOpen(false)}
             onSubmit={approve}
           />
@@ -852,10 +868,17 @@ export const AdminInspectorDetailPage = () => {
         {textAction ? (
           <ActionTextModal
             {...textAction}
-            pending={pending}
+            pending={pending || stepUp.busy || Boolean(stepUp.challenge)}
             onClose={() => setTextAction(null)}
           />
         ) : null}
+        <StepUpDialog
+          challenge={stepUp.challenge}
+          busy={pending || stepUp.busy}
+          error={stepUp.error}
+          onCancel={stepUp.cancel}
+          onSubmit={completeProtectedAction}
+        />
       </main>
     </AdminLayout>
   );

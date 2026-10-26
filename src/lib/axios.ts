@@ -23,6 +23,7 @@ export class ApiRequestError extends Error {
   requiresSellerAccount?: boolean;
   reconciliationRequired?: boolean;
   existingAccess?: boolean;
+  existingRequestId?: string;
   invalidItems?: unknown;
   fieldErrors?: ApiFieldError[];
   publicationReadiness?: { projectBlockers?: Array<{ field: string; code: string }>; units?: Array<{ unitId: string; blockers: Array<{ field: string; code: string }> }> };
@@ -44,6 +45,7 @@ export class ApiRequestError extends Error {
     requiresSellerAccount?: boolean;
     reconciliationRequired?: boolean;
     existingAccess?: boolean;
+    existingRequestId?: string;
     invalidItems?: unknown;
     fieldErrors?: ApiFieldError[];
     publicationReadiness?: ApiRequestError['publicationReadiness'];
@@ -165,6 +167,7 @@ export const normalizeApiError = (error: AxiosError<unknown>): Error => {
     requiresSellerAccount: typeof payload?.requiresSellerAccount === 'boolean' ? payload.requiresSellerAccount : undefined,
     reconciliationRequired: typeof payload?.reconciliationRequired === 'boolean' ? payload.reconciliationRequired : undefined,
     existingAccess: typeof payload?.existingAccess === 'boolean' ? payload.existingAccess : undefined,
+    existingRequestId: typeof payload?.existingRequestId === 'string' ? payload.existingRequestId : undefined,
     invalidItems: payload?.invalidItems,
     fieldErrors,
     publicationReadiness: payload?.publicationReadiness as ApiRequestError['publicationReadiness'],

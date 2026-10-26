@@ -760,3 +760,26 @@ The source and mocked evidence is ready to inform authorized staging acceptance 
 
 - Chapter 14 does not itself define per-route query/body/media type, authorization, profile, step-up, version, DTO or response behavior; linked feature contracts remain authoritative. Existing incomplete specifications/configuration and product blockers remain in the earlier tracker sections.
 - **Pass 14 verdict: PARTIAL.** All discovered frontend route patterns map to a mounted method/path, but one-row index count discrepancies, first-batch rows without a direct call, partial route-level DTO documentation and no live backend acceptance remain. Pass 15 is ready for DTO/schema-level review.
+
+## PASS 16 — API RESPONSE VARIATION MATRIX
+
+### Initial audit
+
+- Read Chapter 16 and cross-checked the relevant feature chapters, Chapters 10 and 14–17, and the Pass 11–15 reports. The chapter contains **45 variation-matrix rows** mentioning **44 unique path patterns**, plus **3 contract additions** (payment CSV, saved-search revisions and grid undo metadata). It does not specify a count of individual status/error branches.
+- The 45 rows divide into **28 consumer rows** and **17 operational/internal private-file reconciliation/custody rows** with no first-batch user-facing UI. The latter are intentionally unused here; no migration/operations console or uncontracted UI was invented.
+- Initial source review found three frontend gaps: duplicate proxy request `existingRequestId` was discarded after a race-time 409; Property Agent staff review/suspend/reactivate controls were disabled despite Chapter 07 documenting bound-step-up request bodies; and proxy detail normalization did not validate the documented nullable envelope.
+
+### Implementation and final coverage
+
+- Preserved `existingRequestId` in the shared `ApiRequestError` and linked the existing inspection from the 409 conflict state.
+- Connected Property Agent approve/reject/suspend/reactivate to exact route/body TOTP-bound step-up and server refresh. No optimistic profile verification/visibility change is shown.
+- Hardened proxy detail parsing for required request identity, nullable related records, and the evidence array while preserving permitted populated/extra fields.
+- Final Chapter 16 row classification: **17 COMPLETE with focused mock evidence; 11 PARTIAL (source path verified, dedicated branch assertion remains); 17 INTENTIONALLY UNUSED (operational/internal; no first-batch UI).** No matrix row is blocked by an absent Chapter 16 response DTO. Three separate cross-cutting additions remain source/mock verified from Pass 15. Counts and per-row traceability are in [the Pass 16 response coverage report](API_RESPONSE_VARIATION_MATRIX_PASS16.md).
+- The matrix is representative, not exhaustive for the Chapter 14 mounted routes. Chapter 16 prose says 594/411 and cites 189 exact mentions, while the current Pass 14 table-derived report records 595/412 with a different literal-path scan. This source/methodology discrepancy remains explicit; Pass 13’s historical 222 figure is not restated as a verified count.
+
+### Verification and remaining work
+
+- Focused Vitest command: `npx vitest run --config vite.config.ts src/lib/axios.test.ts src/services/proxyNetworkService.test.ts src/pages/proxyNetwork/CreateProxyInspection.test.tsx src/pages/proxyNetwork/AdminInspectors.stepUp.test.tsx src/services/tourService.test.ts src/services/escrowService.test.ts src/services/adminService.test.ts --reporter=dot` — **7 files / 42 tests executed, all assertions passed, overall exit 1**. Startup/resolution emitted Windows `EPERM: lstat C:\Users\DELL` and `MISSING DEPENDENCY jsdom`. `jsdom@29.1.1` is declared, lockfile-matched, and physically present. The resolver error is environmental; no packages or permissions were changed. The optional Vite `esbuild` peer is not declared/locked and absent; Vite emitted an unresolved optional-import warning but transformed and ran tests.
+- `npx tsc --noEmit -p tsconfig.app.json` — **exit 0**. Edited-file ESLint (`npx eslint` on the eight changed TS/TSX files with `--max-warnings 0`) — **exit 0, zero warnings**. `git diff --check` — **exit 0**; Git emitted only line-ending conversion notices. No live backend/provider calls or full suite/build were run.
+- **Pass 16 verdict: PARTIAL.** All 45 documented rows were inventoried and mapped; 28 frontend-consumer paths are source-aligned, but 11 lack dedicated branch assertions, 17 internal operations have no first-batch consumer, Vitest exits nonzero in this environment, and the chapter is not route-exhaustive. No live acceptance is claimed.
+- Pass 17 is ready to begin using the bounded response inventory and documented blockers; prioritize test assertions for M16-30, M16-33–34, and M16-37–44.

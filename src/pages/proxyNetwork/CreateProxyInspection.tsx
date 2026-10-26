@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import BuyerPortalLayout from '../../components/layout/BuyerPortalLayout';
 import { useProperties } from '../../contexts/PropertiesContext';
 import { REQUESTED_SERVICES } from '../../features/proxyNetwork/config';
+import { ApiRequestError } from '../../lib/axios';
 import { proxyNetworkService } from '../../services/proxyNetworkService';
 import type { ProxyInspectionRequest, RequestedService } from '../../types/proxyNetwork';
 
@@ -96,6 +97,9 @@ const CreateProxyInspection = () => {
       });
       navigate(`/buyer/proxy-inspections/${request._id}`);
     } catch (raw) {
+      if (raw instanceof ApiRequestError && raw.status === 409 && raw.existingRequestId) {
+        setDuplicateRequestId(raw.existingRequestId);
+      }
       setError(raw instanceof Error ? raw.message : 'Unable to create this inspection request.');
       setReviewing(false);
     } finally {

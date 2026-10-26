@@ -35,8 +35,19 @@ export const parseProxyEvidenceList = (value: unknown): ProxyEvidence[] => {
   return value as ProxyEvidence[];
 };
 
-const parseProxyInspectionDetail = (value: unknown): ProxyInspectionDetail => {
-  if (!isRecord(value) || !Array.isArray(value.evidence)) {
+export const parseProxyInspectionDetail = (value: unknown): ProxyInspectionDetail => {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.request) ||
+    typeof value.request._id !== 'string' ||
+    !('serviceEscrow' in value) ||
+    (value.serviceEscrow !== null && !isRecord(value.serviceEscrow)) ||
+    !('report' in value) ||
+    (value.report !== null && !isRecord(value.report)) ||
+    !('dispute' in value) ||
+    (value.dispute !== null && !isRecord(value.dispute)) ||
+    !Array.isArray(value.evidence)
+  ) {
     throw new Error('Property Agent job detail is not available in a supported format.');
   }
   return { ...value, evidence: parseProxyEvidenceList(value.evidence) } as unknown as ProxyInspectionDetail;
@@ -59,6 +70,9 @@ export interface ReportInput {
   declarationAccepted: boolean; signedByName?: string;
 }
 export interface ReviewInput { rating: number; professionalism?: number; accuracy?: number; communication?: number; timeliness?: number; comment?: string }
+export type AdminInspectorReviewInput =
+  | { decision: 'approve'; notes: string }
+  | { decision: 'reject'; reason: string };
 
 export const proxyQueryKeys = {
   publicInspectors: (filters: PublicInspectorFilters) => ['proxy', 'public-list', compact(filters)] as const,
@@ -228,14 +242,20 @@ export const proxyNetworkService = {
   async getAdminInspector(id: string, signal?: AbortSignal) {
     const { data } = await api.get<AdminInspectorDetail>(`/admin/proxy-inspectors/${id}`, config(signal)); return data;
   },
-  async reviewInspector(id: string, input: { decision: 'approve'; notes: string } | { decision: 'reject'; reason: string }) {
-    const { data } = await api.patch(`/admin/proxy-inspectors/${id}/review`, input); return data;
+  async reviewInspector(id: string, challengeId: string, input: AdminInspectorReviewInput) {
+    const { data } = await api.patch(`/admin/proxy-inspectors/${id}/review`, input, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    }); return data;
   },
-  async suspendInspector(id: string, reason: string) {
-    const { data } = await api.patch(`/admin/proxy-inspectors/${id}/suspend`, { reason }); return data;
+  async suspendInspector(id: string, challengeId: string, reason: string) {
+    const { data } = await api.patch(`/admin/proxy-inspectors/${id}/suspend`, { reason }, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    }); return data;
   },
-  async reactivateInspector(id: string, notes: string) {
-    const { data } = await api.patch(`/admin/proxy-inspectors/${id}/reactivate`, { notes }); return data;
+  async reactivateInspector(id: string, challengeId: string, notes: string) {
+    const { data } = await api.patch(`/admin/proxy-inspectors/${id}/reactivate`, { notes }, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    }); return data;
   },
   async listAdminJobs(filters: InspectionListFilters, signal?: AbortSignal) {
     const { data } = await api.get<RequestListResponse>('/admin/proxy-inspections', { params: compact(filters), signal }); return data;

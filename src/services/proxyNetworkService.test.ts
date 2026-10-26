@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import api from '../lib/axios';
-import { parseProxyEvidenceList, proxyNetworkService } from './proxyNetworkService';
+import { parseProxyEvidenceList, parseProxyInspectionDetail, proxyNetworkService } from './proxyNetworkService';
 
 vi.mock('../lib/axios', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn() },
@@ -175,14 +175,42 @@ describe('proxyNetworkService contracts', () => {
     expect(() => parseProxyEvidenceList([{ ...evidence, id: undefined }])).toThrow(/supported format/i);
   });
 
-  it('sends exact admin resolution and profile decision bodies', async () => {
+  it('accepts documented null related detail records and rejects an incomplete detail envelope', () => {
+    const detail = {
+      request: { _id: 'request-1', status: 'requested' },
+      serviceEscrow: null,
+      report: null,
+      evidence: [],
+      dispute: null,
+    };
+
+    expect(parseProxyInspectionDetail(detail)).toEqual(detail);
+    expect(() => parseProxyInspectionDetail({ ...detail, request: null })).toThrow(/supported format/i);
+    expect(() => parseProxyInspectionDetail({ ...detail, serviceEscrow: 'unexpected' })).toThrow(/supported format/i);
+  });
+
+  it('sends exact admin decisions with the required one-use step-up challenge', async () => {
     vi.mocked(api.patch).mockResolvedValue({ data: {} });
     await proxyNetworkService.resolveDispute('request-1', 'challenge-2', { resolution: 'cancel_and_refund', notes: 'Confirmed cancellation.' });
-    await proxyNetworkService.reviewInspector('profile-1', { decision: 'approve', notes: 'Verified.' });
+    await proxyNetworkService.reviewInspector('profile-1', 'challenge-review', { decision: 'approve', notes: 'Verified.' });
+    await proxyNetworkService.reviewInspector('profile-1', 'challenge-reject', { decision: 'reject', reason: 'Missing credential.' });
+    await proxyNetworkService.suspendInspector('profile-1', 'challenge-suspend', 'Policy violation.');
+    await proxyNetworkService.reactivateInspector('profile-1', 'challenge-reactivate', 'Review completed.');
     expect(api.patch).toHaveBeenNthCalledWith(1, '/admin/proxy-inspections/request-1/resolve-dispute', { resolution: 'cancel_and_refund', notes: 'Confirmed cancellation.' }, {
       headers: { 'X-Step-Up-Challenge': 'challenge-2' },
     });
-    expect(api.patch).toHaveBeenNthCalledWith(2, '/admin/proxy-inspectors/profile-1/review', { decision: 'approve', notes: 'Verified.' });
+    expect(api.patch).toHaveBeenNthCalledWith(2, '/admin/proxy-inspectors/profile-1/review', { decision: 'approve', notes: 'Verified.' }, {
+      headers: { 'X-Step-Up-Challenge': 'challenge-review' },
+    });
+    expect(api.patch).toHaveBeenNthCalledWith(3, '/admin/proxy-inspectors/profile-1/review', { decision: 'reject', reason: 'Missing credential.' }, {
+      headers: { 'X-Step-Up-Challenge': 'challenge-reject' },
+    });
+    expect(api.patch).toHaveBeenNthCalledWith(4, '/admin/proxy-inspectors/profile-1/suspend', { reason: 'Policy violation.' }, {
+      headers: { 'X-Step-Up-Challenge': 'challenge-suspend' },
+    });
+    expect(api.patch).toHaveBeenNthCalledWith(5, '/admin/proxy-inspectors/profile-1/reactivate', { notes: 'Review completed.' }, {
+      headers: { 'X-Step-Up-Challenge': 'challenge-reactivate' },
+    });
   });
 
   it('binds price confirmation and payout release to one-use challenges', async () => {

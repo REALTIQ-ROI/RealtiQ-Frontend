@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiRequestError } from '../../lib/axios';
 import { proxyNetworkService } from '../../services/proxyNetworkService';
 import CreateProxyInspection from './CreateProxyInspection';
 
@@ -149,5 +150,35 @@ describe('Create Property Agent inspection request', () => {
     expect(screen.getByRole('link', { name: 'Open existing request.' })).toHaveAttribute('href', '/buyer/proxy-inspections/request-existing');
     expect(proxyNetworkService.createRequest).not.toHaveBeenCalled();
     expect(screen.queryByRole('heading', { name: 'Review request' })).not.toBeInTheDocument();
+  });
+
+  it('opens the server-provided existing request after a duplicate-creation conflict', async () => {
+    const user = userEvent.setup();
+    vi.mocked(proxyNetworkService.createRequest).mockRejectedValue(new ApiRequestError(
+      'An active inspection request already exists.',
+      { status: 409, code: 'CONFLICT_PROXY_INSPECTION_DUPLICATE', existingRequestId: 'request-existing-race' },
+    ));
+
+    render(
+      <MemoryRouter initialEntries={[{
+        pathname: '/buyer/proxy-inspections/new',
+        search: '?propertyId=property-1&inspectorId=agent-user-1',
+        state: { inspectorName: 'Ada Okafor' },
+      }]}>
+        <Routes>
+          <Route path="/buyer/proxy-inspections/new" element={<CreateProxyInspection />} />
+          <Route path="/buyer/proxy-inspections/request-existing-race" element={<p>Existing request opened</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Review request' }));
+    await user.click(screen.getByRole('button', { name: 'Send private request' }));
+
+    const openExisting = await screen.findByRole('link', { name: 'Open existing request.' });
+    expect(openExisting).toHaveAttribute('href', '/buyer/proxy-inspections/request-existing-race');
+    expect(proxyNetworkService.createRequest).toHaveBeenCalledTimes(1);
+    await user.click(openExisting);
+    expect(await screen.findByText('Existing request opened')).toBeInTheDocument();
   });
 });

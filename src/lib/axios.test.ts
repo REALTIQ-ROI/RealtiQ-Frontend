@@ -59,6 +59,20 @@ describe('API error normalization', () => {
     expect(explicit.message).toBe('The project version is stale.');
   });
 
+  it('preserves a duplicate proxy request reference from a conflict response', () => {
+    const normalized = normalizeApiError(responseError(409, {
+      code: 'CONFLICT_PROXY_INSPECTION_DUPLICATE',
+      message: 'An active inspection request already exists.',
+      existingRequestId: 'request-existing-1',
+    }));
+
+    expect(normalized).toMatchObject({
+      status: 409,
+      code: 'CONFLICT_PROXY_INSPECTION_DUPLICATE',
+      existingRequestId: 'request-existing-1',
+    });
+  });
+
   it('preserves Retry-After for rate-limit recovery without scheduling an automatic retry', () => {
     const normalized = normalizeApiError(responseError(429, { code: 'AUTH_FACTOR_RATE_LIMITED' }, { 'retry-after': '30' }));
     expect(normalized).toMatchObject({ status: 429, code: 'AUTH_FACTOR_RATE_LIMITED', retryAfter: '30' });
