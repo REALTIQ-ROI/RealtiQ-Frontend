@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuth } from '../contexts/AuthContext';
 import { ApiRequestError } from '../lib/axios';
 import { stepUpService } from '../services/stepUpService';
-import { useBoundStepUp } from './useBoundStepUp';
+import { stepUpErrorMessage, useBoundStepUp } from './useBoundStepUp';
 
 vi.mock('../contexts/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../services/stepUpService', () => ({ stepUpService: { start: vi.fn(), verify: vi.fn() } }));
@@ -22,6 +22,14 @@ describe('useBoundStepUp', () => {
     setProfile('profile-1');
     vi.mocked(stepUpService.start).mockResolvedValue({ challengeId: 'challenge-1', expiresAt: new Date(Date.now() + 60_000).toISOString(), method: 'totp' });
     vi.mocked(stepUpService.verify).mockResolvedValue(undefined);
+  });
+
+  it('honors Retry-After in rate-limit recovery guidance', () => {
+    expect(stepUpErrorMessage(new ApiRequestError('Rate limited', {
+      status: 429,
+      code: 'AUTH_FACTOR_RATE_LIMITED',
+      retryAfter: '12',
+    }))).toContain('Wait at least 12 seconds');
   });
 
   it('sends the exact frozen JSON body to initiation and the protected action after TOTP', async () => {

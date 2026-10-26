@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { ApiRequestError } from '../lib/axios';
+import { ApiRequestError, retryAfterDelayMs } from '../lib/axios';
 import { stepUpService } from '../services/stepUpService';
 
 export interface BoundStepUpChallenge {
@@ -31,11 +31,15 @@ const cloneAndFreeze = <T extends object>(value: T): T => {
 
 export const stepUpErrorMessage = (error: unknown): string => {
   if (!(error instanceof ApiRequestError)) return error instanceof Error ? error.message : 'The protected action could not be completed.';
+  const waitMessage = (message: string) => {
+    const delay = retryAfterDelayMs(error.retryAfter);
+    return delay && delay > 0 ? `${message} Wait at least ${Math.ceil(delay / 1000)} seconds before trying again.` : message;
+  };
   switch (error.code) {
     case 'AUTH_FACTOR_REQUIRED': return 'Enable the authenticator factor on this account before continuing.';
     case 'AUTH_FACTOR_CODE_INVALID': return 'That authenticator code was not accepted. Enter the current code and try again.';
-    case 'AUTH_FACTOR_RATE_LIMITED': return 'Authenticator verification is temporarily locked. Wait before trying again.';
-    case 'AUTH_CHALLENGE_RATE_LIMITED': return 'Too many security challenges were requested. Wait before trying again.';
+    case 'AUTH_FACTOR_RATE_LIMITED': return waitMessage('Authenticator verification is temporarily locked.');
+    case 'AUTH_CHALLENGE_RATE_LIMITED': return waitMessage('Too many security challenges were requested.');
     case 'AUTH_CHALLENGE_INVALID': return 'This security challenge expired or is no longer valid. Start a new request.';
     case 'AUTH_CHALLENGE_REVOKED':
     case 'AUTH_SESSION_REVOKED': return 'Your session was revoked. Sign in again before continuing.';
