@@ -7,7 +7,7 @@ import { ApiRequestError } from '../../../lib/axios';
 import ProjectPropertyImports from './ProjectPropertyImports';
 
 const mocks = vi.hoisted(() => ({
-  manage: vi.fn(), schema: vi.fn(), imports: vi.fn(), session: vi.fn(), template: vi.fn(), confirm: vi.fn(), retry: vi.fn(),
+  manage: vi.fn(), schema: vi.fn(), imports: vi.fn(), session: vi.fn(), template: vi.fn(), confirm: vi.fn(), retry: vi.fn(), mapColumns: vi.fn(),
   stepUpStart: vi.fn(), stepUpVerify: vi.fn(), upload: vi.fn(),
 }));
 
@@ -20,6 +20,7 @@ vi.mock('../../../services/projectService', () => ({ projectService: {
   confirmProjectPropertyImport: mocks.confirm,
   retryFailedProjectPropertyImportRows: mocks.retry,
   uploadProjectPropertyImport: mocks.upload,
+  mapProjectPropertyImportColumns: mocks.mapColumns,
   editProjectPropertyImportRow: vi.fn(),
   removeProjectPropertyImportRow: vi.fn(),
   restoreProjectPropertyImportRow: vi.fn(),
@@ -47,6 +48,7 @@ describe('project property import flow', () => {
     mocks.stepUpStart.mockResolvedValue({ challengeId: 'challenge-1', expiresAt: new Date(Date.now() + 60_000).toISOString(), method: 'totp' });
     mocks.stepUpVerify.mockResolvedValue(undefined);
     mocks.confirm.mockResolvedValue({ ...readySession, status: 'queued' });
+    mocks.mapColumns.mockResolvedValue(readySession);
   });
 
   it('initiates step-up for the exact confirm path and reports the accepted import as queued', async () => {
@@ -69,6 +71,24 @@ describe('project property import flow', () => {
     await screen.findByText('Unit A');
     const previewRow = screen.getByRole('row', { name: /Unit A/ });
     expect(within(previewRow).getByText('0')).toBeInTheDocument();
+  });
+
+  it('submits the strict documented column mapping and refreshes the staged session', async () => {
+    render(<MemoryRouter initialEntries={['/dashboard/landlord/projects/project-1/imports/import-1']}>
+      <Routes><Route path="/dashboard/landlord/projects/:id/imports/:importId" element={<ProjectPropertyImports />} /></Routes>
+    </MemoryRouter>);
+    await screen.findByText('Unit A');
+    const columnNumbers = screen.getAllByLabelText('Column number');
+    await userEvent.clear(columnNumbers[0]);
+    await userEvent.type(columnNumbers[0], '1');
+    await userEvent.selectOptions(screen.getAllByLabelText('Canonical target')[0], 'title');
+    await userEvent.click(screen.getByRole('button', { name: 'Add mapping' }));
+    const nextNumbers = screen.getAllByLabelText('Column number');
+    await userEvent.clear(nextNumbers[1]);
+    await userEvent.type(nextNumbers[1], '2');
+    await userEvent.selectOptions(screen.getAllByLabelText('Canonical target')[1], 'price');
+    await userEvent.click(screen.getByRole('button', { name: 'Save mapping' }));
+    await waitFor(() => expect(mocks.mapColumns).toHaveBeenCalledWith('project-1', 'import-1', { mappings: [{ columnNumber: 1, field: 'title' }, { columnNumber: 2, field: 'price' }] }));
   });
 
   it('pages through the documented project import history', async () => {

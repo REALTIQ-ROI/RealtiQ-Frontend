@@ -8,6 +8,8 @@ import LoadingState from '../../../components/ui/LoadingState';
 import RegistryAuditDetails from '../../../components/title/RegistryAuditDetails';
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { documentService } from '../../../services/documentService';
 import { titleVerificationService } from '../../../services/titleVerificationService';
@@ -23,6 +25,7 @@ import {
   type TitleVerification,
 } from '../../../types';
 import { documentTypeLabel, formatDateTime, riskFlagText, shortenHash, titleDocumentTypeOptions } from '../../../utils/titleVerification';
+import { buildTitleUploadStepUpBody, digestTitleUpload, validateTitleUploadFile } from '../../../utils/titleUploadStepUp';
 
 const TITLE_DOCUMENT_ACCEPT = '.pdf,image/jpeg,image/png,image/webp';
 
@@ -41,6 +44,8 @@ const LandlordTitleVerifications = () => {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadTitle, setUploadTitle] = useState('Certificate of Occupancy');
   const [uploading, setUploading] = useState(false);
+  const [uploadOutcomeUnknown, setUploadOutcomeUnknown] = useState(false);
+  const titleUploadStepUp = useBoundStepUp<Awaited<ReturnType<typeof documentService.uploadTitleDocument>>>();
   const [openingDocumentId, setOpeningDocumentId] = useState('');
   const [verifications, setVerifications] = useState<TitleVerification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,42 +115,58 @@ const LandlordTitleVerifications = () => {
       toast.error('Select a PDF, JPEG, PNG, or WebP title document.');
       return;
     }
+    if (uploadOutcomeUnknown || titleUploadStepUp.busy || titleUploadStepUp.challenge) return;
+    const fileError = validateTitleUploadFile(uploadFile);
+    if (fileError) { toast.error(fileError); return; }
     setUploading(true);
     try {
-      const response = await documentService.uploadTitleDocument({
+      const input = {
         propertyId: selectedPropertyPublicReference,
         documentType,
         title: uploadTitle,
         file: uploadFile,
+      };
+      const digest = await digestTitleUpload(uploadFile);
+      const body = buildTitleUploadStepUpBody({ documentType, title: uploadTitle }, digest);
+      await titleUploadStepUp.begin({
+        method: 'POST',
+        path: `/api/documents/properties/${encodeURIComponent(selectedPropertyPublicReference)}/title-upload`,
+        body,
+        label: 'Upload this title document to the selected property vault',
+        execute: async (challengeId, exactBody) => {
+          setUploading(true);
+          try {
+            const response = await documentService.uploadTitleDocument(input, challengeId, exactBody);
+            setUploadOutcomeUnknown(false);
+            const publicReference = response.document.publicReference;
+            const verification = response.verification;
+            if (verification) {
+              setVerifications((current) => [verification, ...current.filter((item) => item.verificationId !== verification.verificationId)]);
+              setRiskFlags(verification.riskFlags ?? []);
+            }
+            toast.success(response.verificationExisting ? 'Title document uploaded. Existing title review is active.' : publicReference ? `Title document uploaded as ${publicReference}. Title review pending.` : 'Title document uploaded. Title review pending.');
+            if (response.riskDetected) toast.warning('Legal review is required for this title document before verification can be published.');
+            setUploadFile(null);
+            setUploadTitle('Certificate of Occupancy');
+            await Promise.all([loadDocuments(selectedPropertyPublicReference), load(), refreshProperties()]);
+            return response;
+          } catch (raw) {
+            if (!(raw instanceof ApiRequestError) || !raw.status || raw.status >= 500) setUploadOutcomeUnknown(true);
+            throw raw;
+          } finally { setUploading(false); }
+        },
       });
-      const publicReference = response.document.publicReference;
-      const verification = response.verification;
-      if (verification) {
-        setVerifications((current) => {
-          const withoutDuplicate = current.filter((item) => item.verificationId !== verification.verificationId);
-          return [verification, ...withoutDuplicate];
-        });
-        setRiskFlags(verification.riskFlags ?? []);
-      }
-      toast.success(
-        response.verificationExisting
-          ? 'Title document uploaded. Existing title review is active.'
-          : publicReference
-            ? `Title document uploaded as ${publicReference}. Title review pending.`
-            : 'Title document uploaded. Title review pending.',
-      );
-      if (response.riskDetected) {
-        toast.warning('Legal review is required for this title document before verification can be published.');
-      }
-      setUploadFile(null);
-      setUploadTitle('Certificate of Occupancy');
-      await Promise.all([loadDocuments(selectedPropertyPublicReference), load(), refreshProperties()]);
     } catch (raw) {
-      const message = raw instanceof Error ? raw.message : 'Unable to upload title document.';
-      toast.error(`${message} Please re-upload using the title document uploader.`);
+      toast.error(raw instanceof Error ? raw.message : 'Unable to prepare title document upload.');
     } finally {
       setUploading(false);
     }
+  };
+
+  const submitTitleUploadStepUp = async (code: string): Promise<boolean> => {
+    const result = await titleUploadStepUp.complete(code);
+    if (!result.ok && result.error) setSubmissionError(result.error);
+    return result.ok;
   };
 
   const openTitleDocument = async (document: TitleDocumentRecord) => {
@@ -292,16 +313,17 @@ const LandlordTitleVerifications = () => {
               <p className="text-sm font-bold">Upload a restricted title document</p>
               <p className="mt-1 text-xs text-secondary">RealtIQ stores the file securely in the Document Vault and creates the title review automatically.</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                <select className="rounded-lg bg-white px-3 py-2 text-sm" value={uploadTitle} onChange={(event) => setUploadTitle(event.target.value)}>
+                <select className="rounded-lg bg-white px-3 py-2 text-sm" value={uploadTitle} disabled={uploading || titleUploadStepUp.busy || Boolean(titleUploadStepUp.challenge)} onChange={(event) => setUploadTitle(event.target.value)}>
                   {titleDocumentTypeOptions.map((option) => <option key={option.value} value={option.label}>{option.label}</option>)}
                 </select>
-                <input className="rounded-lg bg-white px-3 py-2 text-sm" type="file" accept={TITLE_DOCUMENT_ACCEPT} onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} />
-                <Button type="button" variant="secondary" onClick={() => void uploadTitleDocument()} disabled title="This multipart route has no documented byte-bound step-up protocol">
+                <input className="rounded-lg bg-white px-3 py-2 text-sm" type="file" accept={TITLE_DOCUMENT_ACCEPT} disabled={uploading || titleUploadStepUp.busy || Boolean(titleUploadStepUp.challenge)} onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} />
+                <Button type="button" variant="secondary" onClick={() => void uploadTitleDocument()} disabled={uploading || titleUploadStepUp.busy || Boolean(titleUploadStepUp.challenge) || !uploadFile || uploadOutcomeUnknown}>
                   {uploading ? 'Uploading...' : 'Upload'}
                 </Button>
               </div>
             </div>
-            <p className="mt-3 text-xs text-amber-800">Title-file upload requires step-up before the backend buffers the file, but this route has no documented byte-bound challenge protocol. Existing document review remains available.</p>
+            {uploadOutcomeUnknown ? <div role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950"><p>The upload response was not confirmed. Do not upload the file again until the title-document list has been refreshed.</p><Button type="button" variant="secondary" className="mt-2" onClick={() => void loadDocuments(selectedPropertyPublicReference).then(() => setUploadOutcomeUnknown(false))}>Refresh documents and review</Button></div> : null}
+            {titleUploadStepUp.error && !titleUploadStepUp.challenge ? <p role="alert" className="mt-3 text-xs text-error">{titleUploadStepUp.error}</p> : null}
             <p className="mt-3 text-xs text-secondary">Title document formats accepted: PDF, JPEG, PNG, and WebP. PDFs are stored as raw files; images are stored as image files.</p>
             {riskFlags.length ? (
               <div role="alert" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -358,6 +380,7 @@ const LandlordTitleVerifications = () => {
             </div>
           )}
         </section>
+        <StepUpDialog challenge={titleUploadStepUp.challenge} busy={uploading || titleUploadStepUp.busy} error={titleUploadStepUp.error} onCancel={titleUploadStepUp.cancel} onSubmit={submitTitleUploadStepUp} />
       </main>
     </LandlordPortalLayout>
   );

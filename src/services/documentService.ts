@@ -1,4 +1,5 @@
 import api from '../lib/axios';
+import { buildBoundTitleUploadFormData, type TitleUploadStepUpBody } from '../utils/titleUploadStepUp';
 import type { TitleDocumentRecord, TitleDocumentType, TitleVerification } from '../types';
 
 export interface UploadTitleDocumentInput {
@@ -42,15 +43,12 @@ export const documentService = {
     return data;
   },
 
-  async uploadTitleDocument(input: UploadTitleDocumentInput): Promise<TitleDocumentUploadResponse> {
-    const form = new FormData();
-    form.append('file', input.file);
-    if (input.documentType) form.append('documentType', input.documentType);
-    if (input.title?.trim()) form.append('title', input.title.trim());
-
+  async uploadTitleDocument(input: UploadTitleDocumentInput, challengeId: string, boundBody: TitleUploadStepUpBody): Promise<TitleDocumentUploadResponse> {
+    const form = buildBoundTitleUploadFormData(input.file, boundBody);
     const { data } = await api.post<TitleDocumentUploadResponse>(
       `/documents/properties/${encodeURIComponent(input.propertyId)}/title-upload`,
       form,
+      { headers: { 'X-Step-Up-Challenge': challengeId } },
     );
     return data;
   },

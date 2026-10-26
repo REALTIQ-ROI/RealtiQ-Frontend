@@ -180,3 +180,13 @@ Post-remediation, this matrix is reconciled against the runtime dictionary and m
 - Chapter 20 now defines nested unit-type list/create/update/remove DTOs, versions, impact and project-unit creation. The project management screen uses them; backend authorization and live acceptance remain unverified.
 - Canonical writes use the dictionary-authorized `set`, `set_null`, `unset`, and `reset_to_inherit` operations. Grid translation uses the grid-specific `reset_to_inherited` spelling only where that contract permits it.
 - Location, site-plan, FX and other Console-backed values remain configuration-gated. The editor does not infer provider readiness or fabricate approved directory values.
+
+## Post-backend-remediation reconciliation note
+
+The Pass 01–10 remediation introduced no new canonical field keys, and this frontend reconciliation did not broaden canonical-field editability. The coverage counts above remain unchanged. Location suggestions, saved-search revisions, import mapping, title upload and map integrations consume existing canonical/query contracts; they do not establish end-to-end coverage for additional dictionary fields.
+
+- **B03-02 remains blocked by missing implementation specification:** the frontend has no per-media-item entitlement mutation or projection contract, so media access is not presented as an editable canonical field.
+- **B03-03 remains blocked by product decision:** the canonical construction-milestone source names 15 values while stating 16. The frontend uses only the named values and does not add a guessed option.
+- Runtime-controlled field classifications remain PARTIAL until a live canonical dictionary response can be checked. No live backend request was made during reconciliation.
+
+The cross-chapter reconciliation is recorded in [FRONTEND_RECONCILIATION_POST_BACKEND_REMEDIATION.md](FRONTEND_RECONCILIATION_POST_BACKEND_REMEDIATION.md).

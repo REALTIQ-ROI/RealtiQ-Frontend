@@ -83,3 +83,8 @@ Handle `LISTING_FIELDS_INVALID` with per-field `errors`; `CONFLICT_LISTING_VERSI
 ## Shared contract references
 
 Contract cross-reference: property/project/unit response shapes and effective-value DTOs are in [15-api-dto-and-schema-reference.md](15-api-dto-and-schema-reference.md); state variations are in [16-api-response-variation-matrix.md](16-api-response-variation-matrix.md); create-to-publication workflows are in [17-end-to-end-frontend-workflows.md](17-end-to-end-frontend-workflows.md).
+### Project association mutation contract
+
+`PATCH /api/properties/:id/project` attaches or moves an eligible property. Body is `{projectId:string,projectUnit?:{unitName?,unitNumber?,block?,phase?,floor?,plotNumber?},expectedVersion?:integer>=0}`; `projectUnit` values are bounded strings/numbers and are contact-guarded. `DELETE /api/properties/:id/project` detaches and accepts only `{expectedVersion?:integer>=0}`. Both require Bearer, the active owner/editor profile, `listing.edit`, current owner-signatory authority, step-up, and current permission over the property and both old/new project. Success is `{property:<safeProperty DTO>,version}`. Sold/completed listings cannot be reassigned; a changed association clears project-scoped unit type, unpublishes the listing and requires normal readiness/review again. Stale versions return `409 CONFLICT_LISTING_VERSION`; a duplicate project unit number returns `409 CONFLICT_PROJECT_UNIT_IDENTIFIER`. The service updates project counts and invalidates dependent publication/search projections transactionally. Use DELETE, not `PATCH` with `projectId:null`, to detach.
+
+\n

@@ -101,7 +101,7 @@ Exact route payload variants are endpoint-specific in [01](01-auth-accounts-prof
 1. Buyer selects an eligible published property and submits `POST /api/tour` with accepted type, schedule and optional safe notes.
 2. Handle `409 CONFLICT_VIEWING_SCHEDULED` by selecting another slot/time; there is no slot-calendar endpoint in the current route set.
 3. For normal request, display `{tour}`; owner receives one-way notification.
-4. For `virtual_paid`, current implementation returns cart or Paystack-initiation branches and uses a fixed server-side amount. The source requires seller-run live video to be free at launch and partner pricing to follow partner terms; therefore do not wire this paid branch as a correct first-batch purchase workflow until backend contract is corrected.
+4. Do not submit `virtual_paid`: the backend returns `503 FEATURE_PAID_TOUR_UNAVAILABLE` before creating a booking or payment. The source does not supply the pricing, provider-session or settlement contract needed to activate this path.
 5. No viewing cancellation operation is mounted and first-batch source does not require one; do not expose Cancel.
 
 ## 12. Protected document access

@@ -269,7 +269,7 @@ export interface CreateEscrowRule extends EscrowMilestoneInput {
 }
 
 export interface CreateEscrowPayload { propertyId: string; amount: number; rules?: CreateEscrowRule[]; metadata?: EscrowMetadata }
-export interface InitializeEscrowPaymentResponse { redirectUrl: string; reference: string; paymentId: string; escrowId: string }
+export interface InitializeEscrowPaymentResponse { redirectUrl?: string; reference: string; paymentId?: string; escrowId: string; pending?: boolean; status?: string; reconciliationRequired?: boolean }
 export interface SatisfyEscrowRuleResponse {
   escrow: Pick<Escrow, '_id' | 'status' | 'amount'>;
   rule: EscrowRule;

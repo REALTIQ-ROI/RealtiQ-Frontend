@@ -37,11 +37,18 @@ export interface DataProtectionExecution {
 }
 
 export type DataProtectionScope = 'account_identity' | 'profile_data' | 'verification' | 'documents' | 'communications' | 'transactions' | 'listing_operations';
+export type DataProtectionCorrectionField = 'account_name' | 'account_phone' | 'profile_name' | 'profile_details' | 'verification_record' | 'document_metadata' | 'listing_record';
 export interface CreateDataProtectionRequestPayload {
-  requestType: 'access' | 'deletion';
+  requestType: 'access' | 'correction' | 'deletion';
   scopes: DataProtectionScope[];
   operationKey: string;
   expectedProfileVersion: number;
+  correctionFields?: DataProtectionCorrectionField[];
+  corrections?: Partial<Record<DataProtectionCorrectionField, string | Record<string, unknown>>>;
+}
+
+export interface WithdrawDataProtectionRequestPayload {
+  expectedVersion: number;
 }
 
 const base = '/profiles/current/data-protection-requests';
@@ -62,6 +69,13 @@ export const dataProtectionService = {
 
   async detail(id: string): Promise<DataProtectionRequestSummary> {
     const { data } = await api.get<{ request: DataProtectionRequestSummary }>(`${base}/${encodeURIComponent(id)}`);
+    return data.request;
+  },
+
+  async withdraw(id: string, payload: WithdrawDataProtectionRequestPayload, challengeId: string): Promise<DataProtectionRequestSummary> {
+    const { data } = await api.post<{ request: DataProtectionRequestSummary }>(`${base}/${encodeURIComponent(id)}/withdraw`, payload, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    });
     return data.request;
   },
 

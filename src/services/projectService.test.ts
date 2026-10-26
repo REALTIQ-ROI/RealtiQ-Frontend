@@ -113,6 +113,14 @@ describe('projectService', () => {
     expect(formData.get('file')).toBe(file);
   });
 
+  it('uses the documented exact import mapping body and nested route', async () => {
+    const session = { importSessionId: 'import-1', project: { id: 'project-1' }, status: 'ready', summary: {}, rows: [] };
+    vi.mocked(api.patch).mockResolvedValue({ data: session });
+    const body = { mappings: [{ columnNumber: 2, field: 'price' }, { columnNumber: 3, field: null }] };
+    await expect(projectService.mapProjectPropertyImportColumns('project-1', 'import-1', body)).resolves.toEqual(session);
+    expect(api.patch).toHaveBeenCalledWith('/projects/project-1/property-imports/import-1/mapping', body);
+  });
+
   it('downloads project import template as a blob', async () => {
     const blob = new Blob(['title,price,propertyType'], { type: 'text/csv' });
     vi.mocked(api.get).mockResolvedValue({ data: blob });

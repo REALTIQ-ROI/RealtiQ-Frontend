@@ -12,6 +12,7 @@ import { projectService } from '../../../services/projectService';
 import type { ImportRowStatus, ProjectDetail, ProjectImportListItem, ProjectImportRow, ProjectImportSchema, ProjectImportSession } from '../../../types';
 import { downloadBlob, rowDataDisplayValue, rowDataValue, sanitizeImportRowPayload, validateProjectImportFile } from '../../../utils/projectImport';
 import { formatDate, labelize } from '../../../utils/projectFormatters';
+import { buildProjectImportMapping, IGNORE_IMPORT_COLUMN, parseCsvHeader, type ImportColumnMappingDraft } from '../../../utils/projectImportMapping';
 
 const numericFields = new Set(['price', 'bedrooms', 'bathrooms', 'squareFeet', 'constructionProgress', 'reservationAmount', 'minimumInitialDeposit', 'installmentDurationMonths']);
 const statusOptions: Array<ImportRowStatus | 'all'> = ['all', 'valid', 'invalid', 'removed', 'imported', 'failed'];
@@ -41,6 +42,9 @@ const ProjectPropertyImports = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [sourceColumns, setSourceColumns] = useState<string[]>([]);
+  const [mappingDrafts, setMappingDrafts] = useState<ImportColumnMappingDraft[]>([{ columnNumber: '1', field: '' }]);
+  const [mappingError, setMappingError] = useState('');
   const [uploadOutcomeUnknown, setUploadOutcomeUnknown] = useState(false);
   const [uploadHistoryChecked, setUploadHistoryChecked] = useState(false);
   const [templateLoading, setTemplateLoading] = useState(false);
@@ -150,14 +154,20 @@ const ProjectPropertyImports = () => {
     setSelectedFile(file);
     const fileError = validateProjectImportFile(file, schema?.limits.maxFileMB);
     if (fileError) { toast.error(fileError); return; }
+    setUploading(true);
+    let parsedColumns: string[] = [];
+    if (file.name.toLowerCase().endsWith('.csv')) {
+      try { parsedColumns = parseCsvHeader(await file.text()); } catch { /* Server validation remains authoritative if browser text access is unavailable. */ }
+    }
     setUploadOutcomeUnknown(false);
     setUploadHistoryChecked(false);
-    setUploading(true);
     try {
       const next = await projectService.uploadProjectPropertyImport(id, file);
       setSession(next);
       setRowPage(1);
-      setSelectedFile(null);
+      setSourceColumns(parsedColumns);
+      setMappingDrafts([{ columnNumber: '1', field: '' }]);
+      setMappingError('');
       setUploadOutcomeUnknown(false);
       setUploadHistoryChecked(false);
       toast.success('Import file staged. Review the returned preview before submitting.');
@@ -174,6 +184,24 @@ const ProjectPropertyImports = () => {
     } finally {
       setUploading(false);
     }
+  };
+
+  const mapColumns = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!session || pendingAction) return;
+    setMappingError('');
+    let body: ReturnType<typeof buildProjectImportMapping>;
+    try { body = buildProjectImportMapping(mappingDrafts, (schema?.fields ?? []).map((field) => field.name)); }
+    catch (raw) { setMappingError(raw instanceof Error ? raw.message : 'Check each source-column mapping.'); return; }
+    setPendingAction('mapping');
+    try {
+      const updated = await projectService.mapProjectPropertyImportColumns(id, sessionId(session), body);
+      replaceSession(updated);
+      toast.success('Column mapping saved and rows revalidated by the server.');
+    } catch (raw) {
+      const message = raw instanceof Error ? raw.message : 'Unable to save import mapping.';
+      setMappingError(message);
+    } finally { setPendingAction(''); }
   };
 
   const checkImportHistoryAfterUpload = async () => {
@@ -397,7 +425,7 @@ const ProjectPropertyImports = () => {
                   </table>
                 </div>
                 {schema?.unsupportedFields.length ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">These source fields are not eligible for this project import and are not mapped: {schema.unsupportedFields.join(', ')}.</p> : null}
-                <p className="mt-3 rounded-lg bg-surface-container-low p-3 text-xs text-secondary">Column remapping is unavailable in this screen. The server-returned schema and row validation remain authoritative.</p>
+                <p className="mt-3 rounded-lg bg-surface-container-low p-3 text-xs text-secondary">The backend validates every source-column mapping against the current project schema. Imported rows remain unpublished until a separate publication action.</p>
               </div>
               <aside className="rounded-xl bg-white p-6">
                 <h2 className="text-xl font-black">Import history</h2>
@@ -434,6 +462,20 @@ const ProjectPropertyImports = () => {
                   </div>
                 </div>
                 {activeImportStates.has(session.status) ? <p role="status" className="mt-3 text-sm text-secondary">This import is {labelize(session.status)}. Progress refreshes automatically; committed rows remain even if cancellation is requested.</p> : null}
+                <section className="mt-5 rounded-lg border border-outline-variant/20 bg-surface-container-low p-4" aria-label="Column mapping">
+                  <h3 className="font-bold">Map source columns</h3>
+                  <p className="mt-1 text-xs text-secondary">Column numbers start at 1. The server accepts only eligible canonical fields, prevents duplicate source/target mappings and revalidates the staged rows. For CSV, headers are shown from the selected file; for XLSX or a reopened session, use the column order in your source sheet.</p>
+                  {sourceColumns.length ? <ol className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-secondary">{sourceColumns.map((header, index) => <li key={`${index}:${header}`}>{index + 1}: {header || '(blank header)'}</li>)}</ol> : null}
+                  <form onSubmit={(event) => void mapColumns(event)} className="mt-3 space-y-2">
+                    {mappingDrafts.map((draft, index) => <div key={index} className="grid gap-2 sm:grid-cols-[minmax(90px,0.3fr)_1fr_auto]">
+                      <label className="text-xs font-semibold">Column number<input type="number" min="1" step="1" value={draft.columnNumber} onChange={(event) => setMappingDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, columnNumber: event.target.value } : item))} className="mt-1 w-full rounded border bg-white px-3 py-2" /></label>
+                      <label className="text-xs font-semibold">Canonical target<select value={draft.field} onChange={(event) => setMappingDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, field: event.target.value } : item))} className="mt-1 w-full rounded border bg-white px-3 py-2"><option value="">Choose a field</option>{(schema?.fields ?? []).map((field) => <option key={field.name} value={field.name}>{field.name}{field.required ? ' *' : ''}</option>)}<option value={IGNORE_IMPORT_COLUMN}>Ignore this source column</option></select></label>
+                      <Button type="button" variant="ghost" disabled={mappingDrafts.length < 2 || Boolean(pendingAction)} onClick={() => setMappingDrafts((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</Button>
+                    </div>)}
+                    <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" disabled={Boolean(pendingAction)} onClick={() => setMappingDrafts((current) => [...current, { columnNumber: '', field: '' }])}>Add mapping</Button><Button type="submit" loading={pendingAction === 'mapping'} loadingLabel="Validating mapping…" disabled={Boolean(pendingAction) || !schema?.fields.length}>Save mapping</Button></div>
+                    {mappingError ? <p role="alert" className="text-sm text-error">{mappingError}</p> : null}
+                  </form>
+                </section>
                 {session.status === 'partial' || session.status === 'partially_completed' ? <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Some rows were imported and others need review. Check each row result before retrying.</p> : null}
                 {progressError ? <p role="alert" className="mt-3 text-sm text-red-700">Progress refresh failed: {progressError}</p> : null}
                 {pollingPaused && activeImportStates.has(session.status) ? <p role="status" className="mt-3 text-sm text-amber-800">Automatic refresh paused after five minutes. Use Refresh status to continue checking this durable import.</p> : null}

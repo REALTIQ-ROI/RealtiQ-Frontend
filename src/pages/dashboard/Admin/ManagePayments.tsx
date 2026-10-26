@@ -5,7 +5,9 @@ import { toast } from 'sonner';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
 import { useAsync } from '../../../hooks/useAsync';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { paymentService } from '../../../services/paymentService';
 import type { ApiPayment } from '../../../types';
 
@@ -38,6 +40,10 @@ const ManagePayments = () => {
   const { data, loading, error, execute } = useAsync(() => paymentService.getPayments(), true);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [verifying, setVerifying] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const exportStepUp = useBoundStepUp<Blob>();
+  const cancelStepUp = useBoundStepUp<Awaited<ReturnType<typeof paymentService.cancelPayment>>>();
+  const [cancelling, setCancelling] = useState<string | null>(null);
   const payments = data ?? [];
   const filtered = activeTab === 'all' ? payments : payments.filter((p) => p.status === activeTab);
 
@@ -76,6 +82,67 @@ const ManagePayments = () => {
     }
   };
 
+  const beginExport = async () => {
+    if (exporting || exportStepUp.busy || exportStepUp.challenge) return;
+    const body = { limit: 2000 };
+    await exportStepUp.begin({
+      method: 'POST', path: '/api/payments/export.csv', body,
+      label: 'Download the authorized payment CSV export',
+      execute: (challengeId, exactBody) => paymentService.exportPaymentsCsv(exactBody, challengeId),
+    });
+  };
+
+  const completeExport = async (code: string): Promise<boolean> => {
+    setExporting(true);
+    const result = await exportStepUp.complete(code);
+    if (result.ok) {
+      const url = URL.createObjectURL(result.value);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'payments.csv';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      toast.success('The authorized payment export has been downloaded.');
+    } else if (result.error) toast.error(result.error);
+    setExporting(false);
+    return result.ok;
+  };
+
+  const beginCancelPayment = async (payment: ApiPayment) => {
+    if (payment.status !== 'pending' || cancelling || cancelStepUp.busy || cancelStepUp.challenge) return;
+    const review = await Swal.fire({
+      title: 'Cancel pending payment?',
+      text: 'This action requires Finance authorization and a fresh authenticator check. Cancellation does not issue a refund.',
+      input: 'textarea', inputLabel: 'Reason (optional)', inputAttributes: { maxlength: '1000' },
+      showCancelButton: true, confirmButtonText: 'Review with authenticator', confirmButtonColor: '#9f1239',
+      inputValidator: (value) => value.length > 1000 ? 'The reason must be 1,000 characters or fewer.' : undefined,
+    });
+    if (!review.isConfirmed) return;
+    const reason = typeof review.value === 'string' ? review.value.trim() : '';
+    const body = reason ? { reason } : {};
+    setCancelling(payment._id);
+    await cancelStepUp.begin({
+      method: 'PATCH', path: `/api/admin/payments/${encodeURIComponent(payment._id)}/cancel`, body,
+      label: 'Cancel this pending payment attempt',
+      execute: (challengeId, exactBody) => paymentService.cancelPayment(payment._id, exactBody, challengeId),
+    });
+  };
+
+  const completeCancelPayment = async (code: string): Promise<boolean> => {
+    const result = await cancelStepUp.complete(code);
+    if (result.ok) {
+      toast.success(result.value.alreadyCanceled ? 'Payment was already canceled.' : result.value.message || 'Payment canceled. No refund was issued.');
+      setCancelling(null);
+      await execute();
+    } else if (result.error && !(result.error.includes('not accepted') || result.error.includes('locked'))) {
+      toast.error(result.error);
+      if (!cancelStepUp.challenge) setCancelling(null);
+    }
+    return result.ok;
+  };
+
   return (
     <AdminLayout>
       <div className="min-h-screen">
@@ -88,7 +155,9 @@ const ManagePayments = () => {
               <p className="text-secondary max-w-md leading-relaxed text-sm">
                 Comprehensive overview of platform liquidity and individual asset performance.
               </p>
-              <p className="mt-3 text-sm text-secondary">Payment cancellation stays disabled until its exact reason and request DTO are documented. Use the platform ledger for authoritative finance aggregates.</p>
+              <p className="mt-3 text-sm text-secondary">Payment cancellation requires the current Finance staff profile and a bound authenticator challenge. It cancels only a pending attempt and does not issue a refund.</p>
+              <button type="button" className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-50" disabled={exporting || exportStepUp.busy || Boolean(exportStepUp.challenge)} onClick={() => void beginExport()}>{exporting || exportStepUp.busy ? 'Preparing protected export…' : 'Export payments CSV'}</button>
+              {exportStepUp.error && !exportStepUp.challenge ? <p role="alert" className="mt-2 text-sm text-error">{exportStepUp.error}</p> : null}
             </div>
             <div className="lg:col-span-5">
               <Link to="/dashboard/admin/wallet" className="block bg-primary-container p-8 rounded-xl relative overflow-hidden hover:opacity-95">
@@ -218,13 +287,13 @@ const ManagePayments = () => {
                                     </>
                                   ) : 'Verify'}
                                 </button>
-                                <button
-                                  disabled
-                                  title="The payment cancellation request DTO is not documented for frontend use."
+                                {payment.status === 'pending' ? <button
+                                  disabled={Boolean(isBusy || cancelling || cancelStepUp.busy || cancelStepUp.challenge)}
+                                  onClick={() => void beginCancelPayment(payment)}
                                   className="inline-flex items-center gap-1 whitespace-nowrap px-3 py-1.5 text-xs font-bold border border-rose-200 text-rose-700 rounded-lg hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
                                 >
-                                  Cancel payment
-                                </button>
+                                  {cancelling === payment._id ? 'Awaiting authorization…' : 'Cancel payment'}
+                                </button> : null}
                                 <button
                                   disabled={isBusy}
                                   onClick={() => void execute()}
@@ -276,6 +345,8 @@ const ManagePayments = () => {
           </div>
         </div>
       </div>
+      <StepUpDialog challenge={exportStepUp.challenge} busy={exporting || exportStepUp.busy} error={exportStepUp.error} onCancel={exportStepUp.cancel} onSubmit={completeExport} />
+      <StepUpDialog challenge={cancelStepUp.challenge} busy={cancelStepUp.busy} error={cancelStepUp.error} onCancel={() => { cancelStepUp.cancel(); setCancelling(null); }} onSubmit={completeCancelPayment} />
     </AdminLayout>
   );
 };

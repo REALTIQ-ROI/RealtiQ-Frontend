@@ -587,3 +587,50 @@ The source-level gaps identified for this pass were: validation envelope parsing
 - No live backend, payment/provider call, real protected mutation, broad build, or full test suite was run. The backend remains unavailable; the remediation inventory is source/documentation based.
 - **Pass 10 verdict: PARTIAL.** The shared documented error envelope and core transport recovery are now normalized and tested. Module-specific validation binding, concurrency conflict review, route-level retry/state contracts, and some cross-module recovery views remain incomplete; the exact backend-dependent gaps are consolidated in the linked inventory. This does not mean the previously connected payment/import/privacy/realtime state machines regress or that their unimplemented operations should be guessed.
 - Pass 11 readiness: **ready for continuation**; remaining contract and configuration gates are isolated. The blocker inventory should be revised when the backend publishes or changes contracts.
+
+## POST-BACKEND-REMEDIATION RECONCILIATION — PASSES 01–10
+
+This section supersedes earlier blocker statements only where the corrected local contract and connected frontend code support the change. It preserves the historical Pass 01–10 records above. The full blocker-by-blocker record is [Frontend Reconciliation Post Backend Remediation](FRONTEND_RECONCILIATION_POST_BACKEND_REMEDIATION.md); the original IDs and backend dispositions remain in [the remediation inventory](BACKEND_CONTRACT_REMEDIATION_PASS01_10.md) and [results](BACKEND_CONTRACT_REMEDIATION_PASS01_10_RESULTS.md).
+
+### Reconciliation outcome
+
+| Result | Count | Notes |
+|---|---:|---|
+| COMPLETE at source/UI level | 18 | Includes connected profile/session controls, location suggestions, staff access changes, legal holds, notification-delivery reconciliation, allocation retry and bound trust-appeal decisions, plus corrected flows already wired. |
+| PARTIAL | 15 | A supported subset is connected; exact remaining steps are listed in the detailed report. |
+| BLOCKED by product, contract or specification | 7 | Paid tours, seat/payout plan selection, listing verification, ownership history/transfer, per-media access, construction milestone count and unspecified admin aggregates. |
+| DEFERRED | 1 | Exhaustive per-route error/state/retry documentation (B10-01). |
+| **Total** | **41** | No live backend acceptance was performed. |
+
+The remediation results document's overview says P0 6 / P1 23 / P2 12, while its actual headings count P0 6 / P1 22 / P2 13. Both total 41; the original heading IDs and priorities are retained.
+
+### Newly connected and corrected journeys
+
+| Operation | Status | Frontend entry point / implementation |
+|---|---|---|
+| Standalone profile creation | COMPLETE | Profile switcher uses allowlisted kinds/structures, operation key, returned profile refresh and selection. |
+| Active session listing and per-session revoke | COMPLETE | Account Security uses the server session DTO and revocation cleanup. |
+| Phone verification event history | PARTIAL | Account Security shows phone challenges and returned events; provider delivery remains configuration-gated. |
+| Organization roster, invitations and applicant signatory request | PARTIAL | Organization Team and Account Security connect those journeys; custom role/mandate CRUD and staff signatory review remain incomplete. |
+| Holder onboarding and verification case submission | COMPLETE | Landlord → Verification uses the current draft version and declared-person paths. |
+| Saved-search revision/conflict review | COMPLETE | Public Listings creates, opens, edits and deletes persisted searches and reviews stale `configurationRevision` before another write. |
+| Location suggestions | COMPLETE | Public Listings filters handle hierarchy and unavailable gazetteer states. |
+| Import mapping and durable job states | PARTIAL / COMPLETE by operation | Mapping uses strict documented envelope; confirm/retry/cancel/polling are connected. Row correction/decision body remains unspecified. |
+| Byte-bound property title upload | PARTIAL | Landlord → Title Verification uses the preferred property-scoped upload and bound bytes/metadata; not every staff title/custody operation has a UI. |
+| Grid undo | COMPLETE | Unit grid gates on returned `undoAvailable` and `undoExpiresAt`; it does not guess expiry. |
+| Payment initialization and export | COMPLETE (client paths) | Property/installment/escrow/cart flows preserve attempt references and unknown states; Admin Payments uses bound `POST /api/payments/export.csv`. Payment unique-index deployment remains required. |
+| Payment cancellation and allocation retry | COMPLETE | Admin Payments cancels pending attempts; Admin Checkout Detail retries eligible allocations using bound `{}`. |
+| Privacy correction/withdrawal and execution | PARTIAL / COMPLETE by operation | Supported applicant values are bound/versioned; grouped outcomes/notices are shown without fabricated record rows. Staff decision DTO remains incomplete. |
+| Staff access changes, legal holds and notification delivery | COMPLETE for documented UI paths | Admin routes use the exact documented protected mutations and shared step-up hook. |
+| Trust appeals | PARTIAL | Admin → Trust Appeals has versioned bound resolution; recompute remains disabled until bodyless binding is documented. |
+| Virtual-tour settings | PARTIAL | Admin Settings now uses bound step-up and sends the returned revision on later writes; no admin settings read supplies the initial revision or history UI. Paid/live tour purchases remain disabled. |
+
+### Remaining blockers and gates
+
+- Login second-factor completion is documented, but the initial login challenge response that should open the code form remains unspecified.
+- The local handoff still omits seat-plan item fields, bank-directory contract, staff signatory queue read route, import row-correction/decision bodies, listing-verification preflight route/response plus upload limits and requirements DTO, staff privacy decision fields, general consent-history schema and some moderation/account projections.
+- Product/specification blockers remain: paid/live tour rules, ownership transfer/history/sales aggregates, per-item media entitlement, construction milestone count and complete admin metrics.
+- Deployment/provider gates remain separate: payment reservation unique index, payment/payout providers and approved policies, evidence scanning/storage, location gazetteer, notification delivery and FX.
+- Canonical field classifications remain as recorded in [Pass 03 coverage](CANONICAL_FIELD_COVERAGE_PASS03.md). This reconciliation adds no canonical editability claims; B03-02 and B03-03 remain blocked.
+
+See [the detailed 41-row reconciliation](FRONTEND_RECONCILIATION_POST_BACKEND_REMEDIATION.md) for each original issue, initial/final frontend status, affected files, UI entry point, focused checks and dependencies.

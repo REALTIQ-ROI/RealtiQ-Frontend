@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import PublicLayout from "../../components/layout/PublicLayout";
 import PropertyCard from "../../components/property/PropertyCard";
@@ -17,6 +17,9 @@ import { canonicalMapMarkers } from '../../utils/canonicalMapMarkers';
 import { cataloguePageFromQuery, readCatalogueQuery, writeCatalogueQuery } from "../../utils/catalogueQuery";
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
 import { summarizeCatalogueFacets } from '../../utils/catalogueFacets';
+import { savedSearchFiltersFromUrl } from '../../utils/savedSearchQuery';
+import type { SavedSearch } from '../../types';
+import { ApiRequestError } from '../../lib/axios';
 import { writeCatalogueMapViewport } from '../../utils/catalogueMapViewport';
 import {
   propertyPublicReference,
@@ -38,7 +41,15 @@ const mapNoticeText = (notice: unknown): string => {
 
 const Listings = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const initialSavedSearchEdit = (location.state as { savedSearchEdit?: { id?: string; name?: string; revision?: number } } | null)?.savedSearchEdit;
+  const [savedSearchEdit, setSavedSearchEdit] = useState(initialSavedSearchEdit?.id && Number.isInteger(initialSavedSearchEdit.revision)
+    ? { id: initialSavedSearchEdit.id, name: initialSavedSearchEdit.name ?? '', revision: initialSavedSearchEdit.revision as number }
+    : null);
+  const [savedSearchConflict, setSavedSearchConflict] = useState<SavedSearch | null>(null);
+  const [reviewedLatestSavedSearch, setReviewedLatestSavedSearch] = useState(false);
+  const [savedSearchError, setSavedSearchError] = useState('');
   const [initialFilters] = useState(() => new URLSearchParams(searchParams));
   const [initialPage] = useState(() => cataloguePageFromQuery(searchParams));
   const appliedQueryKey = useRef(searchParams.toString());
@@ -90,6 +101,9 @@ const Listings = () => {
   const resultsRef = useRef<HTMLDivElement>(null);
   const viewportKey = useRef("");
   const viewportInteracted = useRef(false);
+  const [saveSearchOpen, setSaveSearchOpen] = useState(false);
+  const [savedSearchName, setSavedSearchName] = useState(initialSavedSearchEdit?.name ?? '');
+  const [savingSearch, setSavingSearch] = useState(false);
   useEffect(() => {
     const key = searchParams.toString();
     if (key === appliedQueryKey.current) return;
@@ -202,9 +216,62 @@ const Listings = () => {
     applyFilters(next);
   };
 
+  const saveCurrentSearch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!user || !activeProfile) { navigate('/login-required'); return; }
+    const name = savedSearchName.trim();
+    if (!name || savingSearch) return;
+    setSavingSearch(true);
+    setSavedSearchError('');
+    try {
+      const filters = savedSearchFiltersFromUrl(new URLSearchParams(searchParams));
+      if (savedSearchEdit) {
+        const expectedConfigurationRevision = savedSearchConflict
+          ? reviewedLatestSavedSearch ? savedSearchConflict.configurationRevision : savedSearchEdit.revision
+          : savedSearchEdit.revision;
+        const updated = await personalisationService.updateSearch(savedSearchEdit.id, { name, filters, expectedConfigurationRevision });
+        toast.success(`Saved search updated to revision ${updated.configurationRevision}.`);
+      } else {
+        await personalisationService.createSearch({ name, filters });
+        toast.success('Search saved to this profile.');
+      }
+      setSavedSearchName('');
+      setSaveSearchOpen(false);
+      setSavedSearchEdit(null);
+      setSavedSearchConflict(null);
+      setReviewedLatestSavedSearch(false);
+    } catch (raw) {
+      if (savedSearchEdit && raw instanceof ApiRequestError && raw.code === 'CONFLICT_SAVED_SEARCH_VERSION') {
+        try {
+          const latest = await personalisationService.getSearch(savedSearchEdit.id);
+          setSavedSearchConflict(latest);
+          setReviewedLatestSavedSearch(false);
+          setSavedSearchError(`Saved search changed on the server. Latest revision ${latest.configurationRevision} is shown below. Your current filters and name are preserved for review.`);
+        } catch (refreshError) { setSavedSearchError(refreshError instanceof Error ? refreshError.message : 'The latest saved-search revision could not be loaded.'); }
+      } else {
+        const message = raw instanceof Error ? raw.message : 'Unable to save this search.';
+        setSavedSearchError(message);
+        toast.error(message);
+      }
+    } finally { setSavingSearch(false); }
+  };
+
   return (
     <PublicLayout fullHeight>
       <section className="flex h-full min-h-0 flex-col lg:h-full">
+        <div className="flex flex-wrap items-center justify-end gap-3 px-4 pt-3">
+          {user ? <>
+            {!saveSearchOpen ? <button type="button" className="rounded-lg border border-outline-variant/30 bg-white px-4 py-2 text-sm font-bold text-primary" onClick={() => setSaveSearchOpen(true)}>{savedSearchEdit ? 'Update saved search' : 'Save this search'}</button> : null}
+            {saveSearchOpen ? <form onSubmit={(event) => void saveCurrentSearch(event)} className="flex flex-wrap items-center gap-2 rounded-lg bg-white p-2">
+              <label className="sr-only" htmlFor="saved-search-name">Saved search name</label>
+              <input id="saved-search-name" value={savedSearchName} onChange={(event) => setSavedSearchName(event.target.value)} maxLength={120} required placeholder="Name this search" className="rounded-md border border-outline-variant/30 px-3 py-2 text-sm" />
+              <button type="submit" disabled={savingSearch || !savedSearchName.trim() || Boolean(savedSearchConflict && !reviewedLatestSavedSearch)} className="rounded-md bg-primary px-3 py-2 text-sm font-bold text-white disabled:opacity-50">{savingSearch ? 'Saving…' : savedSearchEdit ? 'Update search' : 'Save search'}</button>
+              <button type="button" disabled={savingSearch} onClick={() => setSaveSearchOpen(false)} className="px-3 py-2 text-sm font-semibold text-secondary">Cancel</button>
+              {savedSearchEdit ? <p className="w-full text-xs text-secondary">Updating saved search revision {savedSearchConflict?.configurationRevision ?? savedSearchEdit.revision}. Pagination is excluded; current canonical criteria are retained.</p> : null}
+              {savedSearchError ? <div role="alert" className="w-full rounded bg-amber-50 p-3 text-xs text-amber-950">{savedSearchError}{savedSearchConflict ? <><pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap">Latest server criteria: {JSON.stringify(savedSearchConflict.filters)}</pre><label className="mt-2 flex items-center gap-2"><input type="checkbox" checked={reviewedLatestSavedSearch} onChange={(event) => setReviewedLatestSavedSearch(event.target.checked)} />I reviewed the latest revision and want to apply my current search criteria.</label></> : null}</div> : null}
+            </form> : null}
+          </> : null}
+        </div>
         <PropertyFiltersPanel
           key={searchParams.toString()}
           initialFilters={readCatalogueQuery(searchParams)}

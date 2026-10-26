@@ -47,6 +47,22 @@ export interface PhoneVerificationStatus {
   errorCode?: string | null;
 }
 
+export interface PhoneVerificationEvent {
+  id: string;
+  challengeId: string;
+  action: string;
+  attempt: number;
+  at: string;
+  errorCode?: string;
+}
+
+export interface AuthSession {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  current: boolean;
+}
+
 export const authService = {
   async getTwoStep(): Promise<{ enabled: boolean }> {
     const { data } = await api.get<{ enabled: boolean }>('/auth/two-step');
@@ -73,6 +89,11 @@ export const authService = {
   },
   async login(payload: LoginPayload): Promise<LoginResponse> {
     const { data } = await api.post<LoginResponse>('/auth/login', payload);
+    return data;
+  },
+
+  async completeLoginSecondFactor(challengeId: string, code: string): Promise<LoginResponse> {
+    const { data } = await api.post<LoginResponse>('/auth/login/second-factor', { challengeId, code });
     return data;
   },
 
@@ -103,8 +124,8 @@ export const authService = {
     return data;
   },
 
-  async phoneVerificationHistory(limit = 25, before?: string): Promise<{ events: unknown[]; nextCursor: string | null }> {
-    const { data } = await api.get<{ events: unknown[]; nextCursor: string | null }>('/auth/phone-verification/history', {
+  async phoneVerificationHistory(limit = 25, before?: string): Promise<{ events: PhoneVerificationEvent[]; nextCursor: string | null }> {
+    const { data } = await api.get<{ events: PhoneVerificationEvent[]; nextCursor: string | null }>('/auth/phone-verification/history', {
       params: { limit, ...(before ? { before } : {}) },
     });
     return data;
@@ -127,6 +148,16 @@ export const authService = {
 
   async revokeOtherSessions(): Promise<unknown> {
     const { data } = await api.delete<unknown>('/auth/sessions/others');
+    return data;
+  },
+
+  async sessions(): Promise<{ sessions: AuthSession[] }> {
+    const { data } = await api.get<{ sessions: AuthSession[] }>('/auth/sessions');
+    return data;
+  },
+
+  async revokeSession(id: string): Promise<{ revoked: number }> {
+    const { data } = await api.delete<{ revoked: number }>(`/auth/sessions/${encodeURIComponent(id)}`);
     return data;
   },
 };

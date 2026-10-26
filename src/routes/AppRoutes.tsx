@@ -55,6 +55,10 @@ import UserDetails from '../pages/dashboard/Admin/UserDetails';
 import ManageInquiries from '../pages/dashboard/Admin/ManageInquiries';
 import ManageLandlords from '../pages/dashboard/Admin/ManageLandlords';
 import ManagePayments from '../pages/dashboard/Admin/ManagePayments';
+import LegalHolds from '../pages/dashboard/Admin/LegalHolds';
+import StaffAccessChanges from '../pages/dashboard/Admin/StaffAccessChanges';
+import NotificationDeliveryReconciliation from '../pages/dashboard/Admin/NotificationDeliveryReconciliation';
+import OrganizationManagement from '../pages/dashboard/OrganizationManagement';
 import ManageProperties from '../pages/dashboard/Admin/ManageProperties';
 import AdminProjects from '../pages/dashboard/Admin/Projects';
 import AdminProjectDetails from '../pages/dashboard/Admin/ProjectDetails';
@@ -208,6 +212,7 @@ const AppRoutes = () => {
           <Route path='/dashboard/personalisation' element={<Personalisation />} />
           <Route path='/dashboard/notifications' element={<Notifications />} />
           <Route path='/dashboard/trust' element={<TrustAccount />} />
+          <Route path='/dashboard/organization' element={<OrganizationManagement />} />
           <Route path='/dashboard/valuations/:propertyReference' element={<ValuationPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/roi-v1/properties/:propertyReference/new" element={<RoiV1EstimatePage />} />
@@ -288,6 +293,9 @@ const AppRoutes = () => {
 
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route path='/dashboard/admin/trust-appeals' element={<TrustAppeals />} />
+          <Route path='/dashboard/admin/legal-holds' element={<LegalHolds />} />
+          <Route path='/dashboard/admin/staff-access-changes' element={<StaffAccessChanges />} />
+          <Route path='/dashboard/admin/notification-deliveries' element={<NotificationDeliveryReconciliation />} />
           <Route path='/dashboard/admin/message-moderation' element={<MessageModeration />} />
           <Route path="/admin/proxy-inspectors" element={<AdminInspectorList />} />
           <Route path="/admin/proxy-inspectors/:profileId" element={<AdminInspectorDetailPage />} />

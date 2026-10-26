@@ -337,6 +337,7 @@ This index is generated from the Express mount table in `src/app.js` and literal
 | GET | `/api/payments` | `src/routes/paymentRoutes.js:19` | First-batch frontend-facing | 07-payments-ownership-escrow.md |
 | GET | `/api/payments/:id` | `src/routes/paymentRoutes.js:22` | First-batch frontend-facing | 07-payments-ownership-escrow.md |
 | GET | `/api/payments/export.csv` | `src/routes/paymentRoutes.js:20` | First-batch frontend-facing | 07-payments-ownership-escrow.md |
+| POST | `/api/payments/export.csv` | `src/routes/paymentRoutes.js:24` | First-batch frontend-facing | 07-payments-ownership-escrow.md |
 | POST | `/api/payments/initialize` | `src/routes/paymentRoutes.js:23` | First-batch frontend-facing | 07-payments-ownership-escrow.md |
 | GET | `/api/payments/verify/:reference` | `src/routes/paymentRoutes.js:21` | First-batch frontend-facing | 07-payments-ownership-escrow.md |
 | POST | `/api/payments/webhook` | `src/routes/paymentRoutes.js:17` | Provider callback | 07-payments-ownership-escrow.md |

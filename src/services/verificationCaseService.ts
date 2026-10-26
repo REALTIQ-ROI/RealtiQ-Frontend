@@ -58,9 +58,42 @@ export interface VerificationCasePage {
   nextCursor: string | null;
 }
 
+export interface VerificationCasePersonRoute {
+  path: string;
+  route: 'nigerian' | 'international';
+  country: string;
+}
+
+export interface VerificationCaseSubmission {
+  expectedDraftVersion: number;
+  operationKey: string;
+  people: VerificationCasePersonRoute[];
+  identityRoute?: 'nigerian' | 'international';
+  identityCountry?: string;
+  identityEvidence?: Array<{ purpose: string; evidenceId: string }>;
+}
+
 export interface VerificationCaseHistoryPage {
   events: Array<{ id: string; action: string; version: number; at: string; [key: string]: unknown }>;
   nextCursor: string | null;
+}
+
+export interface VerificationCaseCheck {
+  field: string;
+  source: 'original_document' | 'official_registry' | 'approved_provider';
+  reference: string;
+  expiresAt?: string;
+  nonExpiring?: true;
+  applicability?: 'required' | 'not_applicable';
+  jurisdictionStateId?: string;
+  issuerName?: string;
+}
+
+export interface VerificationCaseDecision {
+  expectedVersion: number;
+  decision: 'approved' | 'rejected';
+  checks?: VerificationCaseCheck[];
+  reasonCodes?: string[];
 }
 
 const holderBase = '/profiles/current';
@@ -114,6 +147,13 @@ export const verificationCaseService = {
     return data;
   },
 
+  async createHolderCase(body: VerificationCaseSubmission, challengeId: string): Promise<VerificationCase> {
+    const { data } = await api.post<VerificationCase>(`${holderBase}/verification-cases`, body, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    });
+    return data;
+  },
+
   async getHolderCase(id: string): Promise<VerificationCase> {
     const { data } = await api.get<VerificationCase>(`${holderBase}/verification-cases/${encodeURIComponent(id)}`);
     return data;
@@ -154,7 +194,7 @@ export const verificationCaseService = {
     return data;
   },
 
-  async decideCase(id: string, body: { expectedVersion: number; decision: 'rejected'; reasonCodes: ['DOCUMENT_UNREADABLE'] }, challengeId: string): Promise<VerificationCaseDetail> {
+  async decideCase(id: string, body: VerificationCaseDecision, challengeId: string): Promise<VerificationCaseDetail> {
     const { data } = await api.post<VerificationCaseDetail>(`${adminBase}/${encodeURIComponent(id)}/decision`, body, { headers: { 'X-Step-Up-Challenge': challengeId } });
     return data;
   },

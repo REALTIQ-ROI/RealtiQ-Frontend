@@ -1,20 +1,56 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { useAsync } from '../../../hooks/useAsync';
 import { cartService } from '../../../services/cartService';
+import type { CartCheckoutDetail } from '../../../types';
 import { cartItemTypeLabel, checkoutStatusClasses, checkoutStatusLabel, formatNgn } from '../../../utils/cartFormatters';
 
 const canRetry = (detail: Awaited<ReturnType<typeof cartService.adminGetCartCheckout>> | null) => {
   const checkout = detail?.checkout;
   if (!checkout) return false;
-  return ['failed', 'partially_failed'].includes(checkout.status) || checkout.items.some((item) => ['failed', 'pending'].includes(item.status));
+  return detail.payment?.status === 'paid'
+    && (['failed', 'partially_failed'].includes(checkout.status) || checkout.items.some((item) => ['failed', 'pending'].includes(item.status)));
 };
 
 const AdminCartCheckoutDetail = () => {
   const { checkoutId = '' } = useParams();
   const { data, loading, error, execute } = useAsync(() => cartService.adminGetCartCheckout(checkoutId), Boolean(checkoutId));
+  const retryStepUp = useBoundStepUp<CartCheckoutDetail>();
+  const [retrying, setRetrying] = useState(false);
+  const [retryMessage, setRetryMessage] = useState('');
+
+  const beginRetry = async () => {
+    if (!data || !canRetry(data) || retrying || retryStepUp.busy || retryStepUp.challenge) return;
+    if (!window.confirm('Retry eligible allocations for this already paid checkout? This does not start another payment.')) return;
+    const body = {};
+    setRetryMessage('');
+    await retryStepUp.begin({
+      method: 'POST',
+      path: `/api/admin/cart-checkouts/${encodeURIComponent(checkoutId)}/retry-allocations`,
+      body,
+      label: 'Retry eligible paid checkout allocations',
+      execute: (challengeId) => cartService.adminRetryCartAllocations(checkoutId, challengeId),
+    });
+  };
+
+  const completeRetry = async (code: string): Promise<boolean> => {
+    setRetrying(true);
+    try {
+      const result = await retryStepUp.complete(code);
+      if (!result.ok) return false;
+      setRetryMessage('The retry request was accepted. Refreshing authoritative allocation states…');
+      await execute();
+      setRetryMessage('Allocation states were refreshed from the server. Pending or failed rows remain visible until the server confirms a terminal result.');
+      return true;
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   return (
     <AdminLayout>
@@ -37,12 +73,14 @@ const AdminCartCheckoutDetail = () => {
                     {checkoutStatusLabel(data.checkout.status)}
                   </span>
                   {canRetry(data) ? (
-                    <button type="button" disabled title="The allocation-retry request binding is not defined in the frontend contract." className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold text-secondary disabled:cursor-not-allowed disabled:opacity-60">Retry failed allocations</button>
+                    <button type="button" disabled={retrying || retryStepUp.busy || Boolean(retryStepUp.challenge)} onClick={() => void beginRetry()} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">Retry eligible allocations with authenticator</button>
                   ) : null}
                 </div>
               </div>
             </section>
-            {canRetry(data) ? <p role="note" className="text-sm text-secondary">Allocation retry remains unavailable because the mounted route requires step-up but the handoff does not specify the exact bound request body. Checkout and payment status remain available for review.</p> : null}
+            {canRetry(data) ? <p role="note" className="text-sm text-secondary">Retry is available only while the payment is server-reported paid and eligible allocation rows remain. The retry does not charge the buyer again.</p> : null}
+            {retryMessage ? <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">{retryMessage}</p> : null}
+            {retryStepUp.error && !retryStepUp.challenge ? <p role="alert" className="rounded-lg bg-error-container p-3 text-sm text-on-error-container">{retryStepUp.error}</p> : null}
             <section className="rounded-xl border border-outline-variant/10 bg-white">
               <div className="border-b border-outline-variant/10 p-5">
                 <h2 className="text-xl font-black">Allocation items</h2>
@@ -70,6 +108,7 @@ const AdminCartCheckoutDetail = () => {
           </>
         ) : null}
       </div>
+      <StepUpDialog challenge={retryStepUp.challenge} busy={retrying || retryStepUp.busy} error={retryStepUp.error} onCancel={retryStepUp.cancel} onSubmit={completeRetry} />
     </AdminLayout>
   );
 };

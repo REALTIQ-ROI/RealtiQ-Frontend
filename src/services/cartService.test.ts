@@ -65,9 +65,9 @@ describe('cartService', () => {
     expect(api.get).toHaveBeenCalledWith('/admin/cart-checkouts', { params: { page: 1, limit: 20, status: 'partially_failed', user: 'user1', paymentReference: 'ref1' } });
   });
 
-  it('retries failed allocations through the admin-only endpoint', async () => {
+  it('retries failed allocations with the documented empty body and bound step-up', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { checkoutId: 'checkout1', totalAmount: 5000, currency: 'NGN', status: 'completed', items: [] } });
-    await cartService.adminRetryCartAllocations('checkout1');
-    expect(api.post).toHaveBeenCalledWith('/admin/cart-checkouts/checkout1/retry-allocations');
+    await cartService.adminRetryCartAllocations('checkout1', 'challenge-1');
+    expect(api.post).toHaveBeenCalledWith('/admin/cart-checkouts/checkout1/retry-allocations', {}, { headers: { 'X-Step-Up-Challenge': 'challenge-1' } });
   });
 });

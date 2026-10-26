@@ -55,8 +55,8 @@ describe('escrowService', () => {
   });
   it('persists only escrow checkout context when payment is initialized', async () => {
     mockedApi.post.mockResolvedValue({ data: { redirectUrl: 'https://pay.test', reference: 'ref1', paymentId: 'pay1', escrowId: 'e1' } });
-    await escrowService.initializePayment('e1');
-    expect(mockedApi.post).toHaveBeenCalledWith('/escrow/e1/initialize-payment');
+    await escrowService.initializePayment('e1', 'challenge1');
+    expect(mockedApi.post).toHaveBeenCalledWith('/payments/initialize', { escrowId: 'e1' }, { headers: { 'X-Step-Up-Challenge': 'challenge1' } });
     expect(escrowService.getPendingId()).toBe('e1'); expect(escrowService.getPendingReference()).toBe('ref1');
   });
   it('lists and gets role-authorized escrow resources', async () => {

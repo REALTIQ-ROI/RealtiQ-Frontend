@@ -1,4 +1,5 @@
 import api from '../lib/axios';
+import { buildBoundTitleUploadFormData, type TitleUploadStepUpBody } from '../utils/titleUploadStepUp';
 import type {
   ManagedTitleDocument,
   PaidAccessMode,
@@ -56,6 +57,7 @@ export interface UploadPropertyTitleDocumentResponse {
   };
   verificationExisting?: boolean;
   riskDetected?: boolean;
+  nextAction?: string;
 }
 
 const normalizeProtectedContentPath = (contentUrl: string): string => {
@@ -99,15 +101,12 @@ export const titleDocumentService = {
     return data.documents;
   },
 
-  async upload(propertyId: string, input: UploadPropertyTitleDocumentInput): Promise<UploadPropertyTitleDocumentResponse> {
-    const form = new FormData();
-    form.append('file', input.file);
-    form.append('documentType', input.documentType);
-    form.append('title', input.title.trim());
-    form.append('accessPolicy', JSON.stringify(input.accessPolicy));
+  async upload(propertyId: string, input: UploadPropertyTitleDocumentInput, challengeId: string, boundBody: TitleUploadStepUpBody): Promise<UploadPropertyTitleDocumentResponse> {
+    const form = buildBoundTitleUploadFormData(input.file, boundBody);
     const { data } = await api.post<UploadPropertyTitleDocumentResponse>(
-      `/properties/${propertyId}/title-documents`,
+      `/documents/properties/${encodeURIComponent(propertyId)}/title-upload`,
       form,
+      { headers: { 'X-Step-Up-Challenge': challengeId } },
     );
     return data;
   },

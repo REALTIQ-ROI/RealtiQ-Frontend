@@ -117,18 +117,23 @@ export interface SavedSearchFilters {
   bedrooms?: number;
   bathrooms?: number;
   paymentType?: string;
+  [canonicalKey: string]: string | number | boolean | null | readonly (string | number | boolean)[] | undefined;
 }
 export interface SavedSearchAlerts {
   enabled: boolean;
   cadence: "instant" | "daily" | "weekly";
-  channels: { inApp: boolean; email: boolean };
+  timeZone?: string | null;
+  channels?: { inApp?: boolean; email?: boolean; sms?: boolean; whatsapp?: boolean; push?: boolean };
+  triggers?: { newListings?: boolean; priceReductions?: boolean };
 }
 export interface SavedSearch {
   _id: string;
   publicReference: string;
   name: string;
   filters: SavedSearchFilters;
-  alerts: SavedSearchAlerts;
+  alerts?: SavedSearchAlerts;
+  profileId?: string;
+  configurationRevision: number;
   createdAt: string;
   updatedAt: string;
 }

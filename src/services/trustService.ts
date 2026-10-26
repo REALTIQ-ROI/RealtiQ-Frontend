@@ -52,7 +52,7 @@ export const trustService = {
     }>("/trust/v1/admin/appeals", { params: query });
     return phase45Cache.set("admin", `queue:${key}`, data);
   },
-  async resolveAppeal(id: string, input: ResolveAppealInput) {
+  async resolveAppeal(id: string, input: ResolveAppealInput, challengeId: string) {
     const normalized = { ...input, reason: input.reason.trim() };
     if (!normalized.reason || normalized.reason.length > 2000)
       throw new Error(
@@ -77,6 +77,7 @@ export const trustService = {
     const { data } = await api.patch<ResolveAppealResult>(
       `/trust/v1/admin/appeals/${id}`,
       normalized,
+      { headers: { 'X-Step-Up-Challenge': challengeId } },
     );
     phase45Cache.clear();
     return data;

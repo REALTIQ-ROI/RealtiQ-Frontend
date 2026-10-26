@@ -2,6 +2,7 @@ import api from '../lib/axios';
 import type {
   AdminVirtualTourDetail,
   AdminVirtualTourListResponse,
+  AdminVirtualTourSettingsResponse,
   FloorPlanResponse,
   MeasurementsResponse,
   PropertyProviderConfigurationResponse,
@@ -90,8 +91,10 @@ export const virtualTourService = {
     return data;
   },
 
-  async updateAdminVirtualTourSettings(body: Partial<{ enabled: boolean; defaultProvider: VirtualTourProvider; providers: Partial<Record<VirtualTourProvider, { enabled: boolean }>> }>): Promise<Pick<PublicProviderAvailability, 'enabled' | 'defaultProvider' | 'providers'>> {
-    const { data } = await api.patch<Pick<PublicProviderAvailability, 'enabled' | 'defaultProvider' | 'providers'>>('/admin/settings/virtual-tours', body);
+  async updateAdminVirtualTourSettings(body: Partial<{ enabled: boolean; defaultProvider: VirtualTourProvider; providers: Partial<Record<VirtualTourProvider, { enabled: boolean }>>; expectedVersion: number }>, challengeId: string): Promise<AdminVirtualTourSettingsResponse> {
+    const { data } = await api.patch<AdminVirtualTourSettingsResponse>('/admin/settings/virtual-tours', body, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    });
     viewerCache.clear();
     return data;
   },

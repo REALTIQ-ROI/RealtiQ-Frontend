@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../lib/axios';
-import { authService, type PhoneVerificationStatus } from '../../services/authService';
+import { authService, type AuthSession, type PhoneVerificationEvent, type PhoneVerificationStatus } from '../../services/authService';
 import { profileService } from '../../services/profileService';
 import { userService } from '../../services/userService';
 import type { UpdateUserPayload, User } from '../../types';
@@ -22,19 +22,22 @@ const errorText = (error: unknown) => {
 };
 
 const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
-  const { activeProfile, logout, updateUser } = useAuth();
+  const { activeProfile, logout, updateUser, refreshProfiles } = useAuth();
   const stepUp = useBoundStepUp<unknown>();
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phone ?? '');
   const [identityError, setIdentityError] = useState<string | null>(null);
   const [savingIdentity, setSavingIdentity] = useState(false);
   const [sessionBusy, setSessionBusy] = useState(false);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessions, setSessions] = useState<AuthSession[]>([]);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
   const [phoneChallenge, setPhoneChallenge] = useState<PhoneVerificationStatus | null>(null);
   const [phoneCode, setPhoneCode] = useState('');
   const [phoneBusy, setPhoneBusy] = useState(false);
   const [phoneError, setPhoneError] = useState<string | null>(null);
-  const [phoneHistoryCount, setPhoneHistoryCount] = useState<number | null>(null);
+  const [phoneHistory, setPhoneHistory] = useState<PhoneVerificationEvent[] | null>(null);
   const [signatoryIdentityId, setSignatoryIdentityId] = useState(user._id);
   const [authorityEvidenceId, setAuthorityEvidenceId] = useState('');
   const [signatoryExpiresAt, setSignatoryExpiresAt] = useState('');
@@ -46,7 +49,11 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
   const [twoStepEnrollment, setTwoStepEnrollment] = useState<Awaited<ReturnType<typeof authService.enrollTwoStep>> | null>(null);
   const [twoStepBusy, setTwoStepBusy] = useState(false);
   const [twoStepError, setTwoStepError] = useState<string | null>(null);
-  const [pendingStepUp, setPendingStepUp] = useState<'identity' | 'signatory' | null>(null);
+  const [pendingStepUp, setPendingStepUp] = useState<'identity' | 'signatory' | 'privacy' | null>(null);
+  const [profileVisibility, setProfileVisibility] = useState<'private' | 'public'>('private');
+  const [profileFollowable, setProfileFollowable] = useState(false);
+  const [privacyError, setPrivacyError] = useState<string | null>(null);
+  const [privacyMessage, setPrivacyMessage] = useState<string | null>(null);
   const startKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -55,6 +62,24 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
       .catch((raw) => { if (active) setTwoStepError(errorText(raw)); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    setSessionsLoading(true);
+    void authService.sessions().then((result) => {
+      if (active) setSessions(result.sessions);
+    }).catch((raw) => {
+      if (active) setSessionsError(errorText(raw));
+    }).finally(() => {
+      if (active) setSessionsLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    setProfileVisibility(activeProfile?.visibility === 'public' ? 'public' : 'private');
+    setProfileFollowable(Boolean(activeProfile?.followable));
+  }, [activeProfile?.id, activeProfile?.visibility, activeProfile?.followable]);
 
   const beginTwoStepEnrollment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -144,12 +169,37 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
     if (!started) setSignatoryError(stepUp.getError() ?? 'The secure request could not start. Refresh the organization state and try again.');
   };
 
+  const requestProfilePrivacy = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPrivacyError(null);
+    setPrivacyMessage(null);
+    if (!activeProfile || !Array.isArray(activeProfile.permissions) || !activeProfile.permissions.includes('team.manage')) {
+      setPrivacyError('The active profile does not report the required team.manage permission.');
+      return;
+    }
+    if (!Number.isInteger(activeProfile.version) || activeProfile.version < 0) {
+      setPrivacyError('The current profile version is unavailable. Refresh the profile before changing privacy settings.');
+      return;
+    }
+    const visibility = activeProfile.kind === 'buyer' ? 'private' : profileVisibility;
+    const followable = visibility === 'public' && profileFollowable;
+    const body = { visibility, followable, expectedVersion: activeProfile.version };
+    const started = await stepUp.begin({
+      method: 'PATCH', path: '/api/profiles/current/privacy', body,
+      label: 'Update active profile visibility settings',
+      execute: (challengeId, exactBody) => profileService.updatePrivacy(exactBody, challengeId),
+    });
+    if (started) setPendingStepUp('privacy');
+    if (!started) setPrivacyError(stepUp.getError() ?? 'The secure profile privacy update could not start.');
+  };
+
   const completeStepUp = async (code: string) => {
     const action = pendingStepUp;
     const result = await stepUp.complete(code);
     if (!result.ok) {
       const message = result.error ?? stepUp.error ?? 'The protected request was not accepted. Review the current server state and try again.';
-      if (action === 'signatory') setSignatoryError(message);
+      if (action === 'privacy') setPrivacyError(message);
+      else if (action === 'signatory') setSignatoryError(message);
       else setIdentityError(message);
       return false;
     }
@@ -157,6 +207,11 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
     if (action === 'signatory') {
       setAuthorityEvidenceId('');
       setSignatorySuccess('The request was submitted. Signatory authority is not active unless and until independent staff review approves it.');
+      return true;
+    }
+    if (action === 'privacy') {
+      await refreshProfiles();
+      setPrivacyMessage('Profile privacy settings were updated from the server.');
       return true;
     }
     if (typeof result.value === 'object' && result.value !== null && '_id' in result.value && 'name' in result.value && 'email' in result.value && 'role' in result.value) {
@@ -174,8 +229,40 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
     try {
       await authService.revokeOtherSessions();
       setSessionMessage('Other sessions were revoked. This device remains signed in.');
+      setSessions((current) => current.filter((session) => session.current));
     } catch (error) {
       setSessionMessage(errorText(error));
+    } finally {
+      setSessionBusy(false);
+    }
+  };
+
+  const refreshSessions = async () => {
+    if (sessionsLoading || sessionBusy) return;
+    setSessionsLoading(true);
+    setSessionsError(null);
+    try {
+      const result = await authService.sessions();
+      setSessions(result.sessions);
+    } catch (raw) {
+      setSessionsError(errorText(raw));
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  const revokeSession = async (session: AuthSession) => {
+    if (session.current || sessionBusy || !window.confirm('Sign out this session? This cannot be undone.')) return;
+    setSessionBusy(true);
+    setSessionMessage(null);
+    setSessionsError(null);
+    try {
+      const result = await authService.revokeSession(session.id);
+      setSessionMessage(result.revoked > 0 ? 'The session was revoked.' : 'The server did not revoke a session. Refresh the list to check its current state.');
+      const refreshed = await authService.sessions();
+      setSessions(refreshed.sessions);
+    } catch (raw) {
+      setSessionsError(errorText(raw));
     } finally {
       setSessionBusy(false);
     }
@@ -249,7 +336,7 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
     setPhoneError(null);
     try {
       const result = await authService.phoneVerificationHistory();
-      setPhoneHistoryCount(result.events.length);
+      setPhoneHistory(result.events);
     } catch (error) {
       setPhoneError(errorText(error));
     } finally {
@@ -296,7 +383,7 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
             {verified ? <p role="status" className="mt-2 font-semibold text-emerald-700">Phone verified.</p> : null}
           </div> : null}
           {phoneError ? <p role="alert" className="mt-3 text-sm text-error">{phoneError}</p> : null}
-          {phoneHistoryCount !== null ? <p className="mt-2 text-xs text-secondary">{phoneHistoryCount} recent verification event(s). The handoff does not specify event-row fields, so details are not inferred.</p> : null}
+          {phoneHistory ? <div className="mt-3 rounded-md bg-white p-3"><h5 className="text-xs font-bold">Recent verification history</h5>{phoneHistory.length ? <ul className="mt-2 space-y-2">{phoneHistory.map((event) => <li key={event.id} className="border-t pt-2 text-xs"><span className="font-semibold">{event.action.replace(/_/g, ' ')}</span> · attempt {event.attempt} · {new Date(event.at).toLocaleString()}{event.errorCode ? <span className="ml-1 text-amber-800">({event.errorCode})</span> : null}<span className="block text-[10px] text-secondary">Challenge {event.challengeId}</span></li>)}</ul> : <p className="mt-1 text-xs text-secondary">No verification events were returned.</p>}</div> : null}
           {!phoneChallenge ? <div className="mt-3 flex flex-wrap gap-2">
             <Button type="button" disabled={!user.phone || phoneBusy} loading={phoneBusy} loadingLabel="Requesting…" onClick={() => void startPhoneChallenge()}>Send verification code</Button>
             <Button type="button" variant="secondary" disabled={phoneBusy} onClick={() => void loadPhoneHistory()}>Load recent history</Button>
@@ -318,12 +405,27 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
 
         <section className="rounded-lg bg-surface-container-low p-4" aria-labelledby="sessions-heading">
           <h4 id="sessions-heading" className="font-bold">Signed-in sessions</h4>
-          <p className="mt-1 text-sm text-secondary">Revoke all other sessions while keeping this device active.</p>
-          <p className="mt-2 text-xs text-secondary">The handoff identifies a safe session-list endpoint but does not define session row fields; this screen does not invent device/session details.</p>
+          <p className="mt-1 text-sm text-secondary">Review active session dates and revoke individual sessions. Session details are limited to the fields returned by the account API.</p>
+          {sessionsError ? <p role="alert" className="mt-2 text-sm text-error">{sessionsError}</p> : null}
           {sessionMessage ? <p role="status" className="mt-3 text-sm">{sessionMessage}</p> : null}
-          <Button className="mt-3" type="button" variant="secondary" disabled={sessionBusy} loading={sessionBusy} loadingLabel="Revoking…" onClick={() => void revokeOtherSessions()}>Sign out other sessions</Button>
+          {sessionsLoading && !sessions.length ? <p className="mt-3 text-sm text-secondary">Loading active sessions…</p> : null}
+          <ul className="mt-3 space-y-2">{sessions.map((session) => <li key={session.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-white p-3 text-xs">
+            <span><strong>{session.current ? 'This device' : 'Other session'}</strong><br />Started {new Date(session.createdAt).toLocaleString()} · expires {new Date(session.expiresAt).toLocaleString()}</span>
+            {!session.current ? <Button type="button" variant="ghost" disabled={sessionBusy || sessionsLoading} onClick={() => void revokeSession(session)}>Revoke session</Button> : <span className="text-secondary">Current</span>}
+          </li>)}</ul>
+          {!sessionsLoading && !sessions.length && !sessionsError ? <p className="mt-3 text-sm text-secondary">No active sessions were returned.</p> : null}
+          <div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="secondary" disabled={sessionBusy || sessionsLoading} onClick={() => void refreshSessions()}>Refresh sessions</Button><Button type="button" variant="secondary" disabled={sessionBusy} loading={sessionBusy} loadingLabel="Revoking…" onClick={() => void revokeOtherSessions()}>Sign out other sessions</Button></div>
         </section>
       </div>
+
+      {activeProfile ? <section className="border-t border-outline-variant/10 pt-5">
+        <div><h4 className="font-bold">Active profile visibility</h4><p className="mt-1 text-sm text-secondary">These are profile settings, separate from account identity. Buyer profiles must remain private. The server rechecks current profile authority and version.</p></div>
+        {!Array.isArray(activeProfile.permissions) || !activeProfile.permissions.includes('team.manage') ? <p className="mt-3 text-sm text-amber-800">The active profile does not report `team.manage`; privacy controls are unavailable.</p> : <form onSubmit={(event) => void requestProfilePrivacy(event)} className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="text-xs font-bold text-secondary">Visibility<select value={activeProfile.kind === 'buyer' ? 'private' : profileVisibility} onChange={(event) => setProfileVisibility(event.target.value as 'private' | 'public')} disabled={activeProfile.kind === 'buyer' || Boolean(stepUp.challenge)} className="mt-1 block w-full rounded-lg border p-2 text-sm font-normal"><option value="private">Private</option><option value="public">Public</option></select></label>
+          <label className="flex items-center gap-2 self-end pb-2 text-sm"><input type="checkbox" checked={activeProfile.kind === 'buyer' ? false : profileFollowable} onChange={(event) => setProfileFollowable(event.target.checked)} disabled={activeProfile.kind === 'buyer' || profileVisibility !== 'public' || Boolean(stepUp.challenge)} />Allow profile follows</label>
+          <div className="sm:col-span-2">{privacyError ? <p role="alert" className="mb-2 text-sm text-error">{privacyError}</p> : null}{privacyMessage ? <p role="status" className="mb-2 text-sm text-emerald-800">{privacyMessage}</p> : null}<Button type="submit" disabled={Boolean(stepUp.challenge) || stepUp.busy}>Save profile privacy with authenticator</Button></div>
+        </form>}
+      </section> : null}
 
       <div className="border-t border-outline-variant/10 pt-5">
         <h4 className="font-bold">Authenticator enrollment</h4>

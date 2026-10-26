@@ -12,7 +12,7 @@ Mounted under `/api/projects/:projectId/property-imports`:
 | Download template | `GET /template` or `GET /template.xlsx` | Text/csv or XLSX template response according to requested route; authenticated current project editor. |
 | Upload/stage | `POST /` multipart `file` | CSV/XLSX staged into an import session; success `201` with import session/preview summary. Size, row/column limits are centrally configured. Does not publish. |
 | List/read | `GET /` and `GET /:importId` | Current project-scoped import list or detail; row/page parameters are validated by the service. Includes row results/readiness, not private storage credentials. |
-| Map columns | `PATCH /:importId/mapping` | Map source columns to canonical fields using server schema. Unknown/duplicate/ineligible fields are rejected, not ignored. |
+| Map columns | `PATCH /:importId/mapping` | Exact body `{mappings:[{columnNumber,field}]}`. `columnNumber` is a positive integer identifying an uploaded source column; `field` is an eligible canonical import field or `null` to explicitly ignore that column. Each mapping object accepts only these two keys; the same column cannot appear twice, two columns cannot target the same field, and an unknown/non-importable field is rejected. Response is the refreshed import-session DTO with mapped columns, row validation and readiness. |
 | Edit row | `PATCH /:importId/rows/:rowNumber` | Correct staged row fields; revalidates canonical type/conditional values. Response includes row status/errors/readiness. |
 | Confirm an existing unit update | `POST /:importId/rows/:rowNumber/confirm-update` | Step-up and current project/unit version/owner permission required; confirms the explicit target rather than fuzzy overwrite. |
 | Confirm new unit type | `POST /:importId/rows/:rowNumber/confirm-new-type` | Step-up; developer explicitly confirms type creation. Worker never creates a type implicitly and revalidates staged rows after confirmation. |
@@ -37,7 +37,7 @@ Import states include staged/correction/ready/queued/processing/partial/complete
 ### Durable bulk job contract
 
 - `POST /api/projects/:projectId/unit-grid/jobs` → `202 {job}`. Use the operation key and expected project/row versions required by the request schema.
-- `GET /api/projects/:projectId/unit-grid/jobs/:jobId` → `{job}` with safe progress, current status and per-row outcomes. No raw input secrets or private prices are returned.
+- `GET /api/projects/:projectId/unit-grid/jobs/:jobId` → `{job}` with safe progress, current status and per-row outcomes. Each eligible row may include server-authored `undoAvailable` and `undoExpiresAt`; `undoExpiresAt` is computed from the configured undo window and operation creation time. When the window is configured but the operation timestamp is absent, undo is unavailable and no expiry is fabricated. When no time cutoff is configured, the row may remain undoable based on current version/eligibility checks and no expiry is returned. No raw input secrets or private prices are returned.
 - `POST /api/projects/:projectId/unit-grid/jobs/:jobId/cancel` → `{job}`. Cancellation is cooperative; already committed rows remain.
 - `POST /api/projects/:projectId/unit-grid/operations/:operationId/undo` → prior operation/row result after current authorization, exact after-version and sold-history checks.
 

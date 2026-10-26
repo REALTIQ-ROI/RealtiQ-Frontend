@@ -22,6 +22,7 @@ import PublicTitleDocuments from '../../components/title/PublicTitleDocuments';
 import VirtualTourExperience from '../../components/virtualTour/VirtualTourExperience';
 import PublicLayout from '../../components/layout/PublicLayout';
 import Button from '../../components/ui/Button';
+import StepUpDialog from '../../components/auth/StepUpDialog';
 import Card from '../../components/ui/Card';
 import SellerTrustBadge from '../../components/trust/SellerTrustBadge';
 import LoadingState from '../../components/ui/LoadingState';
@@ -31,9 +32,11 @@ import { useRecordRecentProperty } from '../../hooks/useRecordRecentProperty';
 import { messageService } from '../../services/messageService';
 import { useProperties } from '../../contexts/PropertiesContext';
 import { useAsync } from '../../hooks/useAsync';
+import { useBoundStepUp } from '../../hooks/useBoundStepUp';
+import { ApiRequestError } from '../../lib/axios';
 import { inquiryService } from '../../services/inquiryService';
 import { installmentService } from '../../services/installmentService';
-import { paymentService } from '../../services/paymentService';
+import { paymentService, type InitializePaymentResponse } from '../../services/paymentService';
 import {
   propertyService,
   type NearbyPropertySummary,
@@ -94,7 +97,12 @@ const PropertyDetails = () => {
     ? (location.state as { from: string }).from
     : '/properties';
   const { user, isAuthenticated } = useAuth();
-  const { buyProperty, refreshProperties } = useProperties();
+  const { refreshProperties } = useProperties();
+  const propertyPaymentStepUp = useBoundStepUp<InitializePaymentResponse>();
+  const [paymentOutcomeUnknown, setPaymentOutcomeUnknown] = useState(false);
+  const [paymentTerminalStatus, setPaymentTerminalStatus] = useState<string | null>(null);
+  const [paymentStatusMessage, setPaymentStatusMessage] = useState('');
+  const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(false);
   const {
     data: property,
     loading,
@@ -188,7 +196,7 @@ const PropertyDetails = () => {
     );
     observer.observe(mediaSection);
     return () => observer.disconnect();
-  }, [propertyReference]);
+  }, [property?._id, propertyReference]);
 
   useEffect(() => {
     if (!property) return;
@@ -310,6 +318,14 @@ const PropertyDetails = () => {
   const hasInstallmentPayment = paymentTypes.includes('installment');
   const hasEscrowPayment = paymentTypes.includes('escrow');
 
+  useEffect(() => {
+    const propertyResourceId = property?._id || propertyReference;
+    if (propertyResourceId && paymentService.getPendingPaymentReference(`property:${propertyResourceId}`)) {
+      setPaymentOutcomeUnknown(true);
+      setPaymentStatusMessage('A previous payment attempt for this property is still recorded. Check the server status before starting another attempt.');
+    }
+  }, [propertyReference]);
+
   const handleBuyProperty = async () => {
     if (!propertyReference) {
       toast.error('Unable to initialize payment. Please try again.');
@@ -351,11 +367,57 @@ const PropertyDetails = () => {
     });
     if (!confirmed.isConfirmed) return;
 
+    if (paymentOutcomeUnknown || propertyPaymentStepUp.busy || propertyPaymentStepUp.challenge || !property) return;
+    const body = { propertyId: property._id || propertyReference };
+    await propertyPaymentStepUp.begin({
+      method: 'POST',
+      path: '/api/payments/initialize',
+      body,
+      label: 'Initialize the current outright property payment',
+      execute: async (challengeId, exactBody) => {
+        try {
+          const response = await paymentService.initialize(exactBody, challengeId);
+          if (response.redirectUrl) paymentService.redirectToCheckout(response, propertyReference, `property:${property._id || propertyReference}`);
+          else {
+            setPaymentOutcomeUnknown(true);
+            setPaymentStatusMessage('The server has a pending payment attempt without a provider URL. Check its status before continuing.');
+          }
+          return response;
+        } catch (raw) {
+          if (raw instanceof ApiRequestError && (raw.code === 'PAYMENT_INITIALIZATION_OUTCOME_UNKNOWN' || raw.code === 'PAYMENT_INITIALIZATION_PENDING')) {
+            setPaymentOutcomeUnknown(true);
+            setPaymentStatusMessage('The provider outcome is unresolved. No new payment attempt was created. Check the saved reference before taking another action.');
+          }
+          toast.error(raw instanceof Error ? raw.message : 'Unable to initialize the payment.');
+          throw raw;
+        }
+      },
+    });
+  };
+
+  const submitPropertyPaymentStepUp = async (code: string): Promise<boolean> => {
+    const result = await propertyPaymentStepUp.complete(code);
+    if (!result.ok && result.error) toast.error(result.error);
+    return result.ok;
+  };
+
+  const refreshPropertyPaymentStatus = async () => {
+    const propertyResourceId = property?._id || propertyReference;
+    const reference = propertyResourceId ? paymentService.getPendingPaymentReference(`property:${propertyResourceId}`) : null;
+    if (!reference || checkingPaymentStatus) return;
+    setCheckingPaymentStatus(true);
     try {
-      await buyProperty(propertyReference, user._id);
-    } catch {
-      toast.error('Unable to initialize payment. Please try again.');
-    }
+      const result = await paymentService.verifyPayment(reference);
+      if (result.verified) {
+        setPaymentTerminalStatus(result.payment.status);
+        setPaymentOutcomeUnknown(result.payment.status === 'pending');
+        setPaymentStatusMessage(`Payment status: ${result.payment.status}. This status comes from the server; ownership is shown only after the ownership record is available.`);
+      } else {
+        setPaymentStatusMessage('The payment is still pending or has not been reconciled. Do not start a second attempt.');
+      }
+    } catch (raw) {
+      setPaymentStatusMessage(raw instanceof Error ? raw.message : 'Unable to check the payment reference.');
+    } finally { setCheckingPaymentStatus(false); }
   };
 
   const handleContinueInstallment = () => {
@@ -498,6 +560,7 @@ const PropertyDetails = () => {
     <PublicLayout>
       <section className='mx-auto max-w-7xl space-y-8 px-4 sm:space-y-10 sm:px-6 lg:px-8'>
         <Link to={returnTo} className='inline-flex pt-5 text-sm font-bold text-primary hover:underline'>← Back to search results</Link>
+        {paymentOutcomeUnknown ? <div role='alert' className='rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950'><p className='font-bold'>Payment outcome unresolved</p><p className='mt-1'>{paymentStatusMessage}</p><p className='mt-1'>Reference: {paymentService.getPendingPaymentReference(`property:${property?._id || propertyReference}`) || 'pending reference unavailable'}</p><Button type='button' variant='secondary' className='mt-3' disabled={checkingPaymentStatus || !paymentService.getPendingPaymentReference(`property:${property?._id || propertyReference}`)} onClick={() => void refreshPropertyPaymentStatus()}>{checkingPaymentStatus ? 'Checking status…' : 'Check payment status'}</Button></div> : paymentStatusMessage ? <p role='status' className='rounded-xl bg-surface-container-low p-4 text-sm text-secondary'>{paymentStatusMessage}</p> : null}
         <PropertyGallery
           property={property}
           activeIndex={activeMediaIndex}
@@ -597,12 +660,11 @@ const PropertyDetails = () => {
                   <div>
                   <Button
                     onClick={() => void handleBuyProperty()}
-                    disabled
-                    title="Outright checkout requires a documented step-up challenge"
+                    disabled={installmentLoading || propertyPaymentStepUp.busy || Boolean(propertyPaymentStepUp.challenge) || paymentOutcomeUnknown || paymentTerminalStatus === 'paid'}
                   >
-                    {installmentLoading ? 'Checking...' : 'Buy Property'}
+                    {installmentLoading ? 'Checking...' : propertyPaymentStepUp.busy ? 'Preparing secure payment…' : 'Buy Property'}
                   </Button>
-                  <p className="mt-2 text-xs text-amber-800">Outright checkout is awaiting the server step-up challenge contract.</p>
+                  {propertyPaymentStepUp.error && !propertyPaymentStepUp.challenge ? <p role="alert" className="mt-2 text-xs text-error">{propertyPaymentStepUp.error}</p> : null}
                   </div>
                 ) : canPurchase && hasInstallmentPayment ? (
                   <Button
@@ -1388,15 +1450,14 @@ const PropertyDetails = () => {
                         <div>
                         <Button
                           fullWidth
-                          disabled
-                          title="Outright checkout requires a documented step-up challenge"
+                          disabled={installmentLoading || propertyPaymentStepUp.busy || Boolean(propertyPaymentStepUp.challenge) || paymentOutcomeUnknown || paymentTerminalStatus === 'paid'}
                           onClick={() => void handleBuyProperty()}
                         >
-                          {installmentLoading
+                          {paymentOutcomeUnknown ? 'Payment status unresolved' : propertyPaymentStepUp.busy ? 'Preparing secure payment…' : installmentLoading
                             ? 'Checking eligibility...'
                             : 'Buy Property Outright'}
                         </Button>
-                        <p className="mt-2 text-xs text-amber-800">Outright checkout is awaiting the server step-up challenge contract.</p>
+                        {propertyPaymentStepUp.error && !propertyPaymentStepUp.challenge ? <p role="alert" className="mt-2 text-xs text-error">{propertyPaymentStepUp.error}</p> : null}
                         </div>
                       ) : null}
                       {hasInstallmentPayment ? (
@@ -1534,6 +1595,7 @@ const PropertyDetails = () => {
           </section>
         ) : null}
       </section>
+      <StepUpDialog challenge={propertyPaymentStepUp.challenge} busy={propertyPaymentStepUp.busy} error={propertyPaymentStepUp.error} onCancel={propertyPaymentStepUp.cancel} onSubmit={submitPropertyPaymentStepUp} />
     </PublicLayout>
   );
 };

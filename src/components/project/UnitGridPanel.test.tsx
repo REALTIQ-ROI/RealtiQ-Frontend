@@ -180,13 +180,23 @@ describe('canonical unit grid', () => {
   });
 
   it('refreshes a durable job before starting a job-row undo challenge', async () => {
-    const jobWithUndo = { id: 'saved-job', projectId: 'p', action: 'field_edit', state: 'completed' as const, operationKey: 'grid_job_12345678', createdAt: '', startedAt: null, completedAt: '', progress: { total: 1, completed: 1, failed: 0, cancelled: 0, remaining: 0 }, cancellationRequested: false, rows: [{ index: 0, unitId: 'unit-1', state: 'completed', attempts: 1, undoAvailable: true, operationId: 'op-job-row' }] };
+    const jobWithUndo = { id: 'saved-job', projectId: 'p', action: 'field_edit', state: 'completed' as const, operationKey: 'grid_job_12345678', createdAt: '', startedAt: null, completedAt: '', progress: { total: 1, completed: 1, failed: 0, cancelled: 0, remaining: 0 }, cancellationRequested: false, rows: [{ index: 0, unitId: 'unit-1', state: 'completed', attempts: 1, undoAvailable: true, undoExpiresAt: new Date(Date.now() + 60_000).toISOString(), operationId: 'op-job-row' }] };
     sessionStorage.setItem('realtiq:unit-grid-job:p', 'saved-job');
     vi.mocked(projectService.getUnitGridJob).mockResolvedValue(jobWithUndo);
     render(<UnitGridPanel projectId="p" />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Check status and undo with authenticator' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Review and undo' }));
     await waitFor(() => expect(projectService.getUnitGridJob).toHaveBeenCalledTimes(2));
     expect(stepUpService.start).toHaveBeenCalledWith('POST', '/api/projects/p/unit-grid/operations/op-job-row/undo', {});
+  });
+
+  it('does not start a job-row undo challenge after the server-reported expiry', async () => {
+    const jobWithExpiredUndo = { id: 'saved-job', projectId: 'p', action: 'field_edit', state: 'completed' as const, operationKey: 'grid_job_12345678', createdAt: '', startedAt: null, completedAt: '', progress: { total: 1, completed: 1, failed: 0, cancelled: 0, remaining: 0 }, cancellationRequested: false, rows: [{ index: 0, unitId: 'unit-1', state: 'completed', attempts: 1, undoAvailable: true, undoExpiresAt: new Date(Date.now() - 60_000).toISOString(), operationId: 'op-expired-job-row' }] };
+    sessionStorage.setItem('realtiq:unit-grid-job:p', 'saved-job');
+    vi.mocked(projectService.getUnitGridJob).mockResolvedValue(jobWithExpiredUndo);
+    render(<UnitGridPanel projectId="p" />);
+    const undoButton = await screen.findByRole('button', { name: 'Review and undo' });
+    expect(undoButton).toBeDisabled();
+    expect(stepUpService.start).not.toHaveBeenCalled();
   });
 
   it('reopens the saved durable job after the grid is remounted', async () => {

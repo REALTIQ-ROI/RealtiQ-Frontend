@@ -6,6 +6,12 @@ import type { ManagedTitleDocument } from '../../types';
 import TitleDocumentManagement from './TitleDocumentManagement';
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+const mocks = vi.hoisted(() => ({ stepUp: { begin: vi.fn(), complete: vi.fn(), cancel: vi.fn(), challenge: null, busy: false, error: null } }));
+vi.mock('../../hooks/useBoundStepUp', () => ({ useBoundStepUp: () => mocks.stepUp }));
+vi.mock('../../utils/titleUploadStepUp', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/titleUploadStepUp')>();
+  return { ...actual, digestTitleUpload: vi.fn().mockResolvedValue('a'.repeat(64)) };
+});
 vi.mock('../../services/titleDocumentService', () => ({
   titleDocumentService: {
     listManaged: vi.fn(),
@@ -35,10 +41,11 @@ const rejected: ManagedTitleDocument = {
 describe('TitleDocumentManagement', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.stepUp.begin.mockReset().mockResolvedValue(true);
     vi.mocked(titleDocumentService.listManaged).mockResolvedValue([rejected]);
   });
 
-  it('shows rejected history and describes the permitted action as a new version', async () => {
+  it('binds a rejected document resubmission to its file and metadata before upload', async () => {
     render(<MemoryRouter><TitleDocumentManagement propertyId="prop1" sold={false} /></MemoryRouter>);
     expect(await screen.findByText('The seal is not legible.', { exact: false })).toBeInTheDocument();
     expect(screen.getByText(/Submission version 1/i)).toBeInTheDocument();
@@ -47,9 +54,13 @@ describe('TitleDocumentManagement', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Submit a new version' }));
     expect(screen.getByRole('button', { name: 'Submit new vault record' })).toBeDisabled();
-    expect(screen.getByText(/route-specific file-bound step-up protocol/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Restricted file'), { target: { files: [new File(['private'], 'title.pdf', { type: 'application/pdf' })] } });
     fireEvent.submit(screen.getByRole('button', { name: 'Submit new vault record' }).closest('form')!);
+    await vi.waitFor(() => expect(mocks.stepUp.begin).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'POST',
+      path: '/api/documents/properties/prop1/title-upload',
+      body: expect.objectContaining({ documentType: 'survey_plan', title: 'Registered Survey Plan', __stepUpFileSha256: 'a'.repeat(64) }),
+    })));
     expect(titleDocumentService.upload).not.toHaveBeenCalled();
   });
 

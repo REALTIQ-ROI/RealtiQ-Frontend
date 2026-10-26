@@ -250,7 +250,7 @@ export interface UnitGridJob {
   completedAt: string | null;
   progress: { total: number; completed: number; failed: number; cancelled: number; remaining: number };
   cancellationRequested: boolean;
-  rows: Array<{ index: number; unitId: string; state: string; attempts: number; undoAvailable: boolean; operationId?: string; operationCreatedAt?: string; beforeVersion?: number; afterVersion?: number; error?: { code: string; message: string } }>;
+  rows: Array<{ index: number; unitId: string; state: string; attempts: number; undoAvailable: boolean; undoExpiresAt?: string | null; operationId?: string; operationCreatedAt?: string; beforeVersion?: number; afterVersion?: number; error?: { code: string; message: string } }>;
 }
 
 export interface UnitGridJobRequest {
@@ -464,6 +464,11 @@ export const projectService = {
 
   async getProjectPropertyImport(projectId: string, importId: string, params?: { page?: number; limit?: number }): Promise<ProjectImportSession> {
     const { data } = await api.get<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports/${encodeURIComponent(importId)}`, { params: compact(params) });
+    return data;
+  },
+
+  async mapProjectPropertyImportColumns(projectId: string, importId: string, body: { mappings: Array<{ columnNumber: number; field: string | null }> }): Promise<ProjectImportSession> {
+    const { data } = await api.patch<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports/${encodeURIComponent(importId)}/mapping`, body);
     return data;
   },
 

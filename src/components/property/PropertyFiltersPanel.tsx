@@ -6,6 +6,8 @@ import { canonicalFieldOptions, canonicalSearchControls, canonicalSearchQueryVal
 import type { AccountProfileSummary } from '../../services/profileService';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
+import LocationSuggestionInput from './LocationSuggestionInput';
+import type { LocationSuggestion } from '../../services/locationService';
 
 interface PropertyFiltersProps {
   initialFilters?: PropertyFilters;
@@ -104,8 +106,33 @@ const PropertyFiltersPanel = ({ initialFilters = {}, initialQuery, activeProfile
     nearbyRadiusKm: initialQuery?.get('nearbyRadiusKm') ?? '',
   });
   const startingValues = useRef(values);
+  const [locationLabels, setLocationLabels] = useState({ state: values.state, lga: values.lga, area: values.area, estateName: values.estateName });
+  const [locationIds, setLocationIds] = useState<{ state?: string; lga?: string; area?: string; estateName?: string }>({});
   const [moreOpen, setMoreOpen] = useState(false);
   const set = (key: keyof typeof values, value: string | boolean | string[]) => setValues((current) => ({ ...current, [key]: value }));
+  const updateLocationText = (key: 'state' | 'lga' | 'area' | 'estateName', text: string) => {
+    setLocationLabels((current) => ({ ...current, [key]: text }));
+    setLocationIds((current) => ({ ...current, [key]: undefined }));
+    set(key, text);
+  };
+  const selectLocation = (key: 'state' | 'lga' | 'area' | 'estateName', suggestion: LocationSuggestion) => {
+    setLocationLabels((current) => ({ ...current, [key]: suggestion.name }));
+    setLocationIds((current) => ({ ...current, [key]: suggestion.id }));
+    set(key, suggestion.id);
+    if (key === 'state') {
+      setLocationLabels((current) => ({ ...current, lga: '', area: '', estateName: '' }));
+      setLocationIds((current) => ({ ...current, lga: undefined, area: undefined, estateName: undefined }));
+      setValues((current) => ({ ...current, lga: '', area: '', estateName: '' }));
+    } else if (key === 'lga') {
+      setLocationLabels((current) => ({ ...current, area: '', estateName: '' }));
+      setLocationIds((current) => ({ ...current, area: undefined, estateName: undefined }));
+      setValues((current) => ({ ...current, area: '', estateName: '' }));
+    } else if (key === 'area') {
+      setLocationLabels((current) => ({ ...current, estateName: '' }));
+      setLocationIds((current) => ({ ...current, estateName: undefined }));
+      setValues((current) => ({ ...current, estateName: '' }));
+    }
+  };
   const buildFilters = (current: typeof values): CatalogueQueryChanges => ({
     search: current.search.trim() || undefined,
     minPrice: current.minPrice === '' ? undefined : Number(current.minPrice),
@@ -254,7 +281,7 @@ const PropertyFiltersPanel = ({ initialFilters = {}, initialQuery, activeProfile
     </div>
     {moreOpen ? <div className="mt-3 grid max-h-[min(70vh,720px)] grid-cols-1 gap-3 overflow-y-auto rounded-xl border border-outline-variant/20 bg-surface p-4 shadow-lg sm:grid-cols-2 lg:grid-cols-4">
       <label className="space-y-1 text-xs font-bold text-secondary"><span>Min / Max Price (NGN basis)</span><div className="grid grid-cols-2 gap-2"><input type="number" min="0" value={values.minPrice} onChange={(event) => set('minPrice', event.target.value)} className={fieldClass} placeholder="Min ₦" /><input type="number" min="0" value={values.maxPrice} onChange={(event) => set('maxPrice', event.target.value)} className={fieldClass} placeholder="Max ₦" /></div><span className="block text-[11px] font-medium">Foreign-currency comparison and aggregates depend on approved FX configuration.</span></label>
-      <div className="space-y-2 text-xs font-bold text-secondary"><span className="block">Canonical location</span><input aria-label="Filter by state" value={values.state} onChange={(event) => set('state', event.target.value)} className={fieldClass} placeholder="State ID or exact approved name" /><input aria-label="Filter by LGA" value={values.lga} onChange={(event) => set('lga', event.target.value)} className={fieldClass} placeholder="Exact Local Government Area" /><input aria-label="Filter by area" value={values.area} onChange={(event) => set('area', event.target.value)} className={fieldClass} placeholder="Exact area" /><select aria-label="Gated estate filter" value={values.gatedEstate} onChange={(event) => { const next = event.target.value; const updated = { ...values, gatedEstate: next, ...(next === 'false' ? { estateName: '' } : {}) }; setValues(updated); }} className={fieldClass}><option value="">Any estate type</option><option value="true">Gated estate</option><option value="false">Not gated</option></select>{values.gatedEstate === 'true' ? <input aria-label="Filter by estate name" value={values.estateName} onChange={(event) => set('estateName', event.target.value)} className={fieldClass} placeholder="Exact approved estate name" /> : null}<p className="text-[11px] font-medium">The server resolves these values against its active location directory. Keep state, LGA, area and estate name in the same hierarchy.</p></div>
+      <div className="space-y-2 text-xs font-bold text-secondary"><span className="block">Canonical location</span><LocationSuggestionInput label="Filter by state" level="state" value={locationLabels.state} onChange={(text) => updateLocationText('state', text)} onSelect={(suggestion) => selectLocation('state', suggestion)} className={fieldClass} /><LocationSuggestionInput label="Filter by LGA" level="lga" value={locationLabels.lga} parentId={locationIds.state} onChange={(text) => updateLocationText('lga', text)} onSelect={(suggestion) => selectLocation('lga', suggestion)} className={fieldClass} /><LocationSuggestionInput label="Filter by area" level="area" value={locationLabels.area} parentId={locationIds.lga} onChange={(text) => updateLocationText('area', text)} onSelect={(suggestion) => selectLocation('area', suggestion)} className={fieldClass} /><select aria-label="Gated estate filter" value={values.gatedEstate} onChange={(event) => { const next = event.target.value; const updated = { ...values, gatedEstate: next, ...(next === 'false' ? { estateName: '' } : {}) }; setValues(updated); if (next === 'false') { setLocationLabels((current) => ({ ...current, estateName: '' })); setLocationIds((current) => ({ ...current, estateName: undefined })); } }} className={fieldClass}><option value="">Any estate type</option><option value="true">Gated estate</option><option value="false">Not gated</option></select>{values.gatedEstate === 'true' ? <LocationSuggestionInput label="Filter by estate name" level="estate" value={locationLabels.estateName} parentId={locationIds.area} onChange={(text) => updateLocationText('estateName', text)} onSelect={(suggestion) => selectLocation('estateName', suggestion)} className={fieldClass} /> : null}<p className="text-[11px] font-medium">Choose a parent suggestion to browse child locations. Typed exact names remain available; the server resolves all values against its active location directory.</p></div>
       <label className="space-y-1 text-xs font-bold text-secondary"><span>Beds / Baths</span><div className="grid grid-cols-2 gap-2"><input type="number" min="0" value={values.bedrooms} onChange={(event) => set('bedrooms', event.target.value)} className={fieldClass} placeholder="Beds" /><input type="number" min="0" value={values.bathrooms} onChange={(event) => set('bathrooms', event.target.value)} className={fieldClass} placeholder="Baths" /></div></label>
       <fieldset className="space-y-1 text-xs font-bold text-secondary"><legend>Build stage</legend>{buildStages.map((stage) => <label key={stage} className="flex items-center gap-2 font-medium"><input type="checkbox" checked={values.buildStage.includes(stage)} onChange={(event) => set('buildStage', event.target.checked ? [...values.buildStage, stage] : values.buildStage.filter((item) => item !== stage))} />{stage}</label>)}</fieldset>
       <label className="space-y-1 text-xs font-bold text-secondary"><span>Status</span><select value={values.status} onChange={(event) => set('status', event.target.value)} className={fieldClass}>{[['', 'Available'], ['all', 'All public'], ['under_offer', 'Under offer'], ['sold', 'Sold']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>

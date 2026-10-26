@@ -31,10 +31,15 @@ export interface PublicProviderAvailability {
   enabled: boolean;
   defaultProvider: VirtualTourProvider;
   providers: Record<VirtualTourProvider, { enabled: boolean }>;
+  version?: number;
   publicConfiguration: {
     matterport: { sdkKey: string | null };
     realsee: { workDataDelivery: 'signed_url' };
   };
+}
+
+export interface AdminVirtualTourSettingsResponse extends Pick<PublicProviderAvailability, 'enabled' | 'defaultProvider' | 'providers'> {
+  version: number;
 }
 
 export interface NormalizedRoom { id: string; name: string; floor: string | number | null; providerReference: string }

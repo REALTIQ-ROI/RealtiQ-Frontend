@@ -10,8 +10,9 @@ import type {
 export interface SavedSearchInput {
   name: string;
   filters: SavedSearchFilters;
-  alerts: SavedSearchAlerts;
+  alerts?: SavedSearchAlerts;
 }
+export interface SavedSearchUpdateInput extends Partial<SavedSearchInput> { expectedConfigurationRevision?: number }
 export interface FavouriteMutationResult {
   propertyReference: string;
   isFavourite: boolean;
@@ -95,7 +96,7 @@ export const personalisationService = {
     );
     return data.savedSearch;
   },
-  async updateSearch(id: string, input: Partial<SavedSearchInput>) {
+  async updateSearch(id: string, input: SavedSearchUpdateInput) {
     const { data } = await api.patch<{ savedSearch: SavedSearch }>(
       `/personalisation/searches/${id}`,
       input,

@@ -17,16 +17,20 @@ import BuyerRefundAccountForm from '../../../components/escrow/BuyerRefundAccoun
 import EscrowStatusBadge from '../../../components/escrow/EscrowStatusBadge';
 import RefundAdminPanel from '../../../components/escrow/RefundAdminPanel';
 import RefundChat from '../../../components/escrow/RefundChat';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
 import MediaPreview from '../../../components/property/MediaPreview';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
+import { ApiRequestError } from '../../../lib/axios';
 import { useAsync } from '../../../hooks/useAsync';
 import {
   escrowErrorDetails,
   escrowService,
 } from '../../../services/escrowService';
 import { propertyPublicReference } from '../../../types';
+import { paymentService } from '../../../services/paymentService';
 import type {
   Escrow,
   SatisfyEscrowRuleResponse,
@@ -97,6 +101,11 @@ const EscrowDetails = () => {
   );
   const [satisfactionUpdate, setSatisfactionUpdate] =
     useState<SatisfyEscrowRuleResponse | null>(null);
+  const escrowPaymentStepUp = useBoundStepUp<Awaited<ReturnType<typeof escrowService.initializePayment>>>();
+  const [paymentOutcomeUnknown, setPaymentOutcomeUnknown] = useState(false);
+  const [paymentStatusMessage, setPaymentStatusMessage] = useState('');
+  const [paymentTerminalStatus, setPaymentTerminalStatus] = useState<string | null>(null);
+  const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(false);
 
   const displayedRules = useMemo(() => {
     if (!escrow) return [];
@@ -134,6 +143,12 @@ const EscrowDetails = () => {
   const seller = displayedEscrow ? escrowSeller(displayedEscrow) : null;
   const payment = displayedEscrow ? escrowPayment(displayedEscrow) : null;
   const propertyReference = propertyPublicReference(property);
+  useEffect(() => {
+    if (displayedEscrow && escrowService.getPendingId() === displayedEscrow._id && escrowService.getPendingReference()) {
+      setPaymentOutcomeUnknown(true);
+      setPaymentStatusMessage('A previous escrow payment attempt is recorded. Check its status before starting another attempt.');
+    }
+  }, [displayedEscrow?._id]);
   const progress = useMemo(
     () => (displayedEscrow ? requiredProgress(displayedEscrow) : null),
     [displayedEscrow],
@@ -249,7 +264,7 @@ const EscrowDetails = () => {
   };
 
   const initialize = async () => {
-    if (!displayedEscrow || pending) return;
+    if (!displayedEscrow || pending || paymentOutcomeUnknown || escrowPaymentStepUp.busy || escrowPaymentStepUp.challenge) return;
     const result = await Swal.fire({
       title: 'Continue to secured payment?',
       text: `Paystack will charge the full escrow amount of ${formatEscrowMoney(
@@ -263,14 +278,54 @@ const EscrowDetails = () => {
     });
     if (!result.isConfirmed) return;
     setPending('payment');
+    await escrowPaymentStepUp.begin({
+      method: 'POST', path: '/api/payments/initialize', body: { escrowId: displayedEscrow._id },
+      label: 'Initialize this escrow funding payment',
+      execute: async (challengeId) => {
+        try {
+          const response = await escrowService.initializePayment(displayedEscrow._id, challengeId);
+          if (response.redirectUrl) escrowService.redirectToPayment(response);
+          else {
+            setPaymentOutcomeUnknown(true);
+            setPaymentStatusMessage('The escrow payment is pending without a provider URL. Check its reference before taking another action.');
+          }
+          return response;
+        } catch (raw) {
+          if (raw instanceof ApiRequestError && (raw.code === 'PAYMENT_INITIALIZATION_OUTCOME_UNKNOWN' || raw.code === 'PAYMENT_INITIALIZATION_PENDING')) {
+            setPaymentOutcomeUnknown(true);
+            setPaymentStatusMessage('The provider outcome is unresolved. No replacement escrow payment was initialized.');
+          } else if (!(raw instanceof ApiRequestError) || !raw.status || raw.status >= 500) {
+            setPaymentOutcomeUnknown(true);
+            setPaymentStatusMessage('The payment response was not confirmed. Check the saved reference before another attempt.');
+          }
+          toast.error(escrowErrorDetails(raw).message);
+          throw raw;
+        } finally { setPending(null); }
+      },
+    });
+  };
+
+  const completeEscrowStepUp = async (code: string): Promise<boolean> => {
+    const result = await escrowPaymentStepUp.complete(code);
+    if (!result.ok) setPending(null);
+    if (!result.ok && result.error) toast.error(result.error);
+    return result.ok;
+  };
+
+  const refreshEscrowPaymentStatus = async () => {
+    const reference = escrowService.getPendingReference();
+    if (!reference || checkingPaymentStatus) return;
+    setCheckingPaymentStatus(true);
     try {
-      escrowService.redirectToPayment(
-        await escrowService.initializePayment(displayedEscrow._id),
-      );
-    } catch (raw) {
-      toast.error(escrowErrorDetails(raw).message);
-      setPending(null);
-    }
+      const result = await paymentService.verifyPayment(reference);
+      if (result.verified) {
+        setPaymentTerminalStatus(result.payment.status);
+        setPaymentOutcomeUnknown(result.payment.status === 'pending');
+        setPaymentStatusMessage(`Server payment status: ${result.payment.status}. Escrow funding and allocations remain subject to the escrow record.`);
+        if (result.payment.status === 'failed' || result.payment.status === 'canceled') escrowService.clearPending();
+      } else setPaymentStatusMessage('The payment is still pending or has not been reconciled. Do not create another attempt.');
+    } catch (raw) { setPaymentStatusMessage(raw instanceof Error ? raw.message : 'Unable to check escrow payment status.'); }
+    finally { setCheckingPaymentStatus(false); }
   };
 
   if (loading) {
@@ -676,13 +731,15 @@ const EscrowDetails = () => {
             displayedEscrow.status === 'pending_payment' ? (
               <button
                 type="button"
-                disabled={Boolean(pending)}
+                disabled={Boolean(pending) || paymentOutcomeUnknown || paymentTerminalStatus === 'paid' || escrowPaymentStepUp.busy || Boolean(escrowPaymentStepUp.challenge)}
                 onClick={() => void initialize()}
                 className="w-full rounded-lg bg-primary px-4 py-3 font-bold text-on-primary"
               >
-                Fund full escrow amount
+                {paymentOutcomeUnknown ? 'Payment outcome unresolved' : pending || escrowPaymentStepUp.busy ? 'Preparing secure payment…' : 'Fund full escrow amount'}
               </button>
             ) : null}
+            {paymentOutcomeUnknown ? <div role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950"><p>{paymentStatusMessage}</p><p className="mt-1">Reference: {escrowService.getPendingReference() || 'not available'}</p><button type="button" className="mt-2 font-bold underline" disabled={checkingPaymentStatus || !escrowService.getPendingReference()} onClick={() => void refreshEscrowPaymentStatus()}>{checkingPaymentStatus ? 'Checking…' : 'Check payment status'}</button></div> : paymentStatusMessage ? <p role="status" className="text-sm text-secondary">{paymentStatusMessage}</p> : null}
+            {escrowPaymentStepUp.error && !escrowPaymentStepUp.challenge ? <p role="alert" className="text-sm text-error">{escrowPaymentStepUp.error}</p> : null}
             {actions.requestRelease ? (
               <button
                 type="button"
@@ -721,7 +778,8 @@ const EscrowDetails = () => {
               </a>
             ) : null}
           </div>
-        </aside>
+      </aside>
+      <StepUpDialog challenge={escrowPaymentStepUp.challenge} busy={escrowPaymentStepUp.busy || pending === 'payment'} error={escrowPaymentStepUp.error} onCancel={() => { escrowPaymentStepUp.cancel(); setPending(null); }} onSubmit={completeEscrowStepUp} />
       </div>
     </EscrowRoleLayout>
   );

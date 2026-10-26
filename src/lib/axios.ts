@@ -16,6 +16,8 @@ export class ApiRequestError extends Error {
   missingRules?: unknown;
   eligibleAt?: string;
   existingPayment?: unknown;
+  reference?: string;
+  paymentState?: string;
   details?: unknown;
   requiresAccountDetails?: boolean;
   requiresSellerAccount?: boolean;
@@ -35,6 +37,8 @@ export class ApiRequestError extends Error {
     missingRules?: unknown;
     eligibleAt?: string;
     existingPayment?: unknown;
+    reference?: string;
+    paymentState?: string;
     details?: unknown;
     requiresAccountDetails?: boolean;
     requiresSellerAccount?: boolean;
@@ -90,6 +94,9 @@ export const retryAfterDelayMs = (retryAfter?: string, now = Date.now()): number
 };
 
 const fallbackMessage = (status: number, code?: string, hasFieldErrors = false): string => {
+  if (code === 'FEATURE_PAID_TOUR_UNAVAILABLE') return 'Paid/live virtual tours are not available. No tour payment was initialized.';
+  if (code === 'PAYMENT_INITIALIZATION_OUTCOME_UNKNOWN' || code === 'PAYMENT_INITIALIZATION_PENDING') return 'The payment provider outcome is unresolved. Check the saved payment reference before taking another action.';
+  if (code === 'CONFLICT_SAVED_SEARCH_VERSION') return 'This saved search changed elsewhere. Review the latest server revision before applying your edits.';
   if (hasFieldErrors || code === 'VALIDATION_FAILED') return 'The request contains invalid fields. Review the highlighted values and try again.';
   if (status === 400) return 'The request could not be accepted. Review the submitted values and try again.';
   if (status === 401) return 'Your session is missing, expired or no longer valid. Sign in again to continue.';
@@ -136,7 +143,10 @@ export const normalizeApiError = (error: AxiosError<unknown>): Error => {
   const retryGuidance = retryDelay && retryDelay > 0
     ? ` Wait at least ${Math.ceil(retryDelay / 1000)} seconds before trying again.`
     : '';
-  const message = `${responseMessage || fieldMessage || fallbackMessage(status, code, Boolean(fieldErrors))}${retryGuidance}`;
+  const baseMessage = code === 'FEATURE_PAID_TOUR_UNAVAILABLE'
+    ? fallbackMessage(status, code)
+    : responseMessage || fieldMessage || fallbackMessage(status, code, Boolean(fieldErrors));
+  const message = `${baseMessage}${retryGuidance}`;
 
   return new ApiRequestError(message, {
     status,
@@ -148,6 +158,8 @@ export const normalizeApiError = (error: AxiosError<unknown>): Error => {
     missingRules: payload?.missingRules,
     eligibleAt: typeof payload?.eligibleAt === 'string' ? payload.eligibleAt : undefined,
     existingPayment: payload?.payment,
+    reference: typeof payload?.reference === 'string' ? payload.reference : undefined,
+    paymentState: typeof payload?.status === 'string' ? payload.status : undefined,
     details: payload?.details,
     requiresAccountDetails: typeof payload?.requiresAccountDetails === 'boolean' ? payload.requiresAccountDetails : undefined,
     requiresSellerAccount: typeof payload?.requiresSellerAccount === 'boolean' ? payload.requiresSellerAccount : undefined,

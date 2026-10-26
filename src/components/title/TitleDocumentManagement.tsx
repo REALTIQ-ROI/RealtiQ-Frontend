@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { titleDocumentService } from '../../services/titleDocumentService';
+import { useBoundStepUp } from '../../hooks/useBoundStepUp';
+import StepUpDialog from '../auth/StepUpDialog';
+import { ApiRequestError } from '../../lib/axios';
 import type {
   ManagedTitleDocument,
   TitleDocumentAnalytics,
@@ -9,6 +12,7 @@ import type {
   TitleDocumentType,
 } from '../../types';
 import { documentTypeLabel, formatDateTime, titleDocumentTypeOptions, titleStatusClasses } from '../../utils/titleVerification';
+import { buildTitleUploadStepUpBody, digestTitleUpload, validateTitleUploadFile } from '../../utils/titleUploadStepUp';
 import Button from '../ui/Button';
 
 interface TitleDocumentManagementProps {
@@ -31,6 +35,8 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
   const [documentType, setDocumentType] = useState<TitleDocumentType>('survey_plan');
   const [title, setTitle] = useState('Survey Plan');
   const [mode, setMode] = useState<TitleDocumentPolicyMode>('private');
+  const [uploadOutcomeUnknown, setUploadOutcomeUnknown] = useState(false);
+  const uploadStepUp = useBoundStepUp<Awaited<ReturnType<typeof titleDocumentService.upload>>>();
 
   const refresh = useCallback(async () => {
     if (!propertyId) return;
@@ -56,7 +62,44 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
 
   const submitDocument = async (event: FormEvent) => {
     event.preventDefault();
-    toast.error('Title-file submission is unavailable until the backend provides a file-bound step-up protocol for this route. Your selected file remains in this form.');
+    if (sold || !file || uploadOutcomeUnknown || uploadStepUp.busy || uploadStepUp.challenge) return;
+    const fileError = validateTitleUploadFile(file);
+    if (fileError) { toast.error(fileError); return; }
+    const input = { file, documentType, title: title.trim(), accessPolicy: { enabled: mode !== 'private', mode } };
+    try {
+      const digest = await digestTitleUpload(file);
+      const body = buildTitleUploadStepUpBody({ documentType, title: input.title, accessPolicy: input.accessPolicy }, digest);
+      await uploadStepUp.begin({
+        method: 'POST',
+        path: `/api/documents/properties/${encodeURIComponent(propertyId)}/title-upload`,
+        body,
+        label: 'Upload this title document to the selected property vault',
+        execute: async (challengeId, exactBody) => {
+          setBusyId('upload');
+          try {
+            const result = await titleDocumentService.upload(propertyId, input, challengeId, exactBody);
+            setUploadOutcomeUnknown(false);
+            toast.success(result.verificationExisting ? 'Title document uploaded. The existing title review remains active.' : 'Title document uploaded and title review submitted.');
+            if (result.riskDetected) toast.warning('Legal review is required before this title document can be verified.');
+            setFile(null);
+            setShowUpload(false);
+            await refresh();
+            return result;
+          } catch (raw) {
+            if (!(raw instanceof ApiRequestError) || !raw.status || raw.status >= 500) setUploadOutcomeUnknown(true);
+            throw raw;
+          } finally { setBusyId(null); }
+        },
+      });
+    } catch (raw) {
+      toast.error(raw instanceof Error ? raw.message : 'Unable to prepare the protected title upload.');
+    }
+  };
+
+  const submitUploadStepUp = async (code: string): Promise<boolean> => {
+    const result = await uploadStepUp.complete(code);
+    if (!result.ok && result.error) toast.error(result.error);
+    return result.ok;
   };
 
   const updatePolicy = async (document: ManagedTitleDocument, nextMode: TitleDocumentPolicyMode) => {
@@ -105,12 +148,12 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
           <h2 className="text-xl font-extrabold">Private title-document vault</h2>
           <p className="mt-1 text-sm text-secondary">Each document is a separate private record with independent verification, policy, history, and analytics.</p>
         </div>
-      <Button type="button" disabled onClick={() => setShowUpload((current) => !current)} title="Title upload requires a route-specific file-bound step-up contract">
+      <Button type="button" disabled={sold || busyId === 'upload' || uploadStepUp.busy} onClick={() => setShowUpload((current) => !current)}>
           Upload a missing type
         </Button>
       </div>
       {sold ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">This property has been sold. Upload, resubmission, and seller policy changes are unavailable; existing history and permitted protected viewing remain available.</p> : null}
-      {!sold ? <p className="mt-4 text-sm text-amber-800">New title-file uploads and resubmissions require a route-specific file-bound step-up protocol. Existing vault records and permitted viewing remain available.</p> : null}
+      {!sold ? <p className="mt-4 text-sm text-secondary">New title documents are uploaded to the private property vault after a one-use authenticator check bound to the selected file and metadata.</p> : null}
 
       {showUpload && !sold ? (
         <form onSubmit={(event) => void submitDocument(event)} className="mt-5 grid gap-4 rounded-xl bg-surface-container-low p-4 md:grid-cols-2">
@@ -118,6 +161,7 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
             <label className="text-xs font-bold uppercase tracking-widest text-secondary">Document type</label>
             <select
               value={documentType}
+              disabled={busyId === 'upload' || uploadStepUp.busy || Boolean(uploadStepUp.challenge)}
               onChange={(event) => {
                 const next = event.target.value as TitleDocumentType;
                 setDocumentType(next);
@@ -134,16 +178,16 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
           </div>
           <div>
             <label className="text-xs font-bold uppercase tracking-widest text-secondary">Title</label>
-            <input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-lg bg-white px-4 py-3 text-sm" />
+            <input value={title} disabled={busyId === 'upload' || uploadStepUp.busy || Boolean(uploadStepUp.challenge)} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-lg bg-white px-4 py-3 text-sm" />
           </div>
           <div>
             <label htmlFor="title-document-file" className="text-xs font-bold uppercase tracking-widest text-secondary">Restricted file</label>
-            <input id="title-document-file" type="file" accept=".pdf,image/jpeg,image/png,image/webp" onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="mt-2 w-full rounded-lg bg-white px-4 py-3 text-sm" />
+            <input id="title-document-file" type="file" accept=".pdf,image/jpeg,image/png,image/webp" disabled={busyId === 'upload' || uploadStepUp.busy || Boolean(uploadStepUp.challenge)} onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="mt-2 w-full rounded-lg bg-white px-4 py-3 text-sm" />
             {file ? <p role="status" className="mt-2 text-xs text-secondary">Selected file retained: {file.name} · {Math.ceil(file.size / 1024)} KB</p> : null}
           </div>
           <div>
             <label className="text-xs font-bold uppercase tracking-widest text-secondary">Access policy</label>
-            <select value={mode} onChange={(event) => setMode(event.target.value as TitleDocumentPolicyMode)} className="mt-2 w-full rounded-lg bg-white px-4 py-3 text-sm">
+            <select value={mode} disabled={busyId === 'upload' || uploadStepUp.busy || Boolean(uploadStepUp.challenge)} onChange={(event) => setMode(event.target.value as TitleDocumentPolicyMode)} className="mt-2 w-full rounded-lg bg-white px-4 py-3 text-sm">
               <option value="private">Private</option>
               <option value="paid_view_once">Paid — one view</option>
               <option value="paid_view_multiple">Paid — multiple views</option>
@@ -152,8 +196,9 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
           </div>
           <div className="md:col-span-2">
             <div>
-              <Button type="submit" disabled title="The file-binding protocol is not documented for this title-upload route">Submit new vault record</Button>
-              <p role="status" className="mt-2 text-xs text-amber-800">Submission is withheld because the backend requires step-up before buffering this file, but does not document a byte-bound challenge protocol for this route.</p>
+              <Button type="submit" loading={uploadStepUp.busy} loadingLabel="Preparing secure upload…" disabled={sold || busyId === 'upload' || uploadStepUp.busy || Boolean(uploadStepUp.challenge) || !file || uploadOutcomeUnknown}>Submit new vault record</Button>
+              {uploadOutcomeUnknown ? <div role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950"><p>The upload response was not confirmed. The file was not resubmitted. Refresh the vault to inspect the current records first.</p><Button type="button" variant="secondary" className="mt-2" onClick={() => void refresh().then(() => setUploadOutcomeUnknown(false))}>Refresh vault and review before a new attempt</Button></div> : null}
+              {uploadStepUp.error && !uploadStepUp.challenge ? <p role="alert" className="mt-2 text-xs text-error">{uploadStepUp.error}</p> : null}
             </div>
           </div>
         </form>
@@ -221,6 +266,7 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
           );
         })}
       </div>
+      <StepUpDialog challenge={uploadStepUp.challenge} busy={uploadStepUp.busy || busyId === 'upload'} error={uploadStepUp.error} onCancel={uploadStepUp.cancel} onSubmit={submitUploadStepUp} />
     </section>
   );
 };

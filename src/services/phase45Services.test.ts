@@ -90,6 +90,13 @@ describe("Phase 4–5 services", () => {
       params: { page: 1, limit: 20, status: "open" },
     });
   });
+  it("binds trust-appeal decisions to the documented PATCH body and TOTP challenge", async () => {
+    const result = { appeal: { publicReference: "RTQ-APPEAL-1" }, decision: { publicReference: "RTQ-TRUST-1" } };
+    const body = { action: "upheld" as const, reason: "Evidence reviewed" };
+    vi.mocked(api.patch).mockResolvedValueOnce({ data: result } as never);
+    await expect(trustService.resolveAppeal("appeal-1", body, "challenge-1")).resolves.toEqual(result);
+    expect(api.patch).toHaveBeenCalledWith("/trust/v1/admin/appeals/appeal-1", body, { headers: { "X-Step-Up-Challenge": "challenge-1" } });
+  });
   it("uses only the current-user trust endpoint", async () => {
     vi.mocked(api.get).mockResolvedValue({
       data: {

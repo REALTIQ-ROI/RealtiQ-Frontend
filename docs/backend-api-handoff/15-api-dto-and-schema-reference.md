@@ -34,11 +34,11 @@ Source: `src/services/profileTourService.js` (`dto`), `src/models/Tour.js`, `src
 }
 ```
 
-`notes` is included only in buyer responses; `property` is `null` only when the controller/service source has no property object, although list processing excludes missing/archived properties. Stored status supports `pending|approved|rejected|completed|cancelled`; `PATCH /api/tour/:id` currently accepts only the first four. See [07](07-payments-ownership-escrow.md) for the source/contract outcome. A created paid-tour response may additionally include `requiresPayment`, `paymentOption`, `cartItem`, `redirectUrl` and `reference` depending on request branch; the current paid path is not a safe first-batch price contract.
+`notes` is included only in buyer responses; `property` is `null` only when the controller/service source has no property object, although list processing excludes missing/archived properties. Stored status supports `pending|approved|rejected|completed|cancelled`; `PATCH /api/tour/:id` currently accepts only the first four. See [07](07-payments-ownership-escrow.md) for the source/contract outcome. No paid-tour response variation is available: `type:"virtual_paid"` fails with `503 FEATURE_PAID_TOUR_UNAVAILABLE` before persistence, and `paymentOption`/`addToCart` are rejected as unsupported request fields.
 
 The HTTP envelopes differ by method:
 
-- `POST /api/tour` returns `{tour}` for the ordinary path; the paid cart branch returns `{tour,requiresPayment:true,paymentOption:"cart",cartItem:{itemType,resourceId}}`; the standalone paid branch returns `{tour,redirectUrl,reference,requiresPayment:true}`.
+- `POST /api/tour` returns `{tour}` for supported `open_house` and `staging_view` requests. The legacy `virtual_paid` value returns 503 before persistence; no paid response branch exists.
 - `GET /api/tour` returns a bare JSON array `TourDTO[]`; pagination totals are response headers `X-Result-Count`, `X-Page`, and `X-Page-Count`. Empty results are `[]` with total `0` and page count `0`.
 - `PATCH /api/tour/:id` returns a bare `TourDTO`.
 
@@ -177,6 +177,14 @@ Evidence list rows are `{id,type,category,mimeType,fileSize,caption,uploadedAt,a
 Dispute fields are `inspectionRequest,serviceEscrow,raisedBy,reason,description,status,resolution,resolutionNotes,resolvedBy,resolvedAt,createdAt,updatedAt`; states are `open|under_review|corrections_requested|refund_processing|release_processing|resolved`; resolutions are `resume_service|refund_buyer|release_inspector|cancel_and_refund`.
 
 ## Routes returning resource-specific shapes
+
+### Current contract additions — 26 October 2026
+
+- Saved-search response wrapper remains `{savedSearch}` / `{savedSearches,pagination}`. The saved-search DTO now includes integer `configurationRevision`; PATCH may supply `expectedConfigurationRevision` to reject a stale form with `409 CONFLICT_SAVED_SEARCH_VERSION`. See [04](04-search-maps-discovery.md) for complete create/update DTO and normalization semantics.
+- `POST /api/payments/export.csv` accepts JSON `{limit?:integer}` (1–2,000; default 2,000), requires a POST/path/profile/session/body-bound one-use `X-Step-Up-Challenge`, and returns a private CSV stream with `X-Export-Row-Count` and `X-Total-Count`. The legacy GET registration is retained but is not compatible with the current supported challenge issuance protocol.
+- Durable unit-grid job rows may include `undoExpiresAt` beside server-authored `undoAvailable`. The timestamp is present only when the configured undo window and source operation timestamp permit a calculation. The server boolean and current-version checks remain authoritative; clients must not calculate expiry or enable undo from local time.
+
+These additions are backed by the mounted route/controller/service implementation and focused contract tests; they do not normalize unrelated endpoint DTOs.
 
 This table points to authoritative serializer/model sources; it is not permission to normalize unlike DTOs into one frontend type.
 

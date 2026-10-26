@@ -27,11 +27,21 @@ export const escrowService = {
   async create(payload: CreateEscrowPayload): Promise<Escrow> { return (await api.post<Escrow>('/escrow', payload)).data; },
   async list(): Promise<Escrow[]> { return (await api.get<Escrow[]>('/escrow')).data; },
   async get(id: string): Promise<Escrow> { return (await api.get<Escrow>(`/escrow/${id}`)).data; },
-  async initializePayment(id: string): Promise<InitializeEscrowPaymentResponse> {
-    const data = (await api.post<InitializeEscrowPaymentResponse>(`/escrow/${id}/initialize-payment`)).data;
-    sessionStorage.setItem(ESCROW_ID_KEY, data.escrowId);
-    sessionStorage.setItem(ESCROW_REFERENCE_KEY, data.reference);
-    return data;
+  async initializePayment(id: string, challengeId: string): Promise<InitializeEscrowPaymentResponse> {
+    try {
+      const data = (await api.post<InitializeEscrowPaymentResponse>('/payments/initialize', { escrowId: id }, {
+        headers: { 'X-Step-Up-Challenge': challengeId },
+      })).data;
+      sessionStorage.setItem(ESCROW_ID_KEY, data.escrowId || id);
+      sessionStorage.setItem(ESCROW_REFERENCE_KEY, data.reference);
+      return data;
+    } catch (raw) {
+      if (raw instanceof ApiRequestError && raw.reference) {
+        sessionStorage.setItem(ESCROW_ID_KEY, id);
+        sessionStorage.setItem(ESCROW_REFERENCE_KEY, raw.reference);
+      }
+      throw raw;
+    }
   },
   async satisfyRule(id: string, ruleId: string, note?: string): Promise<SatisfyEscrowRuleResponse> { return (await api.patch<SatisfyEscrowRuleResponse>(`/escrow/${id}/rules/${ruleId}/satisfy`, { note: note?.trim() || undefined })).data; },
   async requestRelease(id: string, note?: string): Promise<Escrow> { return (await api.post<Escrow>(`/escrow/${id}/request-release`, { note: note?.trim() || undefined })).data; },
@@ -71,6 +81,7 @@ export const escrowService = {
     return (await api.put<PayoutAccount>('/escrow/payout-account', payload)).data;
   },
   redirectToPayment(result: InitializeEscrowPaymentResponse): void {
+    if (!result.redirectUrl) throw new Error('This escrow payment is pending without a provider URL. Check its reference before taking another action.');
     sessionStorage.setItem(ESCROW_ID_KEY, result.escrowId);
     sessionStorage.setItem(ESCROW_REFERENCE_KEY, result.reference);
     window.location.href = result.redirectUrl;

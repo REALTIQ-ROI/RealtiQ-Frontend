@@ -38,4 +38,12 @@ describe('verificationCaseService evidence mutations', () => {
       { data: body, headers: { 'X-Step-Up-Challenge': 'challenge-2' } },
     );
   });
+
+  it('submits the onboarding snapshot version, declared person routes, and operation key with a bound challenge', async () => {
+    const created = { id: 'case-1', state: 'submitted', draftVersion: 7, version: 1 };
+    vi.mocked(api.post).mockResolvedValueOnce({ data: created });
+    const body = { expectedDraftVersion: 7, operationKey: 'verification_case_001', people: [{ path: 'directors[0]', route: 'nigerian' as const, country: 'NG' }] };
+    await expect(verificationCaseService.createHolderCase(body, 'challenge-1')).resolves.toEqual(created);
+    expect(api.post).toHaveBeenCalledWith('/profiles/current/verification-cases', body, { headers: { 'X-Step-Up-Challenge': 'challenge-1' } });
+  });
 });

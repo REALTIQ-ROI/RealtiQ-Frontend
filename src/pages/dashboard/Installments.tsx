@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner';
 import AdminLayout from '../../components/layout/AdminLayout';
 import BuyerPortalLayout from '../../components/layout/BuyerPortalLayout';
+import StepUpDialog from '../../components/auth/StepUpDialog';
 import LandlordPortalLayout from '../../components/layout/LandlordPortalLayout';
 import PropertySearchSelect from '../../components/forms/PropertySearchSelect';
 import Button from '../../components/ui/Button';
@@ -10,6 +11,7 @@ import ErrorState from '../../components/ui/ErrorState';
 import Input from '../../components/ui/Input';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
+import { useBoundStepUp } from '../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../lib/axios';
 import { installmentService } from '../../services/installmentService';
 import { paymentService } from '../../services/paymentService';
@@ -502,13 +504,20 @@ const InstallmentList = ({
 
 const PaymentPanel = ({
   installment,
-  onRefresh,
 }: {
   installment: Installment;
-  onRefresh: () => Promise<void>;
 }) => {
   const [amount, setAmount] = useState(String(getNextPayableScheduleItem(installment)?.remainingAmount || getTotalOutstandingBalance(installment)));
   const [paying, setPaying] = useState(false);
+  const paymentStepUp = useBoundStepUp<Awaited<ReturnType<typeof paymentService.initialize>>>();
+  const paymentResourceKey = `installment:${installment._id}`;
+  const [outcomeUnknown, setOutcomeUnknown] = useState(() => Boolean(paymentService.getPendingPaymentReference(paymentResourceKey)));
+  const [statusMessage, setStatusMessage] = useState('');
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  useEffect(() => {
+    setOutcomeUnknown(Boolean(paymentService.getPendingPaymentReference(paymentResourceKey)));
+    setStatusMessage('');
+  }, [paymentResourceKey]);
   const selectedItem = getNextPayableScheduleItem(installment);
   const scheduleItemId = selectedItem?._id ?? '';
   const targetMilestoneLabel = selectedItem ? `${selectedItem.sequence}. ${selectedItem.title}` : 'No specific milestone';
@@ -522,22 +531,52 @@ const PaymentPanel = ({
   }, [installment]);
 
   const initialize = async () => {
-    if (invalidAmount || blockedByConditions || !canPayInstallment(installment)) return;
-    setPaying(true);
+    if (invalidAmount || blockedByConditions || !canPayInstallment(installment) || outcomeUnknown || paymentStepUp.busy || paymentStepUp.challenge) return;
+    const body = { installmentId: installment._id, amount: numericAmount, ...(scheduleItemId ? { scheduleItemId } : {}) };
+    await paymentStepUp.begin({
+      method: 'POST', path: '/api/payments/initialize', body,
+      label: 'Initialize the selected installment payment',
+      execute: async (challengeId, exactBody) => {
+        setPaying(true);
+        try {
+          const response = await paymentService.initialize(exactBody, challengeId);
+          if (response.redirectUrl) paymentService.redirectToCheckout(response, resolveInstallmentPropertyId(installment), paymentResourceKey);
+          else { setOutcomeUnknown(true); setStatusMessage('This payment attempt has no provider URL yet. Check its reference before taking another action.'); }
+          return response;
+        } catch (raw) {
+          if (raw instanceof ApiRequestError && (raw.code === 'PAYMENT_INITIALIZATION_OUTCOME_UNKNOWN' || raw.code === 'PAYMENT_INITIALIZATION_PENDING')) {
+            setOutcomeUnknown(true);
+            setStatusMessage('The provider outcome is unresolved. No new payment request was sent. Check the saved reference first.');
+          } else if (!(raw instanceof ApiRequestError) || !raw.status || raw.status >= 500) {
+            setOutcomeUnknown(true);
+            setStatusMessage('The payment response was not confirmed. Check the saved reference before starting another attempt.');
+          }
+          toast.error(apiMessage(raw, 'Unable to initialize installment payment.'));
+          throw raw;
+        } finally { setPaying(false); }
+      },
+    });
+  };
+
+  const completePaymentStepUp = async (code: string): Promise<boolean> => {
+    const result = await paymentStepUp.complete(code);
+    if (!result.ok && result.error) toast.error(result.error);
+    return result.ok;
+  };
+
+  const refreshPaymentStatus = async () => {
+    const reference = paymentService.getPendingPaymentReference(paymentResourceKey);
+    if (!reference || checkingStatus) return;
+    setCheckingStatus(true);
     try {
-      const response = await installmentService.initializePayment(installment._id, {
-        amount: numericAmount,
-        scheduleItemId: scheduleItemId || undefined,
-      });
-      paymentService.persistPaymentReference(response.reference, resolveInstallmentPropertyId(installment));
-      window.location.href = response.redirectUrl;
-    } catch (error) {
-      if (!(await conflictToast(error, onRefresh))) {
-        toast.error(apiMessage(error, 'Unable to initialize installment payment.'));
-      }
-    } finally {
-      setPaying(false);
-    }
+      const result = await paymentService.verifyPayment(reference);
+      if (result.verified) {
+        setStatusMessage(`Server payment status: ${result.payment.status}. Ownership is confirmed only by the separate ownership record.`);
+        setOutcomeUnknown(result.payment.status === 'pending');
+        if (result.payment.status === 'failed' || result.payment.status === 'canceled') paymentService.clearPendingPayment(paymentResourceKey);
+      } else setStatusMessage('The payment remains unverified or pending. Do not create another attempt.');
+    } catch (raw) { setStatusMessage(raw instanceof Error ? raw.message : 'Unable to check the payment reference.'); }
+    finally { setCheckingStatus(false); }
   };
 
   if (!canPayInstallment(installment)) {
@@ -556,13 +595,16 @@ const PaymentPanel = ({
         <Input label="Amount" type="number" min="1" max={maxPayable} value={amount} onChange={(event) => setAmount(event.target.value)} error={invalidAmount ? `Enter an amount up to ${formatCurrency(maxPayable)}.` : undefined} />
         <Input label="Target milestone" value={targetMilestoneLabel} readOnly className="cursor-not-allowed opacity-75" />
         <div className="flex items-end">
-          <Button type="button" fullWidth disabled={paying || invalidAmount || blockedByConditions} onClick={() => void initialize()}>
-            {paying ? 'Initializing...' : 'Pay with Paystack'}
+          <Button type="button" fullWidth disabled={paying || invalidAmount || blockedByConditions || outcomeUnknown || paymentStepUp.busy || Boolean(paymentStepUp.challenge)} onClick={() => void initialize()}>
+            {outcomeUnknown ? 'Payment outcome unresolved' : paying || paymentStepUp.busy ? 'Preparing secure payment…' : 'Pay with Paystack'}
           </Button>
         </div>
       </div>
       {blockedByConditions ? <p className="mt-3 text-sm text-error">Required milestone conditions must be satisfied before paying this targeted item.</p> : null}
       <p className="mt-3 text-sm text-secondary">Maximum payable now: {formatCurrency(maxPayable)}.</p>
+      {outcomeUnknown ? <div role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950"><p>{statusMessage || 'A previous payment attempt must be reconciled before another initialization.'}</p><p className="mt-1">Reference: {paymentService.getPendingPaymentReference() || 'not available'}</p><Button type="button" variant="secondary" className="mt-2" disabled={checkingStatus || !paymentService.getPendingPaymentReference()} onClick={() => void refreshPaymentStatus()}>{checkingStatus ? 'Checking…' : 'Check payment status'}</Button></div> : statusMessage ? <p role="status" className="mt-3 text-sm text-secondary">{statusMessage}</p> : null}
+      {paymentStepUp.error && !paymentStepUp.challenge ? <p role="alert" className="mt-3 text-sm text-error">{paymentStepUp.error}</p> : null}
+      <StepUpDialog challenge={paymentStepUp.challenge} busy={paymentStepUp.busy || paying} error={paymentStepUp.error} onCancel={paymentStepUp.cancel} onSubmit={completePaymentStepUp} />
     </section>
   );
 };
@@ -805,7 +847,7 @@ const InstallmentDetail = ({
         <p className="mt-4 text-sm text-secondary">A payment becomes due at the stated date and time, and overdue after the grace period. Default status is based on RealtIQ's payment policy, not a single missed due date.</p>
       </section>
 
-      {role === 'buyer' ? <PaymentPanel installment={installment} onRefresh={onRefresh} /> : null}
+      {role === 'buyer' ? <PaymentPanel installment={installment} /> : null}
       <ScheduleTable installment={installment} role={role} onSatisfy={satisfy} />
       <HistoryPanel payments={payments} penalties={penalties} role={role} onWaive={waive} />
 

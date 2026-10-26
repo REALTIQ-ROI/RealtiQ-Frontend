@@ -21,7 +21,17 @@ All routes below are mounted by `src/app.js`. Administrative middleware usually 
 | `POST /api/admin/staff-access-changes` | Step-up: prepare an access change. |
 | `POST /api/admin/staff-access-changes/:id/decision` | Step-up, independent decision; preparer cannot approve their own change. |
 
+### Staff access-change contract
+
+All three routes require current Executive department authority; Internal Audit is excluded. `GET /api/admin/staff-access-changes` returns a bounded array of pending DTOs `{id,targetIdentityId,departments,state,preparedBy,reviewedBy?,reviewedAt?,version}`. `POST /api/admin/staff-access-changes` requires bound step-up and accepts exactly `{targetIdentityId,departments}`. `targetIdentityId` is an ObjectId; `departments` is a duplicate-free subset of the User schema enum (`executive`, `sales_partnerships`, `customer_support`, `trust_safety`, `legal_verification`, `escrow_operations`, `finance`, `listings_quality`, `third_party_network`, `technical`, `data_market_intelligence`, `marketing_growth`, `compliance_data_protection`, `internal_audit`). An empty list requests removal of staff access. Success is `201` with the safe change DTO.
+
+`POST /api/admin/staff-access-changes/:id/decision` requires step-up and exact `{decision:"approved"|"rejected",expectedVersion}`. It returns the updated safe DTO. The preparer cannot decide their own change; the preparer's current Executive authority and target `authVersion` are rechecked. Approval updates staff departments/profile and increments target auth version; all target sessions are revoked so the person must sign in again. A stale change/identity returns a conflict; do not retry without reloading. This is not a general client-controlled role or permission mutation API.
+
 Applicant-facing verification submission and status are under `/api/profiles/current/verification-cases`; evidence is uploaded under `/api/profiles/current/onboarding/evidence`. The legacy `/api/verification/submit` and `/review/:userId` routes are mounted compatibility paths that reject the legacy user-ID/raw-KYC workflow with `409 CONFLICT_KYC_PROFILE_WORKFLOW_REQUIRED`; they are not the supported frontend workflow.
+
+### Verification-case decision contract
+
+The staff `POST /api/admin/verification-cases/:id/decision` and `/api/admin/company-verification-cases/:id/decision` require an active Trust & Safety profile, a claimed case, bound step-up, current `expectedVersion`, and reviewer independence from the holder/preparer. Request is `{expectedVersion,decision:"approved"|"rejected",checks?,reasonCodes?}`. Approval requires `checks` to contain exactly one row for each server-returned `requiredChecks` field; each row accepts `{field,source,reference,expiresAt?,nonExpiring?,applicability?,jurisdictionStateId?,issuerName?}`. `source` must be present in the currently approved `company_verification.manualSources` policy; the validator permits only `original_document|official_registry|approved_provider`, and the active policy may narrow that set. Evidence rows are bound to the exact submitted evidence IDs/versions/content hashes; applicable issuer/jurisdiction/expiry fields are enforced by evidence purpose. Rejection requires non-empty `reasonCodes` (maximum 50, each uppercase code); do not send narrative reasons in place of codes. Success returns the case DTO directly, not wrapped in `{case}`. Policy-revision mismatch, changed evidence, stale version, wrong case state or reviewer conflict returns a stable 409/403 code; do not retry without reloading the case. If `company_verification` is unconfigured, keep approval unavailable; do not select manual-source values locally.
 
 ## Property trust, duplicate and accuracy review
 
@@ -42,6 +52,29 @@ Applicant-facing verification submission and status are under `/api/profiles/cur
 | `GET /api/trust/v1/admin/appeals` | Trust appeal queue. |
 | `PATCH /api/trust/v1/admin/appeals/:id` | Step-up resolution. |
 | `POST /api/trust/v1/admin/users/:userId/recompute` | Step-up/current trust-policy recompute. |
+
+### Property, duplicate and listing-verification decisions
+
+All mutations below require Bearer, a current staff profile, one-use method/path/profile/body-bound step-up and the route's department permission; Internal Audit cannot decide. Reviewers must be independent from the applicant/reporting seller where the service requires it.
+
+| Endpoint | Exact decision body | Success and key conflicts |
+|---|---|---|
+| `POST /api/admin/duplicate-property-matches/:id/decision` | `{decision:"approve"|"reject",reason,expectedVersion,sourceAuthorityDocumentId?,candidateAuthorityDocumentId?,transferProofDocumentId?}`. Reject requires reason and forbids evidence IDs. Approve of a non-sold pair requires both current private seller-authority document IDs; sold-property relisting requires the exact previously submitted `transferProofDocumentId`. | `200 {link:<safe link DTO>}`. Listings Quality or Legal Verification, independent reviewer, unchanged listing/profile/doc versions and clean evidence are required. Stale pair, evidence or version returns `409`; never substitute another proof document during review. |
+| `POST /api/admin/distress-sale-assessments/:id/decision` | `{expectedVersion,decision:"approve"|"reject",reason?}`; reject requires a bounded reason. | `200 {assessment:<staff assessment DTO>}`. Listings Quality only, independent reviewer, current price/currency and current clean private evidence are rechecked. The 15% valuation basis is a source-defined gate; changed price/evidence or stale version conflicts. |
+| `POST /api/admin/listing-verifications/:id/decision` | `{expectedVersion,decision:"approve"|"reject",checks?,rejectionReason?}`. Approval `checks` has one row per current server-required key: `{key,source,reference}`. `source` must be in the approved `listing_verification.approvedSources` policy. Rejection requires bounded `rejectionReason`. | `200 {verification:<staff case DTO>}`. Current policy revision, property/project/profile/identity and exact evidence versions are rechecked; absent approved policy returns 503; stale evidence/version returns 409. |
+| `POST /api/admin/listing-accuracy-reports/:id/resolve` | `{resolution,expectedUpdatedAt}`; bounded, contact-guarded resolution and exact current ISO timestamp are required. | `200 {report:<safe report DTO>}`. Listings Quality, non-reporter reviewer, pending report and matching `updatedAt` required; otherwise 403/409. |
+
+List/read and evidence-content paths are separate scoped operations; do not infer that queue visibility grants evidence access. Listing-verification approval remains policy-gated and does not merge title verification, distress assessment or moderation status.
+
+### Trust appeals and recomputation
+
+- `POST /api/trust/v1/appeals` (current user/session) body `{decisionReference,reason}`; `reason` is required and up to 2,000 characters. Returns `201 {appeal:{id,publicReference,decision,decisionVersion,reason,status,createdAt,updatedAt,version}}`. One open appeal per active decision; opening moves the challenged trust decision to `under_review`.
+- `GET /api/trust/v1/appeals` returns the current identity's `{appeals:[...]}`; no other profile's appeals are included.
+- `GET /api/trust/v1/admin/appeals?page=1&limit=20&status=open` is Trust & Safety staff only; status is `open|upheld|adjusted|dismissed`, page 1–10,000, limit 1–100. Response is `{appeals:[<staff appeal DTO>],pagination:{page,limit,total,pages}}`.
+- `PATCH /api/trust/v1/admin/appeals/:id` requires Trust & Safety, bound step-up and an independent reviewer. Body accepts `{action:"upheld"|"adjusted"|"dismissed",reason,reviewAt?,expiresAt?,badge?,score?,band?}`; `reason` is required, maximum 2,000. `adjusted` requires a future `reviewAt` or `expiresAt`; badge is `none|bronze|silver|gold`, band is `insufficient|low|standard|strong|excellent`, score is 0–100. Response `{appeal:<staff appeal DTO>,decision:<public trust decision DTO>}`. Already-resolved appeal or changed decision version returns 409; unsupported policy/authority returns 403/422.
+- `POST /api/trust/v1/admin/users/:userId/recompute` requires Trust & Safety and step-up, has no body, and returns `{trust:<public trust DTO>}`. The recompute uses server evidence/policy; it is not a client score mutation.
+
+The recompute mutation does not include a request revision because the current mounted handler does not consume a body or idempotency key. Do not add client-supplied score or recompute parameters.
 
 Exact bodies and response DTOs are implemented by the named controllers/services in `src/routes/adminRoutes.js`, `src/routes/trustRoutes.js`, and the corresponding controller files. Review queues are operational staff interfaces; do not reuse public profile/search DTOs to render evidence.
 
@@ -78,6 +111,24 @@ Other current admin paths mounted by `adminRoutes.js` include:
 - `GET /api/admin/escrow-disputes`, `GET /api/admin/escrow-disputes/:disputeId`, `PATCH /api/admin/escrow-disputes/:disputeId/resolve`, `POST /api/admin/escrows/:id/process-refund` (mutations require step-up).
 - `GET /api/admin/search` (separate search router; current admin access and bounded query normalization).
 - Virtual tour operations: `PATCH /api/admin/settings/virtual-tours`, `GET /api/admin/virtual-tours/providers/health`, `GET /api/admin/virtual-tours`, `GET /api/admin/virtual-tours/:propertyId`, `GET /api/admin/virtual-tours/:propertyId/history`.
+
+### Virtual-tour Console settings and history
+
+`PATCH /api/admin/settings/virtual-tours` requires current staff/admin authority, Technical department (Internal Audit read-only), and step-up. Body accepts a non-empty subset of `{enabled?:boolean,defaultProvider?:"realsee"|"matterport",providers?:{realsee?:{enabled:boolean},matterport?:{enabled:boolean}},expectedVersion?:integer>=0}`; unknown keys reject. The response is the normalized settings object `{enabled,defaultProvider,providers:{realsee:{enabled},matterport:{enabled}},version}`. The default provider must remain enabled; stale versions conflict. This controls provider configuration only; it does not establish vendor credentials, ownership of media, or live readiness.
+
+`GET /api/admin/virtual-tours/:propertyId/history?limit=25&before=<id>` returns `{history:[{id,propertyId,projectId,actingIdentityId,actingProfileId,ownerProfileId,provider,action,previousStatus,newStatus,beforeVersion,afterVersion,createdAt}],nextCursor}` with a bounded cursor page. Provider work URLs, raw provider responses, source filenames and signed assets are excluded.
+
+### Notification-delivery operations
+
+`GET /api/admin/notification-deliveries?state=<state>&before=<deliveryId>` accepts `state=outcome_unknown|activation_pending|failed|retry`; page size is fixed at 50 and `before` is an optional ObjectId cursor. Current Technical or Internal Audit staff may read; the response is `{deliveries:[{id,channel,state,attempts,dueAt,acceptedAt,errorCode,receiptStatus,receiptAt,updatedAt}],nextCursor}`. No recipient address or provider payload is returned.
+
+`POST /api/admin/notification-deliveries/:deliveryId/reconcile` is current Technical staff only (Internal Audit cannot mutate), with step-up and exact body `{outcome:"accepted"|"not_accepted",evidenceReference,expectedUpdatedAt,providerMessageId?}`. `providerMessageId` is required for `accepted` and forbidden as a substitute for evidence. Success is `{delivery:<safe delivery DTO>}`; accepted records become `sent`, while attested non-acceptance becomes `retry`. Stale delivery timestamps or non-unknown state return `409 CONFLICT_NOTIFICATION_DELIVERY`. A reconciliation is an audited staff attestation, not proof from the provider itself.
+
+### Versioned policy and gazetteer revisions
+
+For `/api/admin/policies/:key`, GET returns `{policy:{key,state,revision,value,approvedAt?}}`. `POST /api/admin/policies/:key/revisions` requires the policy's preparation department, current staff profile, and step-up; body is exactly `{value,reason,expectedRevision}` and returns `201 {revision:<revision DTO>}`. The DTO includes `id,key,basedOnRevision,value,reason,state,preparedBy,preparedProfile,approvedBy,approvedAt,rejectedAt,createdAt`. `POST /api/admin/policies/:key/revisions/:revisionId/approved|rejected` has no body; it is an Executive step-up decision, excludes Internal Audit and the preparer, and returns `{revision}`. History accepts `before?` and `limit` 1–100, default 25. Unknown policy keys and invalid revision schemas reject; policy remains unconfigured until the independent decision approves it.
+
+Gazetteer revision preparation at `POST /api/admin/gazetteer/revisions` accepts exactly `{sourceKind:"official_dataset"|"mapbox_permanent"|"manual_verified",sourceReference,reason,expectedRevision,operationKey}` and returns `201 {revision}`. Entry batches at `POST /api/admin/gazetteer/revisions/:id/entries` accept `{operationKey,entries:[{externalId,level:"state"|"lga"|"area"|"estate",name,parentExternalId?}]}`. Decision at `POST /api/admin/gazetteer/revisions/:id/decision` accepts `{decision:"approved"|"rejected",reason}`. Data & Market Intelligence prepares/appends; an independent Executive approves/rejects; Internal Audit is read-only. Revisions are idempotent/versioned, and only approved source data becomes the active directory. Dataset licensing and source verification remain external activation requirements.
 
 Proxy-inspector review routes are also mounted under `/api/admin/proxy-inspectors` and `/api/admin/proxy-inspections`; they are listed in [the endpoint index](14-mounted-endpoint-index.md). Only integrate them if the first-batch product screens include those proxy workflows. They must not be mistaken for property-publication verification.
 
@@ -142,6 +193,19 @@ If response status is 202, display a pending reconciliation state and refresh th
 This file records mounted paths and route-level middleware. Route body/response shape remains operation-specific; use the corresponding controller/service as contract when implementing a particular Console screen. In particular policy payloads, evidence decision codes and payment/escrow resolution bodies are not interchangeable. Admin errors use the shared `{message, code}` envelope, with typed validation/conflict codes and `X-Request-ID`.
 
 
+
+## Legal holds
+
+Mounted in `src/routes/adminRoutes.js` under `/api/admin/legal-holds`. All routes require Bearer authentication and current Admin/staff context; `X-Profile-ID` selects the staff profile. The service additionally requires `compliance_data_protection`; Internal Audit can read but cannot issue or release. Create/release require `X-Step-Up-Challenge` bound to the exact request. Release requires a different authorized actor than the issuer. Holds are record-specific and do not auto-release when `reviewAt` or `expiresAt` passes.
+
+| Endpoint | Request | Response |
+|---|---|---|
+| `GET /api/admin/legal-holds?before=<ObjectId>&limit=50&state=active&subjectKind=profile` | Optional `before`, `limit` 1–100, `state=active|released`, `subjectKind=account|profile|financial_transaction|escrow|dispute|investigation|property|ownership|title_document|kyc_evidence|regulatory_record|litigation_record`. Unknown/invalid query keys are rejected. | Bare `{holds:[LegalHoldDTO],nextCursor:string|null}`. |
+| `GET /api/admin/legal-holds/:id` | No body/query. | `{hold:LegalHoldDTO}`. |
+| `POST /api/admin/legal-holds` | `{subjectKind,subjectId,category,reasonCode,operationKey,expiresAt?,reviewAt?}`. `operationKey` is 8–100 letters/digits/underscore/hyphen. Dates must be valid ISO dates; expiry, if supplied, must be in the future. Category must match the subject-kind family. | `201 {hold:LegalHoldDTO}`; replaying the same operation key and same scope returns the existing hold; reusing it for a different scope conflicts. |
+| `POST /api/admin/legal-holds/:id/release` | `{expectedVersion,reasonCode}`; reason is `resolved|authority_withdrawn|superseded|court_or_regulator_release`. | `{hold:LegalHoldDTO}`; stale version `409 CONFLICT_LEGAL_HOLD_VERSION`; issuer release denied with `403 PERMISSION_SEPARATION_OF_DUTIES`. |
+
+`LegalHoldDTO` is `{id,subjectKind,subjectId,holderId,profileId,category,reasonCode,issuer,createdAt,expiresAt,reviewAt,state,releaseActor,releaseReasonCode,releasedAt,version}`; nullable subject/release fields are `null`. Allowed categories are `account_profile|financial_transaction_escrow|dispute_investigation|property_ownership_title|kyc_identity_evidence|regulatory_litigation`. Allowed reason codes are `regulatory_preservation|litigation_preservation|investigation|dispute|ownership_claim|identity_review|financial_review|other_authorized_basis`. The hold write service fences current staff and department authorization inside the database transaction and appends an audit record. An active hold blocks prepared eligible deletion items; it does not itself authorize arbitrary record reads.
 
 ## Shared contract references
 

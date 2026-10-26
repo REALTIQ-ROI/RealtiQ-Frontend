@@ -1,10 +1,31 @@
 # Focused backend acceptance and contract review
 
+## Passes 01–10 remediation update — 26 October 2026
+
+This is the latest source-backed update for the contract families affected by the consolidated remediation. It supersedes earlier statements below about the paid-tour fixed-price implementation, title-upload binding, direct-payment retry behavior, the saved-search revision, import mapping validation, undo expiry, and whether code/tests changed. It does not claim exhaustive route documentation or live-provider/production acceptance.
+
+- Title/private evidence uploads are authorized before bounded file buffering where the contract allows it, then consume one-use step-up bound to the exact route/profile/session, file digest and multipart metadata. The legacy title path requires matching `X-Property-ID`; use the property-scoped route for new clients.
+- Direct property, installment and escrow initialization share durable pending reservations. A provider ambiguity remains outcome-unknown and reserved pending reconciliation; the same resource cannot start a second attempt. No live Paystack request was made.
+- `POST /api/payments/export.csv` is the protected export contract; the old GET registration remains but cannot use the supported bound step-up challenge.
+- Saved searches expose `configurationRevision`; clients may send `expectedConfigurationRevision` on PATCH. Durable grid-job rows expose `undoExpiresAt` only where derived from a configured window and persisted operation timestamp. Import mapping rejects unsupported request-envelope fields.
+- Paid virtual tours now fail closed with `503 FEATURE_PAID_TOUR_UNAVAILABLE`; the previous fixed-price branch has been removed. This resolves the unsafe charging defect, while product pricing/calendar/session policy remains a blocker to activating paid/live viewing.
+- Focused verification: `node --require ./test/support/isolation.cjs --test test/firstBatchContractRemediation.test.js test/firstBatchSecurityRun1.test.js` — **51 passed, 0 failed**. `git diff --check` is recorded in the remediation results document. No provider payment, production migration, external notification or live activation was performed.
+
+## Earlier consolidated remediation follow-up — 26 October 2026 (superseded where noted above)
+
+This dated addendum supersedes only the affected contract/security statements below; it does not convert this source-level handoff into live-provider or production acceptance.
+
+- Protected title uploads now run resource preflight → bounded multipart parsing → file-byte/metadata-bound one-use step-up → storage. See [06](06-documents-media-verification.md) and [19](19-frontend-blocking-contracts.md). Exact routes include property title upload, staged title assets, registered survey, property title-document attachment, distress evidence, listing-verification evidence and internal title-document comparison. The legacy property-body route requires `X-Property-ID` before buffering; prefer the property-scoped URL.
+- Paid virtual-tour initiation no longer uses an unapproved fixed price; new paid-tour requests fail closed with `503 FEATURE_PAID_TOUR_UNAVAILABLE` pending an approved source-compatible pricing/session/provider policy.
+- Property, installment and escrow direct payment initialization now persists a stable pending reference and a per-property reservation before contacting Paystack. All three payment kinds share the reservation key; mismatched provider references/amount/currency/URLs are rejected, ambiguous outcomes remain reserved for reconciliation, and confirmed provider failures release the pending slot. Legacy installment and escrow payment routes delegate to the same initializer while preserving their mounted paths and route-bound step-up.
+- The escrow participant route-to-step-up matrix and legal-hold DTOs have been added to [07](07-payments-ownership-escrow.md) and [09](09-admin-console-and-policies.md). Existing source gaps remain explicitly blocked: paid-tour pricing/session policy, ownership transfer/history APIs, and aggregate metrics without an authoritative aggregate definition.
+- Earlier focused result was 50 passed before the paid-tour test/fix. The later 51-test result above is current.
+
 ## Scope and evidence
 
 This is a source-level review, not runtime acceptance. The current Express mount table was inspected in `src/app.js`; route files, current account and step-up middleware, canonical query/dictionary services, relevant serializers, policies, controllers/services and the two final implementation areas were read. The source set includes `backend-first-batch-corrections.md`, the current first-batch audit and relevant RQS pages in `REALTIQ Specifications.pdf` (RQS-03 pp59–75; RQS-02/RQS-04 field references in the source manifest). The PDFs were text-inspected for their relevant requirements; visual PDF review was not needed for these API/data contracts.
 
-No application source was modified. No tests/builds, database access, migrations, benchmarks, or provider calls were performed.
+Historical note for the October 24 source-only acceptance review: no application source was modified and no tests/builds, database access, migrations, benchmarks or provider calls were performed during that earlier review. The current 26 October remediation and focused test result are recorded above.
 
 ## Final two internal implementation changes
 

@@ -73,6 +73,20 @@ describe('API error normalization', () => {
     expect(unavailable.message).toMatch(/check operation status before submitting again/i);
   });
 
+  it('preserves durable payment references and reconciliation state from the corrected error DTO', () => {
+    const normalized = normalizeApiError(responseError(503, {
+      code: 'PAYMENT_INITIALIZATION_OUTCOME_UNKNOWN', message: 'Provider status is unresolved.',
+      reference: 'PAY-REF-1', status: 'pending', reconciliationRequired: true,
+    }));
+    expect(normalized).toMatchObject({ code: 'PAYMENT_INITIALIZATION_OUTCOME_UNKNOWN', reference: 'PAY-REF-1', paymentState: 'pending', reconciliationRequired: true });
+  });
+
+  it('treats paid virtual tours as a product-unavailable state', () => {
+    const unavailable = normalizeApiError(responseError(503, { code: 'FEATURE_PAID_TOUR_UNAVAILABLE', message: 'Temporary issue.' }));
+    expect(unavailable.message).toMatch(/Paid\/live virtual tours are not available/);
+    expect(unavailable.message).not.toMatch(/temporarily unavailable/i);
+  });
+
   it('does not log out on permission denial, but dispatches session cleanup for 401', () => {
     let expirations = 0;
     const onExpired = () => { expirations += 1; };

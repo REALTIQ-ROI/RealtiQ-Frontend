@@ -93,8 +93,10 @@ export const cartService = {
     return data;
   },
 
-  async adminRetryCartAllocations(checkoutId: string): Promise<CartCheckoutDetail> {
-    const { data } = await api.post<CartCheckoutDetail>(`/admin/cart-checkouts/${encodeURIComponent(checkoutId)}/retry-allocations`);
+  async adminRetryCartAllocations(checkoutId: string, challengeId: string): Promise<CartCheckoutDetail> {
+    const { data } = await api.post<CartCheckoutDetail>(`/admin/cart-checkouts/${encodeURIComponent(checkoutId)}/retry-allocations`, {}, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    });
     return data;
   },
 };

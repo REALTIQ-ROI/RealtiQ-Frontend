@@ -40,11 +40,11 @@ describe('virtualTourService contract', () => {
   it('uses exact admin settings, list, detail, and health routes', async () => {
     vi.mocked(api.patch).mockResolvedValue({ data: {} });
     vi.mocked(api.get).mockResolvedValue({ data: {} });
-    await virtualTourService.updateAdminVirtualTourSettings({ defaultProvider: 'realsee' });
+    await virtualTourService.updateAdminVirtualTourSettings({ defaultProvider: 'realsee', expectedVersion: 4 }, 'challenge-virtual-tour');
     await virtualTourService.listAdminVirtualTours({ provider: 'matterport', status: 'ready', page: 2, limit: 20 });
     await virtualTourService.getAdminVirtualTour('RTQ-PROP-9');
     await virtualTourService.getAdminVirtualTourProviderHealth();
-    expect(api.patch).toHaveBeenCalledWith('/admin/settings/virtual-tours', { defaultProvider: 'realsee' });
+    expect(api.patch).toHaveBeenCalledWith('/admin/settings/virtual-tours', { defaultProvider: 'realsee', expectedVersion: 4 }, { headers: { 'X-Step-Up-Challenge': 'challenge-virtual-tour' } });
     expect(api.get).toHaveBeenCalledWith('/admin/virtual-tours', { params: { provider: 'matterport', status: 'ready', page: 2, limit: 20 } });
     expect(api.get).toHaveBeenCalledWith('/admin/virtual-tours/RTQ-PROP-9');
     expect(api.get).toHaveBeenCalledWith('/admin/virtual-tours/providers/health');

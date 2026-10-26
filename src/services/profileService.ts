@@ -14,6 +14,31 @@ export interface AccountProfileSummary {
   unreadCount?: number;
 }
 
+export interface ProfileOnboardingDraft {
+  profileId: string;
+  kind: string;
+  structure: string;
+  version: number;
+  state: 'draft';
+  values: Record<string, unknown>;
+  readiness: unknown;
+  fields: unknown[];
+  updatedAt: string;
+}
+
+export type CreateProfileKind =
+  | 'buyer'
+  | 'owner'
+  | 'agency'
+  | 'developer'
+  | 'legal_partner'
+  | 'engineering_survey_partner'
+  | 'inspection_partner'
+  | 'valuation_partner'
+  | 'buyers_agent'
+  | 'sellers_agent';
+export type ProfileStructure = 'individual' | 'company' | 'cooperative';
+
 interface ProfileListResponse {
   profiles: AccountProfileSummary[];
   nextCursor: string | null;
@@ -43,8 +68,25 @@ export const profileService = {
     return data;
   },
 
+  async create(payload: { kind: CreateProfileKind; structure: ProfileStructure; name: string; operationKey: string }): Promise<{ profile: AccountProfileSummary }> {
+    const { data } = await api.post<{ profile: AccountProfileSummary }>('/profiles', payload);
+    return data;
+  },
+
+  async getOnboarding(): Promise<ProfileOnboardingDraft> {
+    const { data } = await api.get<ProfileOnboardingDraft>('/profiles/current/onboarding');
+    return data;
+  },
+
   async submitSignatory(payload: { identityId: string; authorityEvidenceId: string; expiresAt: string }, challengeId: string): Promise<unknown> {
     const { data } = await api.post<unknown>('/profiles/current/signatories', payload, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    });
+    return data;
+  },
+
+  async updatePrivacy(payload: { visibility: 'private' | 'public'; followable: boolean; expectedVersion: number }, challengeId: string): Promise<{ profile: AccountProfileSummary }> {
+    const { data } = await api.patch<{ profile: AccountProfileSummary }>('/profiles/current/privacy', payload, {
       headers: { 'X-Step-Up-Challenge': challengeId },
     });
     return data;

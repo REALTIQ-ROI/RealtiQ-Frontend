@@ -21,6 +21,7 @@ const navItems = [
   { to: '/messages', icon: 'chat', label: 'Messages' },
   { to: '/dashboard/notifications', icon: 'notifications', label: 'Notifications' },
   { to: '/dashboard/trust', icon: 'verified_user', label: 'Account Trust' },
+  { to: '/dashboard/organization', icon: 'groups', label: 'Organization Team' },
   { to: '/buyer/proxy-inspections', icon: 'fact_check', label: 'Proxy Inspections' },
   { to: '/dashboard/buyer/tours', icon: 'tour', label: 'Tours' },
   { to: '/dashboard/buyer/installments', icon: 'schedule', label: 'Installments' },
