@@ -37,12 +37,12 @@ const AdminCartCheckoutDetail = () => {
                     {checkoutStatusLabel(data.checkout.status)}
                   </span>
                   {canRetry(data) ? (
-                    <button type="button" disabled title="Allocation retry requires a one-use security challenge." className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold text-secondary disabled:cursor-not-allowed disabled:opacity-60">Retry failed allocations</button>
+                    <button type="button" disabled title="The allocation-retry request binding is not defined in the frontend contract." className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold text-secondary disabled:cursor-not-allowed disabled:opacity-60">Retry failed allocations</button>
                   ) : null}
                 </div>
               </div>
             </section>
-            {canRetry(data) ? <p className="text-sm text-secondary">Allocation retry is unavailable until the one-use security challenge contract is supplied. Checkout and payment status remain available for review.</p> : null}
+            {canRetry(data) ? <p role="note" className="text-sm text-secondary">Allocation retry remains unavailable because the mounted route requires step-up but the handoff does not specify the exact bound request body. Checkout and payment status remain available for review.</p> : null}
             <section className="rounded-xl border border-outline-variant/10 bg-white">
               <div className="border-b border-outline-variant/10 p-5">
                 <h2 className="text-xl font-black">Allocation items</h2>

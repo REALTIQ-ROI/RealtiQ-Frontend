@@ -50,7 +50,7 @@ const TrustAppeals = () => {
             Resolution details and reviewer data remain inside this admin-only
             queue.
           </p>
-          <p className={"mt-2 text-sm text-secondary"}>Appeal resolution and trust recomputation require a one-use security challenge. Review access remains available.</p>
+          <p className={"mt-2 text-sm text-secondary"}>Appeal resolution and trust recomputation require step-up. Their exact bound request payloads are not specified in the current handoff, so these actions remain unavailable.</p>
         </header>
         <label className={"block max-w-xs text-sm font-bold"}>
           Status filter
@@ -122,7 +122,7 @@ const TrustAppeals = () => {
                         <button
                           type="button"
                           disabled
-                          title="Appeal resolution requires a one-use security challenge."
+                          title="The appeal-resolution request body needed for step-up binding is not documented."
                           className={
                             "rounded-lg bg-primary px-3 py-2 font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-60"
                           }
@@ -133,7 +133,7 @@ const TrustAppeals = () => {
                       <button
                         type="button"
                         disabled
-                        title="Trust recomputation requires a one-use security challenge."
+                        title="The trust-recomputation request body needed for step-up binding is not documented."
                         className={
                           "rounded-lg bg-surface-container-low px-3 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-60"
                         }

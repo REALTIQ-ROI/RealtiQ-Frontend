@@ -137,7 +137,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           <div className="flex items-center gap-3 border-l border-slate-200 pl-3 sm:pl-6">
             <div className="hidden text-right sm:block">
               <p className="text-xs font-bold text-on-surface">{user?.name ?? 'Admin'}</p>
-              <p className="text-[10px] text-secondary">Super Admin</p>
+              <p className="text-[10px] text-secondary">Admin account</p>
             </div>
             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary text-xs font-bold">
               {initials}

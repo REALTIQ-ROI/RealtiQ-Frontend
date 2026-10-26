@@ -1,4 +1,5 @@
 ﻿import AdminLayout from '../../../components/layout/AdminLayout';
+import { Link } from 'react-router-dom';
 import MediaPreview from '../../../components/property/MediaPreview';
 import ErrorState from '../../../components/ui/ErrorState';
 import { useAsync } from '../../../hooks/useAsync';
@@ -25,8 +26,8 @@ const formatNGN = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-const StatCard = ({ title, value, icon }: { title: string; value: string | number; icon: string }) => (
-  <div className="bg-surface-container-lowest p-6 rounded-xl transition-all hover:-translate-y-1">
+const StatCard = ({ title, value, icon, to }: { title: string; value: string | number; icon: string; to: string }) => (
+  <Link to={to} aria-label={`Open ${title}`} className="block rounded-xl bg-surface-container-lowest p-6 transition-all hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
     <div className="flex items-start justify-between">
       <div className="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-fixed">
         <span className="material-symbols-outlined text-2xl">{icon}</span>
@@ -36,7 +37,7 @@ const StatCard = ({ title, value, icon }: { title: string; value: string | numbe
       <p className="text-secondary text-sm font-medium">{title}</p>
       <h3 className="text-3xl font-extrabold tracking-tight mt-1 font-headline">{value}</h3>
     </div>
-  </div>
+  </Link>
 );
 
 const StatSkeleton = () => (
@@ -50,7 +51,7 @@ const StatSkeleton = () => (
 const PropertyCard = ({ property }: { property: Property }) => {
   const image = property.media?.[0];
   return (
-    <div className="group bg-surface-container-lowest rounded-xl overflow-hidden">
+    <Link to={`/dashboard/admin/property-details/${encodeURIComponent(property._id)}`} aria-label={`Open property ${property.title}`} className="group block overflow-hidden rounded-xl bg-surface-container-lowest focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
       <div className="relative h-48 bg-surface-container-high">
         <MediaPreview
           media={image}
@@ -89,7 +90,7 @@ const PropertyCard = ({ property }: { property: Property }) => {
           </span>
         </div>
       </div>
-    </div>
+    </Link>
   );
 };
 
@@ -116,16 +117,9 @@ const AdminDashboard = () => {
           </div>
           <div className="flex items-center gap-3">
             <button
-              className="bg-surface-container-lowest text-on-surface px-4 py-2 rounded-lg font-semibold flex items-center gap-2 hover:bg-surface-container-high transition-colors"
-              onClick={() => void refreshStats()}
-              type="button"
-            >
-              <span className="material-symbols-outlined text-lg">calendar_today</span>
-              <span>Last 30 Days</span>
-            </button>
-            <button
               className="bg-primary text-on-primary px-6 py-2 rounded-lg font-bold flex items-center gap-2 hover:opacity-90 transition-all"
               onClick={() => void refreshStats()}
+              type="button"
             >
               <span className="material-symbols-outlined text-lg">refresh</span>
               <span>Refresh Stats</span>
@@ -144,23 +138,23 @@ const AdminDashboard = () => {
               Array.from({ length: 6 }, (_, index) => <StatSkeleton key={index} />)
             ) : (
               <>
-                <StatCard title="Total Users" value={stats.totalUsers.toLocaleString()} icon="group" />
-                <StatCard title="Total Properties" value={stats.totalProperties.toLocaleString()} icon="home_work" />
-                <StatCard title="Active Listings" value={stats.activeListings.toLocaleString()} icon="real_estate_agent" />
-                <StatCard title="Sold Properties" value={stats.soldProperties.toLocaleString()} icon="verified" />
-                <StatCard title="Total Inquiries" value={stats.totalInquiries.toLocaleString()} icon="mail" />
-                <StatCard title="Total Revenue" value={formatNGN(stats.totalRevenue)} icon="payments" />
-                <StatCard title="Verified Property Agents" value={(stats.totalProxyInspectors ?? 0).toLocaleString()} icon="engineering" />
-                <StatCard title="Pending Inspector Approvals" value={(stats.pendingProxyInspectorApprovals ?? 0).toLocaleString()} icon="pending_actions" />
-                <StatCard title="Approved Inspectors" value={(stats.approvedProxyInspectors ?? 0).toLocaleString()} icon="verified" />
-                <StatCard title="Suspended Inspectors" value={(stats.suspendedProxyInspectors ?? 0).toLocaleString()} icon="person_off" />
-                <StatCard title="Property Agent Requests" value={(stats.totalProxyInspectionRequests ?? 0).toLocaleString()} icon="fact_check" />
-                <StatCard title="Active Property Agent Jobs" value={(stats.activeProxyInspectionJobs ?? 0).toLocaleString()} icon="construction" />
-                <StatCard title="Completed Property Agent Jobs" value={(stats.completedProxyInspectionJobs ?? 0).toLocaleString()} icon="task_alt" />
-                <StatCard title="Disputed Property Agent Jobs" value={(stats.disputedProxyInspectionJobs ?? 0).toLocaleString()} icon="gavel" />
-                <StatCard title="Property Agent Gross Volume" value={formatNGN(stats.proxyInspectionGrossVolume ?? 0)} icon="account_balance" />
-                <StatCard title="Property Agent Network Revenue" value={formatNGN(stats.proxyInspectionRevenue ?? 0)} icon="paid" />
-                <StatCard title="Inspector Payout Total" value={formatNGN(stats.proxyInspectorPayoutTotal ?? 0)} icon="payments" />
+                <StatCard title="Total Users" value={stats.totalUsers.toLocaleString()} icon="group" to="/dashboard/admin/manage-users" />
+                <StatCard title="Total Properties" value={stats.totalProperties.toLocaleString()} icon="home_work" to="/dashboard/admin/manage-properties" />
+                <StatCard title="Active Listings" value={stats.activeListings.toLocaleString()} icon="real_estate_agent" to="/dashboard/admin/manage-properties" />
+                <StatCard title="Sold Properties" value={stats.soldProperties.toLocaleString()} icon="verified" to="/dashboard/admin/manage-properties" />
+                <StatCard title="Total Inquiries" value={stats.totalInquiries.toLocaleString()} icon="mail" to="/dashboard/admin/manage-inquiries" />
+                <StatCard title="Total Revenue" value={formatNGN(stats.totalRevenue)} icon="payments" to="/dashboard/admin/wallet" />
+                <StatCard title="Verified Property Agents" value={(stats.totalProxyInspectors ?? 0).toLocaleString()} icon="engineering" to="/admin/proxy-inspectors" />
+                <StatCard title="Pending Inspector Approvals" value={(stats.pendingProxyInspectorApprovals ?? 0).toLocaleString()} icon="pending_actions" to="/admin/proxy-inspectors" />
+                <StatCard title="Approved Inspectors" value={(stats.approvedProxyInspectors ?? 0).toLocaleString()} icon="verified" to="/admin/proxy-inspectors" />
+                <StatCard title="Suspended Inspectors" value={(stats.suspendedProxyInspectors ?? 0).toLocaleString()} icon="person_off" to="/admin/proxy-inspectors" />
+                <StatCard title="Property Agent Requests" value={(stats.totalProxyInspectionRequests ?? 0).toLocaleString()} icon="fact_check" to="/admin/proxy-inspections" />
+                <StatCard title="Active Property Agent Jobs" value={(stats.activeProxyInspectionJobs ?? 0).toLocaleString()} icon="construction" to="/admin/proxy-inspections" />
+                <StatCard title="Completed Property Agent Jobs" value={(stats.completedProxyInspectionJobs ?? 0).toLocaleString()} icon="task_alt" to="/admin/proxy-inspections" />
+                <StatCard title="Disputed Property Agent Jobs" value={(stats.disputedProxyInspectionJobs ?? 0).toLocaleString()} icon="gavel" to="/admin/proxy-inspections" />
+                <StatCard title="Property Agent Gross Volume" value={formatNGN(stats.proxyInspectionGrossVolume ?? 0)} icon="account_balance" to="/admin/proxy-inspections" />
+                <StatCard title="Property Agent Network Revenue" value={formatNGN(stats.proxyInspectionRevenue ?? 0)} icon="paid" to="/dashboard/admin/wallet" />
+                <StatCard title="Inspector Payout Total" value={formatNGN(stats.proxyInspectorPayoutTotal ?? 0)} icon="payments" to="/dashboard/admin/wallet" />
               </>
             )}
           </section>
