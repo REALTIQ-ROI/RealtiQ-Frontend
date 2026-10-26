@@ -102,6 +102,9 @@ export const paymentService = {
   },
 
   async exportPaymentsCsv(body: { limit?: number }, challengeId: string): Promise<Blob> {
+    if (body.limit !== undefined && (!Number.isInteger(body.limit) || body.limit < 1 || body.limit > 2000)) {
+      throw new Error('Payment export limit must be a whole number from 1 to 2,000.');
+    }
     const { data } = await api.post<Blob>('/payments/export.csv', body, {
       headers: { 'X-Step-Up-Challenge': challengeId },
       responseType: 'blob',

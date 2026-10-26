@@ -18,6 +18,33 @@ export interface FavouriteMutationResult {
   isFavourite: boolean;
   saves: number;
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+export const parseSavedSearch = (value: unknown): SavedSearch => {
+  if (
+    !isRecord(value) ||
+    typeof value._id !== 'string' ||
+    typeof value.publicReference !== 'string' ||
+    typeof value.name !== 'string' ||
+    !isRecord(value.filters) ||
+    !Number.isInteger(value.configurationRevision) ||
+    (value.configurationRevision as number) < 0 ||
+    typeof value.createdAt !== 'string' ||
+    typeof value.updatedAt !== 'string'
+  ) {
+    throw new Error('The saved-search response is missing documented revision or identity fields.');
+  }
+  return value as unknown as SavedSearch;
+};
+
+const parseSavedSearchEnvelope = (value: unknown): SavedSearch => {
+  if (!isRecord(value) || !('savedSearch' in value)) {
+    throw new Error('The saved-search response envelope is not available in a supported format.');
+  }
+  return parseSavedSearch(value.savedSearch);
+};
 const favouriteMutations = new Map<string, Promise<FavouriteMutationResult>>();
 const mutateFavourite = (propertyId: string, value: boolean) => {
   const pending = favouriteMutations.get(propertyId);
@@ -81,27 +108,30 @@ export const personalisationService = {
       savedSearches: SavedSearch[];
       pagination: Pagination;
     }>("/personalisation/searches", { params: { page, limit } });
-    return data;
+    if (!isRecord(data) || !Array.isArray(data.savedSearches)) {
+      throw new Error('The saved-search list response is not available in a supported format.');
+    }
+    return { ...data, savedSearches: data.savedSearches.map(parseSavedSearch) };
   },
   async createSearch(input: SavedSearchInput) {
     const { data } = await api.post<{ savedSearch: SavedSearch }>(
       "/personalisation/searches",
       input,
     );
-    return data.savedSearch;
+    return parseSavedSearchEnvelope(data);
   },
   async getSearch(id: string) {
     const { data } = await api.get<{ savedSearch: SavedSearch }>(
       `/personalisation/searches/${id}`,
     );
-    return data.savedSearch;
+    return parseSavedSearchEnvelope(data);
   },
   async updateSearch(id: string, input: SavedSearchUpdateInput) {
     const { data } = await api.patch<{ savedSearch: SavedSearch }>(
       `/personalisation/searches/${id}`,
       input,
     );
-    return data.savedSearch;
+    return parseSavedSearchEnvelope(data);
   },
   async deleteSearch(id: string) {
     await api.delete(`/personalisation/searches/${id}`);

@@ -14,6 +14,34 @@ const compact = <T extends object>(value: T) => Object.fromEntries(
 );
 const config = (signal?: AbortSignal): AxiosRequestConfig => ({ signal });
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** Evidence responses contain short-lived private URLs, so validate identity and access data at the boundary. */
+export const parseProxyEvidenceList = (value: unknown): ProxyEvidence[] => {
+  if (!Array.isArray(value) || value.some((item) =>
+    !isRecord(item) ||
+    typeof item.id !== 'string' || item.id.length === 0 ||
+    typeof item.type !== 'string' ||
+    typeof item.category !== 'string' ||
+    typeof item.accessUrl !== 'string' || item.accessUrl.length === 0 ||
+    (item.mimeType !== undefined && typeof item.mimeType !== 'string') ||
+    (item.fileSize !== undefined && (typeof item.fileSize !== 'number' || !Number.isFinite(item.fileSize))) ||
+    (item.caption !== undefined && item.caption !== null && typeof item.caption !== 'string') ||
+    (item.uploadedAt !== undefined && typeof item.uploadedAt !== 'string')
+  )) {
+    throw new Error('Private evidence response is not available in a supported format.');
+  }
+  return value as ProxyEvidence[];
+};
+
+const parseProxyInspectionDetail = (value: unknown): ProxyInspectionDetail => {
+  if (!isRecord(value) || !Array.isArray(value.evidence)) {
+    throw new Error('Property Agent job detail is not available in a supported format.');
+  }
+  return { ...value, evidence: parseProxyEvidenceList(value.evidence) } as unknown as ProxyInspectionDetail;
+};
+
 export interface InspectorRegistrationInput {
   name: string; email: string; password: string; phone: string; professionalType: string;
   professionalTitle?: string; yearsOfExperience?: number; bio?: string;
@@ -121,10 +149,10 @@ export const proxyNetworkService = {
     const { data } = await api.get<RequestListResponse>('/proxy-inspector/tasks', { params: compact(filters), signal }); return data;
   },
   async getDetail(id: string, signal?: AbortSignal) {
-    const { data } = await api.get<ProxyInspectionDetail>(`/proxy-inspections/${id}`, config(signal)); return data;
+    const { data } = await api.get<unknown>(`/proxy-inspections/${id}`, config(signal)); return parseProxyInspectionDetail(data);
   },
   async getInspectorTask(id: string, signal?: AbortSignal) {
-    const { data } = await api.get<ProxyInspectionDetail>(`/proxy-inspector/tasks/${id}`, config(signal)); return data;
+    const { data } = await api.get<unknown>(`/proxy-inspector/tasks/${id}`, config(signal)); return parseProxyInspectionDetail(data);
   },
   async getConversation(id: string, signal?: AbortSignal) {
     const { data } = await api.get<ProxyConversationResponse>(`/proxy-inspections/${id}/conversation`, config(signal)); return data;
@@ -158,10 +186,10 @@ export const proxyNetworkService = {
     const body = new FormData();
     files.forEach((file) => body.append('evidence', file));
     captions.forEach((caption) => body.append('captions', caption));
-    const { data } = await api.post<ProxyEvidence[]>(`/proxy-inspections/${id}/evidence`, body); return data;
+    const { data } = await api.post<unknown>(`/proxy-inspections/${id}/evidence`, body); return data;
   },
   async getEvidence(id: string, signal?: AbortSignal) {
-    const { data } = await api.get<ProxyEvidence[]>(`/proxy-inspections/${id}/evidence`, config(signal)); return data;
+    const { data } = await api.get<unknown>(`/proxy-inspections/${id}/evidence`, config(signal)); return parseProxyEvidenceList(data);
   },
   async saveReport(id: string, input: ReportInput, update = false) {
     const request = update ? api.patch : api.put;
@@ -213,7 +241,7 @@ export const proxyNetworkService = {
     const { data } = await api.get<RequestListResponse>('/admin/proxy-inspections', { params: compact(filters), signal }); return data;
   },
   async getAdminJob(id: string, signal?: AbortSignal) {
-    const { data } = await api.get<ProxyInspectionDetail>(`/admin/proxy-inspections/${id}`, config(signal)); return data;
+    const { data } = await api.get<unknown>(`/admin/proxy-inspections/${id}`, config(signal)); return parseProxyInspectionDetail(data);
   },
   async releasePayment(id: string, challengeId: string, body: Record<string, never>) {
     const { data } = await api.post<{ status: string; transferReference: string }>(`/admin/proxy-inspections/${id}/release-payment`, body, {

@@ -9,6 +9,11 @@ import type { WalletSummary, WalletTransactionStatus, WalletTransactionType } fr
 const formatNaira = (amount: number) =>
   new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(amount);
 
+const paymentStatuses = ['pending', 'paid', 'failed', 'canceled'] as const;
+type PaymentStatusFilter = typeof paymentStatuses[number];
+const isPaymentStatusFilter = (value: string | null): value is PaymentStatusFilter =>
+  value !== null && paymentStatuses.some((status) => status === value);
+
 const toIsoBoundary = (value: string, end = false): string | undefined => {
   if (!value) return undefined;
   const date = new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}`);
@@ -33,6 +38,8 @@ const AdminWallet = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reference, setReference] = useState(searchParams.get('reference') ?? '');
+  const paymentStatus = searchParams.get('paymentStatus');
+  const selectedPaymentStatus = isPaymentStatusFilter(paymentStatus) ? paymentStatus : '';
 
   const filters = useMemo<WalletTransactionFilters>(() => ({
     page: Number(searchParams.get('page') || 1),
@@ -44,10 +51,10 @@ const AdminWallet = () => {
     property: searchParams.get('property') || undefined,
     user: searchParams.get('user') || undefined,
     reference: searchParams.get('reference') || undefined,
-    paymentStatus: searchParams.get('paymentStatus') || undefined,
+    paymentStatus: isPaymentStatusFilter(paymentStatus) ? paymentStatus : undefined,
     inspector: searchParams.get('inspector') || undefined,
     inspectionRequest: searchParams.get('inspectionRequest') || undefined,
-  }), [searchParams]);
+  }), [searchParams, paymentStatus]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,14 +100,14 @@ const AdminWallet = () => {
     setSearchParams(next);
   };
 
-  const cards = summary ? [
+  const cards: Array<[string, number | undefined]> = summary ? [
     ['Total credits', summary.totalCredits],
     ['Total debits / refunds', summary.totalDebits],
     ['Net revenue', summary.netRevenue],
     ['Available ledger revenue', summary.availableRevenue],
     ['Title-document views', summary.breakdown.titleDocumentViews],
     ['Tour payments', summary.breakdown.tourPayments],
-    ['Property Agent revenue', summary.breakdown.proxyInspectionRevenue ?? 0],
+    ['Property Agent revenue', summary.breakdown.proxyInspectionRevenue],
     ['Other platform revenue', summary.breakdown.other],
     ['Refunds', summary.breakdown.refunds],
   ] as const : [];
@@ -121,7 +128,7 @@ const AdminWallet = () => {
               {cards.map(([label, amount]) => (
                 <div key={label} className="rounded-xl bg-white p-5 shadow-sm">
                   <p className="text-xs font-bold uppercase tracking-widest text-secondary">{label}</p>
-                  <p className="mt-2 text-2xl font-black">{formatNaira(amount)}</p>
+                  <p className="mt-2 text-2xl font-black">{amount === undefined ? 'Not reported' : formatNaira(amount)}</p>
                 </div>
               ))}
               <div className="rounded-xl bg-primary p-5 text-on-primary">
@@ -155,7 +162,13 @@ const AdminWallet = () => {
                 <input aria-label="Property filter" placeholder="Property ID" value={searchParams.get('property') ?? ''} onChange={(event) => updateFilter('property', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
                 <input aria-label="User filter" placeholder="User ID" value={searchParams.get('user') ?? ''} onChange={(event) => updateFilter('user', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
                 <input aria-label="Exact payment reference" placeholder="Exact payment reference" value={reference} onChange={(event) => setReference(event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
-                <input aria-label="Payment status" placeholder="Payment status" value={searchParams.get('paymentStatus') ?? ''} onChange={(event) => updateFilter('paymentStatus', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
+                <select aria-label="Payment status" value={selectedPaymentStatus} onChange={(event) => updateFilter('paymentStatus', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm">
+                  <option value="">All payment states</option>
+                  <option value="pending">Pending</option>
+                  <option value="paid">Paid</option>
+                  <option value="failed">Failed</option>
+                  <option value="canceled">Canceled</option>
+                </select>
                 <input aria-label="Inspector filter" placeholder="Inspector user ID" value={searchParams.get('inspector') ?? ''} onChange={(event) => updateFilter('inspector', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
                 <input aria-label="Inspection request filter" placeholder="Inspection request ID" value={searchParams.get('inspectionRequest') ?? ''} onChange={(event) => updateFilter('inspectionRequest', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
               </div>

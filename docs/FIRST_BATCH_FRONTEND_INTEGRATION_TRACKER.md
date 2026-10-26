@@ -659,6 +659,36 @@ See [the detailed 41-row reconciliation](FRONTEND_RECONCILIATION_POST_BACKEND_RE
 - TypeScript no-emit passed (exit 0). Edited-file ESLint passed with `--max-warnings 0` (exit 0). `git diff --check` passed (exit 0; only line-ending normalization notices).
 - No full suite/build or live backend acceptance was run.
 
+## PASS 15 — API DTO AND SCHEMA REFERENCE
+
+### Initial audit and schema inventory
+
+- Read Chapter 15 and cross-checked the endpoint-specific shape guidance against Chapters 04–10, 14 and 16, plus the current services, types, UI consumers and focused tests. Chapter 15 explicitly says it is **not a universal schema**; a single official count of all DTOs/nested schemas cannot be derived from it.
+- For a reproducible count, the [Pass 15 DTO coverage report](API_DTO_AND_SCHEMA_REFERENCE_PASS15.md) enumerates **25 independently described entries** in Chapter 15: tour (4), finance (6), private-file/custody (5), proxy inspection (5), and corrected additions (5). Nested structures are counted within the containing DTO. **20 entries have frontend consumers: 16 COMPLETE and 4 PARTIAL; 5 operational private-file/custody entries are intentionally unused by first-batch user-facing UI.** This is not a live acceptance count.
+- The nine Chapter 15 family-reference rows were separately mapped to their feature chapters. Remaining family-level schema blockers include login MFA challenge selection; organization seat, bank-directory, mandate and signatory projections; import row decisions; listing-verification decisions; staff privacy decisions; ownership history/transfer; per-media entitlements; construction milestone count; admin metric definitions; and gazetteer status.
+
+### Corrections and final status
+
+- Added endpoint-boundary validation for the platform wallet summary and transaction envelope. `proxyInspectionRevenue` remains optional; the wallet UI now shows “Not reported” for omission and preserves explicit zero. Payment-status filters use only `pending|paid|failed|canceled`, separately from the wallet transaction row status enum.
+- Corrected Proxy Inspection evidence to the documented `id` field, validated evidence rows/private delivery URLs at service boundaries, and updated the gallery key/refresh identity. Added the documented optional metadata/timestamp fields to raw proxy model types.
+- Aligned escrow dispute resolution with the documented partial response: `escrow` is optional, `reused` is represented, HTTP 202 remains pending, and the UI refreshes detail rather than asserting final state.
+- Added saved-search revision DTO validation; missing/invalid `configurationRevision` now fails at the service boundary. Existing UI preserves the user’s edits and requires review after a server revision conflict.
+- Added protected payment CSV limit validation (whole number 1–2,000) before issuing POST. The existing method/path/body/header and Blob download behavior are preserved.
+- Optional admin aggregate cards no longer convert missing backend fields to zero. This does not close the missing complete `/api/admin/stats` metric specification.
+- Canonical field coverage did not change; [Pass 03’s 156-field matrix](CANONICAL_FIELD_COVERAGE_PASS03.md) remains authoritative.
+
+### Files and verification
+
+- Source/types: `src/services/adminService.ts`, `src/services/personalisationService.ts`, `src/services/paymentService.ts`, `src/services/proxyNetworkService.ts`, `src/types/escrow.ts`, `src/types/proxyNetwork.ts`, `src/pages/dashboard/Admin/AdminDashboard.tsx`, `src/pages/dashboard/Admin/AdminWallet.tsx`, `src/components/proxyNetwork/ProxyWorkspace.tsx`.
+- Focused tests: `src/services/adminService.test.ts`, `src/services/personalisationService.test.ts`, `src/services/paymentService.test.ts`, `src/services/escrowService.test.ts`, `src/services/proxyNetworkService.test.ts`, `src/services/tourService.test.ts`, `src/utils/savedSearchQuery.test.ts`, `src/components/project/UnitGridPanel.test.tsx`, `src/components/proxyNetwork/ProxyWorkspace.pricing.test.tsx`, `src/pages/dashboard/Admin/AdminWallet.test.tsx`, `src/pages/dashboard/Admin/AdminDashboard.test.tsx`.
+- Focused Vitest: **11 files / 62 assertions passed**. The overall process exited **1** because Vitest startup reported Windows `EPERM` resolving `C:\Users\DELL` and `MISSING DEPENDENCY jsdom`; no assertions failed. This is reported as assertions passed with runner failure, not a clean test run.
+- TypeScript no-emit (`npx tsc --noEmit -p tsconfig.app.json` with the Windows preserve-symlinks workaround): **exit 0**. Edited-file ESLint (`npx eslint --max-warnings 0` on changed TS/TSX files): **exit 0, zero warnings**. `git diff --check`: **exit 0**, line-ending notices only. No full test suite/build or live backend/provider/payment operation was run.
+
+### Blockers and verdict
+
+- **Pass 15 verdict: PARTIAL.** The supported DTO corrections above are source-wired and covered by focused assertions. Four used DTO projections remain partial where the source intentionally varies by endpoint and complete response validation is not available. Five private-file reconciliation/custody DTOs are not user-facing first-batch workflows. Missing specification/product/configuration/deployment items remain as listed in the Pass 15 report; no DTO or policy was invented to close them.
+- **Pass 16 readiness:** ready for response-variation review with targeted focus on tour bare-array/header paging, saved-search 409 revision conflicts, escrow 200/202 optional fields, CSV stream/error responses, proxy evidence private URLs, and optional/null response values. No live acceptance is claimed.
+
 ### Verdict and Pass 12 readiness
 
 **Pass 11 verdict: PARTIAL.** The checklist’s supported frontend-owned association and payment-detail gaps are closed, and stale hook closures were fixed. The remaining partial/blocked items require missing route-specific DTOs, product/specification decisions, approved policies or provider/deployment configuration. They remain accurately represented in the Pass 11 report and the Pass 01–10 reconciliation. **Pass 12 is ready to begin**; no Pass 11 dependency requires additional backend access.

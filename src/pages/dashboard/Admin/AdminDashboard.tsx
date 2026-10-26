@@ -40,6 +40,23 @@ const StatCard = ({ title, value, icon, to }: { title: string; value: string | n
   </Link>
 );
 
+const OptionalStatCard = ({
+  title,
+  value,
+  icon,
+  to,
+  currency = false,
+}: {
+  title: string;
+  value: unknown;
+  icon: string;
+  to: string;
+  currency?: boolean;
+}) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return <StatCard title={title} value={currency ? formatNGN(value) : value.toLocaleString()} icon={icon} to={to} />;
+};
+
 const StatSkeleton = () => (
   <div className="bg-surface-container-lowest p-6 rounded-xl animate-pulse">
     <div className="w-12 h-12 rounded-full bg-surface-container-high mb-4" />
@@ -144,17 +161,17 @@ const AdminDashboard = () => {
                 <StatCard title="Sold Properties" value={stats.soldProperties.toLocaleString()} icon="verified" to="/dashboard/admin/manage-properties" />
                 <StatCard title="Total Inquiries" value={stats.totalInquiries.toLocaleString()} icon="mail" to="/dashboard/admin/manage-inquiries" />
                 <StatCard title="Total Revenue" value={formatNGN(stats.totalRevenue)} icon="payments" to="/dashboard/admin/wallet" />
-                <StatCard title="Verified Property Agents" value={(stats.totalProxyInspectors ?? 0).toLocaleString()} icon="engineering" to="/admin/proxy-inspectors" />
-                <StatCard title="Pending Inspector Approvals" value={(stats.pendingProxyInspectorApprovals ?? 0).toLocaleString()} icon="pending_actions" to="/admin/proxy-inspectors" />
-                <StatCard title="Approved Inspectors" value={(stats.approvedProxyInspectors ?? 0).toLocaleString()} icon="verified" to="/admin/proxy-inspectors" />
-                <StatCard title="Suspended Inspectors" value={(stats.suspendedProxyInspectors ?? 0).toLocaleString()} icon="person_off" to="/admin/proxy-inspectors" />
-                <StatCard title="Property Agent Requests" value={(stats.totalProxyInspectionRequests ?? 0).toLocaleString()} icon="fact_check" to="/admin/proxy-inspections" />
-                <StatCard title="Active Property Agent Jobs" value={(stats.activeProxyInspectionJobs ?? 0).toLocaleString()} icon="construction" to="/admin/proxy-inspections" />
-                <StatCard title="Completed Property Agent Jobs" value={(stats.completedProxyInspectionJobs ?? 0).toLocaleString()} icon="task_alt" to="/admin/proxy-inspections" />
-                <StatCard title="Disputed Property Agent Jobs" value={(stats.disputedProxyInspectionJobs ?? 0).toLocaleString()} icon="gavel" to="/admin/proxy-inspections" />
-                <StatCard title="Property Agent Gross Volume" value={formatNGN(stats.proxyInspectionGrossVolume ?? 0)} icon="account_balance" to="/admin/proxy-inspections" />
-                <StatCard title="Property Agent Network Revenue" value={formatNGN(stats.proxyInspectionRevenue ?? 0)} icon="paid" to="/dashboard/admin/wallet" />
-                <StatCard title="Inspector Payout Total" value={formatNGN(stats.proxyInspectorPayoutTotal ?? 0)} icon="payments" to="/dashboard/admin/wallet" />
+                <OptionalStatCard title="Verified Property Agents" value={stats.totalProxyInspectors} icon="engineering" to="/admin/proxy-inspectors" />
+                <OptionalStatCard title="Pending Inspector Approvals" value={stats.pendingProxyInspectorApprovals} icon="pending_actions" to="/admin/proxy-inspectors" />
+                <OptionalStatCard title="Approved Inspectors" value={stats.approvedProxyInspectors} icon="verified" to="/admin/proxy-inspectors" />
+                <OptionalStatCard title="Suspended Inspectors" value={stats.suspendedProxyInspectors} icon="person_off" to="/admin/proxy-inspectors" />
+                <OptionalStatCard title="Property Agent Requests" value={stats.totalProxyInspectionRequests} icon="fact_check" to="/admin/proxy-inspections" />
+                <OptionalStatCard title="Active Property Agent Jobs" value={stats.activeProxyInspectionJobs} icon="construction" to="/admin/proxy-inspections" />
+                <OptionalStatCard title="Completed Property Agent Jobs" value={stats.completedProxyInspectionJobs} icon="task_alt" to="/admin/proxy-inspections" />
+                <OptionalStatCard title="Disputed Property Agent Jobs" value={stats.disputedProxyInspectionJobs} icon="gavel" to="/admin/proxy-inspections" />
+                <OptionalStatCard title="Property Agent Gross Volume" value={stats.proxyInspectionGrossVolume} icon="account_balance" to="/admin/proxy-inspections" currency />
+                <OptionalStatCard title="Property Agent Network Revenue" value={stats.proxyInspectionRevenue} icon="paid" to="/dashboard/admin/wallet" currency />
+                <OptionalStatCard title="Inspector Payout Total" value={stats.proxyInspectorPayoutTotal} icon="payments" to="/dashboard/admin/wallet" currency />
               </>
             )}
           </section>

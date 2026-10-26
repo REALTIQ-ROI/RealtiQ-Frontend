@@ -55,6 +55,33 @@ describe('AdminDashboard', () => {
     expect(screen.queryByRole('button', { name: /last 30 days/i })).not.toBeInTheDocument();
   });
 
+  it('does not turn absent optional dashboard aggregates into zero', async () => {
+    render(<MemoryRouter><AdminDashboard /></MemoryRouter>);
+
+    await waitFor(() => expect(adminService.fetchAdminStats).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('link', { name: 'Open Verified Property Agents' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open Property Agent Network Revenue' })).not.toBeInTheDocument();
+  });
+
+  it('preserves an explicitly returned zero optional aggregate', async () => {
+    vi.mocked(adminService.fetchAdminStats).mockResolvedValue({
+      totalUsers: 14,
+      totalProperties: 8,
+      activeListings: 3,
+      soldProperties: 2,
+      totalInquiries: 5,
+      totalRevenue: 1000,
+      totalProxyInspectors: 0,
+      proxyInspectionGrossVolume: 0,
+    });
+    render(<MemoryRouter><AdminDashboard /></MemoryRouter>);
+
+    const agents = await screen.findByRole('link', { name: 'Open Verified Property Agents' });
+    expect(agents).toHaveTextContent('0');
+    expect(screen.getByRole('link', { name: 'Open Property Agent Gross Volume' })).toHaveTextContent('₦0');
+    expect(screen.queryByRole('link', { name: 'Open Property Agent Network Revenue' })).not.toBeInTheDocument();
+  });
+
   it('opens a featured result in its authorized admin detail route', async () => {
     render(<MemoryRouter><AdminDashboard /></MemoryRouter>);
 

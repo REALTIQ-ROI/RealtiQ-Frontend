@@ -46,7 +46,7 @@ export interface ProxyInspectionRequest {
   proposedPrice?: number; proposedBy?: string; buyerPriceConfirmed: boolean; inspectorPriceConfirmed: boolean;
   agreedPrice?: number; priceLockedAt?: string; startedAt?: string; completionSubmittedAt?: string;
   buyerConfirmedAt?: string; completedAt?: string; cancelledAt?: string; reportLockedAt?: string;
-  createdAt: string; updatedAt: string;
+  metadata?: Record<string, unknown>; __v?: number; createdAt: string; updatedAt: string;
 }
 export interface ServiceEscrow {
   _id: string; serviceType: 'proxy_inspection'; serviceReference: string; payer: string; provider: string;
@@ -57,8 +57,14 @@ export interface ServiceEscrow {
   status: ServiceEscrowStatus; fundedAt?: string; releaseRequestedAt?: string; releasedAt?: string; refundedAt?: string;
 }
 export interface ProxyEvidence {
-  _id: string; inspectionRequest: string; uploadedBy: string; type: EvidenceType; category: EvidenceCategory;
-  accessUrl: string; mimeType?: string; fileSize?: number; duration?: number; caption?: string; uploadedAt?: string;
+  id: string;
+  type: EvidenceType | (string & {});
+  category: EvidenceCategory | (string & {});
+  accessUrl: string;
+  mimeType?: string;
+  fileSize?: number;
+  caption?: string | null;
+  uploadedAt?: string;
 }
 export interface ReportSection { key: string; title: string; condition: ReportCondition; comments?: string }
 export interface ProxyInspectionReport {
@@ -67,11 +73,12 @@ export interface ProxyInspectionReport {
   neighbourhoodComments?: string; roadAccessComments?: string; utilityComments?: string;
   locationConfirmed?: boolean; recommendation?: ReportRecommendation; summary?: string;
   declarationAccepted: boolean; declarationText?: string; signedByName?: string; signedAt?: string; submittedAt?: string;
+  metadata?: Record<string, unknown>; createdAt?: string; updatedAt?: string;
 }
 export interface ProxyInspectionDispute {
   _id: string; inspectionRequest: string; serviceEscrow: string; raisedBy: string; reason: string; description?: string;
   status: 'open' | 'under_review' | 'corrections_requested' | 'refund_processing' | 'release_processing' | 'resolved';
-  resolution?: DisputeResolution; resolutionNotes?: string; resolvedBy?: string; resolvedAt?: string; createdAt: string;
+  resolution?: DisputeResolution; resolutionNotes?: string; resolvedBy?: string; resolvedAt?: string; createdAt: string; updatedAt?: string;
 }
 export interface ProxyAuditEntry { _id: string; action: string; oldStatus?: string; newStatus?: string; createdAt: string; actor?: EntityRef<{ _id: string; name: string }> }
 export interface ProxyMessage {

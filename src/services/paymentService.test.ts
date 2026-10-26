@@ -38,6 +38,11 @@ describe('paymentService remediation contracts', () => {
     });
   });
 
+  it('rejects limits outside the documented protected-export range before request', async () => {
+    await expect(paymentService.exportPaymentsCsv({ limit: 2001 }, 'challenge-export')).rejects.toThrow(/1 to 2,000/);
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it('does not claim or redirect a pending attempt without a provider URL', () => {
     expect(() => paymentService.redirectToCheckout({ reference: 'PAY-PENDING', pending: true })).toThrow(/pending and has no provider redirect URL/);
     expect(paymentService.getPendingPaymentReference()).toBeNull();

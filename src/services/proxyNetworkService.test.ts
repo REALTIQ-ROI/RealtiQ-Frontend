@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import api from '../lib/axios';
-import { proxyNetworkService } from './proxyNetworkService';
+import { parseProxyEvidenceList, proxyNetworkService } from './proxyNetworkService';
 
 vi.mock('../lib/axios', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn() },
@@ -160,6 +160,19 @@ describe('proxyNetworkService contracts', () => {
     expect(body.getAll('evidence')).toHaveLength(2);
     expect(body.getAll('captions')).toEqual(['Front elevation','Recorded walkthrough']);
     expect(vi.mocked(api.post).mock.calls[0][0]).toBe('/proxy-inspections/request-1/evidence');
+  });
+
+  it('reads the documented private evidence row using its public DTO id', async () => {
+    const evidence = {
+      id: 'evidence-1', type: 'image', category: 'inspection_photo', mimeType: 'image/jpeg',
+      fileSize: 1024, caption: 'Front elevation', uploadedAt: '2026-10-24T12:00:00.000Z',
+      accessUrl: 'https://private.example/signed-evidence',
+    };
+    vi.mocked(api.get).mockResolvedValue({ data: [evidence] });
+
+    await expect(proxyNetworkService.getEvidence('inspection-1')).resolves.toEqual([evidence]);
+    expect(api.get).toHaveBeenCalledWith('/proxy-inspections/inspection-1/evidence', { signal: undefined });
+    expect(() => parseProxyEvidenceList([{ ...evidence, id: undefined }])).toThrow(/supported format/i);
   });
 
   it('sends exact admin resolution and profile decision bodies', async () => {

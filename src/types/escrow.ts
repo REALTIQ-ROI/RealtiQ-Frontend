@@ -189,11 +189,12 @@ export interface ResolveEscrowDisputePayload {
 }
 
 export interface ResolveEscrowDisputeResponse {
-  escrow: Partial<Escrow> & Pick<Escrow, '_id' | 'status'>;
+  escrow?: Partial<Escrow> & Pick<Escrow, '_id' | 'status'>;
   dispute?: Partial<EscrowDispute> & Pick<EscrowDispute, '_id'>;
   refund?: EscrowFinancialRecord;
   payout?: EscrowFinancialRecord;
   pending?: boolean;
+  reused?: boolean;
   reconciliationRequired?: boolean;
 }
 

@@ -79,7 +79,7 @@ describe('escrowService', () => {
   });
   it('maps admin dispute list, detail, and four-option resolution routes', async () => {
     mockedApi.get.mockResolvedValue({ data: { items: [], pagination: { page: 2, limit: 20, total: 0, pages: 0 } } });
-    mockedApi.patch.mockResolvedValue({ data: { escrow: { _id: 'e1', status: 'release_processing' }, pending: true }, status: 202 });
+    mockedApi.patch.mockResolvedValue({ data: { pending: true, reused: true, reconciliationRequired: true }, status: 202 });
     await escrowService.listAdminDisputes({ page: 2, limit: 20, status: 'open', search: 'lekki' });
     await escrowService.getAdminDispute('d1');
     const result = await escrowService.resolveAdminDispute('d1', { action: 'release_seller', reason: 'Milestones complete' }, 'decision-challenge');
@@ -87,6 +87,7 @@ describe('escrowService', () => {
     expect(mockedApi.get).toHaveBeenCalledWith('/admin/escrow-disputes/d1');
     expect(mockedApi.patch).toHaveBeenCalledWith('/admin/escrow-disputes/d1/resolve', { action: 'release_seller', reason: 'Milestones complete' }, { headers: { 'X-Step-Up-Challenge': 'decision-challenge' } });
     expect(result.status).toBe(202);
+    expect(result.data).toEqual({ pending: true, reused: true, reconciliationRequired: true });
   });
   it('uses seller-owned payout account routes', async () => {
     mockedApi.get.mockResolvedValue({ data: { configured: false } });

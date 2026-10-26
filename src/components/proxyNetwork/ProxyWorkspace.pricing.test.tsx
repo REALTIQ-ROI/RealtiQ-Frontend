@@ -111,6 +111,25 @@ describe('ProxyWorkspace pricing display', () => {
     expect(screen.getAllByText(/approved, versioned partner-fee policy or provider activation/i).length).toBeGreaterThan(0);
   });
 
+  it('renders private evidence using the documented id and metadata fields', () => {
+    render(
+      <MemoryRouter>
+        <ProxyWorkspace
+          detail={detail({ evidence: [{
+            id: 'evidence-1', type: 'image', category: 'inspection_photo', mimeType: 'image/jpeg',
+            fileSize: 1024, caption: 'Front elevation', uploadedAt: '2026-08-01T00:00:00.000Z',
+            accessUrl: 'https://private.example/signed-evidence',
+          }] })}
+          requestId="request-1"
+          role="buyer"
+          reload={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByAltText('Front elevation')).toHaveAttribute('src', 'https://private.example/signed-evidence');
+  });
+
   it('binds checkout to TOTP and redirects only after the user reviews server pricing', async () => {
     const user = userEvent.setup();
     const reload = vi.fn();

@@ -399,8 +399,8 @@ const EvidenceGallery = ({
     setCaptions(selected.map(() => ""));
   };
   const refreshUrl = async (item: ProxyEvidence) => {
-    if (refreshed.includes(item._id)) return;
-    setRefreshed((old) => [...old, item._id]);
+    if (refreshed.includes(item.id)) return;
+    setRefreshed((old) => [...old, item.id]);
     await mutate(
       "refreshStatus",
       () => proxyNetworkService.getEvidence(id),
@@ -417,7 +417,7 @@ const EvidenceGallery = ({
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {evidence.map((item) => (
           <figure
-            key={item._id}
+            key={item.id}
             className="overflow-hidden rounded-xl border border-outline-variant/20 p-3"
           >
             {item.type === "video" ? (
