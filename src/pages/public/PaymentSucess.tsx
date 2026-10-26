@@ -1,17 +1,8 @@
-﻿import PublicLayout from '../../components/layout/PublicLayout';
-import PageNotice from '../../components/ui/PageNotice';
+import { Navigate, useLocation } from 'react-router-dom';
 
 const PaymentSucess = () => {
-  return (
-    <PublicLayout>
-      <PageNotice
-        title="Payment Successful"
-        description="Your payment has been confirmed successfully."
-        actionLabel="View Dashboard"
-        actionTo="/dashboard"
-      />
-    </PublicLayout>
-  );
+  const location = useLocation();
+  return <Navigate to={{ pathname: '/post-payment-redirect', search: location.search }} replace />;
 };
 
 export default PaymentSucess;

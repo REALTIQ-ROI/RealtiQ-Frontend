@@ -54,8 +54,7 @@ const PaymentHistory = () => {
     return matchesTab && matchesQuery;
   });
 
-  const totalInvested = payments.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
-  const pendingAmount = payments.filter((p) => p.status === 'pending').reduce((s, p) => s + p.amount, 0);
+  const paidCount = payments.filter((p) => p.status === 'paid').length;
   const pendingCount = payments.filter((p) => p.status === 'pending').length;
 
   const handleVerify = async (payment: ApiPayment) => {
@@ -76,10 +75,11 @@ const PaymentHistory = () => {
     try {
       const result = await paymentService.verifyPayment(payment.reference);
       if (result.verified) {
-        toast.success('Payment verified successfully');
+        toast.success('Provider verification completed. Refreshing the payment records.');
         void execute();
       } else {
-        toast.error('Payment verification failed');
+        toast.info('The provider has not confirmed this payment yet. No success or failure is assumed.');
+        void execute();
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to verify payment');
@@ -122,23 +122,23 @@ const PaymentHistory = () => {
     >
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
         <div className="bg-surface-container-low p-8 rounded-xl">
-          <p className="font-semibold text-secondary uppercase tracking-widest mb-2 text-xs">Total Invested</p>
-          <h3 className="text-3xl font-bold text-primary">{formatNGN(totalInvested)}</h3>
+          <p className="font-semibold text-secondary uppercase tracking-widest mb-2 text-xs">Paid payment records</p>
+          <h3 className="text-3xl font-bold text-primary">{paidCount}</h3>
           <div className="mt-4 flex items-center gap-2 text-green-600 text-sm font-medium">
             <span className="material-symbols-outlined text-sm">trending_up</span>
-            <span>Confirmed payments</span>
+            <span>Records returned by the payment API</span>
           </div>
         </div>
         <div className="bg-surface-container-low p-8 rounded-xl">
-          <p className="font-semibold text-secondary uppercase tracking-widest mb-2 text-xs">Active Escrows</p>
+          <p className="font-semibold text-secondary uppercase tracking-widest mb-2 text-xs">Pending payment records</p>
           <h3 className="text-3xl font-bold text-primary">{pendingCount}</h3>
           <div className="mt-4 flex items-center gap-2 text-secondary text-sm font-medium">
             <span className="material-symbols-outlined text-sm">pending_actions</span>
-            <span>Totaling {formatNGN(pendingAmount)}</span>
+            <span>Payment confirmation is pending</span>
           </div>
         </div>
         <div className="bg-surface-container-low p-8 rounded-xl border border-dashed border-outline-variant/30">
-          <p className="font-semibold text-secondary uppercase tracking-widest mb-2 text-xs">Total Transactions</p>
+          <p className="font-semibold text-secondary uppercase tracking-widest mb-2 text-xs">Payment records returned</p>
           <h3 className="text-3xl font-bold text-primary">{payments.length}</h3>
           <div className="mt-4 flex items-center gap-2 text-secondary text-sm font-medium">
             <span className="material-symbols-outlined text-sm">receipt_long</span>

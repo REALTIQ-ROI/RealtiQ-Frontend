@@ -75,11 +75,18 @@ const PaymentDetails = () => {
     setVerifying(true);
     try {
       const result = await paymentService.verifyPayment(payment.reference);
+      // A verification response is not a substitute for the current authorized
+      // payment projection. The server record remains the display authority.
+      const refreshedPayment = await paymentService.getPaymentById(payment._id);
+      setPayment(refreshedPayment);
       if (result.verified) {
-        toast.success('Payment verified successfully');
-        setPayment((prev) => (prev ? { ...prev, status: 'paid' } : prev));
+        if (refreshedPayment.status === 'paid') {
+          toast.success('Payment verification completed. The current payment record is shown below.');
+        } else {
+          toast.info(`The provider verification completed, but the payment record remains ${refreshedPayment.status}.`);
+        }
       } else {
-        toast.error('Payment verification failed');
+        toast.info('The provider has not confirmed this payment yet. The current payment record has been refreshed.');
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to verify payment');
@@ -200,8 +207,8 @@ const PaymentDetails = () => {
             check_circle
           </span>
           <div className="flex-1">
-            <h3 className="font-bold text-green-800">Payment Successful</h3>
-            <p className="text-green-700 text-sm">Your property purchase has been confirmed</p>
+            <h3 className="font-bold text-green-800">Payment Confirmed</h3>
+            <p className="text-green-700 text-sm">This payment record is confirmed. Check your ownership records separately for allocation and ownership status.</p>
           </div>
           {propertyReference ? (
             <button
@@ -269,7 +276,7 @@ const PaymentDetails = () => {
                   <span className="material-symbols-outlined text-sm">location_on</span>
                   {payment.property?.location ?? 'Related record unavailable'}
                 </p>
-                {payment.property ? <p className="text-sm font-bold text-primary mt-1">{formatNGN(payment.property.price)}</p> : null}
+                {payment.property ? <p className="text-sm font-bold text-primary mt-1">Current listing price: {formatNGN(payment.property.price)}</p> : null}
               </div>
             </div>
           </div>

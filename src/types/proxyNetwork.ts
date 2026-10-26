@@ -124,7 +124,9 @@ export type InspectorListResponse = { inspectors: PublicInspectorProfile[]; tota
 export type RequestListResponse = { requests: ProxyInspectionRequest[]; total: number; page: number; limit: number };
 export type AdminInspectorListResponse = { inspectors: AdminInspectorProfile[]; total: number; page: number; limit: number };
 export interface ProxyApiErrorDetails { missing?: string[]; [key: string]: unknown }
-export interface ProxyPaymentVerificationResponse { verified: boolean; payment: { _id: string; user?: string; property?: string; amount?: number; purpose?: string; serviceEscrow?: string; proxyInspectionRequest?: string; status: string; reference: string; fulfilledAt?: string } }
+export type ProxyPaymentVerificationResponse =
+  | { verified: true; payment: { _id: string; user?: string; property?: string; amount?: number; purpose?: string; serviceEscrow?: string; proxyInspectionRequest?: string; status: string; reference: string; fulfilledAt?: string } }
+  | { verified: false; payment?: undefined };
 export interface ProxyRegistrationResponse { message: string; user: { _id: string; role: 'proxy_inspector'; emailVerified: boolean }; profile: { _id: string; verificationStatus: VerificationStatus; isSearchable: boolean }; nextStep: string }
 export interface KycSubmissionResponse { status: string; verificationStatus: VerificationStatus; submittedAt: string }
 export interface PaymentInitializationResponse { redirectUrl?: string; reference: string; pending?: boolean; message?: string; pricing?: ProxyPricing }

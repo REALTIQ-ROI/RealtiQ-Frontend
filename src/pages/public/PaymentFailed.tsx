@@ -1,17 +1,8 @@
-﻿import PublicLayout from '../../components/layout/PublicLayout';
-import PageNotice from '../../components/ui/PageNotice';
+import { Navigate, useLocation } from 'react-router-dom';
 
 const PaymentFailed = () => {
-  return (
-    <PublicLayout>
-      <PageNotice
-        title="Payment Failed"
-        description="We could not complete your payment. Please try again."
-        actionLabel="Retry Checkout"
-        actionTo="/checkout"
-      />
-    </PublicLayout>
-  );
+  const location = useLocation();
+  return <Navigate to={{ pathname: '/post-payment-redirect', search: location.search }} replace />;
 };
 
 export default PaymentFailed;

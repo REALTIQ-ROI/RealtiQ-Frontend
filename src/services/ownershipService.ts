@@ -44,6 +44,9 @@ const extractOwnerships = (response: OwnershipEnvelope): OwnershipRecord[] => {
   if (Array.isArray(response.data)) return response.data;
   return response.data?.ownerships ?? response.data?.records ?? [];
 };
+export const isConfirmedOwnership = (ownership: OwnershipRecord): boolean =>
+  ownership.status === "owned";
+
 export const isReviewEligible = (ownership: OwnershipRecord) => {
   const property =
     typeof ownership.property === "object" ? ownership.property : undefined;
@@ -71,6 +74,7 @@ export const ownershipService = {
   async getMyOwnedProperties(): Promise<Property[]> {
     const ownerships = await ownershipService.getMyOwnerships();
     return ownerships
+      .filter(isConfirmedOwnership)
       .map((item) => item.property ?? item.propertyId)
       .filter(
         (property): property is Property =>

@@ -121,9 +121,9 @@ const LandlordDashboard = () => {
             <p className="text-sm text-secondary mt-2">Active conversations waiting for your response.</p>
           </div>
           <div className="bg-primary-container rounded-xl p-8 text-white">
-            <h3 className="text-on-primary-container text-sm font-semibold tracking-tight uppercase mb-1">Revenue Captured</h3>
-            <p className="text-4xl font-extrabold tracking-tighter">{formatCurrency(myPayments.reduce((sum, item) => sum + item.amount, 0))}</p>
-            <p className="text-xs mt-2 text-slate-300">Sold properties: {soldProperties.length}</p>
+            <h3 className="text-on-primary-container text-sm font-semibold tracking-tight uppercase mb-1">Authorized payment records</h3>
+            <p className="text-4xl font-extrabold tracking-tighter">{myPayments.length}</p>
+            <p className="text-xs mt-2 text-slate-300">Paid payment records: {myPayments.filter((item) => item.status === 'paid').length}. These are record counts, not a sales or settlement total.</p>
           </div>
         </section>
 

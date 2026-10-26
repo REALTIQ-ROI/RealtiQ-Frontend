@@ -135,11 +135,15 @@ export const proxyNetworkService = {
   async proposePrice(id: string, amount: number) {
     const { data } = await api.post<ProxyInspectionRequest>(`/proxy-inspections/${id}/propose-price`, { amount }); return data;
   },
-  async confirmPrice(id: string) {
-    const { data } = await api.post<ProxyInspectionRequest>(`/proxy-inspections/${id}/confirm-price`); return data;
+  async confirmPrice(id: string, challengeId: string, body: Record<string, never>) {
+    const { data } = await api.post<ProxyInspectionRequest>(`/proxy-inspections/${id}/confirm-price`, body, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    }); return data;
   },
-  async initializePayment(id: string) {
-    const { data } = await api.post<PaymentInitializationResponse>(`/proxy-inspections/${id}/initialize-payment`); return data;
+  async initializePayment(id: string, challengeId: string, body: Record<string, never>) {
+    const { data } = await api.post<PaymentInitializationResponse>(`/proxy-inspections/${id}/initialize-payment`, body, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    }); return data;
   },
   async verifyPayment(reference: string) {
     const { data } = await api.get<ProxyPaymentVerificationResponse>(`/payments/verify/${reference}`); return data;
@@ -211,10 +215,14 @@ export const proxyNetworkService = {
   async getAdminJob(id: string, signal?: AbortSignal) {
     const { data } = await api.get<ProxyInspectionDetail>(`/admin/proxy-inspections/${id}`, config(signal)); return data;
   },
-  async releasePayment(id: string) {
-    const { data } = await api.post<{ status: string; transferReference: string }>(`/admin/proxy-inspections/${id}/release-payment`); return data;
+  async releasePayment(id: string, challengeId: string, body: Record<string, never>) {
+    const { data } = await api.post<{ status: string; transferReference: string }>(`/admin/proxy-inspections/${id}/release-payment`, body, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    }); return data;
   },
-  async resolveDispute(id: string, resolution: DisputeResolution, notes: string) {
-    const { data } = await api.patch(`/admin/proxy-inspections/${id}/resolve-dispute`, { resolution, notes }); return data;
+  async resolveDispute(id: string, challengeId: string, body: { resolution: DisputeResolution; notes: string }) {
+    const { data } = await api.patch(`/admin/proxy-inspections/${id}/resolve-dispute`, body, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    }); return data;
   },
 };

@@ -59,7 +59,7 @@ const PostPaymentRedirect = () => {
     setErrorMessage(null);
     try {
       const result = await paymentService.verifyPayment(reference);
-      if (!result.verified) throw new Error("Payment could not be verified.");
+      if (!result.verified) throw new Error("The provider has not confirmed this payment yet. No payment success or failure is assumed. Check the status again later and do not start another payment while the outcome is unresolved.");
       setPaymentId(result.payment._id);
       const paymentPurpose = result.payment.purpose || result.payment.metadata?.paymentPurpose;
       if (paymentPurpose === "multi_service_cart") {
@@ -187,7 +187,7 @@ const PostPaymentRedirect = () => {
               </span>
             </div>
             <h1 className="text-3xl font-extrabold">
-              {cartCheckout ? "Service checkout received" : isEscrow ? "Payment secured in escrow" : isTitleDocumentPayment ? "Document access ready" : "Payment Successful"}
+              {cartCheckout ? "Service checkout received" : isEscrow ? "Payment secured in escrow" : isTitleDocumentPayment ? "Document access ready" : "Payment verified"}
             </h1>
             <p className="mt-3 text-secondary">
               {cartCheckout
@@ -206,7 +206,7 @@ const PostPaymentRedirect = () => {
                   ? titleAccessReady
                     ? "Payment successful — your document access is ready. Payment did not start or consume a viewer session."
                     : "Payment was verified. Access activation is still processing; return to the property shortly and check access again."
-                : "Your property purchase has been confirmed."}
+                : "The backend verified this payment. Check the related ownership or allocation record for its current status."}
             </p>
             {cartCheckout ? (
               <div className="mx-auto mt-5 max-w-sm rounded-xl bg-surface-container-low p-4 text-left text-sm">
@@ -277,7 +277,7 @@ const PostPaymentRedirect = () => {
                   onClick={() => void verify()}
                   className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary"
                 >
-                  Retry Verification
+                  Check payment status again
                 </button>
               ) : null}
               {isEscrow && escrowId ? (

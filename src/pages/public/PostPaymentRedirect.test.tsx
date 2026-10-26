@@ -73,7 +73,19 @@ describe('PostPaymentRedirect', () => {
     vi.mocked(paymentService.verifyPayment).mockRejectedValueOnce(new Error('Network unavailable'));
     render(<MemoryRouter initialEntries={['/post-payment-redirect?trxref=ref1']}><PostPaymentRedirect /></MemoryRouter>);
     expect(await screen.findByText('Network unavailable')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Retry Verification' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Check payment status again' })).toBeInTheDocument();
+  });
+  it('keeps an unverified provider return unresolved without calling it failed or successful', async () => {
+    vi.mocked(escrowService.getPendingId).mockReturnValue(null);
+    vi.mocked(escrowService.getPendingReference).mockReturnValue(null);
+    vi.mocked(paymentService.verifyPayment).mockResolvedValue({
+      verified: false,
+    });
+    render(<MemoryRouter initialEntries={['/post-payment-redirect?reference=pending-ref']}><PostPaymentRedirect /></MemoryRouter>);
+    expect(await screen.findByText(/provider has not confirmed this payment yet/i)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Payment Successful' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Payment Failed' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Check payment status again' })).toBeInTheDocument();
   });
   it('verifies cart payments through shared payment verify and shows the cart receipt link', async () => {
     vi.mocked(escrowService.getPendingId).mockReturnValue(null);

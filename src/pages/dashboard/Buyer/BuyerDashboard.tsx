@@ -101,9 +101,9 @@ const BuyerDashboard = () => {
           <p className="text-sm text-secondary mt-2">Messages waiting for a response.</p>
         </div>
         <div className="bg-primary-container p-6 rounded-xl text-white">
-          <p className="text-xs font-bold uppercase tracking-widest text-on-primary-container">Portfolio Value</p>
-          <p className="mt-3 text-4xl font-black tracking-tighter">{formatCurrency(buyerProperties.reduce((sum, item) => sum + item.price, 0))}</p>
-          <p className="text-sm text-white/80 mt-2">Based on the live property data returned by the API.</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-on-primary-container">Confirmed ownership records</p>
+          <p className="mt-3 text-4xl font-black tracking-tighter">{buyerProperties.length}</p>
+          <p className="text-sm text-white/80 mt-2">Only records returned with the server status “owned” are counted.</p>
         </div>
       </section>
 

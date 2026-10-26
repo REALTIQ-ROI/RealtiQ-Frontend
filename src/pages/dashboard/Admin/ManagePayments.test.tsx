@@ -61,7 +61,7 @@ describe('ManagePayments', () => {
     expect(screen.getByText('Related record unavailable')).toBeInTheDocument();
   });
 
-  it('withholds cancellation while the step-up exchange is unavailable', async () => {
+  it('withholds cancellation because its exact request DTO is not documented', async () => {
     vi.mocked(paymentService.getPayments).mockResolvedValue([
       {
         _id: 'payment-2',
@@ -80,6 +80,6 @@ describe('ManagePayments', () => {
     );
 
     expect(await screen.findByRole('button', { name: 'Cancel payment' })).toBeDisabled();
-    expect(screen.getByText(/Payment cancellation is unavailable/)).toBeInTheDocument();
+    expect(screen.getByText(/Payment cancellation stays disabled/)).toBeInTheDocument();
   });
 });

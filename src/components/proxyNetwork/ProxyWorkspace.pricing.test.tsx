@@ -7,7 +7,11 @@ import { proxyNetworkService } from '../../services/proxyNetworkService';
 import ProxyWorkspace from './ProxyWorkspace';
 
 vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { _id: 'buyer-1', role: 'buyer', name: 'Buyer' } }),
+  useAuth: () => ({ user: { _id: 'buyer-1', role: 'buyer', name: 'Buyer' }, activeProfile: { id: 'buyer-profile-1' }, token: 'test-token' }),
+}));
+
+vi.mock('../../services/stepUpService', () => ({
+  stepUpService: { start: vi.fn(), verify: vi.fn() },
 }));
 
 vi.mock('../../services/proxyNetworkService', () => ({
@@ -19,6 +23,7 @@ vi.mock('../../services/proxyNetworkService', () => ({
     proposePrice: vi.fn(),
     confirmPrice: vi.fn(),
     initializePayment: vi.fn(),
+    verifyPayment: vi.fn(),
     schedule: vi.fn(),
     start: vi.fn(),
     submitCompletion: vi.fn(),
@@ -29,6 +34,8 @@ vi.mock('../../services/proxyNetworkService', () => ({
     resolveDispute: vi.fn(),
   },
 }));
+
+import { stepUpService } from '../../services/stepUpService';
 
 const detail = (overrides: Partial<ProxyInspectionDetail> = {}): ProxyInspectionDetail => ({
   request: {
@@ -68,6 +75,14 @@ describe('ProxyWorkspace pricing display', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
+    localStorage.setItem('token', 'test-token');
+    localStorage.setItem('activeProfileId', 'buyer-profile-1');
+    vi.mocked(stepUpService.start).mockResolvedValue({
+      challengeId: 'challenge-1',
+      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+      method: 'totp',
+    });
+    vi.mocked(stepUpService.verify).mockResolvedValue(undefined);
   });
 
   it('shows buyer fee and total payable from backend pricing', () => {
@@ -80,8 +95,8 @@ describe('ProxyWorkspace pricing display', () => {
     expect(screen.getAllByText('₦40,000').length).toBeGreaterThan(0);
     expect(screen.getAllByText('₦4,000').length).toBeGreaterThan(0);
     expect(screen.getAllByText('₦44,000').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/RealtIQ adds a 10% Platform & Protection Fee/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Platform & Protection Fee to your agreed inspection price/i)[0]).toHaveTextContent('10%');
+    expect(screen.getAllByText(/not a confirmation that an approved, versioned partner-fee policy/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/The approved, versioned partner-fee policy and provider activation are not confirmed/i)).toBeInTheDocument();
   });
 
   it('shows inspector commission and payout from backend pricing', () => {
@@ -92,12 +107,11 @@ describe('ProxyWorkspace pricing display', () => {
     );
 
     expect(screen.getAllByText('₦36,000').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/This supports client acquisition, secure payment collection, task coordination/i)[0]).toHaveTextContent('10%');
-    expect(screen.getAllByText(/RealtIQ deducts a/i)[0]).toHaveTextContent('10%');
-    expect(screen.getAllByText(/Payment processing charges are covered by RealtIQ/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/These amounts are returned by the backend/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/approved, versioned partner-fee policy or provider activation/i).length).toBeGreaterThan(0);
   });
 
-  it('starts checkout from a fresh initialization redirect without forcing a workspace reload loop', async () => {
+  it('binds checkout to TOTP and redirects only after the user reviews server pricing', async () => {
     const user = userEvent.setup();
     const reload = vi.fn();
     const assign = vi.fn();
@@ -123,13 +137,20 @@ describe('ProxyWorkspace pricing display', () => {
 
     await user.click(screen.getByRole('button', { name: 'Pay Now' }));
 
+    expect(stepUpService.start).toHaveBeenCalledWith('POST', '/api/proxy-inspections/request-1/initialize-payment', {});
+    await user.type(screen.getByLabelText('Six-digit authenticator code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Verify and continue' }));
+
     expect(proxyNetworkService.initializePayment).toHaveBeenCalledTimes(1);
+    expect(proxyNetworkService.initializePayment).toHaveBeenCalledWith('request-1', 'challenge-1', {});
     expect(reload).not.toHaveBeenCalled();
-    expect(assign).toHaveBeenCalledWith('https://pay.example/checkout');
+    expect(assign).not.toHaveBeenCalled();
     expect(sessionStorage.getItem('realtiq.proxyPaymentContext')).toBe(JSON.stringify({ reference: 'pay-ref-1', requestId: 'request-1' }));
+    await user.click(screen.getByRole('button', { name: /Continue to provider checkout/ }));
+    expect(assign).toHaveBeenCalledWith('https://pay.example/checkout');
   });
 
-  it('starts checkout when retrying an existing pending payment initialization', async () => {
+  it('continues an existing pending initialization without issuing another request', async () => {
     const user = userEvent.setup();
     const assign = vi.fn();
     vi.stubGlobal('location', { ...window.location, assign });
@@ -153,19 +174,26 @@ describe('ProxyWorkspace pricing display', () => {
     );
 
     await user.click(screen.getByRole('button', { name: 'Pay Now' }));
+    await user.type(screen.getByLabelText('Six-digit authenticator code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Verify and continue' }));
 
     expect(proxyNetworkService.initializePayment).toHaveBeenCalledTimes(1);
-    expect(assign).toHaveBeenCalledWith('https://pay.example/pending-checkout');
+    expect(assign).not.toHaveBeenCalled();
     expect(sessionStorage.getItem('realtiq.proxyPaymentContext')).toBe(JSON.stringify({ reference: 'pay-ref-pending', requestId: 'request-1' }));
+    await user.click(screen.getByRole('button', { name: /Continue to provider checkout/ }));
+    expect(assign).toHaveBeenCalledWith('https://pay.example/pending-checkout');
   });
 
-  it('shows the backend fallback message when initialization has no redirect URL', async () => {
+  it('preserves a checkout reference without a redirect and offers status verification instead of retry', async () => {
     const user = userEvent.setup();
     const assign = vi.fn();
     vi.stubGlobal('location', { ...window.location, assign });
     vi.mocked(proxyNetworkService.initializePayment).mockResolvedValue({
       reference: 'pay-ref-no-link',
       message: 'Checkout link is unavailable. Try again later.',
+    });
+    vi.mocked(proxyNetworkService.verifyPayment).mockResolvedValue({
+      verified: false,
     });
 
     render(
@@ -175,8 +203,15 @@ describe('ProxyWorkspace pricing display', () => {
     );
 
     await user.click(screen.getByRole('button', { name: 'Pay Now' }));
+    await user.type(screen.getByLabelText('Six-digit authenticator code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Verify and continue' }));
 
     expect(assign).not.toHaveBeenCalled();
     expect(await screen.findByRole('status')).toHaveTextContent('Checkout link is unavailable. Try again later.');
+    expect(screen.getByText('Payment reference: pay-ref-no-link')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /retry initialization/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Check payment status' }));
+    expect(proxyNetworkService.verifyPayment).toHaveBeenCalledWith('pay-ref-no-link');
+    expect(await screen.findByText(/No new checkout was started/i)).toBeInTheDocument();
   });
 });

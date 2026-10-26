@@ -46,8 +46,10 @@ export const escrowService = {
   async saveRefundDetails(id: string, details: RefundDetailsPayload): Promise<RefundAccountDetailsResponse> {
     return (await api.post<RefundAccountDetailsResponse>(`/escrow/${id}/refund-account-details`, details)).data;
   },
-  async processRefund(id: string): Promise<{ data: ProcessRefundResponse; status: number }> {
-    const response = await api.post<ProcessRefundResponse>(`/admin/escrows/${id}/process-refund`, {});
+  async processRefund(id: string, challengeId: string): Promise<{ data: ProcessRefundResponse; status: number }> {
+    const response = await api.post<ProcessRefundResponse>(`/admin/escrows/${id}/process-refund`, {}, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    });
     return { data: response.data, status: response.status };
   },
   async listAdminDisputes(query: EscrowDisputeListQuery = {}): Promise<EscrowDisputeListResponse> {
@@ -56,8 +58,10 @@ export const escrowService = {
   async getAdminDispute(id: string): Promise<AdminEscrowDisputeDetail> {
     return (await api.get<AdminEscrowDisputeDetail>(`/admin/escrow-disputes/${id}`)).data;
   },
-  async resolveAdminDispute(id: string, payload: ResolveEscrowDisputePayload): Promise<{ data: ResolveEscrowDisputeResponse; status: number }> {
-    const response = await api.patch<ResolveEscrowDisputeResponse>(`/admin/escrow-disputes/${id}/resolve`, payload);
+  async resolveAdminDispute(id: string, payload: ResolveEscrowDisputePayload, challengeId: string): Promise<{ data: ResolveEscrowDisputeResponse; status: number }> {
+    const response = await api.patch<ResolveEscrowDisputeResponse>(`/admin/escrow-disputes/${id}/resolve`, payload, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    });
     return { data: response.data, status: response.status };
   },
   async getPayoutAccount(): Promise<PayoutAccount> {

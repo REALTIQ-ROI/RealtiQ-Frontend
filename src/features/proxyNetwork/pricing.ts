@@ -5,7 +5,7 @@ type PricingSource = (Partial<ProxyPricing> & Partial<Pick<ServiceEscrow, 'gross
 export interface NormalizedProxyPricing {
   agreedPrice?: number;
   buyerFeePercentage?: number;
-  buyerFeeAmount: number;
+  buyerFeeAmount?: number;
   buyerTotalAmount?: number;
   inspectorCommissionPercentage?: number;
   inspectorCommissionAmount?: number;
@@ -19,17 +19,17 @@ const numberOrUndefined = (value: unknown): number | undefined =>
 
 export const normalizeProxyPricing = (source?: PricingSource): NormalizedProxyPricing => {
   const agreedPrice = numberOrUndefined(source?.agreedPrice) ?? numberOrUndefined(source?.grossAmount);
-  const buyerFeeAmount = numberOrUndefined(source?.buyerFeeAmount) ?? 0;
+  const buyerFeeAmount = numberOrUndefined(source?.buyerFeeAmount);
   const inspectorCommissionAmount = numberOrUndefined(source?.inspectorCommissionAmount) ?? numberOrUndefined(source?.platformFeeAmount);
   return {
     agreedPrice,
     buyerFeePercentage: numberOrUndefined(source?.buyerFeePercentage),
     buyerFeeAmount,
-    buyerTotalAmount: numberOrUndefined(source?.buyerTotalAmount) ?? agreedPrice,
+    buyerTotalAmount: numberOrUndefined(source?.buyerTotalAmount),
     inspectorCommissionPercentage: numberOrUndefined(source?.inspectorCommissionPercentage) ?? numberOrUndefined(source?.platformFeePercentage),
     inspectorCommissionAmount,
     inspectorPayoutAmount: numberOrUndefined(source?.inspectorPayoutAmount) ?? numberOrUndefined(source?.providerAmount),
-    totalPlatformRevenue: numberOrUndefined(source?.totalPlatformRevenue) ?? (buyerFeeAmount + (inspectorCommissionAmount ?? 0)),
+    totalPlatformRevenue: numberOrUndefined(source?.totalPlatformRevenue),
     legacyBuyerFee: source?.buyerFeeAmount == null,
   };
 };
@@ -38,26 +38,6 @@ export const detailPricing = (detail: ProxyInspectionDetail): NormalizedProxyPri
   const normalized = detail.pricing ? normalizeProxyPricing(detail.pricing) : normalizeProxyPricing(detail.serviceEscrow);
   const agreedPrice = detail.request.agreedPrice ?? detail.request.proposedPrice;
   return normalized.agreedPrice == null && agreedPrice != null
-    ? { ...normalized, agreedPrice, buyerTotalAmount: normalized.buyerTotalAmount ?? agreedPrice }
+    ? { ...normalized, agreedPrice }
     : normalized;
-};
-
-export const estimateProxyPricing = (agreedPrice: number, base: NormalizedProxyPricing): NormalizedProxyPricing | null => {
-  if (!Number.isInteger(agreedPrice) || agreedPrice <= 0) return null;
-  const buyerFeePercentage = base.buyerFeePercentage;
-  const inspectorCommissionPercentage = base.inspectorCommissionPercentage;
-  if (buyerFeePercentage == null && inspectorCommissionPercentage == null) return null;
-  const buyerFeeAmount = buyerFeePercentage == null ? 0 : Math.round((agreedPrice * buyerFeePercentage) / 100);
-  const inspectorCommissionAmount = inspectorCommissionPercentage == null ? undefined : Math.round((agreedPrice * inspectorCommissionPercentage) / 100);
-  return {
-    agreedPrice,
-    buyerFeePercentage,
-    buyerFeeAmount,
-    buyerTotalAmount: agreedPrice + buyerFeeAmount,
-    inspectorCommissionPercentage,
-    inspectorCommissionAmount,
-    inspectorPayoutAmount: inspectorCommissionAmount == null ? undefined : agreedPrice - inspectorCommissionAmount,
-    totalPlatformRevenue: buyerFeeAmount + (inspectorCommissionAmount ?? 0),
-    legacyBuyerFee: false,
-  };
 };

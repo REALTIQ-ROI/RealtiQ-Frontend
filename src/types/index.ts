@@ -570,8 +570,9 @@ export interface ApiPayment {
   };
 }
 
-export interface VerifyPaymentResponse {
-  verified: boolean;
+export type VerifyPaymentResponse =
+  | {
+  verified: true;
   payment: {
     _id: string;
     user?: string;
@@ -589,6 +590,7 @@ export interface VerifyPaymentResponse {
     };
   };
 }
+  | { verified: false; payment?: undefined };
 
 export interface AuthResponse {
   user: User;

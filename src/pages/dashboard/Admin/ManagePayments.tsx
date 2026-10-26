@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 import AdminLayout from '../../../components/layout/AdminLayout';
@@ -41,7 +41,6 @@ const ManagePayments = () => {
   const payments = data ?? [];
   const filtered = activeTab === 'all' ? payments : payments.filter((p) => p.status === activeTab);
 
-  const totalVolume = payments.reduce((s, p) => s + p.amount, 0);
   const paidCount = payments.filter((p) => p.status === 'paid').length;
   const pendingCount = payments.filter((p) => p.status === 'pending').length;
   const canceledCount = payments.filter((p) => p.status === 'canceled').length;
@@ -67,7 +66,8 @@ const ManagePayments = () => {
         toast.success('Payment verified successfully');
         void execute();
       } else {
-        toast.error('Payment verification failed');
+        toast.info('The provider has not confirmed this payment yet. No success or failure is assumed.');
+        void execute();
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to verify payment');
@@ -88,15 +88,13 @@ const ManagePayments = () => {
               <p className="text-secondary max-w-md leading-relaxed text-sm">
                 Comprehensive overview of platform liquidity and individual asset performance.
               </p>
-              <p className="mt-3 text-sm text-secondary">Payment cancellation is unavailable until the one-use security challenge contract is supplied.</p>
+              <p className="mt-3 text-sm text-secondary">Payment cancellation stays disabled until its exact reason and request DTO are documented. Use the platform ledger for authoritative finance aggregates.</p>
             </div>
             <div className="lg:col-span-5">
-              <div className="bg-primary-container p-8 rounded-xl relative overflow-hidden">
+              <Link to="/dashboard/admin/wallet" className="block bg-primary-container p-8 rounded-xl relative overflow-hidden hover:opacity-95">
                 <div className="relative z-10">
-                  <span className="text-on-primary-container/60 text-xs font-medium uppercase tracking-widest block mb-1">Total Volume</span>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-white tracking-tighter">{formatNGN(totalVolume)}</span>
-                  </div>
+                  <span className="text-on-primary-container/60 text-xs font-medium uppercase tracking-widest block mb-1">Authoritative finance summary</span>
+                  <span className="text-3xl font-bold text-white tracking-tighter">Open platform ledger</span>
                   <div className="mt-6 flex gap-6 text-xs text-on-primary-container/70">
                     <span><span className="text-white font-bold">{paidCount}</span> successful</span>
                     <span><span className="text-amber-300 font-bold">{pendingCount}</span> pending</span>
@@ -105,7 +103,7 @@ const ManagePayments = () => {
                   </div>
                 </div>
                 <div className="absolute -right-12 -bottom-12 w-48 h-48 bg-white/5 rounded-full blur-3xl" />
-              </div>
+              </Link>
             </div>
           </section>
 
@@ -222,7 +220,7 @@ const ManagePayments = () => {
                                 </button>
                                 <button
                                   disabled
-                                  title="Payment cancellation requires the one-use security challenge."
+                                  title="The payment cancellation request DTO is not documented for frontend use."
                                   className="inline-flex items-center gap-1 whitespace-nowrap px-3 py-1.5 text-xs font-bold border border-rose-200 text-rose-700 rounded-lg hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
                                 >
                                   Cancel payment
@@ -256,13 +254,13 @@ const ManagePayments = () => {
           {/* Insights */}
           <div className="mt-16 grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-surface-container-low p-6 rounded-xl border-l-4 border-slate-900">
-              <h4 className="text-xs font-bold text-secondary uppercase tracking-[0.1em] mb-4">Pending Payouts</h4>
-              <div className="text-2xl font-bold tracking-tight">{formatNGN(payments.filter((p) => p.status === 'pending').reduce((s, p) => s + p.amount, 0))}</div>
+              <h4 className="text-xs font-bold text-secondary uppercase tracking-[0.1em] mb-4">Pending payment records</h4>
+              <div className="text-2xl font-bold tracking-tight">{pendingCount}</div>
               <div className="text-[10px] text-secondary mt-1">{pendingCount} pending transactions</div>
             </div>
             <div className="bg-surface-container-low p-6 rounded-xl border-l-4 border-emerald-500">
               <h4 className="text-xs font-bold text-secondary uppercase tracking-[0.1em] mb-4">Successful Payments</h4>
-              <div className="text-2xl font-bold tracking-tight">{formatNGN(payments.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount, 0))}</div>
+              <div className="text-2xl font-bold tracking-tight">{paidCount}</div>
               <div className="text-[10px] text-emerald-600 mt-1 font-semibold">{paidCount} transactions</div>
             </div>
             <div className="bg-surface-container-low p-6 rounded-xl border-l-4 border-rose-500">

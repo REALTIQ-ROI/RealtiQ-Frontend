@@ -5,8 +5,11 @@ import { useAsync } from '../../../hooks/useAsync';
 import type { AdminEscrowDisputeDetail } from '../../../types/escrow';
 import AdminEscrowDisputeDetails from './AdminEscrowDisputeDetails';
 
+const stepUpMocks = vi.hoisted(() => ({ begin: vi.fn(), cancel: vi.fn(), complete: vi.fn(), getError: vi.fn() }));
+
 vi.mock('../../../components/layout/AdminLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('../../../hooks/useAsync', () => ({ useAsync: vi.fn() }));
+vi.mock('../../../hooks/useBoundStepUp', () => ({ useBoundStepUp: () => ({ ...stepUpMocks, challenge: null, busy: false, error: null }) }));
 
 const detail: AdminEscrowDisputeDetail = {
   dispute: {
@@ -33,6 +36,7 @@ describe('safe finance dispute detail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useAsync).mockReturnValue({ data: detail, loading: false, error: null, execute });
+    stepUpMocks.begin.mockResolvedValue(true);
   });
 
   it('shows only safe dispute status, financial state and milestone counts', () => {
@@ -40,8 +44,19 @@ describe('safe finance dispute detail', () => {
     expect(screen.getByText('Dispute d1')).toBeInTheDocument();
     expect(screen.getByText('Milestone evidence requires review')).toBeInTheDocument();
     expect(screen.getByText('1 satisfied, 1 outstanding, 2 total')).toBeInTheDocument();
-    expect(screen.getByText(/Resolution submission is temporarily unavailable/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Refund buyer' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refund buyer' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Release seller' })).not.toBeInTheDocument();
+  });
+
+  it('starts the exact reason-bound dispute resolution request through step-up', () => {
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Decision reason'), { target: { value: 'Evidence supports the buyer refund.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Refund buyer' }));
+    expect(stepUpMocks.begin).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'PATCH',
+      path: '/api/admin/escrow-disputes/d1/resolve',
+      body: { action: 'refund_buyer', reason: 'Evidence supports the buyer refund.' },
+    }));
   });
 
   it('refreshes canonical status on demand', () => {

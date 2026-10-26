@@ -14,8 +14,8 @@ const LandlordPaymentHistory = () => {
   const { data, loading, error, execute } = useAsync(() => paymentService.getPayments(), true);
 
   const payments = data ?? [];
-  const totalRevenue = payments.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
-  const pendingAmount = payments.filter((p) => p.status === 'pending').reduce((s, p) => s + p.amount, 0);
+  const paidCount = payments.filter((p) => p.status === 'paid').length;
+  const pendingCount = payments.filter((p) => p.status === 'pending').length;
 
   return (
     <LandlordPortalLayout active="payment-history" title="Payment History">
@@ -23,23 +23,23 @@ const LandlordPaymentHistory = () => {
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
           <div className="bg-surface-container-lowest p-8 rounded-xl">
-            <p className="text-secondary text-xs font-bold tracking-widest uppercase mb-2">Total Revenue</p>
-            <h3 className="text-3xl font-black text-primary">{formatNGN(totalRevenue)}</h3>
+            <p className="text-secondary text-xs font-bold tracking-widest uppercase mb-2">Payment records returned</p>
+            <h3 className="text-3xl font-black text-primary">{payments.length}</h3>
           </div>
           <div className="bg-surface-container-lowest p-8 rounded-xl">
-            <p className="text-secondary text-xs font-bold tracking-widest uppercase mb-2">Active Sales</p>
-            <h3 className="text-3xl font-black text-primary">{payments.filter((p) => p.status === 'paid').length}</h3>
+            <p className="text-secondary text-xs font-bold tracking-widest uppercase mb-2">Paid payment records</p>
+            <h3 className="text-3xl font-black text-primary">{paidCount}</h3>
           </div>
           <div className="bg-surface-container-lowest p-8 rounded-xl">
-            <p className="text-secondary text-xs font-bold tracking-widest uppercase mb-2">Pending Deposits</p>
-            <h3 className="text-3xl font-black text-primary">{formatNGN(pendingAmount)}</h3>
+            <p className="text-secondary text-xs font-bold tracking-widest uppercase mb-2">Pending payment records</p>
+            <h3 className="text-3xl font-black text-primary">{pendingCount}</h3>
           </div>
         </div>
 
         <div className="bg-surface-container-lowest rounded-xl overflow-hidden mb-8">
           <div className="p-8 border-b border-surface-container-low">
             <h3 className="text-xl font-bold mb-1">Recent Transactions</h3>
-            <p className="text-secondary text-sm">Payments received for your properties.</p>
+            <p className="text-secondary text-sm">Authorized payment records returned for properties you manage. Counts and amounts here describe returned records; they are not an authoritative sales or escrow aggregate.</p>
           </div>
 
           {loading ? (

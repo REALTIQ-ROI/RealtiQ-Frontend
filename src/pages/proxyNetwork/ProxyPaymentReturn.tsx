@@ -11,6 +11,7 @@ interface ReturnState {
   loading: boolean;
   message: string;
   error: boolean;
+  reference?: string;
   actionLabel?: string;
   actionTo?: string;
 }
@@ -19,6 +20,7 @@ const ProxyPaymentReturn = () => {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const fired = useRef(false);
+  const [retryCount, setRetryCount] = useState(0);
   const { isAuthenticated, user } = useAuth();
   const { refreshCart, setCartFromResponse } = useCart();
   const isBuyer = isAuthenticated && user?.role === 'buyer';
@@ -62,14 +64,52 @@ const ProxyPaymentReturn = () => {
     proxyNetworkService
       .verifyPayment(reference)
       .then(async (result) => {
-        if (result.payment.purpose === 'multi_service_cart') {
-          const pending = cartService.getPendingCheckout();
-          let checkoutId = pending.checkoutId;
+        const pendingCart = cartService.getPendingCheckout();
+        const hasCartContext = Boolean(
+          pendingCart.checkoutId && (!pendingCart.reference || pendingCart.reference === reference),
+        );
+        const hasAnalyticsContext = sessionStorage.getItem('realtiq.analyticsPaymentReference') === reference;
+        const payment = result.verified ? result.payment : undefined;
+
+        if (!result.verified || !payment || payment.status !== 'paid') {
+          const requestId = stored.requestId || payment?.proxyInspectionRequest;
+          const actionTo = hasCartContext
+            ? (isBuyer ? '/dashboard/buyer/cart-checkouts' : '/cart')
+            : hasAnalyticsContext
+              ? '/analytics/property-market'
+              : requestId
+                ? `/buyer/proxy-inspections/${encodeURIComponent(requestId)}`
+                : isBuyer
+                  ? '/dashboard/buyer/payment-history'
+                  : '/properties';
+          setState({
+            loading: false,
+            error: true,
+            reference,
+            message: 'The provider has not confirmed this payment. Its outcome is unresolved, not confirmed as failed. The existing reference is preserved; do not start a replacement payment while this is unresolved.',
+            actionLabel: hasCartContext ? (isBuyer ? 'Checkout history' : 'Back to Service Cart') : hasAnalyticsContext ? 'Analytics' : requestId ? 'Open inspection workspace' : isBuyer ? 'Payment History' : 'Browse Properties',
+            actionTo,
+          });
+          return;
+        }
+
+        if (payment.purpose === 'multi_service_cart') {
+          let checkoutId = hasCartContext ? pendingCart.checkoutId : undefined;
           if (!checkoutId) {
             const recent = await cartService.listCartCheckouts({ page: 1, limit: 10 });
-            checkoutId =
-              recent.checkouts.find((item) => item.paymentReference === reference)?.checkoutId ??
-              recent.checkouts[0]?.checkoutId;
+            checkoutId = recent.checkouts.find((item) => item.paymentReference === reference)?.checkoutId;
+          }
+
+          if (!checkoutId) {
+            setState({
+              loading: false,
+              error: true,
+              reference,
+              message: 'Payment is verified, but its checkout record could not be matched. Keep this reference for reconciliation and do not start another checkout.',
+              actionLabel: isBuyer ? 'Checkout history' : 'Back to Service Cart',
+              actionTo: isBuyer ? '/dashboard/buyer/cart-checkouts' : '/cart',
+            });
+            return;
           }
 
           cartService.clearPendingCheckout();
@@ -94,18 +134,7 @@ const ProxyPaymentReturn = () => {
           return;
         }
 
-        if (result.payment.purpose === 'property_market_analytics') {
-          if (!result.verified || result.payment.status !== 'paid') {
-            setState({
-              loading: false,
-              error: true,
-              message: 'Analytics payment is not yet confirmed. Return to the analytics page to retry.',
-              actionLabel: 'Analytics',
-              actionTo: '/analytics/property-market',
-            });
-            return;
-          }
-
+        if (payment.purpose === 'property_market_analytics') {
           const access = await propertyAnalyticsService.getAccessStatus();
           if (access.hasAccess) {
             sessionStorage.removeItem('realtiq.analyticsPaymentReference');
@@ -123,17 +152,7 @@ const ProxyPaymentReturn = () => {
           return;
         }
 
-        const requestId = result.payment.proxyInspectionRequest || stored.requestId;
-        if (!result.verified || result.payment.status !== 'paid') {
-          setState({
-            loading: false,
-            error: true,
-            message: 'Payment is not yet confirmed. Refresh the inspection workspace before trying again.',
-            actionLabel: 'Inspection jobs',
-            actionTo: '/buyer/proxy-inspections',
-          });
-          return;
-        }
+        const requestId = payment.proxyInspectionRequest || stored.requestId;
 
         if (!requestId) {
           setState({
@@ -158,12 +177,13 @@ const ProxyPaymentReturn = () => {
         setState({
           loading: false,
           error: true,
+          reference,
           message: raw instanceof Error ? raw.message : 'Payment verification could not be completed.',
           actionLabel: 'Back to Service Cart',
           actionTo: '/cart',
         }),
       );
-  }, [isBuyer, navigate, params, refreshCart, setCartFromResponse]);
+  }, [isBuyer, navigate, params, refreshCart, retryCount, setCartFromResponse]);
 
   return (
     <PublicLayout>
@@ -173,6 +193,20 @@ const ProxyPaymentReturn = () => {
             {state.loading ? 'Verifying payment' : state.error ? 'Verification needs attention' : 'Payment verified'}
           </h1>
           <p className="mt-4 text-secondary">{state.message}</p>
+          {state.reference ? <p className="mt-2 break-all text-xs text-secondary">Payment reference: {state.reference}</p> : null}
+          {!state.loading && state.error && (state.reference || hasReference) ? (
+            <button
+              type="button"
+              className="mt-6 inline-block rounded-lg bg-primary px-5 py-3 font-bold text-on-primary"
+              onClick={() => {
+                fired.current = false;
+                setState({ loading: true, error: false, message: 'Checking the current provider status...', reference: state.reference });
+                setRetryCount((count) => count + 1);
+              }}
+            >
+              Check payment status again
+            </button>
+          ) : null}
           {!state.loading && state.actionLabel && state.actionTo ? (
             <Link to={state.actionTo} className="mt-6 inline-block rounded-lg bg-primary px-5 py-3 font-bold text-on-primary">
               {state.actionLabel}

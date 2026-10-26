@@ -70,22 +70,22 @@ describe('escrowService', () => {
     await escrowService.requestRefundDetails('e1', ' Please send details ');
     await escrowService.getRefundChat('e1'); await escrowService.sendRefundMessage('e1', ' Hello ');
     await escrowService.saveRefundDetails('e1', { accountNumber: '0123456789', bankName: 'Bank', bankCode: '001' });
-    const result = await escrowService.processRefund('e1');
+    const result = await escrowService.processRefund('e1', 'refund-challenge');
     expect(mockedApi.post).toHaveBeenCalledWith('/escrow/e1/refund-chat/request-details', { message: 'Please send details' });
     expect(mockedApi.get).toHaveBeenCalledWith('/escrow/e1/refund-chat');
     expect(mockedApi.post).toHaveBeenCalledWith('/escrow/e1/refund-chat/messages', { message: 'Hello' });
     expect(mockedApi.post).toHaveBeenCalledWith('/escrow/e1/refund-account-details', { accountNumber: '0123456789', bankName: 'Bank', bankCode: '001' });
-    expect(mockedApi.post).toHaveBeenCalledWith('/admin/escrows/e1/process-refund', {}); expect(result.status).toBe(202);
+    expect(mockedApi.post).toHaveBeenCalledWith('/admin/escrows/e1/process-refund', {}, { headers: { 'X-Step-Up-Challenge': 'refund-challenge' } }); expect(result.status).toBe(202);
   });
   it('maps admin dispute list, detail, and four-option resolution routes', async () => {
     mockedApi.get.mockResolvedValue({ data: { items: [], pagination: { page: 2, limit: 20, total: 0, pages: 0 } } });
     mockedApi.patch.mockResolvedValue({ data: { escrow: { _id: 'e1', status: 'release_processing' }, pending: true }, status: 202 });
     await escrowService.listAdminDisputes({ page: 2, limit: 20, status: 'open', search: 'lekki' });
     await escrowService.getAdminDispute('d1');
-    const result = await escrowService.resolveAdminDispute('d1', { action: 'release_seller', reason: 'Milestones complete' });
+    const result = await escrowService.resolveAdminDispute('d1', { action: 'release_seller', reason: 'Milestones complete' }, 'decision-challenge');
     expect(mockedApi.get).toHaveBeenCalledWith('/admin/escrow-disputes', { params: { page: 2, limit: 20, status: 'open', search: 'lekki' } });
     expect(mockedApi.get).toHaveBeenCalledWith('/admin/escrow-disputes/d1');
-    expect(mockedApi.patch).toHaveBeenCalledWith('/admin/escrow-disputes/d1/resolve', { action: 'release_seller', reason: 'Milestones complete' });
+    expect(mockedApi.patch).toHaveBeenCalledWith('/admin/escrow-disputes/d1/resolve', { action: 'release_seller', reason: 'Milestones complete' }, { headers: { 'X-Step-Up-Challenge': 'decision-challenge' } });
     expect(result.status).toBe(202);
   });
   it('uses seller-owned payout account routes', async () => {

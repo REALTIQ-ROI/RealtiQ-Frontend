@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "../../contexts/AuthContext";
 import { useCart } from "../../contexts/CartContext";
+import StepUpDialog from "../auth/StepUpDialog";
+import { useBoundStepUp } from "../../hooks/useBoundStepUp";
 import { ApiRequestError } from "../../lib/axios";
 import ActionConfirmModal from "./ActionConfirmModal";
 import type {
@@ -22,7 +24,6 @@ import {
 } from "../../features/proxyNetwork/config";
 import {
   detailPricing,
-  estimateProxyPricing,
   normalizeProxyPricing,
   type NormalizedProxyPricing,
 } from "../../features/proxyNetwork/pricing";
@@ -57,6 +58,14 @@ type PendingAction =
   | "start"
   | "releasePayment";
 
+interface ProtectedPendingAction {
+  actionName: PendingAction;
+  label: string;
+  successMessage: string;
+  refreshAfterSuccess?: boolean;
+  onSuccess?: (value: unknown) => void | Promise<void>;
+}
+
 interface ConfirmAction {
   title: string;
   description: string;
@@ -68,8 +77,20 @@ interface ConfirmAction {
 const percentLabel = (value?: number) =>
   value == null ? "percentage unavailable" : `${new Intl.NumberFormat("en-NG", { maximumFractionDigits: 2 }).format(value)}%`;
 
-const percentNoticeLabel = (value?: number) =>
-  value == null ? "default 10%" : percentLabel(value);
+const readSavedPayment = (requestId: string): PaymentInitializationResponse | null => {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem("realtiq.proxyPaymentContext") || "null") as { reference?: unknown; requestId?: unknown } | null;
+    if (stored?.requestId === requestId && typeof stored.reference === "string" && stored.reference) {
+      return {
+        reference: stored.reference,
+        message: "A checkout reference is already recorded for this inspection. Check its status before taking another payment action.",
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
 
 const FeeInfo = ({ label }: { label: string }) => (
   <span className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-surface-container-high text-[11px] font-black text-secondary" title={label} aria-label={label}>
@@ -83,11 +104,10 @@ const FieldBadge = ({ required = false }: { required?: boolean }) => (
   </span>
 );
 
-const BuyerPricingBreakdown = ({ pricing, estimated = false }: { pricing: NormalizedProxyPricing; estimated?: boolean }) => (
+const BuyerPricingBreakdown = ({ pricing }: { pricing: NormalizedProxyPricing }) => (
   <div className="mt-4 rounded-xl bg-surface-container-low p-4">
     <div className="flex items-center justify-between gap-3">
-      <h3 className="font-black">{estimated ? "Estimated buyer pricing" : "Buyer payment breakdown"}</h3>
-      {estimated ? <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">Estimated</span> : null}
+      <h3 className="font-black">Server-reported buyer pricing</h3>
     </div>
     <dl className="mt-3 grid gap-3 sm:grid-cols-3">
       <div>
@@ -95,7 +115,7 @@ const BuyerPricingBreakdown = ({ pricing, estimated = false }: { pricing: Normal
         <dd className="font-black">{formatNgn(pricing.agreedPrice)}</dd>
       </div>
       <div>
-        <dt className="text-xs font-bold text-secondary">Platform & Protection Fee ({percentLabel(pricing.buyerFeePercentage)})<FeeInfo label="Supports secure payment processing, coordination, dispute assistance, refund handling, and platform protection." /></dt>
+        <dt className="text-xs font-bold text-secondary">Buyer fee ({percentLabel(pricing.buyerFeePercentage)})<FeeInfo label="This value is returned by the backend. This screen cannot confirm an approved partner-fee policy." /></dt>
         <dd className="font-black">{formatNgn(pricing.buyerFeeAmount)}</dd>
       </div>
       <div>
@@ -103,17 +123,16 @@ const BuyerPricingBreakdown = ({ pricing, estimated = false }: { pricing: Normal
         <dd className="font-black">{formatNgn(pricing.buyerTotalAmount)}</dd>
       </div>
     </dl>
-    <p className="mt-3 text-xs text-secondary">
-      RealtIQ adds a {percentLabel(pricing.buyerFeePercentage)} Platform & Protection Fee to your agreed inspection price. This supports secure payment processing, service coordination, dispute assistance and refund protection. Your payment is held securely, and the inspector is only paid after the service is completed and approved.
+    <p className="mt-3 text-xs text-secondary" role="note">
+      These amounts are returned by the backend and are not a confirmation that an approved, versioned partner-fee policy or provider activation is in place. The payment provider and backend determine the amount bound to checkout.
     </p>
   </div>
 );
 
-const InspectorPricingBreakdown = ({ pricing, estimated = false }: { pricing: NormalizedProxyPricing; estimated?: boolean }) => (
+const InspectorPricingBreakdown = ({ pricing }: { pricing: NormalizedProxyPricing }) => (
   <div className="mt-4 rounded-xl bg-surface-container-low p-4">
     <div className="flex items-center justify-between gap-3">
-      <h3 className="font-black">{estimated ? "Estimated inspector payout" : "Inspector payout breakdown"}</h3>
-      {estimated ? <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">Estimated</span> : null}
+      <h3 className="font-black">Server-reported inspector payout</h3>
     </div>
     <dl className="mt-3 grid gap-3 sm:grid-cols-3">
       <div>
@@ -121,7 +140,7 @@ const InspectorPricingBreakdown = ({ pricing, estimated = false }: { pricing: No
         <dd className="font-black">{formatNgn(pricing.agreedPrice)}</dd>
       </div>
       <div>
-        <dt className="text-xs font-bold text-secondary">RealtIQ commission ({percentLabel(pricing.inspectorCommissionPercentage)})<FeeInfo label="Supports client acquisition, payment collection, task coordination, dispute support, and secure payout processing." /></dt>
+        <dt className="text-xs font-bold text-secondary">Inspector commission ({percentLabel(pricing.inspectorCommissionPercentage)})<FeeInfo label="This value is returned by the backend. This screen cannot confirm an approved partner-fee policy." /></dt>
         <dd className="font-black">{formatNgn(pricing.inspectorCommissionAmount)}</dd>
       </div>
       <div>
@@ -129,8 +148,8 @@ const InspectorPricingBreakdown = ({ pricing, estimated = false }: { pricing: No
         <dd className="font-black">{formatNgn(pricing.inspectorPayoutAmount)}</dd>
       </div>
     </dl>
-    <p className="mt-3 text-xs text-secondary">
-      RealtIQ deducts a {percentLabel(pricing.inspectorCommissionPercentage)} commission from the agreed inspection fee. The commission supports client acquisition, secure payment collection, task coordination, dispute support and reliable payout processing. Payment processing charges are covered by RealtIQ and will not be deducted separately from your payout.
+    <p className="mt-3 text-xs text-secondary" role="note">
+      These amounts are returned by the backend and are not a confirmation that an approved, versioned partner-fee policy or provider activation is in place.
     </p>
   </div>
 );
@@ -142,7 +161,7 @@ const AdminPricingBreakdown = ({ pricing }: { pricing: NormalizedProxyPricing })
     <div><dt className="text-xs text-secondary">Buyer total paid</dt><dd className="font-bold">{formatNgn(pricing.buyerTotalAmount)}</dd></div>
     <div><dt className="text-xs text-secondary">Inspector commission ({percentLabel(pricing.inspectorCommissionPercentage)})</dt><dd className="font-bold">{formatNgn(pricing.inspectorCommissionAmount)}</dd></div>
     <div><dt className="text-xs text-secondary">Inspector payout</dt><dd className="font-bold">{formatNgn(pricing.inspectorPayoutAmount)}</dd></div>
-    <div><dt className="text-xs text-secondary">Total RealtIQ revenue</dt><dd className="font-bold">{formatNgn(pricing.totalPlatformRevenue)}</dd></div>
+    <div><dt className="text-xs text-secondary">Server-reported platform revenue</dt><dd className="font-bold">{formatNgn(pricing.totalPlatformRevenue)}</dd></div>
   </dl>
 );
 
@@ -894,14 +913,12 @@ const ReportPanel = ({
 };
 
 const AdminResolution = ({
-  id,
   detail,
-  mutate,
+  onResolve,
   busy = false,
 }: {
-  id: string;
   detail: ProxyInspectionDetail;
-  mutate: (actionName: PendingAction, fn: () => Promise<unknown>, success: string) => Promise<void>;
+  onResolve: (resolution: DisputeResolution, notes: string) => Promise<void>;
   busy?: boolean;
 }) => {
   const options: Array<[DisputeResolution, string, string]> = [
@@ -968,16 +985,7 @@ const AdminResolution = ({
               tone: choice === "resume_service" ? "primary" : "danger",
               onConfirm: () => {
                 setConfirm(null);
-                void mutate(
-                  "resolveDispute",
-                  () =>
-                    proxyNetworkService.resolveDispute(
-                      id,
-                      choice,
-                      notes.trim(),
-                    ),
-                  "Resolution submitted; refreshing authoritative state.",
-                );
+                void onResolve(choice, notes.trim());
               },
             });
         }}
@@ -1330,13 +1338,15 @@ const ProxyWorkspace = ({
 }) => {
   const { user } = useAuth();
   const { addItem, refreshCart } = useCart();
+  const stepUp = useBoundStepUp<unknown>();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [protectedPending, setProtectedPending] = useState<ProtectedPendingAction | null>(null);
   const [missing, setMissing] = useState<string[]>([]);
   const [price, setPrice] = useState("");
   const [schedule, setSchedule] = useState("");
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
   const [initializedPayment, setInitializedPayment] =
-    useState<PaymentInitializationResponse | null>(null);
+    useState<PaymentInitializationResponse | null>(() => readSavedPayment(requestId));
   const [reportDraftVersion, setReportDraftVersion] = useState(0);
   const actions = useMemo(
     () =>
@@ -1372,37 +1382,126 @@ const ProxyWorkspace = ({
       setPendingAction(null);
     }
   };
-  const initializePayment = async () => {
+  const beginProtectedAction = async <B extends object>(
+    actionName: PendingAction,
+    method: "POST" | "PUT" | "PATCH" | "DELETE",
+    path: string,
+    body: B,
+    label: string,
+    execute: (challengeId: string, exactBody: B) => Promise<unknown>,
+    successMessage: string,
+    options: { refreshAfterSuccess?: boolean; onSuccess?: (value: unknown) => void | Promise<void> } = {},
+  ) => {
     if (pendingAction) return;
-    setPendingAction("initializePayment");
+    setPendingAction(actionName);
     setMissing([]);
+    setProtectedPending({ actionName, label, successMessage, ...options });
+    const started = await stepUp.begin({
+      method,
+      path,
+      body,
+      label,
+      execute: async (challengeId, exactBody) => {
+        try {
+          return await execute(challengeId, exactBody);
+        } catch (raw) {
+          if (raw instanceof ApiRequestError) {
+            const details = raw.details as { missing?: string[] } | undefined;
+            const missingItems = raw.missing || details?.missing;
+            if (missingItems?.length) setMissing(missingItems);
+            if ([409, 502].includes(raw.status || 0)) await reload();
+          }
+          throw raw;
+        }
+      },
+    });
+    if (!started) {
+      setProtectedPending(null);
+      setPendingAction(null);
+      const message = stepUp.getError();
+      if (message) toast.error(message);
+    }
+  };
+  const finishProtectedAction = async (code: string): Promise<boolean> => {
+    const action = protectedPending;
+    const result = await stepUp.complete(code);
+    if (!result.ok) {
+      if (result.error) toast.error(result.error);
+      return false;
+    }
+    if (action?.refreshAfterSuccess !== false) {
+      toast.success(action?.successMessage || "Protected action completed.");
+      invalidateProxyData(requestId);
+      await reload();
+    }
+    await action?.onSuccess?.(result.value);
+    setProtectedPending(null);
+    setPendingAction(null);
+    return true;
+  };
+  const cancelProtectedAction = () => {
+    stepUp.cancel();
+    setProtectedPending(null);
+    setPendingAction(null);
+  };
+  useEffect(() => {
+    if (protectedPending && !stepUp.challenge && !stepUp.busy && pendingAction === protectedPending.actionName) {
+      setProtectedPending(null);
+      setPendingAction(null);
+    }
+  }, [pendingAction, protectedPending, stepUp.busy, stepUp.challenge]);
+  const initializePayment = async () => {
+    await beginProtectedAction(
+      "initializePayment",
+      "POST",
+      `/api/proxy-inspections/${encodeURIComponent(requestId)}/initialize-payment`,
+      {},
+      "Initialize inspection payment",
+      (challengeId, body) => proxyNetworkService.initializePayment(requestId, challengeId, body),
+      "",
+      {
+        refreshAfterSuccess: false,
+        onSuccess: (value) => {
+          const result = value as PaymentInitializationResponse;
+          setInitializedPayment(result);
+          sessionStorage.setItem("realtiq.proxyPaymentContext", JSON.stringify({ reference: result.reference, requestId }));
+          toast.success(result.redirectUrl
+            ? "Checkout is ready. Review the server-reported amount before continuing to the provider."
+            : result.message || "Checkout was recorded. Check its status before taking another payment action.");
+        },
+      },
+    );
+  };
+  const refreshPaymentStatus = async (reference: string) => {
+    if (pendingAction) return;
+    setPendingAction("refreshStatus");
     try {
-      const result = await proxyNetworkService.initializePayment(requestId);
-      setInitializedPayment(result);
-      sessionStorage.setItem(
-        "realtiq.proxyPaymentContext",
-        JSON.stringify({ reference: result.reference, requestId }),
-      );
-      if (result.redirectUrl) {
-        window.location.assign(result.redirectUrl);
-      } else {
-        toast.error(
-          result.message ||
-            "Payment was initialized, but a checkout link is not available. Please try again.",
-        );
-      }
+      const result = await proxyNetworkService.verifyPayment(reference);
+      await reload();
+      const message = result.verified && result.payment.status === "paid"
+        ? "The provider reports this payment as paid. The inspection workspace must still confirm escrow funding."
+        : result.verified
+          ? `Payment is not confirmed as paid (server status: ${formatLabel(result.payment.status)}). No new checkout was started.`
+          : "The provider has not confirmed payment. The result is unresolved, not a confirmation of failure. No new checkout was started.";
+      setInitializedPayment((current) => current ? { ...current, message } : { reference, message });
+      toast.info(message);
     } catch (raw) {
-      const err = raw instanceof Error ? raw : new Error("Unable to initialize payment.");
-      toast.error(err.message);
-      if (raw instanceof ApiRequestError) {
-        const details = raw.details as { missing?: string[] } | undefined;
-        const missingItems = raw.missing || details?.missing;
-        if (missingItems?.length) setMissing(missingItems);
-        if ([409, 502].includes(raw.status || 0)) await reload();
-      }
+      toast.error(raw instanceof Error ? raw.message : "Payment status could not be refreshed.");
     } finally {
       setPendingAction(null);
     }
+  };
+  const resolveAdminDispute = (resolution: DisputeResolution, notes: string) => {
+    const body = { resolution, notes };
+    return beginProtectedAction(
+      "resolveDispute",
+      "PATCH",
+      `/api/admin/proxy-inspections/${encodeURIComponent(requestId)}/resolve-dispute`,
+      body,
+      "Resolve this inspection dispute",
+      (challengeId, exactBody) => proxyNetworkService.resolveDispute(requestId, challengeId, exactBody),
+      "Resolution submitted; refreshing authoritative state.",
+    );
   };
   const addProxyInspectionToCart = async () => {
     if (pendingAction) return;
@@ -1434,11 +1533,6 @@ const ProxyWorkspace = ({
       : detail.request.property;
   const pricing = detailPricing(detail);
   const hasAuthoritativePricing = Boolean(detail.pricing || detail.serviceEscrow);
-  const proposedAmount = Number(price);
-  const proposalEstimate =
-    Number.isInteger(proposedAmount) && proposedAmount > 0
-      ? estimateProxyPricing(proposedAmount, pricing)
-      : null;
   const initializedPricing = initializedPayment?.pricing
     ? normalizeProxyPricing(initializedPayment.pricing)
     : null;
@@ -1505,13 +1599,13 @@ const ProxyWorkspace = ({
           include live video or calls.
         </p>
         {role === "buyer" ? (
-          <p className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">
-            RealtIQ adds a {percentNoticeLabel(pricing.buyerFeePercentage)} Platform & Protection Fee to your agreed inspection price. This supports secure payment processing, service coordination, dispute assistance and refund protection. Your payment is held securely, and the inspector is only paid after the service is completed and approved.
+          <p role="note" className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">
+            Payment amounts are determined by the backend. The approved, versioned partner-fee policy and provider activation are not confirmed by this screen; no client-side fee estimate is used.
           </p>
         ) : null}
         {role === "proxy_inspector" ? (
-          <p className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">
-            RealtIQ deducts a {percentNoticeLabel(pricing.inspectorCommissionPercentage)} commission from the agreed inspection fee. This supports client acquisition, secure payment collection, task coordination, dispute support and reliable payout processing.
+          <p role="note" className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">
+            Any payout and commission amounts are server-reported. The approved, versioned partner-fee policy and provider activation are not confirmed by this screen.
           </p>
         ) : null}
       </section>
@@ -1571,16 +1665,10 @@ const ProxyWorkspace = ({
             </button>
           </form>
         ) : null}
-        {proposalEstimate && role === "buyer" ? (
-          <BuyerPricingBreakdown pricing={proposalEstimate} estimated />
-        ) : null}
-        {proposalEstimate && role === "proxy_inspector" ? (
-          <InspectorPricingBreakdown pricing={proposalEstimate} estimated />
-        ) : null}
-        {pricing.agreedPrice && !proposalEstimate && role === "buyer" && hasAuthoritativePricing ? (
+        {pricing.agreedPrice && role === "buyer" && hasAuthoritativePricing ? (
           <BuyerPricingBreakdown pricing={pricing} />
         ) : null}
-        {pricing.agreedPrice && !proposalEstimate && role === "proxy_inspector" && hasAuthoritativePricing ? (
+        {pricing.agreedPrice && role === "proxy_inspector" && hasAuthoritativePricing ? (
           <InspectorPricingBreakdown pricing={pricing} />
         ) : null}
         {actions.confirmPrice ? (
@@ -1594,9 +1682,13 @@ const ProxyWorkspace = ({
                 confirmLabel: "Confirm price",
                 onConfirm: () => {
                   setConfirm(null);
-                  void mutate(
+                  void beginProtectedAction(
                     "confirmPrice",
-                    () => proxyNetworkService.confirmPrice(requestId),
+                    "POST",
+                    `/api/proxy-inspections/${encodeURIComponent(requestId)}/confirm-price`,
+                    {},
+                    "Confirm the agreed inspection price",
+                    (challengeId, body) => proxyNetworkService.confirmPrice(requestId, challengeId, body),
                     "Price confirmation recorded.",
                   );
                 },
@@ -1635,10 +1727,10 @@ const ProxyWorkspace = ({
             <div className="flex flex-wrap gap-3">
               <button
                 className={action}
-                disabled={pending}
+                disabled={pending || initializedPayment !== null}
                 onClick={() => void initializePayment()}
               >
-                {isPending("initializePayment") ? "Loading payment total..." : "Pay Now"}
+                {isPending("initializePayment") ? "Starting secure checkout..." : initializedPayment ? "Checkout reference recorded" : "Pay Now"}
               </button>
               {role === "buyer" ? (
                 <button
@@ -1651,15 +1743,16 @@ const ProxyWorkspace = ({
                 </button>
               ) : null}
             </div>
-            {initializedPricing ? (
+            {initializedPayment ? (
               <div className="mt-4 rounded-xl border border-primary/20 p-4">
-                <BuyerPricingBreakdown pricing={initializedPricing} />
-                {initializedPayment?.message ? (
+                <p className="font-bold">Payment reference: {initializedPayment.reference}</p>
+                {initializedPricing ? <BuyerPricingBreakdown pricing={initializedPricing} /> : null}
+                {initializedPayment.message ? (
                   <p role="status" className="mt-3 text-sm text-secondary">
                     {initializedPayment.message}
                   </p>
                 ) : null}
-                {initializedPayment?.redirectUrl ? (
+                {initializedPayment.redirectUrl ? (
                   <button
                     type="button"
                     className={`${action} mt-4`}
@@ -1667,34 +1760,21 @@ const ProxyWorkspace = ({
                       window.location.assign(initializedPayment.redirectUrl!)
                     }
                   >
-                    Pay {formatNgn(initializedPricing.buyerTotalAmount)} securely
+                    {initializedPricing?.buyerTotalAmount == null
+                      ? "Continue to payment provider"
+                      : `Continue to provider checkout (${formatNgn(initializedPricing.buyerTotalAmount)})`}
                   </button>
                 ) : (
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      disabled={pending}
-                      className="rounded-lg bg-surface-container-high px-4 py-3 text-sm font-bold disabled:opacity-50"
-                      onClick={() => void mutate("refreshStatus", reload, "Status refreshed.")}
-                    >
-                      {isPending("refreshStatus") ? "Refreshing..." : "Refresh status"}
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-outline px-4 py-3 text-sm font-bold"
-                      disabled={pending}
-                      onClick={() => void initializePayment()}
-                    >
-                      {isPending("initializePayment") ? "Retrying..." : "Retry initialization"}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    className="mt-4 rounded-lg bg-surface-container-high px-4 py-3 text-sm font-bold disabled:opacity-50"
+                    onClick={() => void refreshPaymentStatus(initializedPayment.reference)}
+                  >
+                    {isPending("refreshStatus") ? "Checking provider status..." : "Check payment status"}
+                  </button>
                 )}
               </div>
-            ) : initializedPayment ? (
-              <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-                {initializedPayment.message ||
-                  "Payment was initialized, but pricing is not available. Refresh this job before continuing."}
-              </p>
             ) : null}
           </div>
         ) : null}
@@ -1858,9 +1938,13 @@ const ProxyWorkspace = ({
                 tone: "danger",
                 onConfirm: () => {
                   setConfirm(null);
-                  void mutate(
+                  void beginProtectedAction(
                     "releasePayment",
-                    () => proxyNetworkService.releasePayment(requestId),
+                    "POST",
+                    `/api/admin/proxy-inspections/${encodeURIComponent(requestId)}/release-payment`,
+                    {},
+                    "Initiate the authorized escrow payout",
+                    (challengeId, body) => proxyNetworkService.releasePayment(requestId, challengeId, body),
                     "Payout processing started.",
                   );
                 },
@@ -1879,7 +1963,7 @@ const ProxyWorkspace = ({
         </p>
       ) : null}
       {actions.resolveDispute ? (
-        <AdminResolution id={requestId} detail={detail} mutate={mutate} busy={isPending("resolveDispute")} />
+        <AdminResolution detail={detail} onResolve={resolveAdminDispute} busy={isPending("resolveDispute")} />
       ) : null}
       {role === "proxy_inspector" && !payoutVerified ? (
         <p className="rounded-xl bg-amber-50 p-4 text-sm">
@@ -1910,6 +1994,13 @@ const ProxyWorkspace = ({
           </ol>
         </section>
       ) : null}
+      <StepUpDialog
+        challenge={stepUp.challenge}
+        busy={stepUp.busy}
+        error={stepUp.error}
+        onCancel={cancelProtectedAction}
+        onSubmit={finishProtectedAction}
+      />
       {confirm ? (
         <ActionConfirmModal {...confirm} onClose={() => setConfirm(null)} />
       ) : null}

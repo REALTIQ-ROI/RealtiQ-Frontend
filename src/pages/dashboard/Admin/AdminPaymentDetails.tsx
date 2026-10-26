@@ -67,10 +67,11 @@ const AdminPaymentDetails = () => {
     try {
       const result = await paymentService.verifyPayment(payment.reference);
       if (result.verified) {
-        toast.success('Payment verified successfully');
+        toast.success('Provider verification completed. Refreshing the authorized payment record.');
         setPayment(await paymentService.getPaymentById(payment._id || payment.reference));
       } else {
-        toast.error('Payment verification failed');
+        toast.info('The provider has not confirmed payment yet. No success or failure is assumed.');
+        setPayment(await paymentService.getPaymentById(payment._id || payment.reference));
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to verify payment');

@@ -127,9 +127,11 @@ describe('proxyNetworkService contracts', () => {
       },
     });
 
-    const response = await proxyNetworkService.initializePayment('request-1');
+    const response = await proxyNetworkService.initializePayment('request-1', 'challenge-1', {});
 
-    expect(api.post).toHaveBeenCalledWith('/proxy-inspections/request-1/initialize-payment');
+    expect(api.post).toHaveBeenCalledWith('/proxy-inspections/request-1/initialize-payment', {}, {
+      headers: { 'X-Step-Up-Challenge': 'challenge-1' },
+    });
     expect(response.pricing?.buyerTotalAmount).toBe(44_000);
     expect(response.pricing?.inspectorPayoutAmount).toBe(36_000);
   });
@@ -162,9 +164,23 @@ describe('proxyNetworkService contracts', () => {
 
   it('sends exact admin resolution and profile decision bodies', async () => {
     vi.mocked(api.patch).mockResolvedValue({ data: {} });
-    await proxyNetworkService.resolveDispute('request-1', 'cancel_and_refund', 'Confirmed cancellation.');
+    await proxyNetworkService.resolveDispute('request-1', 'challenge-2', { resolution: 'cancel_and_refund', notes: 'Confirmed cancellation.' });
     await proxyNetworkService.reviewInspector('profile-1', { decision: 'approve', notes: 'Verified.' });
-    expect(api.patch).toHaveBeenNthCalledWith(1, '/admin/proxy-inspections/request-1/resolve-dispute', { resolution: 'cancel_and_refund', notes: 'Confirmed cancellation.' });
+    expect(api.patch).toHaveBeenNthCalledWith(1, '/admin/proxy-inspections/request-1/resolve-dispute', { resolution: 'cancel_and_refund', notes: 'Confirmed cancellation.' }, {
+      headers: { 'X-Step-Up-Challenge': 'challenge-2' },
+    });
     expect(api.patch).toHaveBeenNthCalledWith(2, '/admin/proxy-inspectors/profile-1/review', { decision: 'approve', notes: 'Verified.' });
+  });
+
+  it('binds price confirmation and payout release to one-use challenges', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    await proxyNetworkService.confirmPrice('request-1', 'challenge-price', {});
+    await proxyNetworkService.releasePayment('request-1', 'challenge-payout', {});
+    expect(api.post).toHaveBeenNthCalledWith(1, '/proxy-inspections/request-1/confirm-price', {}, {
+      headers: { 'X-Step-Up-Challenge': 'challenge-price' },
+    });
+    expect(api.post).toHaveBeenNthCalledWith(2, '/admin/proxy-inspections/request-1/release-payment', {}, {
+      headers: { 'X-Step-Up-Challenge': 'challenge-payout' },
+    });
   });
 });
