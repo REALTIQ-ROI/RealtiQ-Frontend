@@ -3,6 +3,7 @@ import api from "../lib/axios";
 import { messageService } from "./messageService";
 import { personalisationService } from "./personalisationService";
 import { notificationService } from "./notificationService";
+import { dataProtectionService } from './dataProtectionService';
 vi.mock("../lib/axios", () => ({
   default: {
     get: vi.fn(),
@@ -59,5 +60,34 @@ describe("Phase 2 contract services", () => {
     await notificationService.readAll();
     expect(mocked.get).toHaveBeenCalledWith("/notifications/unread-count");
     expect(mocked.patch).toHaveBeenCalledWith("/notifications/read-all");
+  });
+  it('passes documented notification filters and persists only supported category/channel preferences', async () => {
+    mocked.get.mockResolvedValueOnce({ data: { notifications: [], pagination: { page: 2, limit: 20, total: 21, pages: 2 } } });
+    mocked.patch.mockResolvedValueOnce({ data: { preferences: { profileId: 'p1', categories: {} }, mandatoryCategories: ['security', 'payments', 'legal'] } });
+    await notificationService.list({ page: 2, limit: 20, category: 'messages', read: false });
+    await notificationService.updatePreferences({ messages: { inApp: true, email: false } });
+    expect(mocked.get).toHaveBeenCalledWith('/notifications', { params: { page: 2, limit: 20, category: 'messages', read: false } });
+    expect(mocked.patch).toHaveBeenCalledWith('/notifications/preferences', { messages: { inApp: true, email: false } });
+  });
+  it('creates profile-scoped access or deletion requests using the exact bound body and challenge header', async () => {
+    const payload = { requestType: 'access' as const, scopes: ['profile_data' as const, 'documents' as const], operationKey: 'privacy-operation-123', expectedProfileVersion: 4 };
+    mocked.post.mockResolvedValueOnce({ data: { request: { id: 'request-1', profileId: 'p1', requestType: 'access', state: 'submitted', version: 1, submittedAt: 'now', reviewedAt: null, completedAt: null, resultCodes: [], scopes: payload.scopes } } });
+    const request = await dataProtectionService.create(payload, 'challenge-1');
+    expect(request.id).toBe('request-1');
+    expect(mocked.post).toHaveBeenCalledWith('/profiles/current/data-protection-requests', payload, { headers: { 'X-Step-Up-Challenge': 'challenge-1' } });
+  });
+  it('opens message attachments through the authenticated conversation attachment endpoint', async () => {
+    const blob = new Blob(['authorized'], { type: 'application/pdf' });
+    mocked.get.mockResolvedValueOnce({ data: blob });
+    expect(await messageService.previewAttachment('conversation/1', 'message/2', 0)).toBe(blob);
+    expect(mocked.get).toHaveBeenCalledWith('/messages/conversations/conversation%2F1/messages/message%2F2/attachments/0', { responseType: 'blob' });
+  });
+  it('uses documented staff moderation filters and decision fields', async () => {
+    mocked.get.mockResolvedValueOnce({ data: { reports: [], pagination: { page: 2, limit: 50, total: 60, pages: 2 } } });
+    mocked.patch.mockResolvedValueOnce({ data: { report: { _id: 'report-1', status: 'actioned' } } });
+    await messageService.moderationQueue({ page: 2, limit: 50, status: 'open', reason: 'fraud' });
+    await messageService.moderate('report-1', 'hide_message', 'Evidence reviewed');
+    expect(mocked.get).toHaveBeenCalledWith('/messages/moderation/reports', { params: { page: 2, limit: 50, status: 'open', reason: 'fraud' } });
+    expect(mocked.patch).toHaveBeenCalledWith('/messages/moderation/reports/report-1', { action: 'hide_message', reason: 'Evidence reviewed' });
   });
 });

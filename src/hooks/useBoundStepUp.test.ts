@@ -56,7 +56,7 @@ describe('useBoundStepUp', () => {
     await act(async () => { expect(await result.current.begin({ method: 'POST', path: '/api/cart/checkout/initialize', body: {}, label: 'Checkout', execute })).toBe(false); });
     expect(result.current.challenge).toBeNull();
     expect(result.current.error).toContain('expired challenge');
-    expect(await result.current.complete('123456')).toEqual({ ok: false, error: 'This security challenge expired. Start the protected action again.' });
+    expect(await result.current.complete('123456')).toEqual({ ok: false, error: 'The server returned an expired challenge. Start the action again.' });
     expect(stepUpService.verify).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
   });

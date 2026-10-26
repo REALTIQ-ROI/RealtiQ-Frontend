@@ -36,9 +36,23 @@ export interface DataProtectionExecution {
   completionNotice?: { state: string; outcome: string; attempts: number; lastErrorCode: string | null; acceptedAt: string | null };
 }
 
+export type DataProtectionScope = 'account_identity' | 'profile_data' | 'verification' | 'documents' | 'communications' | 'transactions' | 'listing_operations';
+export interface CreateDataProtectionRequestPayload {
+  requestType: 'access' | 'deletion';
+  scopes: DataProtectionScope[];
+  operationKey: string;
+  expectedProfileVersion: number;
+}
+
 const base = '/profiles/current/data-protection-requests';
 
 export const dataProtectionService = {
+  async create(payload: CreateDataProtectionRequestPayload, challengeId: string): Promise<DataProtectionRequestSummary> {
+    const { data } = await api.post<{ request: DataProtectionRequestSummary }>(base, payload, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    });
+    return data.request;
+  },
   async list(before?: string): Promise<DataProtectionRequestPage> {
     const { data } = await api.get<DataProtectionRequestPage>(base, {
       params: { limit: 25, ...(before ? { before } : {}) },

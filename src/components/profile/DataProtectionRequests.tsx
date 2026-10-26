@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { dataProtectionService, type DataProtectionExecution, type DataProtectionRequestSummary } from '../../services/dataProtectionService';
+import { dataProtectionService, type DataProtectionExecution, type DataProtectionRequestSummary, type DataProtectionScope } from '../../services/dataProtectionService';
 import { useAuth } from '../../contexts/AuthContext';
+import { useBoundStepUp } from '../../hooks/useBoundStepUp';
+import StepUpDialog from '../auth/StepUpDialog';
 import Button from '../ui/Button';
 
 const readable = (value: string) => value.replaceAll('_', ' ');
@@ -35,6 +37,8 @@ const serverFields = (value: unknown, depth = 0): ReactNode => {
 };
 
 const ScopedDataProtectionRequests = () => {
+  const { activeProfile } = useAuth();
+  const createStepUp = useBoundStepUp<DataProtectionRequestSummary>();
   const [requests, setRequests] = useState<DataProtectionRequestSummary[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [selected, setSelected] = useState<DataProtectionRequestSummary | null>(null);
@@ -49,8 +53,24 @@ const ScopedDataProtectionRequests = () => {
   const [executionLoading, setExecutionLoading] = useState(false);
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [executionPollTick, setExecutionPollTick] = useState(0);
+  const [requestType, setRequestType] = useState<'access' | 'deletion'>('access');
+  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
+  const [confirmDeletion, setConfirmDeletion] = useState(false);
   const selectedId = useRef<string | null>(null);
   const executionPollCount = useRef(0);
+  const operationKeyRef = useRef<string | null>(null);
+  const scopes: Array<{ value: string; label: string }> = [
+    { value: 'account_identity', label: 'Account identity' },
+    { value: 'profile_data', label: 'Profile data' },
+    { value: 'verification', label: 'Verification records' },
+    { value: 'documents', label: 'Documents' },
+    { value: 'communications', label: 'Communications' },
+    { value: 'transactions', label: 'Transactions' },
+    { value: 'listing_operations', label: 'Listing operations' },
+  ];
+  const permissions = Array.isArray(activeProfile?.permissions) ? activeProfile.permissions : [];
+  const isOrganizationProfile = activeProfile?.structure !== 'individual';
+  const canCreateRequest = Boolean(activeProfile && activeProfile.kind !== 'staff' && (!isOrganizationProfile || permissions.includes('team.manage')));
 
   const load = async (before?: string) => {
     setLoading(true);
@@ -155,10 +175,61 @@ const ScopedDataProtectionRequests = () => {
     }
   };
 
+  const beginCreate = async () => {
+    if (!activeProfile || !canCreateRequest || !selectedScopes.length || createStepUp.busy || createStepUp.challenge) return;
+    if (!Number.isInteger(activeProfile.version) || activeProfile.version < 0) {
+      setError('The active profile version is unavailable. Refresh your profile before submitting this request.');
+      return;
+    }
+    const operationKey = operationKeyRef.current ?? (crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    operationKeyRef.current = operationKey;
+    const payload = {
+      requestType,
+      scopes: [...new Set(selectedScopes)] as DataProtectionScope[],
+      operationKey,
+      expectedProfileVersion: activeProfile.version,
+    };
+    const started = await createStepUp.begin({
+      method: 'POST',
+      path: '/api/profiles/current/data-protection-requests',
+      body: payload,
+      label: requestType === 'deletion' ? 'Submit a profile data deletion request' : 'Submit a profile data access request',
+      execute: (challengeId, exactBody) => dataProtectionService.create(exactBody, challengeId),
+    });
+    if (!started && createStepUp.error) setError(createStepUp.error);
+  };
+
+  const completeCreate = async (code: string) => {
+    const result = await createStepUp.complete(code);
+    if (!result.ok) return false;
+    operationKeyRef.current = null;
+    setConfirmDeletion(false);
+    setSelectedScopes([]);
+    setError(null);
+    setRequests((current) => [result.value, ...current.filter((request) => request.id !== result.value.id)]);
+    await load();
+    await open(result.value.id);
+    return true;
+  };
+
   return (
     <section className="rounded-xl border border-outline-variant/10 bg-white p-6">
       <h3 className="text-lg font-bold">Data protection requests</h3>
       <p className="mt-1 text-sm text-secondary">Current requests for your selected profile. Result codes and record outcomes determine what was completed or preserved.</p>
+      <div className="mt-4 rounded-lg border border-outline-variant/20 p-4">
+        <h4 className="font-bold">Request access or deletion</h4>
+        {!canCreateRequest ? <p role="status" className="mt-2 text-sm text-amber-800">Request submission requires a non-staff profile. Organization profiles also require the current `team.manage` permission.</p> : null}
+        <p className="mt-1 text-xs text-secondary">Submitting a request creates a review record; it does not immediately export or delete data. Deletion outcomes may preserve records under retention or legal-hold rules.</p>
+        <form className="mt-3 space-y-3" onSubmit={(event) => { event.preventDefault(); if (requestType === 'deletion') setConfirmDeletion(true); else void beginCreate(); }}>
+          <label className="block text-sm font-semibold">Request type<select className="mt-1 block w-full rounded-lg border border-outline-variant/20 p-2" value={requestType} disabled={!canCreateRequest || createStepUp.busy || Boolean(createStepUp.challenge)} onChange={(event) => { setRequestType(event.target.value as 'access' | 'deletion'); operationKeyRef.current = null; }}><option value="access">Access / export</option><option value="deletion">Deletion review</option></select></label>
+          <fieldset disabled={!canCreateRequest || createStepUp.busy || Boolean(createStepUp.challenge)}><legend className="text-sm font-semibold">Requested data scopes</legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{scopes.map((scope) => <label key={scope.value} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedScopes.includes(scope.value)} onChange={(event) => { operationKeyRef.current = null; setSelectedScopes((current) => event.target.checked ? [...current, scope.value] : current.filter((item) => item !== scope.value)); }} />{scope.label}</label>)}</div></fieldset>
+          <p className="text-xs text-secondary">Correction requests remain unavailable here because the handoff does not define field-specific correction value schemas. No arbitrary correction payload is sent.</p>
+          <Button type="submit" disabled={!canCreateRequest || !selectedScopes.length || createStepUp.busy || Boolean(createStepUp.challenge)} loading={createStepUp.busy} loadingLabel="Starting secure request…">Continue with authenticator</Button>
+        </form>
+        {createStepUp.error ? <p role="alert" className="mt-2 text-sm text-red-700">{createStepUp.error}</p> : null}
+      </div>
+      {confirmDeletion ? <div role="dialog" aria-modal="true" aria-labelledby="privacy-delete-title" className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"><section className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl"><h4 id="privacy-delete-title" className="text-lg font-bold">Confirm deletion request</h4><p className="mt-2 text-sm text-secondary">This submits a request for staff review. It does not delete data immediately, and records may be preserved or held under retention and legal requirements.</p><div className="mt-4 flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setConfirmDeletion(false)}>Go back</Button><Button type="button" disabled={createStepUp.busy || Boolean(createStepUp.challenge)} onClick={() => { setConfirmDeletion(false); void beginCreate(); }}>Continue to authenticator</Button></div></section></div> : null}
+      <StepUpDialog challenge={createStepUp.challenge} busy={createStepUp.busy} error={createStepUp.error} onCancel={createStepUp.cancel} onSubmit={async (code) => (await completeCreate(code))} />
       {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
       {loading && !requests.length ? <p className="mt-4 text-sm text-secondary">Loading requests…</p> : null}
       {!loading && !requests.length && !error ? <p className="mt-4 text-sm text-secondary">No data protection requests yet.</p> : null}
@@ -220,7 +291,7 @@ const ScopedDataProtectionRequests = () => {
           </div>
         </div>
       ) : null}
-      <p className="mt-4 text-xs text-amber-800">Creating or withdrawing a request requires a bound authenticator challenge. Those write controls are not yet connected in this screen.</p>
+      <p className="mt-4 text-xs text-amber-800">Withdrawal remains disabled because the current handoff does not specify its version-bound request body. Refresh the request to confirm its current state before contacting support.</p>
     </section>
   );
 };

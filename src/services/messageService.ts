@@ -23,6 +23,13 @@ export const messageService = {
     const { data } = await api.post<{ attachment: StagedAttachment }>(`/messages/conversations/${id}/attachments`, form, { signal, onUploadProgress: (event) => event.total && onProgress?.(Math.round((event.loaded / event.total) * 100)) });
     return data.attachment;
   },
+  async previewAttachment(conversationId: string, messageId: string, attachmentIndex: number, signal?: AbortSignal): Promise<Blob> {
+    const { data } = await api.get<Blob>(
+      `/messages/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/attachments/${attachmentIndex}`,
+      { responseType: 'blob', ...(signal ? { signal } : {}) },
+    );
+    return data;
+  },
   async report(id: string, body: { reason: ReportReason; messageId?: string; details?: string }) { const { data } = await api.post<{ report: ConversationReport }>(`/messages/conversations/${id}/reports`, body); return data.report; },
   async moderationQueue(params: { page?: number; limit?: number; status?: string; reason?: string }) { const { data } = await api.get<{ reports: ConversationReport[]; pagination: Pagination }>('/messages/moderation/reports', { params }); return data; },
   async moderate(reportId: string, action: ModerationAction, reason: string) { const { data } = await api.patch<{ report: ConversationReport }>(`/messages/moderation/reports/${reportId}`, { action, reason }); return data.report; },

@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import Button from '../../../components/ui/Button';
+import { useAuth } from '../../../contexts/AuthContext';
 import { dataProtectionService, type DataProtectionExecution } from '../../../services/dataProtectionService';
 
 const readable = (value: string) => value.replaceAll('_', ' ');
 
 const processingStates = new Set(['queued', 'processing', 'waiting_for_policy']);
 
-const AdminDataProtectionExecution = () => {
+const AdminDataProtectionExecutionContent = () => {
   const [requestId, setRequestId] = useState('');
   const [loadedRequestId, setLoadedRequestId] = useState('');
   const [execution, setExecution] = useState<DataProtectionExecution | null>(null);
@@ -60,6 +61,11 @@ const AdminDataProtectionExecution = () => {
       <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Outcome groups do not include individual record IDs. No individual record rows are inferred from these totals.{polling ? '' : pollCount.current >= 12 && processingStates.has(jobState ?? '') ? ' Automatic refresh stopped after 12 checks; refresh manually for a later state.' : ''}</p>
     </section> : null}
   </main></AdminLayout>;
+};
+
+const AdminDataProtectionExecution = () => {
+  const { activeProfile } = useAuth();
+  return <AdminDataProtectionExecutionContent key={activeProfile?.id ?? 'none'} />;
 };
 
 export default AdminDataProtectionExecution;

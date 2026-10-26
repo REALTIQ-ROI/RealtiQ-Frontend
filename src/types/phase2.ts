@@ -154,10 +154,12 @@ export interface RealtiqNotification {
 }
 export type PreferenceKey =
   "messages" | "savedSearches" | "listingChanges" | "inquiries" | "marketplace";
+export type NotificationChannel = 'inApp' | 'email' | 'sms' | 'whatsapp' | 'push';
 export type NotificationPreferenceValues = Record<
   PreferenceKey,
   { inApp: boolean; email: boolean; sms?: boolean; whatsapp?: boolean; push?: boolean }
 >;
+export type NotificationPreferencePatch = Partial<Record<PreferenceKey, Partial<Record<NotificationChannel, boolean>>>>;
 export interface NotificationPreferences {
   profileId: string;
   categories: NotificationPreferenceValues;

@@ -5,17 +5,62 @@ import PortalShell from '../../components/phase2/PortalShell';
 import { useRealtime } from '../../contexts/RealtimeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { messageService } from '../../services/messageService';
-import type { ReportReason, StagedAttachment } from '../../types';
+import type { MessageAttachment, MarketplaceMessage, ReportReason, StagedAttachment } from '../../types';
 import { removeAccidentalRetryDuplicates } from '../../utils/messageDeduplication';
 
 const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
 const fileSize = (bytes: number) => bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const initials = (name?: string) => (name || 'Property').split(' ').slice(0, 2).map((word) => word[0]).join('').toUpperCase();
 
-export default function Messages() {
+const ProtectedAttachmentPreview = ({ conversationId, message, attachment, index }: {
+  conversationId: string;
+  message: MarketplaceMessage;
+  attachment: MessageAttachment;
+  index: number;
+}) => {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [previewMimeType, setPreviewMimeType] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const requestRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { requestRef.current?.abort(); }, []);
+  useEffect(() => () => { if (objectUrl) URL.revokeObjectURL(objectUrl); }, [objectUrl]);
+  const open = async () => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setLoading(true);
+    setError('');
+    try {
+      const blob = await messageService.previewAttachment(conversationId, message._id, index, controller.signal);
+      if (controller.signal.aborted) return;
+      const mimeType = blob.type || attachment.mimeType;
+      if (!['application/pdf', 'image/jpeg', 'image/png'].includes(mimeType)) {
+        setError('This file type does not have a supported inline preview. It was not opened through a public URL.');
+        return;
+      }
+      setPreviewMimeType(mimeType);
+      setObjectUrl(URL.createObjectURL(blob));
+    } catch (raw) {
+      if (!controller.signal.aborted) setError(raw instanceof Error ? raw.message : 'This attachment is unavailable or you no longer have access.');
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  };
+  return <div className='mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2'>
+    <div className='flex items-center gap-2 text-sm'><span className='material-symbols-outlined text-lg'>description</span><span className='min-w-0 flex-1 truncate'>{attachment.originalFileName}</span><span className='shrink-0 text-xs opacity-70'>{fileSize(attachment.fileSizeBytes)}</span><button type='button' className='rounded-md px-2 py-1 text-xs font-bold text-primary hover:bg-white disabled:opacity-50' disabled={loading} onClick={() => void open()}>{loading ? 'Opening…' : objectUrl ? 'Open again' : 'Preview securely'}</button></div>
+    {error ? <p role='alert' className='mt-2 text-xs text-red-700'>{error}</p> : null}
+    {objectUrl ? <div role='dialog' aria-modal='true' aria-label={`Secure preview: ${attachment.originalFileName}`} className='fixed inset-0 z-[100] flex flex-col bg-slate-950/95 p-3 text-white sm:p-6'>
+      <div className='mb-3 flex items-center justify-between gap-3'><h3 className='truncate font-bold'>{attachment.originalFileName}</h3><button type='button' className='rounded-lg bg-white/10 px-4 py-2 font-bold' onClick={() => { setObjectUrl(null); setPreviewMimeType(''); }}>Close preview</button></div>
+      {previewMimeType.startsWith('image/') ? <img className='min-h-0 flex-1 object-contain' src={objectUrl} alt={attachment.originalFileName} /> : <iframe className='min-h-0 flex-1 rounded-lg bg-white' title={`Secure preview: ${attachment.originalFileName}`} src={objectUrl} />}
+    </div> : null}
+  </div>;
+};
+
+function MessagesContent() {
   const { conversationId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, activeProfile } = useAuth();
   const realtime = useRealtime();
   const { openConversation, closeConversation, markRead } = realtime;
   const [draft, setDraft] = useState('');
@@ -24,6 +69,7 @@ export default function Messages() {
   const [upload, setUpload] = useState<StagedAttachment | null>(null);
   const [progress, setProgress] = useState(0);
   const [reporting, setReporting] = useState(false);
+  const [updatingConversation, setUpdatingConversation] = useState(false);
   const [reason, setReason] = useState<ReportReason>('spam');
   const [details, setDetails] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -79,21 +125,25 @@ export default function Messages() {
     <main className='mx-auto max-w-7xl p-4 md:p-8'>
       <header className='mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between'>
         <div><p className='mb-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700'>Communication centre</p><h1 className='text-3xl font-black tracking-tight text-slate-950'>Marketplace messages</h1><p className='mt-1 max-w-2xl text-sm text-slate-500'>Keep property conversations organized without mixing escrow or proxy-inspection discussions.</p></div>
-        <span aria-live='polite' className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${realtime.connectionState === 'connected' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}><span className={`h-2 w-2 rounded-full ${realtime.connectionState === 'connected' ? 'bg-emerald-500' : 'bg-amber-500'}`} />{realtime.connectionState === 'connected' ? 'Live connection' : 'Reconnecting'}</span>
+        <span aria-live='polite' className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${realtime.connectionState === 'connected' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}><span className={`h-2 w-2 rounded-full ${realtime.connectionState === 'connected' ? 'bg-emerald-500' : 'bg-amber-500'}`} />{realtime.connectionState === 'connected' ? 'Live connection' : realtime.connectionState === 'reconnecting' ? 'Reconnecting' : realtime.connectionState === 'connecting' ? 'Connecting' : realtime.connectionState === 'error' ? 'Connection error' : 'Offline'}</span>
       </header>
       {error && <div role='alert' className='mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800'><span className='material-symbols-outlined text-lg' aria-hidden='true'>error</span><span className='flex-1'>{error}</span><button aria-label='Dismiss error' onClick={() => setError('')}>×</button></div>}
+      {realtime.inboxError && <div role='alert' className='mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900'>{realtime.inboxError} <button className='ml-2 font-bold underline' onClick={() => void realtime.refreshInbox().catch(() => undefined)}>Retry inbox</button></div>}
 
       <div className='grid h-[calc(100vh-15rem)] min-h-[620px] max-h-[850px] grid-cols-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.08)] md:grid-cols-[330px_minmax(0,1fr)]'>
         <aside aria-label='Conversations' className={`min-h-0 border-r border-slate-200 bg-slate-50/70 ${conversationId ? 'hidden md:flex' : 'flex'} flex-col`}>
-          <div className='border-b border-slate-200 px-5 py-4'><div className='flex items-center justify-between'><h2 className='font-extrabold text-slate-900'>Inbox</h2>{realtime.inboxUnread > 0 && <span className='rounded-full bg-primary px-2.5 py-1 text-xs font-bold text-white'>{realtime.inboxUnread} unread</span>}</div><p className='mt-1 text-xs text-slate-500'>{realtime.conversations.length} conversation{realtime.conversations.length === 1 ? '' : 's'}</p></div>
+          <div className='border-b border-slate-200 px-5 py-4'><div className='flex items-center justify-between'><h2 className='font-extrabold text-slate-900'>Inbox</h2>{realtime.inboxUnread > 0 && <span title='Unread count for conversations currently loaded' className='rounded-full bg-primary px-2.5 py-1 text-xs font-bold text-white'>{realtime.inboxUnread} unread loaded</span>}</div><p className='mt-1 text-xs text-slate-500'>{realtime.conversations.length} loaded conversation{realtime.conversations.length === 1 ? '' : 's'}</p></div>
           <div className='flex-1 overflow-y-auto'>
-            {realtime.conversations.length === 0 ? <div className='grid h-full place-items-center p-8 text-center'><div><span className='material-symbols-outlined mb-3 text-4xl text-slate-300'>forum</span><p className='font-semibold text-slate-700'>No conversations yet</p><p className='mt-1 text-sm text-slate-500'>Start one from an eligible property.</p></div></div> : realtime.conversations.map((item) => {
+            {realtime.inboxLoading && !realtime.conversations.length ? <p role='status' className='p-5 text-sm text-slate-500'>Loading conversations…</p> : null}
+            {!realtime.inboxLoading && !realtime.inboxError && realtime.conversations.length === 0 ? <div className='grid h-full place-items-center p-8 text-center'><div><span className='material-symbols-outlined mb-3 text-4xl text-slate-300'>forum</span><p className='font-semibold text-slate-700'>No conversations yet</p><p className='mt-1 text-sm text-slate-500'>Start one from an eligible property.</p></div></div> : null}
+            {realtime.conversations.map((item) => {
               const active = item._id === conversationId;
               return <button key={item._id} className={`relative flex w-full gap-3 border-b border-slate-200/80 p-4 text-left transition ${active ? 'bg-white shadow-[inset_3px_0_0_#173d32]' : 'hover:bg-white'}`} onClick={() => navigate(`/messages/${item._id}`)}>
                 <span className='grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-100 text-sm font-black text-emerald-800'>{initials(item.property?.title)}</span>
                 <span className='min-w-0 flex-1'><span className='flex items-start justify-between gap-2'><span className='truncate font-bold text-slate-900'>{item.property?.title ?? 'Property conversation'}</span>{Boolean(item.unreadCount) && <span className='grid min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-white'>{item.unreadCount}</span>}</span><span className='mt-1 block truncate text-sm text-slate-500'>{item.lastMessageText || 'Conversation started'}</span><span className='mt-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400'><span className={`h-1.5 w-1.5 rounded-full ${item.status === 'open' ? 'bg-emerald-500' : 'bg-slate-400'}`} />{item.status}</span></span>
               </button>;
             })}
+            {realtime.inboxPagination && realtime.inboxPagination.page < realtime.inboxPagination.pages ? <div className='p-4'><button type='button' className='w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-50' disabled={realtime.inboxLoadingMore} onClick={() => void realtime.loadMoreInbox().catch((nextError: Error) => setError(nextError.message))}>{realtime.inboxLoadingMore ? 'Loading conversations…' : 'Load more conversations'}</button></div> : null}
           </div>
         </aside>
 
@@ -101,16 +151,16 @@ export default function Messages() {
           {!conversationId ? <div className='text-center'><span className='material-symbols-outlined mb-3 text-5xl text-slate-300'>chat</span><p className='font-bold text-slate-700'>Choose a conversation</p><p className='mt-1 text-sm'>Messages will appear here.</p></div> : <>
             <header className='flex min-h-[76px] items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-5'>
               <div className='flex min-w-0 items-center gap-3'><Link className='grid h-10 w-10 shrink-0 place-items-center rounded-lg hover:bg-slate-100 md:hidden' aria-label='Back to inbox' to='/messages'><span className='material-symbols-outlined'>arrow_back</span></Link><span className='grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-100 font-black text-emerald-800'>{initials(otherParticipant?.name)}</span><div className='min-w-0'><h2 className='truncate font-extrabold text-slate-950'>{conversation?.property?.title ?? 'Conversation'}</h2><p className='truncate text-xs text-slate-500'>{otherParticipant?.name ?? 'Marketplace participant'} · {realtime.presence[conversationId]?.includes(otherParticipant?._id ?? '') ? 'Online' : conversation?.status}</p></div></div>
-              <div className='flex items-center gap-1'><button className='grid h-10 w-10 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-red-700' aria-label='Report conversation' onClick={() => setReporting(true)}><span className='material-symbols-outlined'>flag</span></button><button className='grid h-10 w-10 place-items-center rounded-lg text-slate-500 hover:bg-slate-100' aria-label={conversation?.status === 'closed' ? 'Reopen conversation' : 'Close conversation'} onClick={() => conversationId && void messageService.update(conversationId, { status: conversation?.status === 'closed' ? 'open' : 'closed' }).then(realtime.refreshInbox)}><span className='material-symbols-outlined'>{conversation?.status === 'closed' ? 'lock_open' : 'lock'}</span></button></div>
+              <div className='flex items-center gap-1'><button className='grid h-10 w-10 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-red-700' aria-label='Report conversation' onClick={() => setReporting(true)}><span className='material-symbols-outlined'>flag</span></button><button type='button' className='grid h-10 w-10 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-50' disabled={updatingConversation || !conversation} aria-label={conversation?.status === 'closed' ? 'Reopen conversation' : 'Close conversation'} onClick={() => { if (!conversationId || !conversation) return; setUpdatingConversation(true); void realtime.updateConversation(conversationId, { status: conversation.status === 'closed' ? 'open' : 'closed' }).then(() => toast.success(conversation.status === 'closed' ? 'Conversation reopened.' : 'Conversation closed.'), (nextError: Error) => setError(nextError.message)).finally(() => setUpdatingConversation(false)); }}><span className='material-symbols-outlined'>{updatingConversation ? 'progress_activity' : conversation?.status === 'closed' ? 'lock_open' : 'lock'}</span></button></div>
             </header>
 
             <div className='flex-1 space-y-4 overflow-y-auto bg-slate-50/70 p-4 sm:p-6' aria-live='polite'>
-              <div className='text-center'><button className='rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:border-slate-300' onClick={() => void realtime.loadOlder(conversationId)}>Load older messages</button></div>
+              {realtime.messageHasMore[conversationId] ? <div className='text-center'><button className='rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:border-slate-300' onClick={() => void realtime.loadOlder(conversationId).catch((nextError: Error) => setError(nextError.message))}>Load older messages</button></div> : null}
               {messages.map((message) => {
                 const mine = (typeof message.sender === 'string' ? message.sender : message.sender._id) === user?._id;
                 return <article key={message._id} className={`w-fit max-w-[88%] rounded-2xl px-4 py-3 shadow-sm sm:max-w-[72%] ${mine ? 'ml-auto rounded-br-md bg-primary text-white' : 'rounded-bl-md border border-slate-200 bg-white text-slate-800'}`}>
                   <p className='whitespace-pre-wrap break-words leading-relaxed'>{message.moderated ? 'This message was removed by moderation.' : message.text}</p>
-                  {!message.moderated && message.attachments.map((attachment) => <a key={attachment.url} className={`mt-2 flex items-center gap-2 rounded-lg border p-2 text-sm font-semibold ${mine ? 'border-white/20 bg-white/10' : 'border-slate-200 bg-slate-50'}`} href={attachment.url} target='_blank' rel='noreferrer'><span className='material-symbols-outlined text-lg'>description</span><span className='min-w-0 truncate'>{attachment.originalFileName}</span><span className='shrink-0 text-xs opacity-70'>{fileSize(attachment.fileSizeBytes)}</span></a>)}
+                  {!message.moderated && message.attachments.map((attachment, index) => <ProtectedAttachmentPreview key={`${activeProfile?.id}:${message._id}:${index}`} conversationId={conversationId} message={message} attachment={attachment} index={index} />)}
                   <time className={`mt-1.5 block text-[11px] ${mine ? 'text-white/65' : 'text-slate-400'}`} dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString()}</time>
                 </article>;
               })}
@@ -135,4 +185,9 @@ export default function Messages() {
       {reporting && <div role='dialog' aria-modal='true' aria-labelledby='report-title' className='fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm'><form className='w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl' onSubmit={(event) => { event.preventDefault(); if (!conversationId) return; void messageService.report(conversationId, { reason, details: details.trim() || undefined }).then(() => { toast.success('Report submitted privately.'); setReporting(false); }, (nextError: Error) => setError(nextError.message)); }}><div className='mb-5 flex items-start justify-between'><div><p className='text-xs font-bold uppercase tracking-wider text-red-700'>Private report</p><h2 id='report-title' className='text-xl font-black text-slate-950'>Report conversation</h2></div><button type='button' aria-label='Close report dialog' onClick={() => setReporting(false)}>×</button></div><label className='mb-4 block text-sm font-semibold text-slate-700'>Reason<select className='mt-1.5 block w-full rounded-xl border border-slate-300 p-3' value={reason} onChange={(event) => setReason(event.target.value as ReportReason)}>{['spam','harassment','fraud','inappropriate_content','other'].map((item) => <option key={item}>{item.replaceAll('_', ' ')}</option>)}</select></label><label className='block text-sm font-semibold text-slate-700'>Additional details<textarea className='mt-1.5 block min-h-28 w-full rounded-xl border border-slate-300 p-3' value={details} onChange={(event) => setDetails(event.target.value)} /></label><div className='mt-5 flex justify-end gap-2'><button className='rounded-xl px-4 py-2 font-bold text-slate-600 hover:bg-slate-100' type='button' onClick={() => setReporting(false)}>Cancel</button><button className='rounded-xl bg-red-700 px-4 py-2 font-bold text-white'>Submit report</button></div></form></div>}
     </main>
   </PortalShell>;
+}
+
+export default function Messages() {
+  const { activeProfile } = useAuth();
+  return <MessagesContent key={activeProfile?.id ?? 'none'} />;
 }
