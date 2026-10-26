@@ -683,3 +683,28 @@ See [the detailed 41-row reconciliation](FRONTEND_RECONCILIATION_POST_BACKEND_RE
 - Focused tests, TypeScript, edited-file ESLint and `git diff --check` all passed; details are recorded in the report. No live provider/backend acceptance was run.
 - **Pass 12 verdict: PARTIAL.** The source-owned UI gaps were closed. Production readiness still depends on backend policy/provider activation, legal/product decisions, deployment checklist completion and live acceptance. No previous pass verdict is changed.
 - Pass 13 readiness: source-level gate handling is ready for backend acceptance review; the 9 deployment activations and unresolved decisions remain explicit prerequisites.
+
+## PASS 13 — BACKEND ACCEPTANCE AND CONTRACT REVIEW
+
+### Initial coverage and scope
+
+- Reviewed the complete local Chapter 13 contract review and the relevant Chapters 01–12, 14–17, 19 and 20, alongside the Pass 01–12 reports. The Chapter 13 acceptance inventory contains **37 source entries**: six remediation assertions, two internal implementation findings, eight consistency findings, four contract-family outcomes and 17 chapter coverage rows.
+- Verified current reconciliation counts from the detailed local report: **19 COMPLETE, 14 PARTIAL, 7 BLOCKED and 1 DEFERRED**. Pass 11’s historical 62-item totals and Pass 12’s gates/decisions/deployment counts remain as previously recorded.
+- Cross-checked **44 representative endpoint patterns** against source, contract method/path, DTO, profile/session, step-up, version and outcome behavior. This is representative frontend acceptance coverage, not proof for every mounted endpoint.
+
+### Final status
+
+- **Pass 13 verdict: PARTIAL.** No additional frontend implementation change was required after the Pass 12 source corrections. The existing integrations were source-reviewed; mocked test evidence covers 35 of the 44 representative endpoint patterns, while nine are source-verified only. No endpoint received live-backend acceptance.
+- Chapter 13’s handoff explicitly records a documentation coverage limitation: exact method/path descriptions outside the endpoint index cover 189 of 411 first-batch routes, leaving 222 without a complete endpoint template there. A mounted route alone does not establish product scope or a complete request/response contract.
+- Confirmed source-level safeguards include profile/session-bound one-use step-up, protected multipart file binding, no blind retries for ambiguous financial mutations, payment export via protected POST, server-authoritative payment/ownership state, and fail-closed paid-tour handling. Deployment, provider, storage/scanner, policy and live acceptance remain separate gates.
+- Contract disagreements and blockers, the 44-row endpoint matrix, state-machine/security/financial reviews, executed versus failed test invocations, and a staged acceptance plan are recorded in [BACKEND_ACCEPTANCE_AND_CONTRACT_REVIEW_PASS13.md](BACKEND_ACCEPTANCE_AND_CONTRACT_REVIEW_PASS13.md).
+
+### Verification
+
+- Focused Vitest: **30 files / 137 tests passed** across five completed focused runs. The system-Node run failed before test discovery with Windows `EPERM`; a wider bundled-Node run was interrupted without results. Only the completed smaller runs count as passing evidence.
+- TypeScript no-emit: **exit 0**. Edited-file ESLint: **exit 0, zero warnings**. Final `git diff --check`: **exit 0** (line-ending notices only).
+- No full suite/build, live backend, provider, payment, irreversible privacy operation or deployment was run.
+
+### Pass 14 readiness
+
+The source and mocked evidence is ready to inform authorized staging acceptance for the documented representative contracts. Pass 14 must retain the outstanding 222 route-template documentation gap, initial-login MFA response gap, product/specification decisions, provider/configuration dependencies, payment-attempt index deployment proof and other live/security acceptance gates. Earlier pass verdicts remain unchanged.
