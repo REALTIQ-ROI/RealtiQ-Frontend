@@ -15,7 +15,7 @@ import { ApiRequestError } from '../../../lib/axios';
 import { projectPublicationReadinessView } from '../../../utils/projectPublicationReadiness';
 import type { ProjectDetail, Property, VirtualTourProvider } from '../../../types';
 import { formatPriceRange, labelize } from '../../../utils/projectFormatters';
-import { downloadBlob } from '../../../utils/projectImport';
+import { downloadBlob } from '../../../utils/download';
 import UnitGridPanel from '../../../components/project/UnitGridPanel';
 import UnitTypeManagement from '../../../components/project/UnitTypeManagement';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -279,7 +279,7 @@ const ProjectManage = () => {
               <div className="flex flex-wrap gap-2">
                 <Link to={`/dashboard/landlord/projects/${project._id}/edit`} className="rounded-lg bg-surface-container-low px-4 py-3 text-sm font-bold text-primary">Edit</Link>
                 <Link to={`/dashboard/landlord/projects/${project._id}/imports`} className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary">Bulk Upload Properties</Link>
-                <Button type="button" variant="secondary" loading={exportingGrid} onClick={() => void exportGrid()}>Export unit grid</Button>
+                <Button type="button" variant="secondary" title="Downloads the unfiltered project-scoped server CSV, subject to the server export limit; it is not limited to the visible grid page or selected rows." loading={exportingGrid} onClick={() => void exportGrid()}>Export project unit grid (CSV)</Button>
                 <Button type="button" onClick={() => setPublicationOpen((value) => !value)}>Publication</Button>
                 <Button type="button" variant="secondary" disabled={deleteProjectStepUp.busy || Boolean(deleteProjectStepUp.challenge) || typeof project.version !== 'number' || (data?.totalUnits ?? project.totalUnits ?? project.propertyCount ?? 0) !== 0} onClick={() => void deleteEmptyProject()}>Delete empty project</Button>
               </div>

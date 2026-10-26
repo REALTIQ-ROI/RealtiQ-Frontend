@@ -120,6 +120,20 @@ describe('projectService', () => {
     expect(api.get).toHaveBeenCalledWith('/projects/project-1/property-imports/template', { responseType: 'blob' });
   });
 
+  it('downloads the documented XLSX project import template', async () => {
+    const blob = new Blob(['xlsx bytes'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    vi.mocked(api.get).mockResolvedValue({ data: blob });
+    await expect(projectService.downloadProjectPropertyImportTemplate('project-1', 'xlsx')).resolves.toBe(blob);
+    expect(api.get).toHaveBeenCalledWith('/projects/project-1/property-imports/template.xlsx', { responseType: 'blob' });
+  });
+
+  it('exports the full filtered unit-grid scope without page or limit parameters', async () => {
+    const blob = new Blob(['csv'], { type: 'text/csv' });
+    vi.mocked(api.get).mockResolvedValue({ data: blob });
+    await expect(projectService.downloadUnitGridCsv('project-1', { sort: 'price_asc', search: 'garden', availability: 'available', problemsOnly: false, currency: 'NGN' })).resolves.toBe(blob);
+    expect(api.get).toHaveBeenCalledWith('/projects/project-1/unit-grid/export.csv', { params: { sort: 'price_asc', search: 'garden', availability: 'available', problemsOnly: false, currency: 'NGN' }, responseType: 'blob' });
+  });
+
   it('edits import rows and strips empty import list params', async () => {
     vi.mocked(api.patch).mockResolvedValue({ data: { importSessionId: 'import-1', project: { id: 'project-1' }, status: 'ready', summary: {}, rows: [] } });
     vi.mocked(api.get).mockResolvedValue({ data: { imports: [], total: 0, page: 1, limit: 20 } });
@@ -127,5 +141,14 @@ describe('projectService', () => {
     expect(api.patch).toHaveBeenCalledWith('/projects/project-1/property-imports/import-1/rows/2', { title: 'Unit A', price: 1000 });
     await projectService.listProjectPropertyImports('project-1', { page: 1, limit: undefined });
     expect(api.get).toHaveBeenCalledWith('/projects/project-1/property-imports', { params: { page: 1 } });
+  });
+
+  it('binds import confirmation and failed-row retry to the exact empty JSON body', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { importSessionId: 'import-1', project: { id: 'project-1' }, status: 'queued', summary: {}, rows: [] } });
+    const body: Record<string, never> = {};
+    await projectService.confirmProjectPropertyImport('project-1', 'import-1', body, 'challenge-1');
+    expect(api.post).toHaveBeenNthCalledWith(1, '/projects/project-1/property-imports/import-1/confirm', body, { headers: { 'X-Step-Up-Challenge': 'challenge-1' } });
+    await projectService.retryFailedProjectPropertyImportRows('project-1', 'import-1', body, 'challenge-2');
+    expect(api.post).toHaveBeenNthCalledWith(2, '/projects/project-1/property-imports/import-1/retry-failed', body, { headers: { 'X-Step-Up-Challenge': 'challenge-2' } });
   });
 });

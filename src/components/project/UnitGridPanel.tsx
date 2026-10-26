@@ -1,19 +1,24 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError } from '../../lib/axios';
 import { useAsync } from '../../hooks/useAsync';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
-import { projectService, type UnitGridJob, type UnitGridJobRequest, type UnitGridMutation, type UnitGridOperation, type UnitGridQuery, type UnitGridRow } from '../../services/projectService';
+import { projectService, type UnitGridEditRequest, type UnitGridExportQuery, type UnitGridJob, type UnitGridJobRequest, type UnitGridMutation, type UnitGridOperation, type UnitGridQuery, type UnitGridRow } from '../../services/projectService';
 import { stepUpService } from '../../services/stepUpService';
 import { getCanonicalFields, parseCanonicalInput, reconcileCanonicalFieldRegistry, serializeCanonicalMutationDrafts, type CanonicalMutationDraft } from '../../utils/canonicalFieldRegistry';
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
 import CanonicalFieldMutationsEditor from '../canonical/CanonicalFieldMutationsEditor';
 import StepUpDialog from '../auth/StepUpDialog';
 import Button from '../ui/Button';
+import { downloadBlob } from '../../utils/download';
 
 const fields = getCanonicalFields('unit');
 
 type EditableField = (typeof fields)[number]['key'];
 type JobAction = UnitGridJobRequest['action'];
+type ReviewedTarget = { id: string; label: string; version: number };
+type GridReview =
+  | { kind: 'edit'; request: UnitGridEditRequest; summary: string; rowCount: number; targets: ReviewedTarget[] }
+  | { kind: 'job'; request: UnitGridJobRequest; summary: string; rowCount: number; targets: ReviewedTarget[] };
 const terminalJobStates = new Set(['completed', 'partially_completed', 'failed', 'cancelled']);
 const sourceValue = (fieldsValue: Record<string, unknown>, key: string): string => {
   if (!Object.prototype.hasOwnProperty.call(fieldsValue, key)) return 'Missing';
@@ -67,24 +72,89 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
   const [adjustmentDirection, setAdjustmentDirection] = useState<'increase' | 'decrease'>('increase');
   const [adjustmentValue, setAdjustmentValue] = useState('');
   const [working, setWorking] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
   const [lastOperation, setLastOperation] = useState<UnitGridOperation | null>(null);
   const [job, setJob] = useState<UnitGridJob | null>(null);
+  const [jobPollingPaused, setJobPollingPaused] = useState(false);
+  const [review, setReview] = useState<GridReview | null>(null);
+  const [cancelJobReview, setCancelJobReview] = useState(false);
+  const [undoClock, setUndoClock] = useState(Date.now());
   const undoStepUp = useBoundStepUp<unknown>();
-  const [existingOperationId, setExistingOperationId] = useState('');
   const operationKeyRef = useRef<{ signature: string; key: string } | null>(null);
   const jobKeyRef = useRef<{ signature: string; key: string } | null>(null);
+  const jobStatusRequestRef = useRef<{ key: string; promise: Promise<UnitGridJob> } | null>(null);
+  const jobStorageKey = `realtiq:unit-grid-job:${projectId}`;
+
+  const readJobStatus = useCallback((jobId: string): Promise<UnitGridJob> => {
+    const key = `${projectId}:${jobId}`;
+    if (jobStatusRequestRef.current?.key === key) return jobStatusRequestRef.current.promise;
+    const request = projectService.getUnitGridJob(projectId, jobId);
+    jobStatusRequestRef.current = { key, promise: request };
+    void request.then(
+      () => { if (jobStatusRequestRef.current?.promise === request) jobStatusRequestRef.current = null; },
+      () => { if (jobStatusRequestRef.current?.promise === request) jobStatusRequestRef.current = null; },
+    );
+    return request;
+  }, [projectId]);
+
+  const refreshJob = async () => {
+    if (!job || working) return;
+    setActionError(null);
+    try {
+      setJob(await readJobStatus(job.id));
+      setJobPollingPaused(false);
+    } catch (raw) { setActionError(errorText(raw)); }
+  };
 
   useEffect(() => {
-    if (!job || terminalJobStates.has(job.state)) return;
-    const timer = window.setInterval(() => {
-      void projectService.getUnitGridJob(projectId, job.id).then(setJob).catch((raw: unknown) => setActionError(errorText(raw)));
-    }, 5000);
+    setJob(null);
+    let savedJobId: string | null = null;
+    try { savedJobId = window.sessionStorage.getItem(jobStorageKey); } catch { return; }
+    if (!savedJobId) return;
+    let active = true;
+    void projectService.getUnitGridJob(projectId, savedJobId).then((saved) => {
+      if (active) { setJob(saved); setJobPollingPaused(false); }
+    }).catch((raw: unknown) => {
+      if (active) setActionError(`Could not reopen the saved durable job: ${errorText(raw)}`);
+    });
+    return () => { active = false; };
+  }, [jobStorageKey, projectId]);
+
+  const currentJobId = job?.id;
+  const currentJobState = job?.state;
+  useEffect(() => {
+    if (!currentJobId || terminalJobStates.has(currentJobState ?? '') || jobPollingPaused) return;
+    let active = true;
+    let timer = 0;
+    let attempts = 0;
+    const poll = async () => {
+      if (attempts >= 60) { setJobPollingPaused(true); return; }
+      attempts += 1;
+      try {
+        const latest = await readJobStatus(currentJobId);
+        if (!active) return;
+        setJob(latest);
+        if (terminalJobStates.has(latest.state)) return;
+      } catch (raw) {
+        if (active) setActionError(errorText(raw));
+      }
+      if (active) timer = window.setTimeout(() => void poll(), 5000);
+    };
+    timer = window.setTimeout(() => void poll(), 5000);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [currentJobId, currentJobState, jobPollingPaused, readJobStatus]);
+
+  useEffect(() => {
+    if (!lastOperation?.undoExpiresAt) return;
+    const timer = window.setInterval(() => setUndoClock(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [projectId, job]);
+  }, [lastOperation?.undoExpiresAt]);
 
   const rows = (grid?.items ?? []).filter((row) => selected.includes(row._id));
+  const hasActiveJob = Boolean(job && !terminalJobStates.has(job.state));
   const applyPriceBounds = () => {
     const min = minimumPriceInput.trim() === '' ? undefined : Number(minimumPriceInput);
     const max = maximumPriceInput.trim() === '' ? undefined : Number(maximumPriceInput);
@@ -96,6 +166,29 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     setPriceBounds({ minPrice: min, maxPrice: max });
     setPage(1);
     setSelected([]);
+  };
+
+  const exportGrid = async () => {
+    if (exporting) return;
+    const query: UnitGridExportQuery = {
+      sort,
+      search: search || undefined,
+      availability: availabilityFilter,
+      publicationState: publicationFilter,
+      problemsOnly: problemsOnly || undefined,
+      unitTypeId: unitTypeFilter.trim() || undefined,
+      propertyType: propertyTypeFilter.trim() || undefined,
+      ...priceBounds,
+      currency: sort?.startsWith('price_') || priceBounds.minPrice !== undefined || priceBounds.maxPrice !== undefined ? currency : undefined,
+    };
+    setExporting(true);
+    setExportStatus('');
+    try {
+      const blob = await projectService.downloadUnitGridCsv(projectId, query);
+      downloadBlob(blob, 'project-unit-grid-filtered.csv');
+      setExportStatus('Downloaded the server export for all project units matching the active grid filters.');
+    } catch (raw) { setActionError(errorText(raw)); }
+    finally { setExporting(false); }
   };
   const keyFor = (ref: typeof operationKeyRef, signature: string) => {
     if (ref.current?.signature === signature) return ref.current.key;
@@ -156,7 +249,11 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
 
   const handleFailure = (raw: unknown) => {
     setActionError(errorText(raw));
-    if (raw instanceof ApiRequestError && raw.status === 409) setConflict(true);
+    if (raw instanceof ApiRequestError && raw.status === 409) {
+      setConflict(true);
+      operationKeyRef.current = null;
+      jobKeyRef.current = null;
+    }
   };
 
   const submitDirectEdit = async () => {
@@ -167,16 +264,13 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     if (!targets || !mutations?.length) return;
     const unsigned = { expectedProjectVersion: grid.projectVersion, rows: targets.map((row) => ({ unitId: row._id, expectedVersion: row.version, canonicalFieldMutations: mutations })) };
     const signature = JSON.stringify(unsigned);
-    setWorking(true);
-    try {
-      const result = await projectService.editUnitGrid(projectId, { ...unsigned, operationKey: keyFor(operationKeyRef, signature) });
-      setLastOperation(result.operation);
-      setSelected([]);
-      setRuntimeDrafts([]);
-      operationKeyRef.current = null;
-      setRefreshKey((value) => value + 1);
-    } catch (raw) { handleFailure(raw); }
-    finally { setWorking(false); }
+    setReview({
+      kind: 'edit',
+      request: { ...unsigned, operationKey: keyFor(operationKeyRef, signature) },
+      rowCount: targets.length,
+      targets: targets.map((row) => ({ id: row._id, label: row.publicReference || row._id, version: row.version })),
+      summary: mutations.map((mutation) => `${mutation.field} ${mutation.operation}${Object.prototype.hasOwnProperty.call(mutation, 'value') ? `: ${JSON.stringify(mutation.value)}` : ''}`).join(' · '),
+    });
   };
 
   const submitTypeMove = async () => {
@@ -187,19 +281,19 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     if (!/^[a-f\d]{24}$/i.test(targetUnitTypeId.trim())) { setActionError('Enter a valid same-project unit type ID.'); return; }
     const unsigned = { expectedProjectVersion: grid.projectVersion, rows: targets.map((row) => ({ unitId: row._id, expectedVersion: row.version, unitTypeId: targetUnitTypeId.trim() })) };
     const signature = JSON.stringify(unsigned);
-    setWorking(true);
-    try {
-      const result = await projectService.editUnitGrid(projectId, { ...unsigned, operationKey: keyFor(operationKeyRef, signature) });
-      setLastOperation(result.operation);
-      setSelected([]);
-      operationKeyRef.current = null;
-      setRefreshKey((value) => value + 1);
-    } catch (raw) { handleFailure(raw); }
-    finally { setWorking(false); }
+    setReview({ kind: 'edit', request: { ...unsigned, operationKey: keyFor(operationKeyRef, signature) }, rowCount: targets.length, targets: targets.map((row) => ({ id: row._id, label: row.publicReference || row._id, version: row.version })), summary: `Move selected units to type ${targetUnitTypeId.trim()}` });
   };
 
   const submitJob = async () => {
     if (conflict || working || !grid) return;
+    if (hasActiveJob) {
+      setActionError('Track the current durable job to a terminal state before queuing another job from this project grid.');
+      return;
+    }
+    if (jobAction === 'confirm') {
+      setActionError('Freshness confirmation is unavailable until the backend freshness policy is approved and active.');
+      return;
+    }
     setActionError(null);
     const targets = selectedRows();
     if (!targets) return;
@@ -221,22 +315,102 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       rows: targets.map((row) => ({ unitId: row._id, expectedVersion: row.version, ...(mutations ? { canonicalFieldMutations: mutations } : {}) })),
     };
     const signature = JSON.stringify(unsigned);
+    const options = unsigned.actionOptions ? ` · ${JSON.stringify(unsigned.actionOptions)}` : '';
+    setReview({
+      kind: 'job',
+      request: { ...unsigned, operationKey: keyFor(jobKeyRef, signature) },
+      rowCount: targets.length,
+      targets: targets.map((row) => ({ id: row._id, label: row.publicReference || row._id, version: row.version })),
+      summary: `${jobAction.replaceAll('_', ' ')}${options}${mutations ? ` · ${mutations.length} canonical field mutation(s)` : ''}`,
+    });
+  };
+
+  const confirmReview = async () => {
+    if (!review || working || conflict) return;
+    const current = review;
+    if (current.kind === 'job' && hasActiveJob) {
+      setReview(null);
+      setActionError('The current durable job is still active. Refresh and track it before starting another job.');
+      return;
+    }
     setWorking(true);
+    setActionError(null);
     try {
-      setJob(await projectService.createUnitGridJob(projectId, { ...unsigned, operationKey: keyFor(jobKeyRef, signature) }));
-      setSelected([]);
-      if (jobAction === 'field_edit') setRuntimeDrafts([]);
-      jobKeyRef.current = null;
+      if (current.kind === 'edit') {
+        const result = await projectService.editUnitGrid(projectId, current.request);
+        setLastOperation(result.operation);
+        setSelected([]);
+        setRuntimeDrafts([]);
+        operationKeyRef.current = null;
+      } else {
+        const created = await projectService.createUnitGridJob(projectId, current.request);
+        setJob(created);
+        setJobPollingPaused(false);
+        try { window.sessionStorage.setItem(jobStorageKey, created.id); } catch { /* Recovery remains available through the current job panel. */ }
+        setSelected([]);
+        if (current.request.action === 'field_edit') setRuntimeDrafts([]);
+        jobKeyRef.current = null;
+      }
+      setReview(null);
       setRefreshKey((value) => value + 1);
-    } catch (raw) { handleFailure(raw); }
+    } catch (raw) {
+      setReview(null);
+      handleFailure(raw);
+    } finally { setWorking(false); }
+  };
+
+  const dismissJob = () => {
+    try { window.sessionStorage.removeItem(jobStorageKey); } catch { /* The current panel can still be closed. */ }
+    setJob(null);
+  };
+
+  const cancelJob = async () => {
+    if (!job || working || terminalJobStates.has(job.state)) return;
+    setWorking(true);
+    setActionError(null);
+    try {
+      setJob(await projectService.cancelUnitGridJob(projectId, job.id));
+      setCancelJobReview(false);
+    } catch (raw) {
+      handleFailure(raw);
+    }
     finally { setWorking(false); }
   };
 
-  const beginUndo = async (operationId: string) => {
+  const beginUndo = async (operationId: string, undoExpiresAt?: string | null) => {
+    const expiry = undoExpiresAt ? Date.parse(undoExpiresAt) : Number.NaN;
+    if (!Number.isFinite(expiry)) {
+      setActionError('.Refresh its status before trying again.');
+      return;
+    }
+    if (expiry <= undoClock) {
+      setActionError('The documented undo window has expired. Refresh the grid before checking the operation again.');
+      if (lastOperation?.id === operationId) setLastOperation({ ...lastOperation, undoAvailable: false });
+      return;
+    }
     setActionError(null);
     const path = `/api/projects/${encodeURIComponent(projectId)}/unit-grid/operations/${encodeURIComponent(operationId)}/undo`;
     await undoStepUp.begin({ method: 'POST', path, body: {}, label: `Undo unit-grid operation ${operationId}`,
       execute: (challengeId, exactBody) => stepUpService.undoUnitGridOperation(projectId, operationId, challengeId, exactBody) });
+  };
+
+  const checkJobRowUndo = async (operationId: string, unitId: string) => {
+    if (!job || working) return;
+    setActionError(null);
+    try {
+      const latest = await readJobStatus(job.id);
+      setJob(latest);
+      const row = latest.rows.find((candidate) => candidate.unitId === unitId && candidate.operationId === operationId);
+      if (!row?.undoAvailable) {
+        setActionError('The refreshed job no longer reports this row as undoable.');
+        return;
+      }
+      // Job rows expose current undo eligibility but no expiry timestamp. The server
+      // remains authoritative and may reject an expired undo after this fresh read.
+      const path = `/api/projects/${encodeURIComponent(projectId)}/unit-grid/operations/${encodeURIComponent(operationId)}/undo`;
+      await undoStepUp.begin({ method: 'POST', path, body: {}, label: `Undo unit-grid operation ${operationId}`,
+        execute: (challengeId, exactBody) => stepUpService.undoUnitGridOperation(projectId, operationId, challengeId, exactBody) });
+    } catch (raw) { handleFailure(raw); }
   };
 
   const completeUndo = async (code: string): Promise<boolean> => {
@@ -245,12 +419,32 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     setWorking(true);
     try {
       const result = await undoStepUp.complete(code);
-      if (!result.ok) return false;
+      if (!result.ok) {
+        const message = result.error ?? undoStepUp.error ?? '';
+        if (message.includes('CONFLICT_GRID_UNDO_EXPIRED') && lastOperation) setLastOperation({ ...lastOperation, undoAvailable: false });
+        if (message.includes('CONFLICT_')) {
+          setActionError(message);
+          setRefreshKey((value) => value + 1);
+          if (job) {
+            try { setJob(await readJobStatus(job.id)); } catch { /* Keep the undo conflict visible if status refresh is unavailable. */ }
+          }
+        }
+        return false;
+      }
       setLastOperation(null);
       setRefreshKey((value) => value + 1);
-      if (job) setJob(await projectService.getUnitGridJob(projectId, job.id));
+      if (job) setJob(await readJobStatus(job.id));
       return true;
-    } catch (raw) { handleFailure(raw); }
+    } catch (raw) {
+      if (raw instanceof ApiRequestError && raw.status === 409) {
+        if (raw.code === 'CONFLICT_GRID_UNDO_EXPIRED' && lastOperation) setLastOperation({ ...lastOperation, undoAvailable: false });
+        setActionError(errorText(raw));
+        setRefreshKey((value) => value + 1);
+        if (job) {
+          try { setJob(await readJobStatus(job.id)); } catch { /* Keep the undo conflict visible if status refresh is unavailable. */ }
+        }
+      } else handleFailure(raw);
+    }
     finally { setWorking(false); }
     return false;
   };
@@ -271,7 +465,8 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     <p className="mt-1 text-sm text-secondary">Effective values and their project, type or unit source come from the private grid response. Each edit carries current project and row versions.</p>
     <div className="mt-4 flex flex-wrap gap-2">
       <input aria-label="Search grid units" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} className="min-w-[180px] flex-1 rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="Search units" />
-      <Button type="button" variant="secondary" onClick={() => { setPage(1); setSearch(searchInput.trim()); }}>Search</Button>
+      <Button type="button" variant="secondary" onClick={() => { setPage(1); setSelected([]); setSearch(searchInput.trim()); }}>Search</Button>
+      <Button type="button" variant="secondary" loading={exporting} loadingLabel="Exporting..." title="Exports all project units matching the active server filters, not only the current page or selected rows." onClick={() => void exportGrid()}>Export filtered units (CSV)</Button>
       <select aria-label="Sort grid" value={sort} onChange={(event) => { setSort(event.target.value as UnitGridQuery['sort']); setPage(1); setSelected([]); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{[['newest', 'Newest'], ['price_asc', 'Price low to high'], ['price_desc', 'Price high to low'], ['availability', 'Availability'], ['publication', 'Publication'], ['unit_type', 'Unit type']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
       <Button type="button" variant="secondary" disabled={loading} onClick={() => void execute()}>Refresh grid</Button>
     </div>
@@ -288,6 +483,7 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     </div>
     {loading ? <p className="mt-3 text-sm text-secondary">Loading grid…</p> : null}
     {error ? <p role="alert" className="mt-3 text-sm text-error">{error}</p> : null}
+    {exportStatus ? <p role="status" className="mt-3 text-sm text-secondary">{exportStatus}</p> : null}
     {grid ? <>
       <p className="mt-3 text-xs font-semibold text-secondary">{grid.pagination.total} units · Page {grid.pagination.page} of {grid.pagination.pages} · Project version {grid.projectVersion}</p>
       <div className="mt-3 flex items-center gap-3 text-xs font-semibold text-secondary"><label className="flex items-center gap-2"><input type="checkbox" checked={grid.items.length > 0 && grid.items.every((row) => selected.includes(row._id))} onChange={(event) => setSelected(event.target.checked ? grid.items.map((row) => row._id) : [])} />Select this page</label><span>{selected.length} selected</span></div>
@@ -309,18 +505,20 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
         <CanonicalFieldMutationsEditor target="project_unit" title="Runtime canonical fields" value={runtimeDrafts} onChange={setRuntimeDrafts} canonicalFields={rows.length === 1 ? rows[0].rawOverrides : undefined} effectiveFields={rows.length === 1 ? rows[0].effectiveFields : undefined} fieldSources={rows.length === 1 ? rows[0].fieldSources : undefined} allowedOperations={['set', 'unset', 'reset_to_inherit']} />
         <div className="border-t border-outline-variant/20 pt-3"><label className="text-xs font-bold text-secondary" htmlFor="unit-grid-target-type">Move to same-project unit type ID</label><input id="unit-grid-target-type" value={targetUnitTypeId} onChange={(event) => setTargetUnitTypeId(event.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="24-character unit type ID" /><Button type="button" variant="secondary" disabled={!rows.length || working || conflict} onClick={() => void submitTypeMove()}>Move selected units</Button></div>
       </div>
-      <div className="space-y-3"><h3 className="font-black">Durable bulk job</h3><select aria-label="Grid job action" value={jobAction} onChange={(event) => setJobAction(event.target.value as JobAction)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{[['availability', 'Set availability'], ['field_edit', 'Edit selected field'], ['price_adjustment', 'Adjust asking price'], ['publish', 'Publish ready units'], ['unpublish', 'Unpublish'], ['archive', 'Archive'], ['confirm', 'Confirm freshness']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+      <div className="space-y-3"><h3 className="font-black">Durable bulk job</h3><select aria-label="Grid job action" value={jobAction} onChange={(event) => setJobAction(event.target.value as JobAction)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{[['availability', 'Set availability'], ['field_edit', 'Edit selected field'], ['price_adjustment', 'Adjust asking price'], ['publish', 'Publish ready units'], ['unpublish', 'Unpublish'], ['archive', 'Archive']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><p className="text-xs text-secondary">Freshness confirmation is unavailable until the backend freshness policy is approved and active.</p>
         {jobAction === 'availability' ? <select aria-label="Target availability" value={availability} onChange={(event) => setAvailability(event.target.value as typeof availability)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="Available">Available</option><option value="Under Offer">Under Offer</option><option value="Not released">Not released</option></select> : null}
         {jobAction === 'price_adjustment' ? <div className="flex flex-wrap gap-2"><select aria-label="Price adjustment mode" value={adjustmentMode} onChange={(event) => setAdjustmentMode(event.target.value as typeof adjustmentMode)} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="amount">Amount</option><option value="percentage">Percentage</option></select><select aria-label="Price adjustment direction" value={adjustmentDirection} onChange={(event) => setAdjustmentDirection(event.target.value as typeof adjustmentDirection)} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="increase">Increase</option><option value="decrease">Decrease</option></select><input aria-label="Price adjustment value" type="number" min={0} value={adjustmentValue} onChange={(event) => setAdjustmentValue(event.target.value)} className="min-w-[100px] flex-1 rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" /></div> : null}
         {jobAction === 'archive' ? <p className="text-xs font-semibold text-amber-800">Archive retains history and may be rejected for sold or transaction-linked units.</p> : null}
-        <Button type="button" disabled={!rows.length || working || conflict} onClick={() => void submitJob()}>Queue selected job</Button>
+        {hasActiveJob ? <p role="status" className="text-xs text-secondary">The active job is retained for refresh recovery. Wait for it to finish before queueing another job from this grid.</p> : null}
+        <Button type="button" disabled={!rows.length || working || conflict || hasActiveJob} onClick={() => void submitJob()}>Queue selected job</Button>
       </div>
     </div>
     {actionError || (!undoStepUp.challenge && undoStepUp.error) ? <p role="alert" className="mt-4 rounded-lg bg-error-container p-3 text-sm text-on-error-container">{actionError ?? undoStepUp.error}</p> : null}
     {conflict ? <div role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">A project or unit version changed. Your selection and inputs remain. <button type="button" className="font-bold underline" onClick={async () => { const latest = await execute(); if (latest) setConflict(false); }}>Refresh versions and review before retrying</button></div> : null}
-    {lastOperation ? <div className="mt-5 rounded-lg bg-surface-container-low p-4 text-sm"><h3 className="font-bold">Direct edit {lastOperation.state}</h3><p>{lastOperation.rowCount} rows · Operation {lastOperation.id}</p>{lastOperation.undoExpiresAt ? <p className="mt-1 text-xs text-secondary">Undo window ends {new Date(lastOperation.undoExpiresAt).toLocaleString()}.</p> : null}{lastOperation.undoAvailable ? <Button type="button" variant="secondary" disabled={working || Boolean(lastOperation.undoExpiresAt && Date.parse(lastOperation.undoExpiresAt) <= Date.now())} onClick={() => void beginUndo(lastOperation.id)}>{lastOperation.undoExpiresAt && Date.parse(lastOperation.undoExpiresAt) <= Date.now() ? 'Undo window expired' : 'Undo with authenticator'}</Button> : null}</div> : null}
-    {job ? <div className="mt-5 rounded-lg bg-surface-container-low p-4 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Job {job.state}</h3><div className="flex gap-2"><Button type="button" variant="secondary" disabled={working} onClick={() => void projectService.getUnitGridJob(projectId, job.id).then(setJob).catch((raw: unknown) => setActionError(errorText(raw)))}>Refresh job</Button>{!terminalJobStates.has(job.state) ? <Button type="button" variant="secondary" disabled={working} onClick={() => void projectService.cancelUnitGridJob(projectId, job.id).then(setJob).catch((raw: unknown) => setActionError(errorText(raw)))}>Cancel remaining</Button> : null}</div></div><p className="mt-2 text-xs text-secondary">{job.progress.completed} completed · {job.progress.failed} failed · {job.progress.cancelled} cancelled · {job.progress.remaining} remaining</p>{job.state === 'partially_completed' ? <p className="mt-2 text-xs font-semibold text-amber-800">Some rows committed and others did not. Review every row before retrying.</p> : null}<div className="mt-3 space-y-2">{job.rows.map((row) => <div key={`${row.index}:${row.unitId}`} className="rounded bg-white p-2 text-xs"><span className="font-bold">{row.unitId} · {row.state}</span>{row.error ? <span className="ml-2 text-error">{row.error.code}: {row.error.message}</span> : null}{row.operationId && row.undoAvailable ? <button type="button" disabled={working} className="ml-2 font-bold text-primary underline" onClick={() => void beginUndo(row.operationId!)}>Undo with authenticator</button> : null}</div>)}</div>{job.rows.some((row) => row.state === 'failed') ? <Button type="button" variant="secondary" className="mt-3" disabled={working || conflict} onClick={selectVisibleFailedJobRows}>Select failed rows on this page for reviewed retry</Button> : null}</div> : null}
-    <div className="mt-5 flex flex-wrap gap-2 border-t border-outline-variant/20 pt-4"><input aria-label="Existing grid operation ID" value={existingOperationId} onChange={(event) => setExistingOperationId(event.target.value)} className="min-w-[220px] flex-1 rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="Existing operation ID for undo" /><Button type="button" variant="secondary" disabled={!existingOperationId.trim() || working} onClick={() => void beginUndo(existingOperationId.trim())}>Request undo challenge</Button></div>
+    {lastOperation ? <div className="mt-5 rounded-lg bg-surface-container-low p-4 text-sm"><h3 className="font-bold">Direct edit {lastOperation.state}</h3><p>{lastOperation.rowCount} rows · Operation {lastOperation.id}</p>{lastOperation.undoExpiresAt ? <p className="mt-1 text-xs text-secondary">Undo window ends {new Date(lastOperation.undoExpiresAt).toLocaleString()}.</p> : null}{lastOperation.undoAvailable ? <Button type="button" variant="secondary" disabled={working || !lastOperation.undoExpiresAt || !Number.isFinite(Date.parse(lastOperation.undoExpiresAt)) || Date.parse(lastOperation.undoExpiresAt) <= undoClock} onClick={() => void beginUndo(lastOperation.id, lastOperation.undoExpiresAt)}>{lastOperation.undoExpiresAt && Number.isFinite(Date.parse(lastOperation.undoExpiresAt)) && Date.parse(lastOperation.undoExpiresAt) <= undoClock ? 'Undo window expired' : 'Undo with authenticator'}</Button> : null}{lastOperation.undoAvailable && !lastOperation.undoExpiresAt ? <p className="mt-1 text-xs text-amber-800">Undo is reported as available, but the response omitted its expiry; refresh before attempting it.</p> : null}</div> : null}
+    {job ? <div className="mt-5 rounded-lg bg-surface-container-low p-4 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Job {job.state}</h3><div className="flex gap-2"><Button type="button" variant="secondary" disabled={working} onClick={() => void refreshJob()}>Refresh job</Button><Button type="button" variant="ghost" disabled={working} onClick={dismissJob}>Close job details</Button>{!terminalJobStates.has(job.state) ? <Button type="button" variant="secondary" disabled={working} onClick={() => setCancelJobReview(true)}>Cancel remaining</Button> : null}</div></div><p className="mt-2 text-xs text-secondary">{job.progress.completed} completed · {job.progress.failed} failed · {job.progress.cancelled} cancelled · {job.progress.remaining} remaining</p><p className="mt-1 text-[11px] text-secondary">Created {new Date(job.createdAt).toLocaleString()}{job.startedAt ? ` · Started ${new Date(job.startedAt).toLocaleString()}` : ''}{job.completedAt ? ` · Finished ${new Date(job.completedAt).toLocaleString()}` : ''}</p>{job.state === 'queued' ? <p role="status" className="mt-2 text-xs text-secondary">Queued — the operation is not complete yet.</p> : null}{jobPollingPaused && !terminalJobStates.has(job.state) ? <p role="status" className="mt-2 text-xs text-amber-800">Automatic refresh paused after five minutes. Refresh the job to continue polling.</p> : null}{job.state === 'partially_completed' ? <p className="mt-2 text-xs font-semibold text-amber-800">Some rows committed and others did not. Review every row before retrying.</p> : null}<div className="mt-3 space-y-2">{job.rows.map((row) => <div key={`${row.index}:${row.unitId}`} className="rounded bg-white p-2 text-xs"><span className="font-bold">{row.unitId} · {row.state}</span><span className="ml-2 text-secondary">Attempt {row.attempts}{row.beforeVersion !== undefined ? ` · v${row.beforeVersion}${row.afterVersion !== undefined ? ` → v${row.afterVersion}` : ''}` : ''}</span>{row.error ? <span className="ml-2 text-error">{row.error.code}: {row.error.message}</span> : null}{row.operationId && row.undoAvailable ? <button type="button" disabled={working || undoStepUp.busy} className="ml-2 font-bold text-primary underline" onClick={() => void checkJobRowUndo(row.operationId!, row.unitId)}>Check status and undo with authenticator</button> : null}</div>)}</div>{job.rows.some((row) => row.state === 'failed') ? <Button type="button" variant="secondary" className="mt-3" disabled={working || conflict} onClick={selectVisibleFailedJobRows}>Select failed rows on this page for reviewed retry</Button> : null}</div> : null}
+    {cancelJobReview && job ? <div className="fixed inset-0 z-[1500] flex items-center justify-center bg-black/50 p-4"><section role="dialog" aria-modal="true" aria-labelledby="grid-cancel-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><h3 id="grid-cancel-title" className="text-xl font-black">Request job cancellation?</h3><p className="mt-3 text-sm text-secondary">Cancellation is cooperative. {job.progress.completed} row(s) are already complete and will not be reversed.</p><div className="mt-5 flex justify-end gap-2"><Button type="button" variant="secondary" disabled={working} onClick={() => setCancelJobReview(false)}>Keep job running</Button><Button type="button" loading={working} loadingLabel="Requesting..." disabled={working} onClick={() => void cancelJob()}>Request cancellation</Button></div></section></div> : null}
+    {review ? <div className="fixed inset-0 z-[1500] flex items-center justify-center bg-black/50 p-4"><section role="dialog" aria-modal="true" aria-labelledby="grid-review-title" className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl"><p className="text-xs font-bold uppercase tracking-widest text-secondary">Review before submit</p><h3 id="grid-review-title" className="mt-2 text-xl font-black">{review.kind === 'job' ? 'Queue durable bulk job?' : 'Apply unit-grid edit?'}</h3><p className="mt-3 text-sm text-secondary">{review.rowCount} selected unit(s) · Project version {review.request.expectedProjectVersion}</p><ul aria-label="Selected units and versions" className="mt-2 max-h-32 overflow-y-auto rounded-lg bg-surface-container-low p-3 text-xs">{review.targets.map((target) => <li key={target.id}>{target.label} · unit version {target.version}</li>)}</ul><p className="mt-2 break-words rounded-lg bg-surface-container-low p-3 text-sm">{review.summary}</p><p className="mt-3 text-xs text-secondary">Each selected row is bound to the version currently displayed. If a version conflict is returned, refresh and review the changes again before submitting.</p><div className="mt-5 flex justify-end gap-2"><Button type="button" variant="secondary" disabled={working} onClick={() => setReview(null)}>Keep editing</Button><Button type="button" loading={working} loadingLabel="Submitting..." disabled={working || conflict} onClick={() => void confirmReview()}>{review.kind === 'job' ? 'Queue job' : 'Apply changes'}</Button></div></section></div> : null}
     <StepUpDialog challenge={undoStepUp.challenge} busy={working || undoStepUp.busy} error={undoStepUp.error} onCancel={undoStepUp.cancel} onSubmit={completeUndo} />
   </section>;
 };

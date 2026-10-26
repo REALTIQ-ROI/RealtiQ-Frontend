@@ -154,6 +154,8 @@ export interface UnitGridQuery {
   propertyType?: string;
 }
 
+export type UnitGridExportQuery = Omit<UnitGridQuery, 'page' | 'limit'>;
+
 export interface CreateProjectRequest {
   canonicalFields?: Record<string, unknown>;
   canonicalFieldMutations?: Array<{ field: string; operation: 'set' | 'set_null' | 'unset' | 'reset_to_inherit'; value?: unknown }>;
@@ -357,8 +359,11 @@ export const projectService = {
     return data;
   },
 
-  async downloadUnitGridCsv(projectId: string): Promise<Blob> {
-    const { data } = await api.get<Blob>(`/projects/${encodeURIComponent(projectId)}/unit-grid/export.csv`, { responseType: 'blob' });
+  async downloadUnitGridCsv(projectId: string, query?: UnitGridExportQuery): Promise<Blob> {
+    const { data } = await api.get<Blob>(`/projects/${encodeURIComponent(projectId)}/unit-grid/export.csv`, {
+      ...(query && Object.keys(compact(query)).length ? { params: compact(query) } : {}),
+      responseType: 'blob',
+    });
     return data;
   },
 
@@ -446,8 +451,9 @@ export const projectService = {
     return data;
   },
 
-  async downloadProjectPropertyImportTemplate(projectId: string): Promise<Blob> {
-    const { data } = await api.get<Blob>(`/projects/${encodeURIComponent(projectId)}/property-imports/template`, { responseType: 'blob' });
+  async downloadProjectPropertyImportTemplate(projectId: string, format: 'csv' | 'xlsx' = 'csv'): Promise<Blob> {
+    const templatePath = format === 'xlsx' ? 'template.xlsx' : 'template';
+    const { data } = await api.get<Blob>(`/projects/${encodeURIComponent(projectId)}/property-imports/${templatePath}`, { responseType: 'blob' });
     return data;
   },
 
@@ -476,13 +482,13 @@ export const projectService = {
     return data;
   },
 
-  async confirmProjectPropertyImport(projectId: string, importId: string): Promise<ProjectImportSession> {
-    const { data } = await api.post<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports/${encodeURIComponent(importId)}/confirm`);
+  async confirmProjectPropertyImport(projectId: string, importId: string, body: Record<string, never>, challengeId: string): Promise<ProjectImportSession> {
+    const { data } = await api.post<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports/${encodeURIComponent(importId)}/confirm`, body, { headers: { 'X-Step-Up-Challenge': challengeId } });
     return data;
   },
 
-  async retryFailedProjectPropertyImportRows(projectId: string, importId: string): Promise<ProjectImportSession> {
-    const { data } = await api.post<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports/${encodeURIComponent(importId)}/retry-failed`);
+  async retryFailedProjectPropertyImportRows(projectId: string, importId: string, body: Record<string, never>, challengeId: string): Promise<ProjectImportSession> {
+    const { data } = await api.post<ProjectImportSession>(`/projects/${encodeURIComponent(projectId)}/property-imports/${encodeURIComponent(importId)}/retry-failed`, body, { headers: { 'X-Step-Up-Challenge': challengeId } });
     return data;
   },
 

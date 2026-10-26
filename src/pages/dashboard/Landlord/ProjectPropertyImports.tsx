@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
+import { ApiRequestError } from '../../../lib/axios';
 import { projectService } from '../../../services/projectService';
 import type { ImportRowStatus, ProjectDetail, ProjectImportListItem, ProjectImportRow, ProjectImportSchema, ProjectImportSession } from '../../../types';
-import { downloadBlob, rowDataValue, sanitizeImportRowPayload } from '../../../utils/projectImport';
+import { downloadBlob, rowDataDisplayValue, rowDataValue, sanitizeImportRowPayload, validateProjectImportFile } from '../../../utils/projectImport';
 import { formatDate, labelize } from '../../../utils/projectFormatters';
 
 const numericFields = new Set(['price', 'bedrooms', 'bathrooms', 'squareFeet', 'constructionProgress', 'reservationAmount', 'minimumInitialDeposit', 'installmentDurationMonths']);
@@ -19,6 +22,10 @@ const rowStatusClasses: Record<ImportRowStatus, string> = {
   imported: 'bg-primary/10 text-primary',
   failed: 'bg-amber-50 text-amber-800',
 };
+const IMPORT_ROW_PAGE_SIZE = 100;
+const IMPORT_HISTORY_PAGE_SIZE = 20;
+const activeImportStates = new Set(['queued', 'processing', 'importing']);
+const ambiguousRequest = (raw: unknown) => raw instanceof ApiRequestError && (raw.status === undefined || raw.status >= 500);
 
 const sessionId = (session: ProjectImportSession | ProjectImportListItem) => 'importSessionId' in session ? session.importSessionId : session._id;
 
@@ -28,11 +35,25 @@ const ProjectPropertyImports = () => {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [schema, setSchema] = useState<ProjectImportSchema | null>(null);
   const [imports, setImports] = useState<ProjectImportListItem[]>([]);
+  const [importsPage, setImportsPage] = useState(1);
+  const [importsTotal, setImportsTotal] = useState(0);
   const [session, setSession] = useState<ProjectImportSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadOutcomeUnknown, setUploadOutcomeUnknown] = useState(false);
+  const [uploadHistoryChecked, setUploadHistoryChecked] = useState(false);
   const [templateLoading, setTemplateLoading] = useState(false);
+  const [templateFormat, setTemplateFormat] = useState<'csv' | 'xlsx'>('csv');
   const [pendingAction, setPendingAction] = useState('');
+  const [cancelReviewOpen, setCancelReviewOpen] = useState(false);
+  const [protectedImportAction, setProtectedImportAction] = useState<'confirm' | 'retry' | null>(null);
+  const [protectedOutcomeUnknown, setProtectedOutcomeUnknown] = useState<'confirm' | 'retry' | null>(null);
+  const protectedOutcomeUnknownRef = useRef<'confirm' | 'retry' | null>(null);
+  const [protectedOutcomeChecked, setProtectedOutcomeChecked] = useState(false);
+  const [rowPage, setRowPage] = useState(1);
+  const [pollReset, setPollReset] = useState(0);
+  const [pollingPaused, setPollingPaused] = useState(false);
   const [error, setError] = useState('');
   const [progressError, setProgressError] = useState('');
   const [statusFilter, setStatusFilter] = useState<ImportRowStatus | 'all'>('all');
@@ -40,6 +61,7 @@ const ProjectPropertyImports = () => {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [editingRow, setEditingRow] = useState<ProjectImportRow | null>(null);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
+  const importStepUp = useBoundStepUp<ProjectImportSession>();
   const editableFields = useMemo(() => schema?.fields.map((field) => field.name) ?? [], [schema]);
 
   const load = async () => {
@@ -51,12 +73,15 @@ const ProjectPropertyImports = () => {
       const [manage, schemaResponse, history] = await Promise.all([
         projectService.getProjectManage(id),
         projectService.getProjectPropertyImportSchema(id),
-        projectService.listProjectPropertyImports(id, { page: 1, limit: 20 }),
+        projectService.listProjectPropertyImports(id, { page: 1, limit: IMPORT_HISTORY_PAGE_SIZE }),
       ]);
       setProject(manage.project);
       setSchema(schemaResponse);
       setImports(history.imports ?? []);
-      if (importId) setSession(await projectService.getProjectPropertyImport(id, importId, { page: 1, limit: 100 }));
+      setImportsPage(history.page);
+      setImportsTotal(history.total);
+      if (importId) setSession(await projectService.getProjectPropertyImport(id, importId, { page: 1, limit: IMPORT_ROW_PAGE_SIZE }));
+      setRowPage(1);
     } catch (raw) {
       setError(raw instanceof Error ? raw.message : 'Unable to load project imports.');
     } finally {
@@ -69,20 +94,43 @@ const ProjectPropertyImports = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, importId]);
 
+  const loadImportHistory = async (page: number) => {
+    const history = await projectService.listProjectPropertyImports(id, { page, limit: IMPORT_HISTORY_PAGE_SIZE });
+    setImports(history.imports ?? []);
+    setImportsPage(history.page);
+    setImportsTotal(history.total);
+  };
+
   useEffect(() => {
-    if (!id || !importId || !['queued', 'processing', 'importing'].includes(session?.status ?? '')) return;
+    if (!id || !importId || !activeImportStates.has(session?.status ?? '')) return;
     let active = true;
-    const timer = window.setInterval(() => {
-      void projectService.getProjectPropertyImport(id, importId, { page: 1, limit: 100 }).then((latest) => {
+    let timer = 0;
+    let attempts = 0;
+    setPollingPaused(false);
+    const poll = async () => {
+      if (!active) return;
+      if (attempts >= 60) { setPollingPaused(true); return; }
+      attempts += 1;
+      try {
+        const latest = await projectService.getProjectPropertyImport(id, importId, { page: rowPage, limit: IMPORT_ROW_PAGE_SIZE });
         if (!active) return;
         setSession(latest);
         setProgressError('');
-      }).catch((raw: unknown) => {
+        if (!activeImportStates.has(latest.status)) return;
+      } catch (raw) {
         if (active) setProgressError(raw instanceof Error ? raw.message : 'Unable to refresh import progress.');
-      });
-    }, 5000);
-    return () => { active = false; window.clearInterval(timer); };
-  }, [id, importId, session?.status]);
+      }
+      if (active) timer = window.setTimeout(() => void poll(), 5000);
+    };
+    timer = window.setTimeout(() => void poll(), 5000);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [id, importId, pollReset, rowPage, session?.status]);
+
+  useEffect(() => {
+    if (importStepUp.challenge || importStepUp.busy || !protectedImportAction) return;
+    setProtectedImportAction(null);
+    setPendingAction((current) => current === protectedImportAction ? '' : current);
+  }, [importStepUp.busy, importStepUp.challenge, protectedImportAction]);
 
   const filteredRows = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -97,33 +145,52 @@ const ProjectPropertyImports = () => {
   const canRetry = session?.status === 'partially_completed' || session?.status === 'partial' || session?.status === 'failed';
   const canCancel = session ? !['completed', 'partially_completed', 'partial', 'failed', 'cancelled', 'expired'].includes(session.status) : false;
 
-  const upload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    if (!/\.(csv|xlsx)$/i.test(file.name)) {
-      toast.error('Only CSV and XLSX files are supported.');
-      return;
-    }
+  const upload = async (file: File) => {
+    if (uploading) return;
+    setSelectedFile(file);
+    const fileError = validateProjectImportFile(file, schema?.limits.maxFileMB);
+    if (fileError) { toast.error(fileError); return; }
+    setUploadOutcomeUnknown(false);
+    setUploadHistoryChecked(false);
     setUploading(true);
     try {
       const next = await projectService.uploadProjectPropertyImport(id, file);
       setSession(next);
+      setRowPage(1);
+      setSelectedFile(null);
+      setUploadOutcomeUnknown(false);
+      setUploadHistoryChecked(false);
       toast.success('Import file staged. Review the returned preview before submitting.');
-      await projectService.listProjectPropertyImports(id, { page: 1, limit: 20 }).then((history) => setImports(history.imports ?? []));
+      await loadImportHistory(1);
       navigate(`/dashboard/landlord/projects/${id}/imports/${next.importSessionId}`, { replace: true });
     } catch (raw) {
-      toast.error(raw instanceof Error ? raw.message : 'Unable to upload spreadsheet.');
+      if (ambiguousRequest(raw)) {
+        setUploadOutcomeUnknown(true);
+        setUploadHistoryChecked(false);
+        toast.error('The server response did not confirm whether this file was staged. Check import history before deciding whether to upload again.');
+      } else {
+        toast.error(raw instanceof Error ? raw.message : 'Unable to upload spreadsheet.');
+      }
     } finally {
       setUploading(false);
+    }
+  };
+
+  const checkImportHistoryAfterUpload = async () => {
+    try {
+      await loadImportHistory(1);
+      setUploadHistoryChecked(true);
+      toast.success('Import history refreshed. Inspect it before deciding whether to stage this file again.');
+    } catch (raw) {
+      toast.error(raw instanceof Error ? raw.message : 'Unable to check import history.');
     }
   };
 
   const downloadTemplate = async () => {
     setTemplateLoading(true);
     try {
-      const blob = await projectService.downloadProjectPropertyImportTemplate(id);
-      downloadBlob(blob, 'project-property-import-template.csv');
+      const blob = await projectService.downloadProjectPropertyImportTemplate(id, templateFormat);
+      downloadBlob(blob, `project-property-import-template.${templateFormat}`);
     } catch (raw) {
       toast.error(raw instanceof Error ? raw.message : 'Unable to download the current project template.');
     } finally {
@@ -135,14 +202,90 @@ const ProjectPropertyImports = () => {
     setSession(next);
   };
 
-  const refreshSession = async () => {
-    if (!importId) return;
+  const refreshSession = async (page = rowPage): Promise<boolean> => {
+    if (!importId) return false;
     try {
-      setSession(await projectService.getProjectPropertyImport(id, importId, { page: 1, limit: 100 }));
+      setSession(await projectService.getProjectPropertyImport(id, importId, { page, limit: IMPORT_ROW_PAGE_SIZE }));
+      setRowPage(page);
       setProgressError('');
+      setPollingPaused(false);
+      setPollReset((value) => value + 1);
+      return true;
     } catch (raw) {
       setProgressError(raw instanceof Error ? raw.message : 'Unable to refresh import progress.');
+      return false;
     }
+  };
+
+  const beginProtectedImportAction = async (action: 'confirm' | 'retry') => {
+    if (!session || pendingAction) return;
+    const currentImportId = sessionId(session);
+    const body: Record<string, never> = {};
+    const suffix = action === 'confirm' ? 'confirm' : 'retry-failed';
+    const label = action === 'confirm' ? 'Submit this validated project import' : 'Retry eligible failed rows in this project import';
+    setProtectedImportAction(action);
+    setPendingAction(action);
+    const started = await importStepUp.begin({
+      method: 'POST',
+      path: `/api/projects/${encodeURIComponent(id)}/property-imports/${encodeURIComponent(currentImportId)}/${suffix}`,
+      body,
+      label,
+      execute: async (challengeId, exactBody) => {
+        try {
+          return action === 'confirm'
+            ? await projectService.confirmProjectPropertyImport(id, currentImportId, exactBody, challengeId)
+            : await projectService.retryFailedProjectPropertyImportRows(id, currentImportId, exactBody, challengeId);
+        } catch (raw) {
+          if (ambiguousRequest(raw)) {
+            protectedOutcomeUnknownRef.current = action;
+            setProtectedOutcomeUnknown(action);
+          }
+          throw raw;
+        }
+      },
+    });
+    if (!started) {
+      setProtectedImportAction(null);
+      setPendingAction('');
+      toast.error(importStepUp.error ?? 'Unable to start the secure import action.');
+    }
+  };
+
+  const completeProtectedImportAction = async (code: string): Promise<boolean> => {
+    const action = protectedImportAction;
+    if (!action || pendingAction !== action) return false;
+    const result = await importStepUp.complete(code);
+    if (!result.ok) {
+      if (protectedOutcomeUnknownRef.current === action) {
+        setProtectedOutcomeChecked(false);
+        await refreshSession(rowPage);
+      }
+      return false;
+    }
+    setProtectedImportAction(null);
+    setPendingAction('');
+    setSession(result.value);
+    protectedOutcomeUnknownRef.current = null;
+    setProtectedOutcomeUnknown(null);
+    setProtectedOutcomeChecked(false);
+    toast.success(`The import request was accepted. Current state: ${labelize(result.value.status)}; review row outcomes before treating it as complete.`);
+    void loadImportHistory(1).catch(() => undefined);
+    return true;
+  };
+
+  const cancelProtectedImportAction = () => {
+    importStepUp.cancel();
+    setProtectedImportAction(null);
+    setPendingAction('');
+  };
+
+  const reviewAndRestartProtectedAction = async () => {
+    if (!protectedOutcomeUnknown || !protectedOutcomeChecked) return;
+    const action = protectedOutcomeUnknown;
+    protectedOutcomeUnknownRef.current = null;
+    setProtectedOutcomeUnknown(null);
+    setProtectedOutcomeChecked(false);
+    await beginProtectedImportAction(action);
   };
 
   const beginEdit = (row: ProjectImportRow) => {
@@ -187,6 +330,7 @@ const ProjectPropertyImports = () => {
     setPendingAction('cancel');
     try {
       replaceSession(await projectService.cancelProjectPropertyImport(id, sessionId(session)));
+      setCancelReviewOpen(false);
       toast.success('Cancellation requested. Any rows already committed remain in the project.');
     } catch (raw) {
       toast.error(raw instanceof Error ? raw.message : 'Unable to cancel import.');
@@ -208,12 +352,29 @@ const ProjectPropertyImports = () => {
               <h1 className="mt-2 text-4xl font-black tracking-tight">Bulk upload properties</h1>
               <p className="mt-3 max-w-3xl text-sm text-secondary">Upload CSV/XLSX text data for this project only. No Properties are created until you confirm a valid preview.</p>
               <div className="mt-5 flex flex-wrap gap-3">
-                <Button type="button" loading={templateLoading} loadingLabel="Downloading..." onClick={() => void downloadTemplate()}>Download CSV Template</Button>
+                <label className="flex items-center gap-2 text-sm font-semibold">Template format
+                  <select aria-label="Template format" value={templateFormat} onChange={(event) => setTemplateFormat(event.target.value as 'csv' | 'xlsx')} className="rounded-lg bg-surface-container-low px-3 py-2">
+                    <option value="csv">CSV</option><option value="xlsx">Excel (.xlsx)</option>
+                  </select>
+                </label>
+                <Button type="button" loading={templateLoading} loadingLabel="Downloading..." onClick={() => void downloadTemplate()}>Download {templateFormat.toUpperCase()} Template</Button>
                 <label className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-on-primary transition-all hover:opacity-90">
-                  {uploading ? 'Uploading...' : 'Upload CSV/XLSX'}
-                  <input type="file" accept=".csv,.xlsx" className="sr-only" disabled={uploading} onChange={(event) => void upload(event)} />
+                  {uploading ? 'Uploading...' : 'Select CSV/XLSX'}
+                  <input type="file" accept=".csv,.xlsx" className="sr-only" disabled={uploading || uploadOutcomeUnknown} onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = '';
+                    if (file) void upload(file);
+                  }} />
                 </label>
               </div>
+              {selectedFile ? <p className="mt-3 text-xs text-secondary">Selected file: {selectedFile.name}{schema ? ` · Limit ${schema.limits.maxFileMB} MB` : ''}</p> : null}
+              {uploadOutcomeUnknown ? <div role="alert" className="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-950">
+                <p>Do not upload it again until you inspect the refreshed import history.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" onClick={() => void checkImportHistoryAfterUpload()}>Check import history</Button>
+                  {uploadHistoryChecked && selectedFile ? <Button type="button" disabled={uploading} loading={uploading} loadingLabel="Staging..." onClick={() => void upload(selectedFile)}>I reviewed history — stage this file again</Button> : null}
+                </div>
+              </div> : null}
             </header>
 
             <section className="grid gap-6 lg:grid-cols-[1fr_0.55fr]">
@@ -235,6 +396,8 @@ const ProjectPropertyImports = () => {
                     ))}</tbody>
                   </table>
                 </div>
+                {schema?.unsupportedFields.length ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">These source fields are not eligible for this project import and are not mapped: {schema.unsupportedFields.join(', ')}.</p> : null}
+                <p className="mt-3 rounded-lg bg-surface-container-low p-3 text-xs text-secondary">Column remapping is unavailable in this screen. The server-returned schema and row validation remain authoritative.</p>
               </div>
               <aside className="rounded-xl bg-white p-6">
                 <h2 className="text-xl font-black">Import history</h2>
@@ -246,6 +409,11 @@ const ProjectPropertyImports = () => {
                     </Link>
                   )) : <p className="rounded-lg bg-surface-container-low p-4 text-sm text-secondary">No import sessions yet.</p>}
                 </div>
+                {importsTotal > IMPORT_HISTORY_PAGE_SIZE ? <nav aria-label="Import history pages" className="mt-4 flex items-center justify-between gap-3 text-sm">
+                  <Button type="button" variant="secondary" disabled={importsPage <= 1} onClick={() => void loadImportHistory(importsPage - 1)}>Previous history</Button>
+                  <span>Page {importsPage} of {Math.max(1, Math.ceil(importsTotal / IMPORT_HISTORY_PAGE_SIZE))} · {importsTotal} imports</span>
+                  <Button type="button" variant="secondary" disabled={importsPage >= Math.ceil(importsTotal / IMPORT_HISTORY_PAGE_SIZE)} onClick={() => void loadImportHistory(importsPage + 1)}>Next history</Button>
+                </nav> : null}
               </aside>
             </section>
 
@@ -256,18 +424,27 @@ const ProjectPropertyImports = () => {
                     <p className="text-xs font-bold uppercase tracking-widest text-secondary">{session.originalFileName} - {labelize(session.status)}</p>
                     <h2 className="mt-2 text-2xl font-black">Preview rows</h2>
                     <p className="mt-2 text-sm text-amber-800">Imported Properties start as pending review and will not include media or title documents.</p>
+                    {session.uploadedAt || session.completedAt ? <p className="mt-2 text-xs text-secondary">{session.uploadedAt ? `Uploaded ${formatDate(session.uploadedAt)}` : ''}{session.completedAt ? ` · Completed ${formatDate(session.completedAt)}` : ''}</p> : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="secondary" disabled={!importId} onClick={() => void refreshSession()}>Refresh status</Button>
-                    {canConfirm ? <Button type="button" disabled title="Step-up challenge contract is not documented">Import Properties</Button> : null}
-                    {canRetry ? <Button type="button" variant="secondary" disabled title="Step-up challenge contract is not documented">Retry failed rows</Button> : null}
-                    {canCancel ? <Button type="button" variant="ghost" loading={pendingAction === 'cancel'} loadingLabel="Cancelling..." onClick={() => void cancel()}>Cancel import</Button> : null}
+                    <Button type="button" variant="secondary" disabled={!importId || pendingAction !== ''} onClick={() => void refreshSession()}>Refresh status</Button>
+                    {canConfirm ? <Button type="button" loading={pendingAction === 'confirm' || (protectedImportAction === 'confirm' && importStepUp.busy)} loadingLabel="Confirming..." disabled={Boolean(pendingAction || protectedOutcomeUnknown)} onClick={() => void beginProtectedImportAction('confirm')}>Import Properties</Button> : null}
+                    {canRetry ? <Button type="button" variant="secondary" loading={pendingAction === 'retry' || (protectedImportAction === 'retry' && importStepUp.busy)} loadingLabel="Retrying..." disabled={Boolean(pendingAction || protectedOutcomeUnknown)} onClick={() => void beginProtectedImportAction('retry')}>Retry eligible failed rows</Button> : null}
+                    {canCancel ? <Button type="button" variant="ghost" disabled={Boolean(pendingAction)} onClick={() => setCancelReviewOpen(true)}>Cancel import</Button> : null}
                   </div>
                 </div>
-                {['queued', 'processing', 'importing'].includes(session.status) ? <p role="status" className="mt-3 text-sm text-secondary">This import is running. Progress refreshes every few seconds; committed rows remain even if cancellation is requested.</p> : null}
+                {activeImportStates.has(session.status) ? <p role="status" className="mt-3 text-sm text-secondary">This import is {labelize(session.status)}. Progress refreshes automatically; committed rows remain even if cancellation is requested.</p> : null}
                 {session.status === 'partial' || session.status === 'partially_completed' ? <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Some rows were imported and others need review. Check each row result before retrying.</p> : null}
                 {progressError ? <p role="alert" className="mt-3 text-sm text-red-700">Progress refresh failed: {progressError}</p> : null}
-                {(canConfirm || canRetry) ? <p className="mt-3 text-sm text-amber-800">Import submission and retry require a server step-up challenge. Those actions are unavailable until the challenge request contract is supplied.</p> : null}
+                {pollingPaused && activeImportStates.has(session.status) ? <p role="status" className="mt-3 text-sm text-amber-800">Automatic refresh paused after five minutes. Use Refresh status to continue checking this durable import.</p> : null}
+                {importStepUp.error && !importStepUp.challenge ? <p role="alert" className="mt-3 text-sm text-error">{importStepUp.error}</p> : null}
+                {protectedOutcomeUnknown ? <div role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+                  <p>The {protectedOutcomeUnknown === 'confirm' ? 'import submission' : 'failed-row retry'} response was ambiguous. No automatic retry was sent. Refresh the import state before deciding what to do next.</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button type="button" variant="secondary" onClick={() => void refreshSession().then((ok) => setProtectedOutcomeChecked(ok))}>Check current import state</Button>
+                    {protectedOutcomeChecked && (protectedOutcomeUnknown === 'confirm' ? canConfirm : canRetry) ? <Button type="button" onClick={() => void reviewAndRestartProtectedAction()}>I reviewed the state — start a new secure attempt</Button> : null}
+                  </div>
+                </div> : null}
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
                   {Object.entries(session.summary).map(([key, value]) => (
@@ -297,7 +474,7 @@ const ProjectPropertyImports = () => {
                           <td className="p-3"><span className={`rounded-full px-3 py-1 text-xs font-bold ${rowStatusClasses[row.status]}`}>{labelize(row.status)}</span></td>
                           <td className="p-3">{rowDataValue(row, 'title') || 'Untitled'}</td>
                           <td className="p-3 text-secondary">{[rowDataValue(row, 'unitNumber'), rowDataValue(row, 'block'), rowDataValue(row, 'phase')].filter(Boolean).join(' - ') || 'N/A'}</td>
-                          <td className="p-3">{rowDataValue(row, 'price') || 'N/A'}</td>
+                          <td className="p-3">{rowDataDisplayValue(row, 'price')}</td>
                           <td className="p-3"><button type="button" className="font-bold text-primary hover:underline" onClick={() => setExpandedRows((current) => {
                             const next = new Set(current);
                             if (next.has(row.rowNumber)) next.delete(row.rowNumber); else next.add(row.rowNumber);
@@ -327,6 +504,11 @@ const ProjectPropertyImports = () => {
                     </tbody>
                   </table>
                 </div>
+                {session.summary.totalRows > IMPORT_ROW_PAGE_SIZE ? <nav aria-label="Import rows pages" className="mt-4 flex items-center justify-between gap-3 text-sm">
+                  <Button type="button" variant="secondary" disabled={rowPage <= 1} onClick={() => void refreshSession(rowPage - 1)}>Previous rows</Button>
+                  <span>Rows page {rowPage} of {Math.max(1, Math.ceil(session.summary.totalRows / IMPORT_ROW_PAGE_SIZE))} · {session.summary.totalRows} total</span>
+                  <Button type="button" variant="secondary" disabled={rowPage >= Math.ceil(session.summary.totalRows / IMPORT_ROW_PAGE_SIZE)} onClick={() => void refreshSession(rowPage + 1)}>Next rows</Button>
+                </nav> : null}
               </section>
             ) : null}
           </>
@@ -343,10 +525,14 @@ const ProjectPropertyImports = () => {
                 {editableFields.map((field) => (
                   <label key={field} className={field === 'description' || field === 'paymentPlanDescription' || field === 'riskDisclosure' ? 'md:col-span-3 text-xs font-bold uppercase tracking-widest text-secondary' : 'text-xs font-bold uppercase tracking-widest text-secondary'}>
                     {field}
-                    {field === 'description' || field === 'paymentPlanDescription' || field === 'riskDisclosure' ? (
+                    {schema?.fields.find((item) => item.name === field)?.allowedValues?.length ? (
+                      <select required={Boolean(schema?.fields.find((item) => item.name === field)?.required)} value={editValues[field] ?? ''} onChange={(event) => setEditValues((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm normal-case outline-none">
+                        <option value="">Choose a server-allowed value</option>{schema?.fields.find((item) => item.name === field)?.allowedValues?.map((value) => <option key={value} value={value}>{value}</option>)}
+                      </select>
+                    ) : field === 'description' || field === 'paymentPlanDescription' || field === 'riskDisclosure' ? (
                       <textarea value={editValues[field] ?? ''} rows={3} onChange={(event) => setEditValues((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm normal-case outline-none disabled:opacity-60" />
                     ) : (
-                      <input type={numericFields.has(field) ? 'text' : field.includes('Date') ? 'date' : 'text'} value={editValues[field] ?? ''} onChange={(event) => setEditValues((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm normal-case outline-none disabled:opacity-60" />
+                      <input required={Boolean(schema?.fields.find((item) => item.name === field)?.required)} type={numericFields.has(field) ? 'text' : field.includes('Date') ? 'date' : 'text'} value={editValues[field] ?? ''} onChange={(event) => setEditValues((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm normal-case outline-none disabled:opacity-60" />
                     )}
                   </label>
                 ))}
@@ -358,7 +544,9 @@ const ProjectPropertyImports = () => {
             </form>
           </div>
         ) : null}
+        {cancelReviewOpen && session ? <div className="fixed inset-0 z-[1900] flex items-center justify-center bg-black/50 p-4"><section role="dialog" aria-modal="true" aria-labelledby="import-cancel-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><h2 id="import-cancel-title" className="text-xl font-black">Request import cancellation?</h2><p className="mt-3 text-sm text-secondary">Cancellation is cooperative. Rows already committed will remain in the project and will be reported in the import results.</p><div className="mt-5 flex justify-end gap-2"><Button type="button" variant="secondary" disabled={Boolean(pendingAction)} onClick={() => setCancelReviewOpen(false)}>Keep importing</Button><Button type="button" variant="ghost" loading={pendingAction === 'cancel'} loadingLabel="Cancelling..." disabled={Boolean(pendingAction)} onClick={() => void cancel()}>Request cancellation</Button></div></section></div> : null}
       </main>
+      <StepUpDialog challenge={importStepUp.challenge} busy={importStepUp.busy} error={importStepUp.error} onCancel={cancelProtectedImportAction} onSubmit={completeProtectedImportAction} />
     </LandlordPortalLayout>
   );
 };

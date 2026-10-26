@@ -1,5 +1,7 @@
 import type { ProjectImportRow } from '../types';
 
+export { downloadBlob } from './download';
+
 export const importTemplateColumns = [
   'title',
   'price',
@@ -121,17 +123,6 @@ export const buildLocalProjectImportCsv = () =>
     .map((row) => row.map(csvEscape).join(','))
     .join('\r\n');
 
-export const downloadBlob = (blob: Blob, filename: string) => {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-};
-
 export const supportedImportFields = new Set(importTemplateColumns);
 
 export const rowDataValue = (row: ProjectImportRow, field: string) => {
@@ -139,6 +130,22 @@ export const rowDataValue = (row: ProjectImportRow, field: string) => {
   if (Array.isArray(value)) return value.join(' | ');
   if (value === null || value === undefined) return '';
   return String(value);
+};
+
+export const rowDataDisplayValue = (row: ProjectImportRow, field: string, missingLabel = 'N/A') => {
+  if (!row.data || !Object.prototype.hasOwnProperty.call(row.data, field)) return missingLabel;
+  const value = row.data[field];
+  if (value === null) return 'Null';
+  if (value === '') return 'Empty';
+  return rowDataValue(row, field);
+};
+
+export const validateProjectImportFile = (file: File, maxFileMB?: number): string | null => {
+  if (!/\.(csv|xlsx)$/i.test(file.name)) return 'Only CSV and XLSX files are supported.';
+  if (typeof maxFileMB === 'number' && Number.isFinite(maxFileMB) && maxFileMB >= 0 && file.size > maxFileMB * 1024 * 1024) {
+    return `This file is larger than the current project limit of ${maxFileMB} MB.`;
+  }
+  return null;
 };
 
 export const sanitizeImportRowPayload = (values: Record<string, string>, allowedFields: string[]): Record<string, unknown> => {

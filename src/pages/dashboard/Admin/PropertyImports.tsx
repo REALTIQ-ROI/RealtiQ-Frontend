@@ -53,7 +53,19 @@ const AdminPropertyImports = () => {
                         <td className="p-3 font-bold">{row.rowNumber}</td>
                         <td className="p-3"><span className={`rounded-full px-3 py-1 text-xs font-bold ${rowStatusClass(row.status)}`}>{labelize(row.status)}</span></td>
                         <td className="p-3">{String(row.data?.title ?? 'Untitled')}</td>
-                        <td className="p-3 text-xs text-secondary">{row.errors.length} errors / {row.warnings.length} warnings</td>
+                        <td className="p-3 text-xs text-secondary">
+                          <span>{row.errors.length} errors / {row.warnings.length} warnings</span>
+                          {[...row.errors, ...row.warnings].length ? <details className="mt-1">
+                            <summary className="cursor-pointer font-bold text-primary">Inspect row messages</summary>
+                            <ul className="mt-2 space-y-1">
+                              {[...row.errors.map((message) => ({ ...message, severity: 'error' as const })), ...row.warnings.map((message) => ({ ...message, severity: 'warning' as const }))].map((message, index) => (
+                                <li key={`${row.rowNumber}:${message.code}:${index}`} className={message.severity === 'error' ? 'text-red-800' : 'text-amber-800'}>
+                                  {message.severity === 'error' ? 'Error' : 'Warning'}{message.field ? ` · ${message.field}` : ''}{message.code ? ` (${message.code})` : ''}: {message.message}
+                                </li>
+                              ))}
+                            </ul>
+                          </details> : <p className="mt-1">No row validation messages.</p>}
+                        </td>
                         <td className="p-3 font-mono text-xs">{row.property || 'N/A'}</td>
                       </tr>
                     ))}
