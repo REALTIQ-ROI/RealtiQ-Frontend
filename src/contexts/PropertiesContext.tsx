@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { propertyService, type ArchivePropertyRequest, type CreatePropertyPayload, type CreatePropertyResponse, type UpdatePropertyPayload } from '../services/propertyService';
 import type { Property } from '../types';
 import { isPublicPropertyVisible } from '../utils/projectPublication';
@@ -18,80 +18,167 @@ interface PropertiesContextValue {
 
 const PropertiesContext = createContext<PropertiesContextValue | undefined>(undefined);
 
+const PROPERTY_PAGE_LIMIT = 100;
+const MAX_PROPERTY_PAGES = 10_000;
+
+const getPropertyIdentity = (property: Property): string | undefined =>
+  property._id || property.id || property.publicReference || undefined;
+
+const appendUniqueProperties = (target: Property[], seen: Set<string>, incoming: Property[]) => {
+  for (const property of incoming) {
+    const identity = getPropertyIdentity(property);
+    if (identity && seen.has(identity)) continue;
+    if (identity) seen.add(identity);
+    target.push(property);
+  }
+};
+
 export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
-  const { user, activeProfile } = useAuth();
+  const { user, token, activeProfile } = useAuth();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const requestSequence = useRef(0);
-  const loadedProfileId = useRef<string | null>(null);
   const selectedProfileId = activeProfile?.id ?? null;
-  const [renderProfileId, setRenderProfileId] = useState<string | null>(selectedProfileId);
-  const visibleProperties = renderProfileId === selectedProfileId ? properties : [];
-  const visibleLoading = loading || renderProfileId !== selectedProfileId;
-  const visibleError = renderProfileId === selectedProfileId ? error : null;
+  const userId = user?._id ?? null;
+  const role = user?.role ?? null;
+  const scopeKey = JSON.stringify([userId, selectedProfileId, role]);
+  const sessionToken = token;
+  const currentScope = { userId, profileId: selectedProfileId, role, token: sessionToken };
+  const scopeRef = useRef(currentScope);
+  const loadedScope = useRef<string | null>(null);
+  const [renderScopeKey, setRenderScopeKey] = useState(scopeKey);
+  const visibleProperties = renderScopeKey === scopeKey ? properties : [];
+  const visibleLoading = loading || renderScopeKey !== scopeKey;
+  const visibleError = renderScopeKey === scopeKey ? error : null;
+
+  useLayoutEffect(() => {
+    const nextScope = { userId, profileId: selectedProfileId, role, token: sessionToken };
+    const previous = scopeRef.current;
+    if (
+      previous.userId !== userId ||
+      previous.profileId !== selectedProfileId ||
+      previous.role !== role ||
+      previous.token !== sessionToken
+    ) {
+      scopeRef.current = nextScope;
+      requestSequence.current += 1;
+      loadedScope.current = null;
+      setProperties([]);
+      setError(null);
+      setLoading(true);
+    }
+  }, [userId, selectedProfileId, role, sessionToken]);
 
   const refreshProperties = useCallback(async (limitOverride = 500) => {
+    if (scopeRef.current.userId !== userId ||
+      scopeRef.current.profileId !== selectedProfileId ||
+      scopeRef.current.role !== role ||
+      scopeRef.current.token !== sessionToken) return;
+
     const requestId = ++requestSequence.current;
-    if (loadedProfileId.current !== selectedProfileId) {
-      loadedProfileId.current = selectedProfileId;
-      setRenderProfileId(selectedProfileId);
+    const requestScopeKey = scopeKey;
+    const isCurrentRequest = () => requestId === requestSequence.current &&
+      scopeRef.current.userId === userId &&
+      scopeRef.current.profileId === selectedProfileId &&
+      scopeRef.current.role === role &&
+      scopeRef.current.token === sessionToken;
+
+    if (loadedScope.current !== requestScopeKey) {
+      loadedScope.current = requestScopeKey;
+      setRenderScopeKey(requestScopeKey);
       setProperties([]);
     }
     setLoading(true);
     setError(null);
     try {
-      const res = user?.role === 'landlord'
-        ? await (async () => {
-            const pageSize = 20;
-            const first = await propertyService.getMyProperties(1, pageSize);
-            const properties = [...first.properties];
-            let page = 1;
-            while (properties.length < Math.min(first.total, limitOverride) && page < first.page + Math.ceil(first.total / pageSize)) {
-              page += 1;
-              const next = await propertyService.getMyProperties(page, pageSize);
-              if (!next.properties.length) break;
-              properties.push(...next.properties);
-            }
-            return { ...first, properties: properties.slice(0, limitOverride) };
-          })()
-        : await propertyService.getProperties({ limit: limitOverride });
-      const nextProperties = Array.isArray(res)
-        ? res
-        : 'properties' in res && Array.isArray(res.properties)
-          ? res.properties
-          : [];
-      if (requestId === requestSequence.current) setProperties(user?.role ? nextProperties : nextProperties.filter(isPublicPropertyVisible));
+      const requestedTotal = Number.isFinite(limitOverride)
+        ? Math.min(MAX_PROPERTY_PAGES * PROPERTY_PAGE_LIMIT, Math.max(0, Math.floor(limitOverride)))
+        : 0;
+      let nextProperties: Property[] = [];
+
+      if (requestedTotal > 0 && role === 'landlord') {
+        const pageSize = 20;
+        const first = await propertyService.getMyProperties(1, pageSize);
+        const seen = new Set<string>();
+        nextProperties = [];
+        appendUniqueProperties(nextProperties, seen, first.properties);
+        const targetTotal = Math.min(first.total, requestedTotal);
+        const totalPages = Math.min(MAX_PROPERTY_PAGES, Math.ceil(first.total / pageSize));
+        let page = 1;
+        while (nextProperties.length < targetTotal && page < totalPages && isCurrentRequest()) {
+          page += 1;
+          const next = await propertyService.getMyProperties(page, pageSize);
+          if (!isCurrentRequest() || !next.properties.length) break;
+          appendUniqueProperties(nextProperties, seen, next.properties);
+        }
+        nextProperties = nextProperties.slice(0, requestedTotal);
+      } else if (requestedTotal > 0) {
+        const pageSize = Math.min(PROPERTY_PAGE_LIMIT, requestedTotal);
+        const seen = new Set<string>();
+        let page = 1;
+        while (page <= MAX_PROPERTY_PAGES && nextProperties.length < requestedTotal && isCurrentRequest()) {
+          const response = await propertyService.getProperties({ page, limit: pageSize });
+          if (!isCurrentRequest()) break;
+          if (!response.properties.length) break;
+
+          appendUniqueProperties(nextProperties, seen, response.properties);
+          if (nextProperties.length >= requestedTotal) break;
+
+          const hasReachedReportedEnd = Number.isFinite(response.total) &&
+            (nextProperties.length >= response.total || page * pageSize >= response.total);
+          if (hasReachedReportedEnd || response.properties.length < pageSize) break;
+          page += 1;
+        }
+        nextProperties = nextProperties.slice(0, requestedTotal);
+      }
+
+      if (isCurrentRequest()) {
+        setProperties(role ? nextProperties : nextProperties.filter(isPublicPropertyVisible));
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch properties.';
-      if (requestId === requestSequence.current) setError(message);
+      if (isCurrentRequest()) setError(message);
     } finally {
-      if (requestId === requestSequence.current) setLoading(false);
+      if (isCurrentRequest()) setLoading(false);
     }
-  }, [selectedProfileId, user?.role]);
+  }, [role, scopeKey, selectedProfileId, sessionToken, userId]);
 
   useEffect(() => {
     void refreshProperties();
+    return () => { requestSequence.current += 1; };
   }, [refreshProperties]);
 
   const addProperty = async (_ownerId: string, payload: CreatePropertyPayload, challengeId?: string): Promise<CreatePropertyResponse> => {
+    const mutationScope = scopeKey;
     const created = await propertyService.createPropertyWithResponse(payload, challengeId);
-    setProperties((current) => [created.property, ...current]);
+    if (scopeRef.current.userId === userId &&
+      scopeRef.current.profileId === selectedProfileId &&
+      scopeRef.current.role === role &&
+      scopeRef.current.token === sessionToken && mutationScope === scopeKey) {
+      setProperties((current) => [created.property, ...current]);
+    }
     await refreshProperties();
     return created;
   };
 
   const updateProperty = async (propertyId: string, payload: UpdatePropertyPayload, challengeId?: string): Promise<Property> => {
+    const mutationScope = scopeKey;
     const updated = await propertyService.updateProperty(propertyId, payload, challengeId);
-    setProperties((current) =>
-      current.map((property) =>
-        (Boolean(updated._id) && property._id === updated._id) ||
-        (Boolean(updated.id) && property.id === updated.id) ||
-        (Boolean(updated.publicReference) && property.publicReference === updated.publicReference)
-          ? updated
-          : property,
-      ),
-    );
+    if (scopeRef.current.userId === userId &&
+      scopeRef.current.profileId === selectedProfileId &&
+      scopeRef.current.role === role &&
+      scopeRef.current.token === sessionToken && mutationScope === scopeKey) {
+      setProperties((current) =>
+        current.map((property) =>
+          (Boolean(updated._id) && property._id === updated._id) ||
+          (Boolean(updated.id) && property.id === updated.id) ||
+          (Boolean(updated.publicReference) && property.publicReference === updated.publicReference)
+            ? updated
+            : property,
+        ),
+      );
+    }
     await refreshProperties();
     return updated;
   };

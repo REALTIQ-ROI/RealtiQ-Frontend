@@ -56,7 +56,8 @@ import ManageInquiries from '../pages/dashboard/Admin/ManageInquiries';
 import ManageLandlords from '../pages/dashboard/Admin/ManageLandlords';
 import ManagePayments from '../pages/dashboard/Admin/ManagePayments';
 import LegalHolds from '../pages/dashboard/Admin/LegalHolds';
-import StaffAccessChanges from '../pages/dashboard/Admin/StaffAccessChanges';
+// Temporarily disabled for the single general-admin model; retain for a future multi-staff workflow.
+// import StaffAccessChanges from '../pages/dashboard/Admin/StaffAccessChanges';
 import NotificationDeliveryReconciliation from '../pages/dashboard/Admin/NotificationDeliveryReconciliation';
 import OrganizationManagement from '../pages/dashboard/OrganizationManagement';
 import ManageProperties from '../pages/dashboard/Admin/ManageProperties';
@@ -294,7 +295,9 @@ const AppRoutes = () => {
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route path='/dashboard/admin/trust-appeals' element={<TrustAppeals />} />
           <Route path='/dashboard/admin/legal-holds' element={<LegalHolds />} />
+          {/* Temporarily disabled for the single general-admin model; retain for a future multi-staff workflow.
           <Route path='/dashboard/admin/staff-access-changes' element={<StaffAccessChanges />} />
+          */}
           <Route path='/dashboard/admin/notification-deliveries' element={<NotificationDeliveryReconciliation />} />
           <Route path='/dashboard/admin/message-moderation' element={<MessageModeration />} />
           <Route path="/admin/proxy-inspectors" element={<AdminInspectorList />} />

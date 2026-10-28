@@ -21,7 +21,14 @@ const FeaturedListings = () => {
   const { properties, loading, error, refreshProperties } = useProperties();
   const { data: stats, loading: statsLoading, error: statsError, execute: refreshStats } = useAsync(() => adminService.fetchAdminStats(), true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const candidates = properties.filter((property) => property.status === 'available');
+  const candidates = properties
+    .filter((property) => property.status === 'available')
+    .map((property, index) => ({ property, index }))
+    .sort((a, b) => {
+      const featuredFirst = Number(Boolean(b.property.featured)) - Number(Boolean(a.property.featured));
+      return featuredFirst || a.index - b.index;
+    })
+    .map(({ property }) => property);
   const featured = candidates.filter((property) => property.featured);
 
   const toggleFeatured = async (id: string, featuredState: boolean) => {

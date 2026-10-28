@@ -12,6 +12,34 @@ describe('legalHoldService', () => {
     await expect(legalHoldService.list({ limit: 50, state: 'active', subjectKind: 'profile' })).resolves.toEqual(response);
     expect(api.get).toHaveBeenCalledWith('/admin/legal-holds', { params: { limit: 50, state: 'active', subjectKind: 'profile' } });
   });
+  it('looks up dynamic categories, kinds and cursor-paginated subjects with the documented query', async () => {
+    const response = {
+      categories: [{ category: 'account_profile', label: 'Account and profile', subjectKinds: [{ subjectKind: 'profile', label: 'Profile' }] }],
+      subjects: [{ subjectId: 'profile-exact-id', subjectKind: 'profile', category: 'account_profile', title: 'Example profile', subtitle: 'Developer · Company' }],
+      nextCursor: 'opaque-next-cursor',
+    };
+    const controller = new AbortController();
+    vi.mocked(api.get).mockResolvedValue({ data: response } as never);
+
+    await expect(legalHoldService.lookupSubjects({
+      category: 'account_profile',
+      subjectKind: 'profile',
+      q: 'Example',
+      limit: 25,
+      after: 'opaque-prior-cursor',
+    }, controller.signal)).resolves.toEqual(response);
+
+    expect(api.get).toHaveBeenCalledWith('/admin/legal-holds/subjects', {
+      params: {
+        category: 'account_profile',
+        subjectKind: 'profile',
+        q: 'Example',
+        limit: 25,
+        after: 'opaque-prior-cursor',
+      },
+      signal: controller.signal,
+    });
+  });
   it('binds create and independent release payloads to their exact routes', async () => {
     const hold = { id: 'hold-1', version: 1, state: 'active' };
     vi.mocked(api.post).mockResolvedValue({ data: { hold } } as never);

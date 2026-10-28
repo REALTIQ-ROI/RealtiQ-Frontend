@@ -2,11 +2,12 @@ import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
+import LoginSecondFactorForm from '../../../components/auth/LoginSecondFactorForm';
 
 const LandlordLogin = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, logout, isLoading } = useAuth();
+  const { login, logout, isLoading, loginChallenge } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -22,7 +23,15 @@ const LandlordLogin = () => {
     e.preventDefault();
     try {
       const user = await login({ email, password, role: 'landlord' });
+      if (!user) return;
+      finishLogin(user);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to login. Please check your details.';
+      toast.error(message);
+    }
+  };
 
+  const finishLogin = (user: NonNullable<Awaited<ReturnType<typeof login>>>) => {
       if (user.role !== 'landlord') {
         logout();
         toast.error('You are attempting to log in through the wrong portal');
@@ -31,10 +40,6 @@ const LandlordLogin = () => {
 
       toast.success('Login successful');
       navigate(landlordRedirect ?? '/dashboard/landlord');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to login. Please check your details.';
-      toast.error(message);
-    }
   };
 
   return (
@@ -98,6 +103,9 @@ const LandlordLogin = () => {
               <p className="text-secondary text-sm">Please enter your details to access your landlord dashboard.</p>
             </div>
 
+            {loginChallenge ? (
+              <LoginSecondFactorForm challenge={loginChallenge} onSuccess={finishLogin} />
+            ) : <>
             <div className="flex rounded-lg bg-surface-container-low p-1 mb-6">
               <button
                 type="button"
@@ -185,6 +193,7 @@ const LandlordLogin = () => {
                 Create one
               </Link>
             </p>
+            </>}
           </div>
         </div>
       </main>

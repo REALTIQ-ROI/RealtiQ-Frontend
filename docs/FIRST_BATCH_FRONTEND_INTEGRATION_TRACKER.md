@@ -782,4 +782,35 @@ The source and mocked evidence is ready to inform authorized staging acceptance 
 - Focused Vitest command: `npx vitest run --config vite.config.ts src/lib/axios.test.ts src/services/proxyNetworkService.test.ts src/pages/proxyNetwork/CreateProxyInspection.test.tsx src/pages/proxyNetwork/AdminInspectors.stepUp.test.tsx src/services/tourService.test.ts src/services/escrowService.test.ts src/services/adminService.test.ts --reporter=dot` — **7 files / 42 tests executed, all assertions passed, overall exit 1**. Startup/resolution emitted Windows `EPERM: lstat C:\Users\DELL` and `MISSING DEPENDENCY jsdom`. `jsdom@29.1.1` is declared, lockfile-matched, and physically present. The resolver error is environmental; no packages or permissions were changed. The optional Vite `esbuild` peer is not declared/locked and absent; Vite emitted an unresolved optional-import warning but transformed and ran tests.
 - `npx tsc --noEmit -p tsconfig.app.json` — **exit 0**. Edited-file ESLint (`npx eslint` on the eight changed TS/TSX files with `--max-warnings 0`) — **exit 0, zero warnings**. `git diff --check` — **exit 0**; Git emitted only line-ending conversion notices. No live backend/provider calls or full suite/build were run.
 - **Pass 16 verdict: PARTIAL.** All 45 documented rows were inventoried and mapped; 28 frontend-consumer paths are source-aligned, but 11 lack dedicated branch assertions, 17 internal operations have no first-batch consumer, Vitest exits nonzero in this environment, and the chapter is not route-exhaustive. No live acceptance is claimed.
+
+### Pass 16 current-evidence addendum — Pass 17
+
+- Pass 17 added focused branch assertions for all 11 previously partial response rows (M16-30, M16-33–34, M16-37–44). Current bounded Chapter 16 mock coverage is **28 consumer rows with focused evidence; 17 internal rows intentionally unused**. The historical Pass 16 verdict and its exit-one system-Node test result are preserved above.
+- A direct bundled-workspace-Node invocation with preserve-symlink options completed the focused Pass 17 set: **3 files / 35 tests, exit 0**. `jsdom` was already declared, locked and installed; no dependency or permission change was needed. See the Pass 17 report for the command and the distinction from historical EPERM failures.
+
+## PASS 17 — END-TO-END FRONTEND WORKFLOWS AND FINAL INTEGRATION HANDOFF
+
+### Workflow audit and implementation
+
+- Read the 19-workflow Chapter 17 playbook and traced each journey to its frontend entry point, API family, prior route/DTO/response evidence, role/profile boundary and documented blocker. Final classifications: **1 supported viewing workflow complete within its documented non-paid scope; 17 end-to-end workflows partial; 1 internal private-file custody workflow intentionally has no first-batch user-facing screen.** No live journey was accepted.
+- Verified the current 41-blocker reconciliation row-by-row: **19 COMPLETE, 14 PARTIAL, 7 BLOCKED, 1 DEFERRED**. Pass 17's focused proxy changes do not close or reclassify these independent contract/product/configuration blockers. The older 18/15 count remains historical.
+- Corrected `ProxyWorkspace` mutation reporting to return an explicit success result. Failed message, evidence and dispute mutations preserve drafts; the UI clears them only after server success. Extracted participant loading so only the exact documented report-not-found 404 maps to an absent report; 403 and unrelated errors remain errors.
+- Added component, service and route-loader mock tests for all 11 formerly partial Chapter 16 response branches, plus failed evidence draft retention. Files: `src/components/proxyNetwork/ProxyWorkspace.tsx`, `src/components/proxyNetwork/ProxyWorkspace.pricing.test.tsx`, `src/services/proxyNetworkService.test.ts`, `src/features/proxyNetwork/loadParticipant.ts`, `src/pages/proxyNetwork/ProxyWorkspaces.tsx`, `src/pages/proxyNetwork/ProxyWorkspaces.test.tsx`.
+
+### Verification
+
+- Focused Vitest (bundled workspace Node, preserve-symlink options): `node.exe --preserve-symlinks --preserve-symlinks-main node_modules/vitest/vitest.mjs run --config vite.config.ts src/components/proxyNetwork/ProxyWorkspace.pricing.test.tsx src/services/proxyNetworkService.test.ts src/pages/proxyNetwork/ProxyWorkspaces.test.tsx --reporter=dot` — **3 files / 35 tests passed, exit 0**. No live API/provider calls. The earlier system-Node EPERM/false jsdom resolution remains recorded historically; `jsdom` is present and lockfile-matched.
+- TypeScript no-emit: `npx tsc --noEmit -p tsconfig.app.json` with `NODE_OPTIONS=--preserve-symlinks --preserve-symlinks-main` — exit 0.
+- Edited-file ESLint with `--max-warnings 0` and the same `NODE_OPTIONS` — exit 0, zero warnings.
+- `git diff --check` — **exit 0**, with only LF-to-CRLF working-copy notices.
+
+### Final handoff
+
+- [Pass 17 end-to-end workflow coverage](END_TO_END_FRONTEND_WORKFLOWS_PASS17.md) contains all 19 journeys and the 11 response-branch mapping.
+- [Final integration assessment](FIRST_BATCH_FRONTEND_INTEGRATION_FINAL_ASSESSMENT.md), [remaining blocker register](FIRST_BATCH_FRONTEND_REMAINING_BLOCKERS.md), and [staging acceptance plan](FIRST_BATCH_STAGING_ACCEPTANCE_PLAN.md) preserve source/mock/live evidence boundaries.
+- **Pass 17 verdict: PARTIAL.** The supported source paths and all 11 formerly uncovered response branches are locally verified. Unresolved contracts, product and configuration decisions, deployment gates, intentionally internal operations and lack of live acceptance prevent a COMPLETE verdict. **Readiness:** the frontend source is ready for authorized staged acceptance only after the scenario-specific prerequisites in the acceptance plan are evidenced; no production readiness is claimed.
+
+## Final first-batch integration status
+
+**Overall: PARTIAL.** Passes 01–17 have source-level integration reports, but the 41-item reconciliation still contains 14 partial, 7 blocked and 1 deferred item; Chapter 12 has 9 deployment tasks without evidence; and live-backend accepted workflows remain zero. See [the final assessment](FIRST_BATCH_FRONTEND_INTEGRATION_FINAL_ASSESSMENT.md), [blocker register](FIRST_BATCH_FRONTEND_REMAINING_BLOCKERS.md), and [staging acceptance plan](FIRST_BATCH_STAGING_ACCEPTANCE_PLAN.md). The numbered-pass history above is retained; this final status does not retroactively change earlier verdicts.
 - Pass 17 is ready to begin using the bounded response inventory and documented blockers; prioritize test assertions for M16-30, M16-33–34, and M16-37–44.

@@ -6,6 +6,24 @@ vi.mock('../lib/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 
 describe('staffAccessChangeService', () => {
   beforeEach(() => vi.clearAllMocks());
+  const change = { id: 'change-1', targetIdentityId: 'target-1', departments: ['finance'], state: 'pending', preparedBy: 'staff-1', version: 1 };
+
+  it.each([
+    ['documented bare array', [change]],
+    ['deployed changes envelope', { changes: [change] }],
+  ])('normalizes the %s queue response', async (_label, payload) => {
+    vi.mocked(api.get).mockResolvedValue({ data: payload } as never);
+
+    await expect(staffAccessChangeService.list()).resolves.toEqual([change]);
+    expect(api.get).toHaveBeenCalledWith('/admin/staff-access-changes');
+  });
+
+  it('rejects malformed rows instead of passing unsafe data to the UI', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { changes: [{ id: 'change-1' }] } } as never);
+
+    await expect(staffAccessChangeService.list()).rejects.toThrow(/returned an unsupported response/i);
+  });
+
   it('binds preparation and independent decisions to exact versioned routes', async () => {
     const change = { id: 'change-1', state: 'pending', version: 1 };
     vi.mocked(api.post).mockResolvedValue({ data: change } as never);

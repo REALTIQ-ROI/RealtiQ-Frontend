@@ -7,6 +7,7 @@ import type {
   ProxyInspectionDispute, ProxyInspectionReport, ProxyInspectionRequest, ProxyInspectorReview,
   ProxyPaymentVerificationResponse, ProxyRegistrationResponse, PublicInspectorFilters,
   PublicInspectorProfile, ReportSection, ReportRecommendation, RequestListResponse, RequestedService,
+  AdminKycContentAccess,
 } from '../types/proxyNetwork';
 
 const compact = <T extends object>(value: T) => Object.fromEntries(
@@ -16,6 +17,23 @@ const config = (signal?: AbortSignal): AxiosRequestConfig => ({ signal });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+export const normalizeAdminInspectorDocumentPath = (contentAccess: AdminKycContentAccess): string => {
+  if (contentAccess.status !== 'protected_route' || contentAccess.method !== 'GET') {
+    throw new Error('This document is not available through a protected viewer route.');
+  }
+  const path = contentAccess.path;
+  if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.includes('\\')) {
+    throw new Error('The protected document route is invalid.');
+  }
+  const parsed = new URL(path, 'https://realtiq.invalid');
+  if (parsed.origin !== 'https://realtiq.invalid' || parsed.search || parsed.hash) {
+    throw new Error('The protected document route is invalid.');
+  }
+  const match = parsed.pathname.match(/^\/(?:api\/)?documents\/private-migrations\/legacy-files\/([A-Za-z0-9_-]{1,128})\/content$/);
+  if (!match) throw new Error('The protected document route is invalid.');
+  return `/documents/private-migrations/legacy-files/${match[1]}/content`;
+};
 
 /** Evidence responses contain short-lived private URLs, so validate identity and access data at the boundary. */
 export const parseProxyEvidenceList = (value: unknown): ProxyEvidence[] => {
@@ -240,7 +258,18 @@ export const proxyNetworkService = {
     return [...first.inspectors, ...remaining.flatMap((page) => page.inspectors)];
   },
   async getAdminInspector(id: string, signal?: AbortSignal) {
-    const { data } = await api.get<AdminInspectorDetail>(`/admin/proxy-inspectors/${id}`, config(signal)); return data;
+    if (!id || id === 'undefined' || id === 'null') {
+      throw new Error('Property Agent profile ID is missing. Return to the review queue and reopen the record.');
+    }
+    const { data } = await api.get<AdminInspectorDetail>(`/admin/proxy-inspectors/${encodeURIComponent(id)}`, config(signal)); return data;
+  },
+  async fetchAdminInspectorDocument(contentAccess: AdminKycContentAccess, signal?: AbortSignal) {
+    const path = normalizeAdminInspectorDocumentPath(contentAccess);
+    const { data, headers } = await api.get<Blob>(path, { ...config(signal), responseType: 'blob' });
+    return {
+      blob: data,
+      contentType: String(headers['content-type'] || data.type || 'application/octet-stream'),
+    };
   },
   async reviewInspector(id: string, challengeId: string, input: AdminInspectorReviewInput) {
     const { data } = await api.patch(`/admin/proxy-inspectors/${id}/review`, input, {

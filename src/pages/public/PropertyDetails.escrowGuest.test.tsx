@@ -160,4 +160,19 @@ describe('public property escrow action for guests', () => {
     expect(screen.queryByRole('option', { name: /Virtual Paid/ })).not.toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Open House' })).toBeInTheDocument();
   });
+
+  it('renders the public property page when square footage is absent', () => {
+    currentProperty = { ...property, squareFeet: undefined };
+
+    render(
+      <MemoryRouter initialEntries={['/properties/RTQ-PROP-1']}>
+        <Routes>
+          <Route path="/properties/:id" element={<PropertyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Area unavailable')).toBeInTheDocument();
+    expect(screen.getByText('List Price')).toBeInTheDocument();
+  });
 });

@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
+import LoginSecondFactorForm from '../../../components/auth/LoginSecondFactorForm';
 
 const AdminLogin = () => {
   const navigate = useNavigate();
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, loginChallenge } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -14,8 +15,8 @@ const AdminLogin = () => {
     event.preventDefault();
     setError(null);
     try {
-      await login({ email, password, role: 'admin' });
-      void navigate('/dashboard/admin');
+      const user = await login({ email, password, role: 'admin' });
+      if (user) void navigate('/dashboard/admin');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to login. Please check your details.';
       setError(message);
@@ -87,7 +88,9 @@ const AdminLogin = () => {
             <p className="text-secondary font-body">Welcome back. Enter your credentials to manage the portfolio.</p>
           </div>
 
-          <form className="space-y-6" onSubmit={onSubmit}>
+          {loginChallenge ? (
+            <LoginSecondFactorForm challenge={loginChallenge} onSuccess={() => void navigate('/dashboard/admin')} />
+          ) : <form className="space-y-6" onSubmit={onSubmit}>
             <div className="space-y-4">
               {/* Email */}
               <div className="space-y-2">
@@ -178,7 +181,7 @@ const AdminLogin = () => {
                 </span>
               )}
             </button>
-          </form>
+          </form>}
 
           <div className="pt-8 border-t border-surface-container flex flex-col items-center gap-4">
             <p className="text-sm text-on-surface-variant">Authenticated access only.</p>

@@ -15,10 +15,11 @@ interface UsePropertiesOptions {
   initialFilters?: PropertyFiltersQuery | URLSearchParams;
   initialPage?: number;
   limit?: number;
+  onRecommendedUnavailable?: () => void;
 }
 
 export const useProperties = (options: UsePropertiesOptions = {}) => {
-  const { autoFetch = false, initialFilters = {}, initialPage = 1, limit = 10 } = options;
+  const { autoFetch = false, initialFilters = {}, initialPage = 1, limit = 10, onRecommendedUnavailable } = options;
   const [properties, setProperties] = useState<Property[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(initialPage);
@@ -29,6 +30,8 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
   const [facets, setFacets] = useState<unknown>(null);
   const [filters, setFilters] = useState<PropertyFiltersQuery | URLSearchParams>(initialFilters);
   const requestSequence = useRef(0);
+  const onRecommendedUnavailableRef = useRef(onRecommendedUnavailable);
+  onRecommendedUnavailableRef.current = onRecommendedUnavailable;
 
   const fetchProperties = useCallback(
     async (currentFilters: PropertyFiltersQuery | URLSearchParams = filters, currentPage = page) => {
@@ -55,8 +58,50 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
           setFacets(res.facets ?? null);
         }
       } catch (err) {
+        let requestError: unknown = err;
+        const requestedSort = currentFilters instanceof URLSearchParams
+          ? currentFilters.get('sort')
+          : currentFilters.sort;
+        if (requestId === requestSequence.current
+          && err instanceof ApiRequestError
+          && err.code === 'RECOMMENDED_WEIGHTS_UNCONFIGURED'
+          && (!requestedSort || requestedSort === 'recommended')) {
+          const fallbackFilters = currentFilters instanceof URLSearchParams
+            ? new URLSearchParams(currentFilters)
+            : { ...currentFilters };
+          if (fallbackFilters instanceof URLSearchParams) fallbackFilters.set('sort', 'newest');
+          else fallbackFilters.sort = 'newest';
+          setFilters(fallbackFilters);
+          onRecommendedUnavailableRef.current?.();
+
+          const fallbackRequestFilters = fallbackFilters instanceof URLSearchParams
+            ? new URLSearchParams(fallbackFilters)
+            : { ...fallbackFilters, page: currentPage, limit };
+          if (fallbackRequestFilters instanceof URLSearchParams) {
+            fallbackRequestFilters.set('page', String(currentPage));
+            fallbackRequestFilters.set('limit', String(limit));
+          }
+
+          try {
+            const res = await propertyService.getProperties(fallbackRequestFilters);
+            if (requestId === requestSequence.current) {
+              setProperties(res.properties);
+              setTotal(res.total);
+              setNotices([
+                ...(res.normalization?.notices ?? []),
+                'Recommended sorting is unavailable right now. Showing newest properties instead.',
+              ]);
+              setDiagnostics(res.diagnostics ?? null);
+              setFacets(res.facets ?? null);
+              setError(null);
+            }
+            return;
+          } catch (fallbackError) {
+            requestError = fallbackError;
+          }
+        }
         if (requestId === requestSequence.current) {
-          const message = err instanceof ApiRequestError && err.code ? `${err.message} (${err.code})` : err instanceof Error ? err.message : 'Failed to load properties.';
+          const message = requestError instanceof ApiRequestError && requestError.code ? `${requestError.message} (${requestError.code})` : requestError instanceof Error ? requestError.message : 'Failed to load properties.';
           setProperties([]);
           setTotal(0);
           setDiagnostics(null);

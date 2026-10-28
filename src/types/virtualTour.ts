@@ -117,9 +117,15 @@ export interface SafeMatterportConfiguration {
 }
 
 export interface AdminVirtualTourDetail {
-  property: { id: string; publicReference: string; title: string };
-  project: { id: string; name: string; slug: string } | null;
-  owner: { id: string; name: string; email: string } | null;
+  property: {
+    id: string;
+    publicReference: string;
+    title: string;
+    owner?: { id?: string; _id?: string; name?: string; email?: string } | null;
+    ownerId?: string | { id?: string; _id?: string; name?: string; email?: string } | null;
+  };
+  project: { id: string; name: string; slug: string; owner?: { id?: string; _id?: string; name?: string; email?: string } | null } | null;
+  owner?: { id?: string; _id?: string; name?: string; email?: string } | null;
   virtualTourProviderOverride: VirtualTourProvider | null;
   resolvedProvider: VirtualTourProvider | null;
   fallbackUsed: boolean;

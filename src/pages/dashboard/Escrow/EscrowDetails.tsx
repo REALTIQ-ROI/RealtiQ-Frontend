@@ -29,17 +29,18 @@ import {
   escrowErrorDetails,
   escrowService,
 } from '../../../services/escrowService';
+import { propertyService } from '../../../services/propertyService';
 import { propertyPublicReference } from '../../../types';
+import type { Property } from '../../../types';
 import { paymentService } from '../../../services/paymentService';
 import type {
   Escrow,
+  EscrowRule,
   SatisfyEscrowRuleResponse,
 } from '../../../types/escrow';
 import {
-  escrowBuyer,
   escrowPayment,
   escrowProperty,
-  escrowSeller,
   isRuleSatisfied,
   populated,
 } from '../../../types/escrow';
@@ -85,15 +86,41 @@ const actorName = (value: unknown) => {
   return actor?.name ?? (typeof value === 'string' ? 'Participant' : 'System');
 };
 
+const propertyLookupId = (escrow: Escrow): string | null => {
+  const references = [escrow.property, escrow.propertyId];
+  for (const reference of references) {
+    if (reference && typeof reference === 'object') {
+      const populatedReference = reference as { _id?: unknown; id?: unknown; publicReference?: unknown };
+      for (const candidate of [populatedReference._id, populatedReference.id, populatedReference.publicReference]) {
+        if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+      }
+    }
+  }
+  for (const reference of references) {
+    if (typeof reference === 'string' && reference.trim()) return reference.trim();
+  }
+  return null;
+};
+
+const escrowRuleIdentifier = (rule: EscrowRule): string | undefined => {
+  if (typeof rule._id === 'string' && rule._id.trim()) return rule._id;
+  if (typeof rule.id === 'string' && rule.id.trim()) return rule.id;
+  return undefined;
+};
+
 const EscrowDetails = () => {
-  const { id = '' } = useParams();
-  const { user } = useAuth();
+  const { id: routeId } = useParams();
+  const normalizedRouteId = routeId?.trim() ?? '';
+  const id = ['undefined', 'null', ':id'].includes(normalizedRouteId.toLowerCase())
+    ? ''
+    : normalizedRouteId;
+  const { user, activeProfile } = useAuth();
   const {
     data: escrow,
     loading,
     error,
     execute,
-  } = useAsync(() => escrowService.get(id), true);
+  } = useAsync(() => id ? escrowService.get(id) : Promise.resolve(null), Boolean(id), id);
   const [pending, setPending] = useState<string | null>(null);
   const [conflict, setConflict] = useState<string | null>(null);
   const [ruleEligibility, setRuleEligibility] = useState<Record<string, string>>(
@@ -109,12 +136,25 @@ const EscrowDetails = () => {
 
   const displayedRules = useMemo(() => {
     if (!escrow) return [];
+    const rules = Array.isArray(escrow.rules)
+      ? escrow.rules.filter((rule): rule is EscrowRule => Boolean(rule) && typeof rule === 'object')
+        .map((rule) => {
+          const ruleId = escrowRuleIdentifier(rule);
+          return ruleId && rule._id !== ruleId ? { ...rule, _id: ruleId } : rule;
+        })
+      : [];
     const updatedRule =
-      satisfactionUpdate?.escrow._id === escrow._id
+      satisfactionUpdate?.escrow?._id === escrow._id
         ? satisfactionUpdate.rule
         : null;
-    return (escrow.rules ?? [])
-      .map((rule) => (updatedRule?._id === rule._id ? updatedRule : rule))
+    const updatedRuleId = updatedRule ? escrowRuleIdentifier(updatedRule) : undefined;
+    return rules
+      .map((rule) => {
+        const ruleId = escrowRuleIdentifier(rule);
+        return updatedRule && updatedRuleId && ruleId === updatedRuleId
+          ? updatedRule
+          : rule;
+      })
       .map((rule, index) => ({ rule, index }))
       .sort((left, right) => {
         if (left.rule.sequence === undefined && right.rule.sequence === undefined) {
@@ -126,6 +166,10 @@ const EscrowDetails = () => {
       })
       .map(({ rule }) => rule);
   }, [escrow, satisfactionUpdate]);
+
+  const hasMalformedRules = Boolean(escrow && Object.prototype.hasOwnProperty.call(escrow, 'rules') && (
+    !Array.isArray(escrow.rules) || escrow.rules.some((rule) => !rule || typeof rule !== 'object' || !escrowRuleIdentifier(rule))
+  ));
 
   const displayedEscrow = useMemo(
     () => (escrow ? { ...escrow, rules: displayedRules } : null),
@@ -139,10 +183,46 @@ const EscrowDetails = () => {
       ? satisfactionUpdate.milestoneSummary
       : escrow?.milestoneSummary;
   const property = displayedEscrow ? escrowProperty(displayedEscrow) : null;
-  const buyer = displayedEscrow ? escrowBuyer(displayedEscrow) : null;
-  const seller = displayedEscrow ? escrowSeller(displayedEscrow) : null;
   const payment = displayedEscrow ? escrowPayment(displayedEscrow) : null;
-  const propertyReference = propertyPublicReference(property);
+  const buyerName = displayedEscrow?.participants?.buyer?.name?.trim() || null;
+  const sellerName = displayedEscrow?.participants?.seller?.name?.trim() || null;
+  const propertyId = displayedEscrow ? propertyLookupId(displayedEscrow) : null;
+  const propertyImage = property?.media?.find((media) =>
+    Boolean(media?.url) && media.type !== 'video' && media.resourceType !== 'video' &&
+    (media.type === 'image' || media.resourceType === 'image'),
+  );
+  const propertyHasImage = Boolean(propertyImage);
+  const propertyLookupKey = propertyId
+    ? `${user?._id ?? ''}:${activeProfile?.id ?? ''}:${propertyId}`
+    : null;
+  const [hydratedProperty, setHydratedProperty] = useState<{
+    key: string;
+    property: Property;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!propertyId || !propertyLookupKey || propertyHasImage) return;
+    let current = true;
+    void propertyService.getPropertyById(propertyId)
+      .then((result) => {
+        if (current) setHydratedProperty({ key: propertyLookupKey, property: result });
+      })
+      .catch(() => {
+        // Keep the safe media placeholder when the property projection is unavailable.
+      });
+    return () => { current = false; };
+  }, [propertyHasImage, propertyId, propertyLookupKey]);
+
+  const visibleProperty = propertyHasImage
+    ? property
+    : hydratedProperty?.key === propertyLookupKey
+      ? hydratedProperty.property
+      : property;
+  const visiblePropertyImage = visibleProperty?.media?.find((media) =>
+    Boolean(media?.url) && media.type !== 'video' && media.resourceType !== 'video' &&
+    (media.type === 'image' || media.resourceType === 'image'),
+  );
+  const propertyReference = propertyPublicReference(visibleProperty);
   useEffect(() => {
     if (displayedEscrow && escrowService.getPendingId() === displayedEscrow._id && escrowService.getPendingReference()) {
       setPaymentOutcomeUnknown(true);
@@ -269,7 +349,7 @@ const EscrowDetails = () => {
       title: 'Continue to secured payment?',
       text: `Paystack will charge the full escrow amount of ${formatEscrowMoney(
         displayedEscrow.amount,
-        displayedEscrow.currency ?? property?.currency,
+        displayedEscrow.currency ?? visibleProperty?.currency,
       )}. Milestone allocations do not split this funding transaction.`,
       icon: 'question',
       showCancelButton: true,
@@ -328,6 +408,21 @@ const EscrowDetails = () => {
     finally { setCheckingPaymentStatus(false); }
   };
 
+  if (!id) {
+    const listPath = user?.role === 'admin'
+      ? '/dashboard/admin/escrows'
+      : user?.role === 'landlord'
+        ? '/dashboard/landlord/escrows'
+        : '/dashboard/buyer/escrows';
+    return (
+      <EscrowRoleLayout title="Escrow Details">
+        <ErrorState message="This escrow link does not contain a valid escrow ID." />
+        <Link to={listPath} className="mt-3 inline-block font-bold text-primary hover:underline">
+          Back to escrows
+        </Link>
+      </EscrowRoleLayout>
+    );
+  }
   if (loading) {
     return (
       <EscrowRoleLayout title="Escrow Details">
@@ -347,7 +442,10 @@ const EscrowDetails = () => {
   }
 
   const refundEscrow = refundStatuses.includes(displayedEscrow.status);
-  const actions = escrowActions(user?.role ?? 'buyer', displayedEscrow);
+  const availableActions = escrowActions(user?.role ?? 'buyer', displayedEscrow);
+  const actions = hasMalformedRules
+    ? { ...availableActions, requestRelease: false, approveRelease: false }
+    : availableActions;
   const soldCancellation =
     displayedEscrow.status === 'cancelled' &&
     (displayedEscrow.logs ?? []).some((log) =>
@@ -381,6 +479,11 @@ const EscrowDetails = () => {
           {conflict}
         </div>
       ) : null}
+      {hasMalformedRules ? (
+        <div role="alert" className="mb-6 rounded-xl bg-amber-100 p-4 text-sm text-amber-900">
+          The server returned incomplete release-condition data. Refresh this escrow before requesting or approving a release.
+        </div>
+      ) : null}
       {soldCancellation ? (
         <div
           role="status"
@@ -397,8 +500,8 @@ const EscrowDetails = () => {
             <div className="flex flex-col gap-5 sm:flex-row">
               <div className="h-40 w-full overflow-hidden rounded-xl bg-surface-container-low sm:w-56">
                 <MediaPreview
-                  media={property?.media?.[0]}
-                  alt={property?.title ?? 'Property'}
+                  media={visiblePropertyImage}
+                  alt={visibleProperty?.title ?? 'Property'}
                   className="h-full w-full object-cover"
                 />
               </div>
@@ -406,10 +509,10 @@ const EscrowDetails = () => {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="text-xl font-bold">
-                      {property?.title ?? 'Property escrow'}
+                      {visibleProperty?.title ?? 'Property escrow'}
                     </h2>
                     <p className="text-sm text-secondary">
-                      {property?.location ?? 'Location unavailable'}
+                      {visibleProperty?.location ?? 'Location unavailable'}
                     </p>
                   </div>
                   <EscrowStatusBadge status={displayedEscrow.status} />
@@ -417,7 +520,7 @@ const EscrowDetails = () => {
                 <p className="mt-5 text-3xl font-black text-primary">
                   {formatEscrowMoney(
                     displayedEscrow.amount,
-                    displayedEscrow.currency ?? property?.currency,
+                    displayedEscrow.currency ?? visibleProperty?.currency,
                   )}
                 </p>
                 {propertyReference ? (
@@ -439,13 +542,13 @@ const EscrowDetails = () => {
                 <dt className="text-xs font-bold uppercase text-secondary">
                   Buyer
                 </dt>
-                <dd>{buyer?.name ?? '—'}</dd>
+                <dd>{buyerName ?? 'Buyer details unavailable'}</dd>
               </div>
               <div>
                 <dt className="text-xs font-bold uppercase text-secondary">
                   Seller
                 </dt>
-                <dd>{seller?.name ?? '—'}</dd>
+                <dd>{sellerName ?? 'Seller details unavailable'}</dd>
               </div>
               <div>
                 <dt className="text-xs font-bold uppercase text-secondary">
@@ -573,7 +676,7 @@ const EscrowDetails = () => {
                     <dd className="mt-1 font-bold">
                       {formatEscrowMoney(
                         milestoneSummary!.totalAllocated,
-                        displayedEscrow.currency ?? property?.currency,
+                        displayedEscrow.currency ?? visibleProperty?.currency,
                       )}
                     </dd>
                   </div>
@@ -584,7 +687,7 @@ const EscrowDetails = () => {
                     <dd className="mt-1 font-bold text-emerald-700">
                       {formatEscrowMoney(
                         milestoneSummary!.satisfiedAmount,
-                        displayedEscrow.currency ?? property?.currency,
+                        displayedEscrow.currency ?? visibleProperty?.currency,
                       )}
                     </dd>
                   </div>
@@ -595,7 +698,7 @@ const EscrowDetails = () => {
                     <dd className="mt-1 font-bold">
                       {formatEscrowMoney(
                         milestoneSummary!.remainingAmount,
-                        displayedEscrow.currency ?? property?.currency,
+                        displayedEscrow.currency ?? visibleProperty?.currency,
                       )}
                     </dd>
                   </div>
@@ -610,7 +713,8 @@ const EscrowDetails = () => {
               <div className="mt-6 space-y-3">
                 {displayedRules.map((rule, index) => {
                   const satisfied = isRuleSatisfied(rule);
-                  const eligibleAt = ruleEligibility[rule._id];
+                  const ruleId = escrowRuleIdentifier(rule);
+                  const eligibleAt = ruleId ? ruleEligibility[ruleId] : undefined;
                   const sequenceBlocked =
                     !satisfied &&
                     firstUnsatisfiedMilestoneIndex >= 0 &&
@@ -625,7 +729,7 @@ const EscrowDetails = () => {
                   );
                   return (
                     <article
-                      key={rule._id}
+                      key={ruleId ?? `rule-${index}`}
                       className="rounded-xl border border-outline-variant/20 p-4"
                     >
                       <div className="flex items-start gap-3">
@@ -648,7 +752,7 @@ const EscrowDetails = () => {
                             <p className="mt-2 text-sm font-black text-primary">
                               {formatEscrowMoney(
                                 rule.amount,
-                                displayedEscrow.currency ?? property?.currency,
+                                displayedEscrow.currency ?? visibleProperty?.currency,
                               )}
                             </p>
                           ) : null}
@@ -663,11 +767,11 @@ const EscrowDetails = () => {
                             </p>
                           ) : null}
                         </div>
-                        {canCurrentUserSatisfy ? (
+                        {canCurrentUserSatisfy && ruleId ? (
                           <button
                             type="button"
                             disabled={Boolean(pending) || sequenceBlocked}
-                            onClick={() => void satisfy(rule._id)}
+                            onClick={() => void satisfy(ruleId)}
                             className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             Satisfy

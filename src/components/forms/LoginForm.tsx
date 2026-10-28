@@ -2,6 +2,7 @@
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
+import LoginSecondFactorForm from '../auth/LoginSecondFactorForm';
 import type { UserRole } from '../../types';
 
 interface LoginFormProps {
@@ -12,7 +13,7 @@ interface LoginFormProps {
 }
 
 const LoginForm = ({ role, initialEmail = '', initialPassword = '', onSuccess }: LoginFormProps) => {
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, loginChallenge } = useAuth();
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState(initialPassword);
   const [error, setError] = useState<string | null>(null);
@@ -22,16 +23,20 @@ const LoginForm = ({ role, initialEmail = '', initialPassword = '', onSuccess }:
     setError(null);
 
     try {
-      await login({ email, password, role });
-      onSuccess?.();
+      const user = await login({ email, password, role });
+      if (user) onSuccess?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to login. Please check your details.';
       setError(message);
     }
   };
 
+  if (loginChallenge) {
+    return <LoginSecondFactorForm challenge={loginChallenge} onSuccess={() => onSuccess?.()} />;
+  }
+
   return (
-    <form className="space-y-5" onSubmit={onSubmit}>
+    <form className="space-y-5" onSubmit={(event) => void onSubmit(event)}>
       <Input id="email" label="Email Address" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
       <Input
         id="password"

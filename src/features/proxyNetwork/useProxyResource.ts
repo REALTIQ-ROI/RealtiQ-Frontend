@@ -14,27 +14,46 @@ export const useProxyResource = <T,>(
   const loaderRef = useRef(loader);
   const pollRef = useRef(options?.poll);
   const pollCountRef = useRef(0);
+  const activeControllerRef = useRef<AbortController | null>(null);
+  const requestVersionRef = useRef(0);
   loaderRef.current = loader;
   pollRef.current = options?.poll;
 
   const load = useCallback(async (silent = false) => {
+    activeControllerRef.current?.abort();
     const controller = new AbortController();
+    activeControllerRef.current = controller;
+    const requestVersion = ++requestVersionRef.current;
     if (silent) setRefreshing(true); else setLoading(true);
+    if (!silent) setData(null);
     setError(null);
     try {
       const next = await loaderRef.current(controller.signal);
-      setData(next);
+      if (!controller.signal.aborted && requestVersion === requestVersionRef.current) setData(next);
       return next;
     } catch (raw) {
-      if (!controller.signal.aborted) setError(raw instanceof Error ? raw : new Error('Unable to load this page.'));
+      if (!controller.signal.aborted && requestVersion === requestVersionRef.current) {
+        setError(raw instanceof Error ? raw : new Error('Unable to load this page.'));
+      }
       return null;
     } finally {
-      setLoading(false); setRefreshing(false);
+      if (requestVersion === requestVersionRef.current) {
+        activeControllerRef.current = null;
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => {
+      activeControllerRef.current?.abort();
+      activeControllerRef.current = null;
+      requestVersionRef.current += 1;
+    };
+  }, [load]);
   useEffect(() => {
     const refresh = () => void load(true);
     window.addEventListener(PROXY_DATA_CHANGED, refresh);

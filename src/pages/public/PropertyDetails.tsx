@@ -1396,7 +1396,9 @@ const PropertyDetails = () => {
                 {formatCurrency(property.price, currency)}
               </p>
               <p className='text-xs text-secondary'>
-                {property.squareFeet.toLocaleString()} sq ft
+                {typeof property.squareFeet === 'number' && Number.isFinite(property.squareFeet)
+                  ? `${property.squareFeet.toLocaleString()} sq ft`
+                  : 'Area unavailable'}
               </p>
               <div className='text-sm'>
                 Status:{' '}

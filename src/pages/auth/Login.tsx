@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import LoginSecondFactorForm from '../../components/auth/LoginSecondFactorForm';
 import type { UserRole } from '../../types';
 import { clearMarketAccessIntent, marketAuthPath, useMarketAccessIntent } from '../../hooks/useMarketAccessIntent';
 
@@ -27,7 +28,7 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { login, logout, isLoading } = useAuth();
+  const { login, logout, isLoading, loginChallenge } = useAuth();
   const marketRedirect = useMarketAccessIntent();
   const [role, setRole] = useState<Role>(searchParams.get('role') === 'proxy_inspector' ? 'proxy_inspector' : 'buyer');
   const [email, setEmail] = useState('');
@@ -41,34 +42,38 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
       ? requestedRedirect
       : null;
 
+  const finishLogin = (user: NonNullable<Awaited<ReturnType<typeof login>>>, loginRole: Role) => {
+    if (user.role !== loginRole) {
+      logout();
+      toast.error('You are attempting to log in through the wrong portal');
+      return;
+    }
+
+    toast.success('Login successful');
+    if (!purchaseMode && marketRedirect) {
+      clearMarketAccessIntent();
+      navigate(marketRedirect, { replace: true });
+      return;
+    }
+    const requested = (location.state as { redirectTo?: unknown } | null)?.redirectTo;
+    const safeRoleRedirect =
+      typeof requested === 'string' &&
+      requested.startsWith('/') &&
+      !requested.startsWith('//') &&
+      ((loginRole === 'buyer' && requested.startsWith('/buyer/proxy-inspections')) ||
+        (loginRole === 'proxy_inspector' && requested.startsWith('/proxy/')))
+        ? requested
+        : null;
+    navigate(purchaseMode ? buyerRedirect ?? '/checkout' : safeRoleRedirect ?? DASHBOARD_PATHS[user.role as Role] ?? '/dashboard');
+  };
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const loginRole: Role = purchaseMode ? 'buyer' : role;
     try {
       const user = await login({ email, password, role: loginRole });
-
-      if (user.role !== loginRole) {
-        logout();
-        toast.error('You are attempting to log in through the wrong portal');
-        return;
-      }
-
-      toast.success('Login successful');
-      if (!purchaseMode && marketRedirect) {
-        clearMarketAccessIntent();
-        navigate(marketRedirect, { replace: true });
-        return;
-      }
-      const requested = (location.state as { redirectTo?: unknown } | null)?.redirectTo;
-      const safeRoleRedirect =
-        typeof requested === 'string' &&
-        requested.startsWith('/') &&
-        !requested.startsWith('//') &&
-        ((loginRole === 'buyer' && requested.startsWith('/buyer/proxy-inspections')) ||
-          (loginRole === 'proxy_inspector' && requested.startsWith('/proxy/')))
-          ? requested
-          : null;
-      navigate(purchaseMode ? buyerRedirect ?? '/checkout' : safeRoleRedirect ?? DASHBOARD_PATHS[user.role as Role] ?? '/dashboard');
+      if (!user) return;
+      finishLogin(user, loginRole);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to login. Please check your details.';
       toast.error(message);
@@ -145,6 +150,12 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
               </p>
             </div>
 
+            {loginChallenge ? (
+              <LoginSecondFactorForm
+                challenge={loginChallenge}
+                onSuccess={(user) => finishLogin(user, purchaseMode ? 'buyer' : role)}
+              />
+            ) : <>
             {/* Role Tabs */}
             <div className="flex rounded-lg bg-surface-container-low p-1 mb-6">
               {(purchaseMode ? ROLES.filter(({ value }) => value === 'buyer') : ROLES).map(({ value, label }) => (
@@ -245,6 +256,7 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
                 Create one
               </Link>
             </p>
+            </>}
           </div>
         </div>
       </main>

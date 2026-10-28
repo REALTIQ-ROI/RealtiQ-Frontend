@@ -212,7 +212,7 @@ const ConversationPanel = ({
 }: {
   id: string;
   detail: ProxyInspectionDetail;
-  mutate: (actionName: PendingAction, fn: () => Promise<unknown>, success: string) => Promise<void>;
+  mutate: (actionName: PendingAction, fn: () => Promise<unknown>, success: string) => Promise<boolean>;
   busy?: boolean;
 }) => {
   const [text, setText] = useState("");
@@ -260,7 +260,9 @@ const ConversationPanel = ({
             "sendMessage",
             () => proxyNetworkService.sendMessage(id, text.trim()),
             "Message sent.",
-          ).then(() => setText(""));
+          ).then((succeeded) => {
+            if (succeeded) setText("");
+          });
         }}
       >
         <label className="sr-only" htmlFor="proxy-message">
@@ -369,7 +371,7 @@ const EvidenceGallery = ({
   id: string;
   evidence: ProxyEvidence[];
   canUpload: boolean;
-  mutate: (actionName: PendingAction, fn: () => Promise<unknown>, success: string) => Promise<void>;
+  mutate: (actionName: PendingAction, fn: () => Promise<unknown>, success: string) => Promise<boolean>;
   busy?: boolean;
 }) => {
   const [files, setFiles] = useState<File[]>([]);
@@ -462,7 +464,8 @@ const EvidenceGallery = ({
               "uploadEvidence",
               () => proxyNetworkService.uploadEvidence(id, files, captions),
               "Evidence uploaded.",
-            ).then(() => {
+            ).then((succeeded) => {
+              if (!succeeded) return;
               setFiles([]);
               setCaptions([]);
             });
@@ -1014,7 +1017,7 @@ const CompletionActions = ({
   id: string;
   detail: ProxyInspectionDetail;
   actions: ReturnType<typeof selectProxyActions>;
-  mutate: (actionName: PendingAction, fn: () => Promise<unknown>, success: string) => Promise<void>;
+  mutate: (actionName: PendingAction, fn: () => Promise<unknown>, success: string) => Promise<boolean>;
   busy?: boolean;
   draftVersion?: number;
 }) => {
@@ -1177,7 +1180,8 @@ const CompletionActions = ({
                   description.trim() || undefined,
                 ),
               "Dispute raised.",
-            ).then(() => {
+            ).then((succeeded) => {
+              if (!succeeded) return;
               setReason("");
               setDescription("");
             });
@@ -1361,23 +1365,38 @@ const ProxyWorkspace = ({
   const pending = pendingAction !== null;
   const isPending = (actionName: PendingAction) => pendingAction === actionName;
   const mutate = async (actionName: PendingAction, fn: () => Promise<unknown>, success: string) => {
-    if (pendingAction) return;
+    if (pendingAction) return false;
     setPendingAction(actionName);
     setMissing([]);
     try {
-      await fn();
+      try {
+        await fn();
+      } catch (raw) {
+        const err = raw instanceof Error ? raw : new Error("Action failed.");
+        toast.error(err.message);
+        if (raw instanceof ApiRequestError) {
+          const details = raw.details as { missing?: string[] } | undefined;
+          const missingItems = raw.missing || details?.missing;
+          if (missingItems?.length) setMissing(missingItems);
+          if ([409, 502].includes(raw.status || 0)) {
+            try {
+              await reload();
+            } catch {
+              toast.error("The latest inspection state could not be refreshed. Use Refresh latest state before reviewing or resubmitting.");
+            }
+          }
+        }
+        return false;
+      }
+
       toast.success(success);
       invalidateProxyData(requestId);
-      await reload();
-    } catch (raw) {
-      const err = raw instanceof Error ? raw : new Error("Action failed.");
-      toast.error(err.message);
-      if (raw instanceof ApiRequestError) {
-        const details = raw.details as { missing?: string[] } | undefined;
-        const missingItems = raw.missing || details?.missing;
-        if (missingItems?.length) setMissing(missingItems);
-        if ([409, 502].includes(raw.status || 0)) await reload();
+      try {
+        await reload();
+      } catch {
+        toast.error("The action was accepted, but the latest inspection state could not be refreshed. Use Refresh latest state before starting another action.");
       }
+      return true;
     } finally {
       setPendingAction(null);
     }

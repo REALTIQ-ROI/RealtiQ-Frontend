@@ -137,3 +137,11 @@ Pass 15 reported 11 files/62 assertions passing but overall Vitest exit code 1 w
 ## P. Readiness for Pass 17
 
 Pass 17 can proceed with the corrected error-field preservation and staff step-up paths. It should use the explicitly limited 45-row Chapter 16 matrix and the mounted index/feature chapters for the broader route count; it must not call the 45-row matrix exhaustive. First follow-up priority is focused tests for the 11 partial rows, then an authorized staging acceptance plan. No live backend/provider result is claimed.
+
+## Pass 17 response-branch test addendum — 26 October 2026
+
+Pass 17 added dedicated branch assertions for **all 11** consumer rows previously marked partial: M16-30, M16-33–34 and M16-37–44. The row-level mapping is in [the Pass 17 workflow report](END_TO_END_FRONTEND_WORKFLOWS_PASS17.md). Current bounded Chapter 16 coverage is therefore **28 of 28 first-batch consumer rows with focused mock evidence** and **17 operational/internal rows intentionally unused**. This addendum updates current test evidence only; it does not rewrite the historical Pass 16 verdict or claim live acceptance.
+
+The Pass 15/16 Windows Vitest resolver issue was investigated without package or permission changes. `jsdom@29.1.1` is declared, lockfile-consistent and installed. A focused run using the bundled workspace Node executable directly, with `--preserve-symlinks --preserve-symlinks-main`, completed **3 files / 35 tests, exit 0**. Standard system-Node runs that hit `EPERM` and the misleading `MISSING DEPENDENCY jsdom` remain historical unsuccessful invocations; the bundled-runtime command is the clean focused path used in Pass 17.
+
+Pass 17 did not broaden Chapter 16's representative matrix into a route-exhaustive response contract. The 17 internal/custody rows still have no first-batch user-facing consumer, and cross-chapter contract, configuration, deployment and live-acceptance dependencies remain open.

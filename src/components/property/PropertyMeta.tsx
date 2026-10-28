@@ -1,6 +1,10 @@
 ﻿import type { Property } from '../../types';
 
 const PropertyMeta = ({ property }: { property: Property }) => {
+  const squareFeet = typeof property.squareFeet === 'number' && Number.isFinite(property.squareFeet)
+    ? property.squareFeet.toLocaleString()
+    : '—';
+
   return (
     <div className="flex flex-wrap gap-8 py-6 border-y border-outline-variant/20">
       <div>
@@ -13,7 +17,7 @@ const PropertyMeta = ({ property }: { property: Property }) => {
       </div>
       <div>
         <p className="text-xs uppercase tracking-wider text-secondary">Total Area</p>
-        <p className="font-bold">{property.squareFeet.toLocaleString()} sq ft</p>
+        <p className="font-bold">{squareFeet} sq ft</p>
       </div>
       <div>
         <p className="text-xs uppercase tracking-wider text-secondary">Type</p>

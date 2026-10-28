@@ -12,7 +12,6 @@ import { projectService, type ProjectPropertiesResponse } from '../../services/p
 import { isProjectPublished } from '../../utils/projectPublication';
 import { readCatalogueQuery, writeCatalogueQuery } from '../../utils/catalogueQuery';
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
-import { summarizeCatalogueFacets } from '../../utils/catalogueFacets';
 
 const PAGE_SIZE = 20;
 const pageFromQuery = (params: URLSearchParams) => {
@@ -35,9 +34,11 @@ const ProjectProperties = () => {
   const queryKey = searchParams.toString();
   const page = pageFromQuery(searchParams);
   const [data, setData] = useState<ProjectPropertiesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [requestState, setRequestState] = useState<{ key: string; error: string | null } | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const requestKey = JSON.stringify([slug, queryKey, page, refreshVersion]);
+  const loading = requestState?.key !== requestKey;
+  const error = requestState?.key === requestKey ? requestState.error ?? '' : '';
 
   useEffect(() => {
     if (!slug) return;
@@ -46,21 +47,27 @@ const ProjectProperties = () => {
     query.set('page', String(page));
     query.set('limit', String(PAGE_SIZE));
     query.set('queryVersion', 'canonical-v1');
-    setLoading(true);
-    setError('');
     void projectService.getProjectProperties(slug, query, controller.signal)
-      .then((response) => { if (!controller.signal.aborted) setData(response); })
-      .catch((raw: unknown) => { if (!controller.signal.aborted) setError(raw instanceof ApiRequestError && raw.code ? `${raw.message} (${raw.code})` : raw instanceof Error ? raw.message : 'Unable to load project units.'); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+      .then((response) => {
+        if (!controller.signal.aborted) {
+          setData(response);
+          setRequestState({ key: requestKey, error: null });
+        }
+      })
+      .catch((raw: unknown) => {
+        if (!controller.signal.aborted) {
+          const message = raw instanceof ApiRequestError && raw.code ? `${raw.message} (${raw.code})` : raw instanceof Error ? raw.message : 'Unable to load project units.';
+          setRequestState({ key: requestKey, error: message });
+        }
+      });
     return () => controller.abort();
-  }, [slug, queryKey, page, refreshVersion]);
+  }, [slug, queryKey, page, refreshVersion, requestKey]);
 
   const project = data?.project;
   const projectIsPublic = project ? isProjectPublished(project) : true;
   const properties = projectIsPublic ? data?.properties ?? [] : [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const facets = summarizeCatalogueFacets(data?.facets);
   const applyFilters = (changes: Parameters<typeof writeCatalogueQuery>[0], clearAll = false) => setSearchParams(writeCatalogueQuery(changes, { base: searchParams, resetPage: true, clearAll }));
   const clearFilterChip = (key: string, index: number) => setSearchParams(removeCatalogueFilterChip(searchParams, { key, index }));
   const changePage = (nextPage: number) => {
@@ -80,7 +87,7 @@ const ProjectProperties = () => {
       </header>
       <div className="-mx-4 mb-5 sm:-mx-8"><PropertyFiltersPanel key={queryKey} initialFilters={readCatalogueQuery(searchParams)} initialQuery={searchParams} activeProfile={activeProfile} onApply={applyFilters} /></div>
       <div className="-mx-4 sm:-mx-8"><ActiveCatalogueFilters params={searchParams} onClear={clearFilterChip} /></div>
-      <div className="my-5 flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-secondary">{total.toLocaleString()} units</p>{facets ? <p className="mt-1 text-xs text-secondary">Available facets: {facets}</p> : null}</div><button type="button" onClick={() => setRefreshVersion((version) => version + 1)} className="text-sm font-bold text-primary">Refresh</button></div>
+      <div className="my-5 flex items-center justify-between gap-3"><p className="text-sm font-semibold text-secondary">{total.toLocaleString()} units</p><button type="button" onClick={() => setRefreshVersion((version) => version + 1)} className="text-sm font-bold text-primary">Refresh</button></div>
       {data?.normalization?.notices?.length ? <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{data.normalization.notices.map((notice, index) => <p key={`unit-search-notice-${index}`}>{noticeText(notice) || 'The server normalized this search.'}</p>)}</div> : null}
       {loading && !properties.length ? <LoadingState label="Loading project units..." /> : null}
       {error ? <ErrorState message={error} onRetry={() => setRefreshVersion((version) => version + 1)} /> : null}

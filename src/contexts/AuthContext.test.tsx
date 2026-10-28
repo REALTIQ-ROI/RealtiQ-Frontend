@@ -6,7 +6,10 @@ import { authService } from '../services/authService';
 import { profileService, type AccountProfileSummary } from '../services/profileService';
 import type { User } from '../types';
 
-vi.mock('../services/authService', () => ({ authService: { account: vi.fn(), login: vi.fn(), register: vi.fn(), logout: vi.fn() } }));
+vi.mock('../services/authService', () => ({
+  isLoginSecondFactorChallenge: (response: { code?: string }) => response.code === 'AUTH_SECOND_FACTOR_REQUIRED',
+  authService: { account: vi.fn(), login: vi.fn(), completeLoginSecondFactor: vi.fn(), register: vi.fn(), logout: vi.fn() },
+}));
 vi.mock('../services/profileService', () => ({ profileService: { list: vi.fn(), current: vi.fn() } }));
 vi.mock('../services/userService', () => ({ userService: { fetchUserById: vi.fn() } }));
 
@@ -86,5 +89,73 @@ describe('AuthProvider account and profile lifecycle', () => {
     expect(localStorage.getItem('activeProfileId')).toBeNull();
     expect(result.current.activeProfile).toBeNull();
     expect(result.current.isAuthenticated).toBe(false);
+  });
+
+  it('keeps a second-factor challenge ephemeral and persists a session only after verification succeeds', async () => {
+    const challenge = {
+      code: 'AUTH_SECOND_FACTOR_REQUIRED',
+      challengeId: 'login-challenge-1',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      method: 'totp',
+    } as const;
+    const authenticated = { user: account, token: 'verified-session-token' };
+    vi.mocked(authService.login).mockResolvedValueOnce(challenge);
+    vi.mocked(authService.completeLoginSecondFactor).mockResolvedValueOnce(authenticated as never);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => {
+      await expect(result.current.login({ email: account.email, password: 'password' })).resolves.toBeNull();
+    });
+
+    expect(result.current.loginChallenge).toEqual(challenge);
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(localStorage.getItem('user')).toBeNull();
+    expect(sessionStorage.length).toBe(0);
+
+    await act(async () => {
+      await result.current.completeLoginSecondFactor('123456');
+    });
+
+    expect(authService.completeLoginSecondFactor).toHaveBeenCalledWith('login-challenge-1', '123456');
+    expect(localStorage.getItem('token')).toBe('verified-session-token');
+    expect(JSON.parse(localStorage.getItem('user') ?? 'null')).toEqual(account);
+    expect(result.current.loginChallenge).toBeNull();
+  });
+
+  it('preserves an active challenge after an invalid code without creating a session', async () => {
+    const challenge = {
+      code: 'AUTH_SECOND_FACTOR_REQUIRED',
+      challengeId: 'login-challenge-2',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      method: 'totp',
+    } as const;
+    vi.mocked(authService.login).mockResolvedValueOnce(challenge);
+    vi.mocked(authService.completeLoginSecondFactor).mockRejectedValueOnce(new Error('The verification code is invalid or already used.'));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => { await result.current.login({ email: account.email, password: 'password' }); });
+    await act(async () => {
+      await expect(result.current.completeLoginSecondFactor('000000')).rejects.toThrow('invalid or already used');
+    });
+
+    expect(result.current.loginChallenge).toEqual(challenge);
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(localStorage.getItem('user')).toBeNull();
+  });
+
+  it('does not submit an expired login challenge', async () => {
+    vi.mocked(authService.login).mockResolvedValueOnce({
+      code: 'AUTH_SECOND_FACTOR_REQUIRED',
+      challengeId: 'expired-challenge',
+      expiresAt: new Date(Date.now() - 1000).toISOString(),
+      method: 'totp',
+    });
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => { await result.current.login({ email: account.email, password: 'password' }); });
+    await act(async () => {
+      await expect(result.current.completeLoginSecondFactor('123456')).rejects.toThrow('challenge has expired');
+    });
+    expect(authService.completeLoginSecondFactor).not.toHaveBeenCalled();
+    expect(result.current.loginChallenge).toBeNull();
   });
 });

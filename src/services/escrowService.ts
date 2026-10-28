@@ -23,10 +23,17 @@ import type {
 const ESCROW_ID_KEY = 'realtiq.pendingEscrowId';
 const ESCROW_REFERENCE_KEY = 'realtiq.pendingEscrowReference';
 
+const normalizeEscrowId = (escrow: Escrow): Escrow => {
+  if (typeof escrow._id === 'string' && escrow._id.trim()) return escrow;
+  return typeof escrow.id === 'string' && escrow.id.trim()
+    ? { ...escrow, _id: escrow.id }
+    : escrow;
+};
+
 export const escrowService = {
   async create(payload: CreateEscrowPayload): Promise<Escrow> { return (await api.post<Escrow>('/escrow', payload)).data; },
-  async list(): Promise<Escrow[]> { return (await api.get<Escrow[]>('/escrow')).data; },
-  async get(id: string): Promise<Escrow> { return (await api.get<Escrow>(`/escrow/${id}`)).data; },
+  async list(): Promise<Escrow[]> { return (await api.get<Escrow[]>('/escrow')).data.map(normalizeEscrowId); },
+  async get(id: string): Promise<Escrow> { return normalizeEscrowId((await api.get<Escrow>(`/escrow/${id}`)).data); },
   async initializePayment(id: string, challengeId: string): Promise<InitializeEscrowPaymentResponse> {
     try {
       const data = (await api.post<InitializeEscrowPaymentResponse>('/payments/initialize', { escrowId: id }, {

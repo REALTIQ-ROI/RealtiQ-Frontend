@@ -2,12 +2,20 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { AxiosAdapter, AxiosError } from 'axios';
 import api, { ApiRequestError, normalizeApiError, retryAfterDelayMs } from './axios';
 
-const responseError = (status: number, data: unknown, headers: Record<string, string> = {}): AxiosError<unknown> => ({
-  name: 'AxiosError',
-  message: 'Request failed',
-  config: {} as AxiosError['config'],
-  response: { status, data, headers, statusText: '', config: {} as AxiosError['config'] },
-} as AxiosError<unknown>);
+const responseError = (
+  status: number,
+  data: unknown,
+  headers: Record<string, string> = {},
+  requestHeaders: Record<string, string> = {},
+): AxiosError<unknown> => {
+  const config = { headers: requestHeaders } as AxiosError['config'];
+  return {
+    name: 'AxiosError',
+    message: 'Request failed',
+    config,
+    response: { status, data, headers, statusText: '', config },
+  } as AxiosError<unknown>;
+};
 
 describe('API profile context', () => {
   afterEach(() => localStorage.clear());
@@ -106,7 +114,7 @@ describe('API error normalization', () => {
     expect(unavailable.message).not.toMatch(/temporarily unavailable/i);
   });
 
-  it('does not log out on permission denial, but dispatches session cleanup for 401', () => {
+  it('dispatches session cleanup only when an authenticated request returns 401', () => {
     let expirations = 0;
     const onExpired = () => { expirations += 1; };
     window.addEventListener('realtiq:session-expired', onExpired);
@@ -114,6 +122,8 @@ describe('API error normalization', () => {
       normalizeApiError(responseError(403, { message: 'Permission denied.', code: 'PERMISSION_PROFILE_REQUIRED' }));
       expect(expirations).toBe(0);
       normalizeApiError(responseError(401, { code: 'AUTH_SESSION_REQUIRED' }));
+      expect(expirations).toBe(0);
+      normalizeApiError(responseError(401, { code: 'AUTH_SESSION_REQUIRED' }, {}, { Authorization: 'Bearer expired-token' }));
       expect(expirations).toBe(1);
     } finally {
       window.removeEventListener('realtiq:session-expired', onExpired);

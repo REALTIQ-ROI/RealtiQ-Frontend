@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import StepUpDialog from "../../components/auth/StepUpDialog";
@@ -6,11 +6,10 @@ import AdminLayout from "../../components/layout/AdminLayout";
 import AdminKycMediaViewer from "../../components/proxyNetwork/AdminKycMediaViewer";
 import AgentApprovalModal from "../../components/proxyNetwork/AgentApprovalModal";
 import ActionTextModal from "../../components/proxyNetwork/ActionTextModal";
-import SecureImageThumbnail from "../../components/proxyNetwork/SecureImageThumbnail";
 import ErrorState from "../../components/ui/ErrorState";
 import LoadingState from "../../components/ui/LoadingState";
 import { useBoundStepUp } from "../../hooks/useBoundStepUp";
-import { formatLabel } from "../../features/proxyNetwork/config";
+import { adminInspectorProfileId, formatLabel } from "../../features/proxyNetwork/config";
 import {
   getKycMediaKind,
   readableKycFileType,
@@ -18,10 +17,22 @@ import {
 import { useProxyResource } from "../../features/proxyNetwork/useProxyResource";
 import { proxyNetworkService } from "../../services/proxyNetworkService";
 import type {
+  AdminKycContentAccess,
   AdminInspectorFilters,
   ProfessionalType,
   VerificationStatus,
 } from "../../types/proxyNetwork";
+
+const formatAdminDate = (value?: string | null) => value ? new Date(value).toLocaleString() : "—";
+
+const formatAdminMoney = (amount?: number, currency?: string) => {
+  if (typeof amount !== "number" || !Number.isFinite(amount) || !currency) return "—";
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount);
+  } catch {
+    return `${currency} ${amount.toLocaleString()}`;
+  }
+};
 
 export const AdminInspectorList = () => {
   const [params, setParams] = useSearchParams();
@@ -287,15 +298,18 @@ export const AdminInspectorList = () => {
               {resource.data?.inspectors.map((profile) => {
                 const user =
                   typeof profile.user === "string" ? null : profile.user;
+                const profileId = adminInspectorProfileId(profile);
                 return (
-                  <tr key={profile._id} className="border-b">
+                  <tr key={profileId ?? `missing-profile-id-${user?._id ?? user?.name ?? "unknown"}`} className="border-b">
                     <td className="p-4">
-                      <Link
-                        to={`/admin/proxy-inspectors/${profile._id}`}
-                        className="font-bold underline"
-                      >
-                        {user?.name || "Inspector"}
-                      </Link>
+                      {profileId ? (
+                        <Link to={`/admin/proxy-inspectors/${encodeURIComponent(profileId)}`} className="font-bold underline">
+                          {user?.name || "Inspector"}
+                        </Link>
+                      ) : (
+                        <span className="font-bold">{user?.name || "Inspector"}</span>
+                      )}
+                      {!profileId ? <p role="status" className="mt-1 text-xs text-error">Profile details are unavailable because this record has no profile ID.</p> : null}
                       <p className="text-xs text-secondary">{user?.email}</p>
                     </td>
                     <td className="p-4">
@@ -356,8 +370,11 @@ export const AdminInspectorList = () => {
 
 export const AdminInspectorDetailPage = () => {
   const { profileId = "" } = useParams();
+  const validProfileId = Boolean(profileId && profileId !== "undefined" && profileId !== "null");
   const resource = useProxyResource(
-    (signal) => proxyNetworkService.getAdminInspector(profileId, signal),
+    (signal) => validProfileId
+      ? proxyNetworkService.getAdminInspector(profileId, signal)
+      : Promise.reject(new Error("The selected Property Agent profile ID is missing. Return to the review queue and open the record again.")),
     [profileId],
   );
   const stepUp = useBoundStepUp<unknown>();
@@ -365,10 +382,18 @@ export const AdminInspectorDetailPage = () => {
   const [pending, setPending] = useState(false);
   const [protectedActionLabel, setProtectedActionLabel] = useState("Property Agent decision");
   const [preview, setPreview] = useState<{
+    profileId: string;
+    requestVersion: number;
     title: string;
     url: string;
     mimeType?: string;
   } | null>(null);
+  const [nationalIdRevealProfileId, setNationalIdRevealProfileId] = useState<string | null>(null);
+  const [documentLoadingKey, setDocumentLoadingKey] = useState<string | null>(null);
+  const [documentError, setDocumentError] = useState("");
+  const privateObjectUrlRef = useRef<string | null>(null);
+  const privateContentControllerRef = useRef<AbortController | null>(null);
+  const documentRequestVersionRef = useRef(0);
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [textAction, setTextAction] = useState<{
@@ -384,6 +409,72 @@ export const AdminInspectorDetailPage = () => {
     cancelStepUp();
     return () => cancelStepUp();
   }, [profileId, cancelStepUp]);
+  useEffect(() => () => {
+    documentRequestVersionRef.current += 1;
+    privateContentControllerRef.current?.abort();
+    privateContentControllerRef.current = null;
+    if (privateObjectUrlRef.current) URL.revokeObjectURL(privateObjectUrlRef.current);
+    privateObjectUrlRef.current = null;
+  }, [profileId]);
+  useEffect(() => {
+    setNationalIdRevealProfileId(null);
+    setDocumentError("");
+    setDocumentLoadingKey(null);
+  }, [profileId]);
+
+  const closePrivateDocument = () => {
+    documentRequestVersionRef.current += 1;
+    privateContentControllerRef.current?.abort();
+    privateContentControllerRef.current = null;
+    if (privateObjectUrlRef.current) URL.revokeObjectURL(privateObjectUrlRef.current);
+    privateObjectUrlRef.current = null;
+    setPreview(null);
+  };
+
+  const openPrivateDocument = async (
+    key: string,
+    title: string,
+    access: AdminKycContentAccess | undefined,
+    fallbackMimeType?: string,
+  ) => {
+    if (!access || access.status !== "protected_route" || access.method !== "GET") return;
+    privateContentControllerRef.current?.abort();
+    const controller = new AbortController();
+    privateContentControllerRef.current = controller;
+    const requestVersion = ++documentRequestVersionRef.current;
+    const requestedProfileId = profileId;
+    setDocumentError("");
+    setDocumentLoadingKey(key);
+    try {
+      const result = await proxyNetworkService.fetchAdminInspectorDocument(access, controller.signal);
+      if (controller.signal.aborted || requestVersion !== documentRequestVersionRef.current) return;
+      const contentType = result.contentType || fallbackMimeType || "application/octet-stream";
+      const objectUrl = URL.createObjectURL(new Blob([result.blob], { type: contentType }));
+      if (privateObjectUrlRef.current) URL.revokeObjectURL(privateObjectUrlRef.current);
+      privateObjectUrlRef.current = objectUrl;
+      setPreview({ profileId: requestedProfileId, requestVersion, title, url: objectUrl, mimeType: contentType });
+    } catch (error) {
+      if (!controller.signal.aborted && requestVersion === documentRequestVersionRef.current) {
+        setDocumentError(error instanceof Error ? error.message : "The protected document could not be loaded.");
+      }
+    } finally {
+      if (requestVersion === documentRequestVersionRef.current) {
+        privateContentControllerRef.current = null;
+        setDocumentLoadingKey(null);
+      }
+    }
+  };
+
+  if (!validProfileId) {
+    return (
+      <AdminLayout>
+        <main className="mx-auto max-w-6xl px-4 py-12 sm:px-8">
+          <ErrorState message="This Property Agent link does not contain a valid profile ID. Return to the review queue and reopen the record." />
+          <Link to="/admin/proxy-inspectors" className="font-bold underline">Return to review queue</Link>
+        </main>
+      </AdminLayout>
+    );
+  }
 
   const beginReview = async (body: { decision: "approve"; notes: string } | { decision: "reject"; reason: string }) => {
     const path = `/api/admin/proxy-inspectors/${encodeURIComponent(profileId)}/review`;
@@ -437,7 +528,8 @@ export const AdminInspectorDetailPage = () => {
       setPending(false);
     }
   };
-  if (resource.loading)
+  const detailMatchesRoute = resource.data?.profile?._id === profileId;
+  if (resource.loading || (resource.data && !detailMatchesRoute))
     return (
       <AdminLayout>
         <LoadingState />
@@ -451,7 +543,7 @@ export const AdminInspectorDetailPage = () => {
         </div>
       </AdminLayout>
     );
-  if (resource.error || !resource.data)
+  if (resource.error || !resource.data || !detailMatchesRoute)
     return (
       <AdminLayout>
         <ErrorState
@@ -462,12 +554,14 @@ export const AdminInspectorDetailPage = () => {
     );
   const { profile } = resource.data;
   const user = typeof profile.user === "string" ? null : profile.user;
-  const kyc = user?.kyc;
+  const kyc = user?.kyc ?? profile.kyc;
   const profileImage =
     profile.profileImageUrl ||
     profile.profilePhoto?.accessUrl;
-  const idDocumentUrl = kyc?.idDocumentAccessUrl;
-  const selfieUrl = kyc?.selfieAccessUrl;
+  const privateDocuments = [
+    { key: "idDocument", label: "Identity document", document: kyc?.privateDocuments?.idDocument, mimeType: "application/octet-stream" },
+    { key: "selfie", label: "KYC selfie", document: kyc?.privateDocuments?.selfie, mimeType: "image/jpeg" },
+  ];
   const reject = () =>
     setTextAction({
       title: "Reject Property Agent",
@@ -519,13 +613,16 @@ export const AdminInspectorDetailPage = () => {
                     {formatLabel(profile.verificationStatus)}
                   </p>
                   <h1 className="mt-2 text-3xl font-black">
-                    {user?.name || "RealtIQ Verified Property Agent"}
+                    {profile.name || user?.name || "Property Agent"}
                   </h1>
                   <p className="mt-2 text-secondary">
-                    {user?.email} · {user?.phone}
+                    Email: {user?.email || "—"} · Phone: {user?.phone || "—"}
+                  </p>
+                  <p className="mt-1 text-sm text-secondary">
+                    Account: {formatLabel(user?.accountStatus)} · Role: {formatLabel(user?.role)} · Email {user?.emailVerified ? "verified" : "unverified"} · Phone {user?.phoneVerified ? "verified" : "unverified"}
                   </p>
                   <p className="mt-3">
-                    {formatLabel(profile.professionalType)} ·{" "}
+                    {profile.professionalTitle || formatLabel(profile.professionalType)} · {formatLabel(profile.professionalType)} ·{" "}
                     {[profile.location?.city, profile.location?.state]
                       .filter(Boolean)
                       .join(", ")}
@@ -538,6 +635,36 @@ export const AdminInspectorDetailPage = () => {
               </div>
             </section>
             <section className="rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-xl font-black">Professional profile and account</h2>
+              <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div><dt className="text-xs font-bold text-secondary">Profile ID</dt><dd className="break-all">{profile._id}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Profile ID alias</dt><dd className="break-all">{profile.id || "—"}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Account ID</dt><dd className="break-all">{user?._id || "—"}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Professional title</dt><dd>{profile.professionalTitle || "—"}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Years of experience</dt><dd>{profile.yearsOfExperience ?? "—"}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Availability</dt><dd>{formatLabel(profile.availabilityStatus)}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Rating</dt><dd>{profile.ratingAverage ?? "—"} ({profile.ratingCount ?? 0} ratings)</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Completed jobs</dt><dd>{profile.completedJobs ?? "—"}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Response rate</dt><dd>{profile.responseRate == null ? "—" : `${profile.responseRate}%`}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Location</dt><dd>{[profile.location?.city, profile.location?.state, profile.location?.country].filter(Boolean).join(", ") || "—"}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Coordinates</dt><dd>{profile.location?.coordinates ? `${profile.location.coordinates.lat ?? "—"}, ${profile.location.coordinates.lng ?? "—"}` : "—"}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Created</dt><dd>{formatAdminDate(profile.createdAt)}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Updated</dt><dd>{formatAdminDate(profile.updatedAt)}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Submitted</dt><dd>{formatAdminDate(profile.submittedAt)}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Reviewed</dt><dd>{formatAdminDate(profile.reviewedAt)}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Approved</dt><dd>{formatAdminDate(profile.approvedAt)}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Suspended</dt><dd>{formatAdminDate(profile.suspendedAt)}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Account created</dt><dd>{formatAdminDate(user?.createdAt)}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Account updated</dt><dd>{formatAdminDate(user?.updatedAt)}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Profile verification</dt><dd>{formatLabel(profile.verificationStatus)}</dd></div>
+              </dl>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div><h3 className="text-xs font-bold text-secondary">Specialties</h3><p className="mt-1">{profile.specialties?.length ? profile.specialties.join(", ") : "—"}</p></div>
+                <div><h3 className="text-xs font-bold text-secondary">Service areas</h3><p className="mt-1">{profile.serviceAreas?.length ? profile.serviceAreas.join(", ") : "—"}</p></div>
+              </div>
+              <div className="mt-4"><h3 className="text-xs font-bold text-secondary">Professional bio</h3><p className="mt-1 whitespace-pre-wrap">{profile.bio || "—"}</p></div>
+            </section>
+            <section className="rounded-2xl bg-white p-6 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-xl font-black">
                   Identity and KYC — Admin only
@@ -547,154 +674,66 @@ export const AdminInspectorDetailPage = () => {
                   onClick={() => void resource.reload()}
                   className="rounded-lg bg-surface-container-low px-4 py-2 text-xs font-bold"
                 >
-                  Refresh secure URLs
+                  Refresh profile and KYC details
                 </button>
               </div>
               <p className="mt-2 text-xs text-secondary">
-                Secure document URLs are fetched when this page opens and are
-                kept only in this page’s memory.
+                KYC details are shown only in this authorized staff view. Document bytes and provider URLs are not included in this response; protected files are fetched on demand through the authenticated viewer route.
               </p>
-              <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+              {!kyc ? (
+                <p role="status" className="mt-3 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">
+                  The admin Property Agent detail response did not include KYC details for this profile.
+                </p>
+              ) : null}
+              {documentError ? <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{documentError}</p> : null}
+              <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div>
-                  <dt className="text-xs font-bold text-secondary">
-                    Legal name
-                  </dt>
+                  <dt className="text-xs font-bold text-secondary">Legal name</dt>
                   <dd>{kyc?.fullLegalName || "—"}</dd>
                 </div>
+                <div><dt className="text-xs font-bold text-secondary">KYC status</dt><dd>{formatLabel(kyc?.status)}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">KYC route</dt><dd>{formatLabel(kyc?.route)}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Address</dt><dd>{kyc?.address || "—"}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">KYC phone</dt><dd>{kyc?.phone || "—"}</dd></div>
                 <div>
-                  <dt className="text-xs font-bold text-secondary">
-                    KYC status
-                  </dt>
-                  <dd>{formatLabel(kyc?.status)}</dd>
+                  <dt className="text-xs font-bold text-secondary">National ID</dt>
+                  <dd className="flex flex-wrap items-center gap-2">
+                    <span>{kyc?.nationalId ? (nationalIdRevealProfileId === profileId ? kyc.nationalId : `••••${kyc.nationalId.slice(-4)}`) : "—"}</span>
+                    {kyc?.nationalId ? <button type="button" className="text-xs font-bold underline" onClick={() => setNationalIdRevealProfileId(nationalIdRevealProfileId === profileId ? null : profileId)}>{nationalIdRevealProfileId === profileId ? "Hide" : "Reveal"} ID</button> : null}
+                  </dd>
                 </div>
-                <div>
-                  <dt className="text-xs font-bold text-secondary">Address</dt>
-                  <dd>{kyc?.address || "—"}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-bold text-secondary">
-                    National ID
-                  </dt>
-                  <dd>{kyc?.nationalId ? `••••${kyc.nationalId.slice(-4)}` : "—"}</dd>
-                </div>
+                <div><dt className="text-xs font-bold text-secondary">Submitted</dt><dd>{formatAdminDate(kyc?.submittedAt)}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Reviewed</dt><dd>{formatAdminDate(kyc?.reviewedAt)}</dd></div>
+                <div><dt className="text-xs font-bold text-secondary">Minimum verified</dt><dd>{formatAdminDate(kyc?.minimumVerifiedAt)}</dd></div>
               </dl>
+              <h3 className="mt-6 font-bold">KYC evidence checks</h3>
+              {kyc?.evidence?.length ? <ul className="mt-3 grid gap-3 sm:grid-cols-2">{kyc.evidence.map((evidence, index) => <li key={`${evidence.kind}-${index}`} className="rounded-xl bg-surface-container-low p-4"><p className="font-bold">{formatLabel(evidence.kind)} · {formatLabel(evidence.status)}</p><dl className="mt-2 grid gap-1 text-xs"><div><dt className="inline font-bold">Checked: </dt><dd className="inline">{formatAdminDate(evidence.checkedAt)}</dd></div><div><dt className="inline font-bold">Expires: </dt><dd className="inline">{formatAdminDate(evidence.expiresAt)}</dd></div><div><dt className="inline font-bold">Policy version: </dt><dd className="inline">{evidence.policyVersion || "—"}</dd></div></dl></li>)}</ul> : <p className="mt-2 text-sm text-secondary">No KYC evidence checks were returned.</p>}
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                {idDocumentUrl ? (
-                  <article className="rounded-xl border border-outline-variant/20 p-3">
-                    {getKycMediaKind(kyc?.idDocumentMimeType, idDocumentUrl) ===
-                    "image" ? (
-                      <SecureImageThumbnail
-                        src={idDocumentUrl}
-                        alt="Identity document"
-                        onClick={() =>
-                          setPreview({
-                            title: "Identity document",
-                            url: idDocumentUrl,
-                            mimeType: kyc?.idDocumentMimeType,
-                          })
-                        }
-                      />
-                    ) : (
-                      <div className="flex h-44 items-center justify-center rounded-xl bg-surface-container-low">
-                        <span
-                          className="material-symbols-outlined text-5xl text-secondary"
-                          aria-hidden="true"
-                        >
-                          picture_as_pdf
-                        </span>
-                      </div>
-                    )}
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <div>
-                        <h3 className="font-bold">Identity document</h3>
-                        <p className="text-xs text-secondary">
-                          {readableKycFileType(
-                            kyc?.idDocumentMimeType,
-                            idDocumentUrl,
-                          )}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPreview({
-                            title: "Identity document",
-                            url: idDocumentUrl,
-                            mimeType: kyc?.idDocumentMimeType,
-                          })
-                        }
-                        className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-on-primary"
-                      >
-                        View
-                      </button>
-                    </div>
-                  </article>
-                ) : (
-                  <p className="rounded-xl bg-surface-container-low p-4 text-sm text-secondary">
-                    No identity document was returned.
-                  </p>
-                )}
-                {selfieUrl ? (
-                  <article className="rounded-xl border border-outline-variant/20 p-3">
-                    <SecureImageThumbnail
-                      src={selfieUrl}
-                      alt="KYC selfie"
-                      onClick={() =>
-                        setPreview({
-                          title: "KYC selfie",
-                          url: selfieUrl,
-                          mimeType: kyc?.selfieMimeType || "image/jpeg",
-                        })
-                      }
-                    />
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <div>
-                        <h3 className="font-bold">KYC selfie</h3>
-                        <p className="text-xs text-secondary">
-                          Identity selfie
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPreview({
-                            title: "KYC selfie",
-                            url: selfieUrl,
-                            mimeType: kyc?.selfieMimeType || "image/jpeg",
-                          })
-                        }
-                        className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-on-primary"
-                      >
-                        View
-                      </button>
-                    </div>
-                  </article>
-                ) : (
-                  <p className="rounded-xl bg-surface-container-low p-4 text-sm text-secondary">
-                    No KYC selfie was returned.
-                  </p>
-                )}
+                {privateDocuments.map(({ key, label, document, mimeType }) => {
+                  const access = document?.contentAccess;
+                  return <article key={key} className="rounded-xl border border-outline-variant/20 p-4">
+                    <h3 className="font-bold">{label}</h3>
+                    <p className="mt-1 text-sm">{document?.submitted ? "Submitted" : "Not submitted"}</p>
+                    {access?.status === "protected_route" ? <button type="button" disabled={documentLoadingKey === key} onClick={() => void openPrivateDocument(key, label, access, mimeType)} className="mt-3 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:opacity-60">{documentLoadingKey === key ? "Loading protected file…" : "View protected file"}</button> : access?.status === "withheld" ? <p className="mt-2 text-xs text-secondary">File access is withheld ({access.reasonCode}).</p> : <p className="mt-2 text-xs text-secondary">No file-access status was returned.</p>}
+                  </article>;
+                })}
               </div>
               <h3 className="mt-6 font-bold">Professional credentials</h3>
               {kyc?.professionalDocuments?.length ? (
                 <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {kyc.professionalDocuments.map((document, index) => {
-                    const documentUrl = document.accessUrl;
-                    const label = document.label || "Professional credential";
+                  {kyc.professionalDocuments.map((document) => {
+                    const label = document.label || `Professional credential ${document.index + 1}`;
+                    const access = document.contentAccess;
                     return (
                       <li
-                        key={document._id || `${label}-${index}`}
+                        key={document.index}
                         className="rounded-xl border border-outline-variant/20 p-4"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <h4 className="font-bold">{label}</h4>
                             <p className="mt-1 text-xs text-secondary">
-                              {readableKycFileType(
-                                document.mimeType,
-                                documentUrl,
-                              )}{" "}
-                              · {document.mimeType || "MIME type unavailable"}
+                              Document {document.index + 1} · {readableKycFileType(document.mimeType)} · {document.mimeType || "MIME type unavailable"}
                             </p>
                             <p className="mt-2 text-xs font-bold">
                               {formatLabel(
@@ -706,47 +745,15 @@ export const AdminInspectorDetailPage = () => {
                             className="material-symbols-outlined text-secondary"
                             aria-hidden="true"
                           >
-                            {getKycMediaKind(document.mimeType, documentUrl) ===
+                            {getKycMediaKind(document.mimeType) ===
                             "image"
                               ? "image"
-                              : getKycMediaKind(
-                                    document.mimeType,
-                                    documentUrl,
-                                  ) === "pdf"
+                              : getKycMediaKind(document.mimeType) === "pdf"
                                 ? "picture_as_pdf"
                                 : "description"}
                           </span>
                         </div>
-                        {documentUrl ? (
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setPreview({
-                                  title: label,
-                                  url: documentUrl,
-                                  mimeType: document.mimeType,
-                                })
-                              }
-                              className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-on-primary"
-                            >
-                              View
-                            </button>
-                            <a
-                              href={documentUrl}
-                              download
-                              target="_blank"
-                              rel="noreferrer"
-                              className="rounded-lg bg-surface-container-high px-3 py-2 text-xs font-bold"
-                            >
-                              Download
-                            </a>
-                          </div>
-                        ) : (
-                          <p className="mt-3 text-xs text-secondary">
-                            No secure URL is available for this credential.
-                          </p>
-                        )}
+                        {access.status === "protected_route" ? <button type="button" disabled={documentLoadingKey === `professional-${document.index}`} onClick={() => void openPrivateDocument(`professional-${document.index}`, label, access, document.mimeType)} className="mt-4 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:opacity-60">{documentLoadingKey === `professional-${document.index}` ? "Loading protected file…" : "View protected file"}</button> : <p className="mt-3 text-xs text-secondary">File access is withheld ({access.reasonCode}).</p>}
                       </li>
                     );
                   })}
@@ -757,27 +764,51 @@ export const AdminInspectorDetailPage = () => {
                 </p>
               )}
               <p className="mt-3 text-xs text-secondary">
-                An uploaded credential remains unverified unless its own RealtIQ
-                status is “verified”.
+                {kyc?.documentAccessNotice || "Document access is re-authorized by the protected endpoint. Upload or verification status alone does not grant access to file bytes."}
               </p>
             </section>
             <section className="rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-black">History and payout</h2>
+              <h2 className="text-xl font-black">Activity, payout and reviews</h2>
               <p className="mt-3">
                 {resource.data.jobCount} jobs · {resource.data.disputeCount}{" "}
                 disputes · {resource.data.reviews.length} reviews
               </p>
               {resource.data.payoutAccount ? (
-                <p className="mt-3">
-                  {resource.data.payoutAccount.bankName} ·{" "}
-                  {resource.data.payoutAccount.maskedAccountNumber} ·{" "}
-                  {resource.data.payoutAccount.verifiedAccountName}
-                </p>
+                <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div><dt className="text-xs font-bold text-secondary">Bank</dt><dd>{resource.data.payoutAccount.bankName}</dd></div>
+                  <div><dt className="text-xs font-bold text-secondary">Masked account number</dt><dd>{resource.data.payoutAccount.maskedAccountNumber}</dd></div>
+                  <div><dt className="text-xs font-bold text-secondary">Verified account name</dt><dd>{resource.data.payoutAccount.verifiedAccountName}</dd></div>
+                  <div><dt className="text-xs font-bold text-secondary">Verified</dt><dd>{formatAdminDate(resource.data.payoutAccount.verifiedAt)}</dd></div>
+                  <div><dt className="text-xs font-bold text-secondary">Payout account ID</dt><dd className="break-all">{resource.data.payoutAccount._id || "—"}</dd></div>
+                  <div><dt className="text-xs font-bold text-secondary">Payout account user ID</dt><dd className="break-all">{resource.data.payoutAccount.user || "—"}</dd></div>
+                  <div><dt className="text-xs font-bold text-secondary">Payout account profile ID</dt><dd className="break-all">{resource.data.payoutAccount.profile || "—"}</dd></div>
+                  <div><dt className="text-xs font-bold text-secondary">Payout account created</dt><dd>{formatAdminDate(resource.data.payoutAccount.createdAt)}</dd></div>
+                  <div><dt className="text-xs font-bold text-secondary">Payout account updated</dt><dd>{formatAdminDate(resource.data.payoutAccount.updatedAt)}</dd></div>
+                </dl>
               ) : (
                 <p className="mt-3 text-amber-800">
                   No verified payout account.
                 </p>
               )}
+              {resource.data.payoutSummary ? (
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <article className="rounded-xl bg-surface-container-low p-4">
+                    <h3 className="text-xs font-bold uppercase text-secondary">Released ({resource.data.payoutSummary.currency})</h3>
+                    <p className="mt-1 text-lg font-black">{formatAdminMoney(resource.data.payoutSummary.released.amount, resource.data.payoutSummary.currency)}</p>
+                    <p className="text-sm text-secondary">{resource.data.payoutSummary.released.count} payouts</p>
+                  </article>
+                  <article className="rounded-xl bg-surface-container-low p-4">
+                    <h3 className="text-xs font-bold uppercase text-secondary">Pending ({resource.data.payoutSummary.currency})</h3>
+                    <p className="mt-1 text-lg font-black">{formatAdminMoney(resource.data.payoutSummary.pending.amount, resource.data.payoutSummary.currency)}</p>
+                    <p className="text-sm text-secondary">{resource.data.payoutSummary.pending.count} payouts</p>
+                  </article>
+                </div>
+              ) : <p className="mt-4 text-sm text-secondary">Payout summary was not provided.</p>}
+              {resource.data.reviews.length ? (
+                <ul className="mt-5 grid gap-2 sm:grid-cols-2">
+                  {resource.data.reviews.map((review) => <li key={review.id} className="rounded-lg border border-outline-variant/20 p-3"><span className="font-bold">Rating: {review.rating}</span><span className="ml-2 break-all text-xs text-secondary">Review {review.id}</span></li>)}
+                </ul>
+              ) : <p className="mt-4 text-sm text-secondary">No review entries were returned.</p>}
             </section>
           </div>
           <aside className="h-fit rounded-2xl bg-white p-5 shadow-sm">
@@ -854,8 +885,8 @@ export const AdminInspectorDetailPage = () => {
             </p>
           </aside>
         </div>
-        {preview ? (
-          <AdminKycMediaViewer {...preview} onClose={() => setPreview(null)} />
+        {preview?.profileId === profileId && preview.requestVersion === documentRequestVersionRef.current ? (
+          <AdminKycMediaViewer {...preview} onClose={closePrivateDocument} />
         ) : null}
         {approvalOpen ? (
           <AgentApprovalModal

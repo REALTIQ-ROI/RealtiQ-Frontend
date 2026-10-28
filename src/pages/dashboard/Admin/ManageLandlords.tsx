@@ -5,6 +5,7 @@ import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import Input from '../../../components/ui/Input';
 import LoadingState from '../../../components/ui/LoadingState';
+import SellerTrustBadge from '../../../components/trust/SellerTrustBadge';
 import { useAsync } from '../../../hooks/useAsync';
 import { userService } from '../../../services/userService';
 import type { User } from '../../../types';
@@ -15,25 +16,29 @@ const ITEMS_PER_PAGE = 10;
 const formatDate = (date?: string) =>
   date ? new Date(date).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
 
+const displayName = (landlord: User) =>
+  typeof landlord.name === 'string' && landlord.name.trim() ? landlord.name.trim() : 'Unnamed landlord';
+
 const initials = (name: string) =>
   name
     .split(' ')
     .map((word) => word[0])
     .join('')
     .slice(0, 2)
-    .toUpperCase();
+    .toUpperCase() || '?';
 
 const LandlordRow = ({ landlord }: { landlord: User }) => (
   <tr className="bg-surface-container-lowest hover:bg-surface-container transition-colors group">
     <td className="px-6 py-5">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-sm font-bold text-on-surface-variant">
-          {initials(landlord.name)}
+          {initials(displayName(landlord))}
         </div>
         <div>
           <Link className="font-bold text-primary group-hover:underline underline-offset-4" to={`/dashboard/admin/landlord-details/${landlord._id}`}>
-            {landlord.name}
+            {displayName(landlord)}
           </Link>
+          {landlord.role === 'landlord' ? <SellerTrustBadge badge={landlord.trustBadge} compact /> : null}
           <div className="text-[10px] text-secondary font-bold tracking-tighter uppercase">
             ID: {landlord._id.slice(-8).toUpperCase()}
           </div>
@@ -41,8 +46,8 @@ const LandlordRow = ({ landlord }: { landlord: User }) => (
       </div>
     </td>
     <td className="px-6 py-5">
-      <div className="text-sm font-medium text-on-surface">{landlord.email}</div>
-      <div className="text-[10px] text-secondary">{landlord.phone ?? 'No phone on file'}</div>
+      <div className="text-sm font-medium text-on-surface">{landlord.email || 'No email on file'}</div>
+      <div className="text-[10px] text-secondary">{landlord.phone || 'No phone on file'}</div>
     </td>
     <td className="px-6 py-5 text-center">
       <span className="inline-flex items-center justify-center bg-secondary-container text-on-secondary-fixed text-xs font-bold px-3 py-1 rounded-full">
@@ -75,14 +80,17 @@ const ManageLandlords = () => {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const landlords = useMemo(() => data ?? [], [data]);
+  const landlords = useMemo(
+    () => (Array.isArray(data) ? data : []).filter((landlord) => Boolean(landlord && typeof landlord._id === 'string' && landlord._id.trim())),
+    [data],
+  );
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return landlords.filter((landlord) => {
       const matchesQuery =
         !needle ||
-        landlord.name.toLowerCase().includes(needle) ||
-        landlord.email.toLowerCase().includes(needle);
+        displayName(landlord).toLowerCase().includes(needle) ||
+        (typeof landlord.email === 'string' && landlord.email.toLowerCase().includes(needle));
       const matchesStatus =
         statusFilter === 'all' ||
         (statusFilter === 'verified' ? isUserVerified(landlord) : !isUserVerified(landlord));

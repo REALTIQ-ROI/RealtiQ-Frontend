@@ -31,9 +31,49 @@ describe('authService account security endpoints', () => {
 
   it('submits the documented login challenge and code without logging or changing them', async () => {
     const response = { user: { _id: 'user-1' }, token: 'access-token' };
-    vi.mocked(api.post).mockResolvedValueOnce({ data: response } as never);
+    vi.mocked(api.post).mockResolvedValueOnce({ data: response, status: 200 } as never);
     await expect(authService.completeLoginSecondFactor('challenge-1', '123456')).resolves.toEqual(response);
     expect(api.post).toHaveBeenCalledWith('/auth/login/second-factor', { challengeId: 'challenge-1', code: '123456' });
+  });
+
+  it('parses the documented 202 login challenge without treating it as an authenticated session', async () => {
+    const challenge = {
+      code: 'AUTH_SECOND_FACTOR_REQUIRED',
+      challengeId: '66f100000000000000000001',
+      expiresAt: '2026-10-27T12:05:00.000Z',
+      method: 'totp',
+    };
+    vi.mocked(api.post).mockResolvedValueOnce({ data: challenge, status: 202 } as never);
+    await expect(authService.login({ email: 'buyer@example.test', password: 'ExamplePass123!' })).resolves.toEqual(challenge);
+    expect(api.post).toHaveBeenCalledWith('/auth/login', { email: 'buyer@example.test', password: 'ExamplePass123!' });
+  });
+
+  it('parses the normal 200 login response and rejects malformed challenge responses', async () => {
+    const response = { user: { _id: 'user-1', role: 'buyer' }, token: 'Bearer jwt' };
+    vi.mocked(api.post).mockResolvedValueOnce({ data: response, status: 200 } as never);
+    await expect(authService.login({ email: 'buyer@example.test', password: 'ExamplePass123!' })).resolves.toEqual(response);
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: { code: 'AUTH_SECOND_FACTOR_REQUIRED', challengeId: 'challenge-1', method: 'totp' },
+      status: 202,
+    } as never);
+    await expect(authService.login({ email: 'buyer@example.test', password: 'ExamplePass123!' })).rejects.toThrow('challenge response was incomplete');
+  });
+
+  it('sends only the documented email and password fields to the login endpoint', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: { user: { _id: 'user-1', role: 'buyer' }, token: 'Bearer jwt' },
+      status: 200,
+    } as never);
+    await authService.login({ email: 'buyer@example.test', password: 'ExamplePass123!', role: 'buyer' });
+    expect(api.post).toHaveBeenCalledWith('/auth/login', {
+      email: 'buyer@example.test',
+      password: 'ExamplePass123!',
+    });
+  });
+
+  it('requires a 200 authenticated response after second-factor verification', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { status: 'pending' }, status: 202 } as never);
+    await expect(authService.completeLoginSecondFactor('challenge-1', '123456')).rejects.toThrow('unsupported status');
   });
 
   it('returns the documented safe phone verification history rows', async () => {

@@ -16,18 +16,20 @@ const formatDate = (date?: string) =>
       })
     : 'N/A';
 
+const displayName = (name?: string | null) => name?.trim() || 'Unnamed landlord';
+
 const initials = (name: string) =>
   name
     .split(' ')
     .map((word) => word[0])
     .join('')
     .slice(0, 2)
-    .toUpperCase();
+    .toUpperCase() || '?';
 
 const LandlordDetails = () => {
   const { id } = useParams();
   const { data: user, loading, error, execute } = useAsync(
-    () => (id ? userService.fetchUserById(id) : Promise.reject(new Error('Missing user id'))),
+    () => (id ? userService.fetchLandlordById(id) : Promise.reject(new Error('Missing user id'))),
     Boolean(id),
   );
 
@@ -41,9 +43,9 @@ const LandlordDetails = () => {
               <span className="material-symbols-outlined text-sm">chevron_right</span>
               <Link className="hover:text-primary" to="/dashboard/admin/manage-landlords">Landlords</Link>
               <span className="material-symbols-outlined text-sm">chevron_right</span>
-              <span className="text-on-background font-medium">{user?.name ?? 'Profile'}</span>
+              <span className="text-on-background font-medium">{user ? displayName(user.name) : 'Profile'}</span>
             </nav>
-            <h1 className="flex flex-wrap items-center gap-3 font-headline text-5xl font-extrabold tracking-tighter">{user?.name ?? 'Landlord Profile'}{user?.role === 'landlord' ? <SellerTrustBadge badge={user?.trustBadge as import('../../../types/phase45').TrustBadge} /> : null}</h1>
+            <h1 className="flex flex-wrap items-center gap-3 font-headline text-5xl font-extrabold tracking-tighter">{user ? displayName(user.name) : 'Landlord Profile'}{user?.role === 'landlord' ? <SellerTrustBadge badge={user?.trustBadge as import('../../../types/phase45').TrustBadge} /> : null}</h1>
             <p className="text-secondary mt-2 text-lg">User profile and account details</p>
           </div>
         </div>
@@ -59,11 +61,11 @@ const LandlordDetails = () => {
             <div className="col-span-12 lg:col-span-4 bg-surface-container-lowest rounded-xl p-8 transition-all">
               <div className="flex items-center gap-6 mb-8">
                 <div className="h-24 w-24 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-fixed font-extrabold text-3xl">
-                  {initials(user.name)}
+                  {initials(displayName(user.name))}
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-bold text-xl">{user.name}</h3>
+                    <h3 className="font-bold text-xl">{displayName(user.name)}</h3>
                     {user.role === 'landlord' ? <SellerTrustBadge badge={user.trustBadge as import('../../../types/phase45').TrustBadge} compact /> : null}
                     {isUserVerified(user) ? (
                       <span className="material-symbols-outlined text-blue-500 text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -85,7 +87,7 @@ const LandlordDetails = () => {
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-secondary uppercase tracking-widest mb-1">Email Address</p>
-                    <p className="font-medium text-on-background">{user.email}</p>
+                    <p className="font-medium text-on-background">{user.email || 'No email on file'}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-4">
@@ -130,8 +132,8 @@ const LandlordDetails = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <p><strong>User ID:</strong> {user._id}</p>
                   <p><strong>Verification:</strong> {isUserVerified(user) ? 'Verified' : 'Unverified'}</p>
-                  <p><strong>Email:</strong> {user.email}</p>
-                  <p><strong>Phone:</strong> {user.phone ?? 'N/A'}</p>
+                  <p><strong>Email:</strong> {user.email || 'No email on file'}</p>
+                  <p><strong>Phone:</strong> {user.phone || 'No phone on file'}</p>
                 </div>
               </div>
             </div>

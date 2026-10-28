@@ -3,6 +3,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
+import usePreservedSidebarScroll from '../../hooks/usePreservedSidebarScroll';
 import ProfileSwitcher from './ProfileSwitcher';
 
 interface BuyerPortalLayoutProps {
@@ -43,12 +44,13 @@ const BuyerPortalLayout = ({
   const { user, logout } = useAuth();
   const { itemCount } = useCart();
   const hasScrolled = useHasScrolled(8);
+  const sidebarRef = usePreservedSidebarScroll('buyer');
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div className="bg-surface text-on-background antialiased min-h-screen">
       {menuOpen ? <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMenuOpen(false)} /> : null}
-      <aside className={`fixed left-0 top-0 h-screen w-64 z-50 bg-white dark:bg-slate-950 flex flex-col p-6 gap-y-2 shadow-2xl shadow-slate-200/50 dark:shadow-none overflow-y-auto overscroll-contain transition-transform lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside ref={sidebarRef} className={`fixed left-0 top-0 h-screen w-64 z-50 bg-white dark:bg-slate-950 flex flex-col p-6 gap-y-2 shadow-2xl shadow-slate-200/50 dark:shadow-none overflow-y-auto overscroll-contain transition-transform lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="mb-8">
           <h1 className="text-2xl font-black text-slate-900 dark:text-white leading-none">Curator</h1>
           <p className="text-xs tracking-widest font-semibold text-slate-500 uppercase mt-1">Premium Real Estate</p>

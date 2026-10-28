@@ -223,7 +223,7 @@ export interface PropertyPriceHistoryItem {
   newPrice: number;
   currency: string;
   absoluteChange: number;
-  percentageChange: number;
+  percentageChange: number | null;
   changeType: 'increase' | 'decrease' | 'unchanged' | string;
   reason?: string;
   source?: string;
@@ -244,7 +244,7 @@ export interface PropertyPriceHistoryResponse {
     initialPrice: number;
     currentPrice: number;
     absoluteChange: number;
-    percentageChange: number;
+    percentageChange: number | null;
     highestPrice: number;
     lowestPrice: number;
     numberOfChanges: number;
@@ -274,10 +274,9 @@ export interface PropertyApprovalDetailResponse {
   titleDocuments?: TitleDocumentRecord[];
 }
 
-export interface PropertyApprovalInput {
-  decision: 'approve' | 'reject';
-  rejectionReason?: string;
-}
+export type PropertyApprovalInput =
+  | { decision: 'approve' }
+  | { decision: 'reject'; rejectionReason: string };
 
 export interface ConstructionUpdateRequest {
   developmentStatus: string;
@@ -455,10 +454,12 @@ export const propertyService = {
   async updatePropertyApproval(
     id: string,
     input: PropertyApprovalInput,
+    challengeId: string,
   ): Promise<{ property: Property; approvalStatus?: PropertyApprovalStatus; message?: string }> {
     const { data } = await api.patch<{ property: Property; approvalStatus?: PropertyApprovalStatus; message?: string }>(
-      `/properties/${id}/approval`,
+      `/properties/${encodeURIComponent(id)}/approval`,
       input,
+      { headers: { 'X-Step-Up-Challenge': challengeId } },
     );
     return { ...data, property: normalizeProperty(data.property) };
   },

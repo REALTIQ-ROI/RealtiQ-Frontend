@@ -64,6 +64,16 @@ describe('escrowService', () => {
     await escrowService.list(); await escrowService.get('e1');
     expect(mockedApi.get).toHaveBeenNthCalledWith(1, '/escrow'); expect(mockedApi.get).toHaveBeenNthCalledWith(2, '/escrow/e1');
   });
+  it('normalizes safe escrow projections that return id instead of _id', async () => {
+    mockedApi.get.mockResolvedValueOnce({ data: [{ id: 'list-e1', amount: 100, status: 'locked' }] })
+      .mockResolvedValueOnce({ data: { id: 'detail-e1', amount: 100, status: 'locked', rules: [] } });
+
+    const [listed] = await escrowService.list();
+    const detail = await escrowService.get('detail-e1');
+
+    expect(listed._id).toBe('list-e1');
+    expect(detail._id).toBe('detail-e1');
+  });
   it('uses all refund endpoints and preserves account numbers as strings', async () => {
     mockedApi.get.mockResolvedValue({ data: { conversation: null, messages: [] } });
     mockedApi.post.mockResolvedValue({ data: {}, status: 202 }); mockedApi.patch.mockResolvedValue({ data: {} });

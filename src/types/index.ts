@@ -398,7 +398,7 @@ export interface Property {
   bedrooms: number;
   bathrooms: number;
   description: string;
-  squareFeet: number;
+  squareFeet?: number;
   structuredFacts?: StructuredPropertyFacts;
   category?: PropertyCategory;
   completionStage?: PropertyCompletionStage;

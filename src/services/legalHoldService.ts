@@ -34,7 +34,45 @@ export interface LegalHoldCreateInput {
   reviewAt?: string;
 }
 
+export interface LegalHoldSubjectKindOption {
+  subjectKind: LegalHoldSubjectKind;
+  label: string;
+}
+
+export interface LegalHoldCategoryOption {
+  category: LegalHoldCategory;
+  label: string;
+  subjectKinds: LegalHoldSubjectKindOption[];
+}
+
+export interface LegalHoldSubject {
+  subjectId: string;
+  subjectKind: LegalHoldSubjectKind;
+  category: LegalHoldCategory;
+  title: string;
+  subtitle?: string;
+}
+
+export interface LegalHoldSubjectLookupResponse {
+  categories: LegalHoldCategoryOption[];
+  subjects: LegalHoldSubject[];
+  nextCursor: string | null;
+}
+
+export interface LegalHoldSubjectLookupQuery {
+  category?: LegalHoldCategory;
+  subjectKind?: LegalHoldSubjectKind;
+  q?: string;
+  limit?: number;
+  after?: string;
+}
+
 export const legalHoldService = {
+  async lookupSubjects(query: LegalHoldSubjectLookupQuery = {}, signal?: AbortSignal) {
+    const params = Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined));
+    const config = signal ? { params, signal } : { params };
+    return (await api.get<LegalHoldSubjectLookupResponse>('/admin/legal-holds/subjects', config)).data;
+  },
   async list(query: { before?: string; limit?: number; state?: 'active' | 'released'; subjectKind?: LegalHoldSubjectKind } = {}) {
     return (await api.get<{ holds: LegalHold[]; nextCursor: string | null }>('/admin/legal-holds', { params: query })).data;
   },

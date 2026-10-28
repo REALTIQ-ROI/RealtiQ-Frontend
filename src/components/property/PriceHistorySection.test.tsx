@@ -31,4 +31,22 @@ describe('public price history', () => {
     expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument();
     await waitFor(() => expect(propertyService.getPriceHistory).toHaveBeenCalledWith('property-1', { page: 2, limit: 20, sort: 'desc' }));
   });
+
+  it('renders unavailable percentages when the API returns null instead of crashing', async () => {
+    vi.mocked(propertyService.getPriceHistory).mockResolvedValue({
+      property: { id: 'property-1', title: 'Home', currentPrice: 40_000_000, currency: 'NGN' },
+      summary: { initialPrice: 45_000_000, currentPrice: 40_000_000, absoluteChange: -5_000_000, percentageChange: null, highestPrice: 45_000_000, lowestPrice: 40_000_000, numberOfChanges: 1 },
+      history: [{
+        _id: 'history-1', property: 'property-1', previousPrice: 45_000_000, newPrice: 40_000_000,
+        currency: 'NGN', absoluteChange: -5_000_000, percentageChange: null, changeType: 'decrease',
+        effectiveAt: '2026-10-01T00:00:00.000Z', createdAt: '2026-10-01T00:00:00.000Z',
+      }],
+      total: 1, page: 1, limit: 20,
+    });
+    vi.mocked(propertyService.getPriceHistoryChart).mockResolvedValue({ propertyId: 'property-1', currency: 'NGN', series: [] });
+
+    render(<PriceHistorySection propertyId="property-1" />);
+
+    expect(await screen.findAllByText('—')).toHaveLength(2);
+  });
 });

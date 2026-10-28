@@ -108,6 +108,58 @@ export interface ProxyKycDocument {
   url?: string;
   verificationStatus?: 'unverified' | 'verified' | 'rejected';
 }
+export type AdminKycContentAccess =
+  | { status: 'withheld'; reasonCode: string }
+  | { status: 'protected_route'; method: 'GET'; path: string };
+export interface AdminKycEvidence {
+  kind: string;
+  status: string;
+  checkedAt?: string | null;
+  expiresAt?: string | null;
+  policyVersion?: string;
+}
+export interface AdminKycPrivateDocument {
+  submitted: boolean;
+  contentAccess: AdminKycContentAccess;
+}
+export interface AdminKycProfessionalDocument {
+  index: number;
+  label: string;
+  mimeType: string;
+  verificationStatus: string;
+  contentAccess: AdminKycContentAccess;
+}
+export interface AdminInspectorKyc {
+  status?: string;
+  route?: string;
+  fullLegalName?: string;
+  address?: string;
+  phone?: string;
+  nationalId?: string;
+  submittedAt?: string | null;
+  reviewedAt?: string | null;
+  minimumVerifiedAt?: string | null;
+  evidence?: AdminKycEvidence[];
+  privateDocuments?: {
+    idDocument?: AdminKycPrivateDocument;
+    selfie?: AdminKycPrivateDocument;
+  };
+  professionalDocuments?: AdminKycProfessionalDocument[];
+  documentAccessNotice?: string;
+}
+export interface AdminInspectorAccount {
+  _id: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  accountStatus?: string;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  kyc?: AdminInspectorKyc;
+}
 export interface AdminInspectorProfile extends Omit<PublicInspectorProfile, 'user'> {
   profileImageUrl?: string;
   user: EntityRef<{ _id: string; name: string; email?: string; phone?: string; role?: 'proxy_inspector'; kyc?: {
@@ -126,7 +178,34 @@ export interface AdminInspectorProfile extends Omit<PublicInspectorProfile, 'use
   } }>;
   rejectionReason?: string; suspensionReason?: string; suspendedAt?: string;
 }
-export interface AdminInspectorDetail { profile: AdminInspectorProfile; jobCount: number; disputeCount: number; payoutAccount: PayoutAccount | null; payoutSummary: unknown[]; reviews: ProxyInspectorReview[] }
+export interface AdminInspectorDetailProfile extends Omit<AdminInspectorProfile, 'user'> {
+  id?: string;
+  name?: string;
+  bio?: string;
+  user: AdminInspectorAccount;
+  kyc?: AdminInspectorKyc;
+  approvedAt?: string | null;
+  reviewedAt?: string | null;
+  suspendedAt?: string | null;
+  submittedAt?: string | null;
+  updatedAt?: string;
+  createdAt?: string;
+}
+export interface AdminInspectorPayoutBucket { count: number; amount: number }
+export interface AdminInspectorPayoutSummary {
+  currency: string;
+  released: AdminInspectorPayoutBucket;
+  pending: AdminInspectorPayoutBucket;
+}
+export interface AdminInspectorReviewSummary { id: string; rating: number }
+export interface AdminInspectorDetail {
+  profile: AdminInspectorDetailProfile;
+  jobCount: number;
+  disputeCount: number;
+  payoutAccount: (PayoutAccount & { profile?: string; createdAt?: string; updatedAt?: string }) | null;
+  payoutSummary: AdminInspectorPayoutSummary | null;
+  reviews: AdminInspectorReviewSummary[];
+}
 export type InspectorListResponse = { inspectors: PublicInspectorProfile[]; total: number; page: number; limit: number };
 export type RequestListResponse = { requests: ProxyInspectionRequest[]; total: number; page: number; limit: number };
 export type AdminInspectorListResponse = { inspectors: AdminInspectorProfile[]; total: number; page: number; limit: number };

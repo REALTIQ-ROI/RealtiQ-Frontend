@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
+import usePreservedSidebarScroll from '../../hooks/usePreservedSidebarScroll';
 import ProfileSwitcher from './ProfileSwitcher';
 
 type LandlordNavKey =
@@ -54,12 +55,13 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
 const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: LandlordPortalLayoutProps) => {
   const { logout } = useAuth();
   const hasScrolled = useHasScrolled(8);
+  const sidebarRef = usePreservedSidebarScroll('landlord');
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div className="bg-surface text-on-surface min-h-screen">
       {menuOpen ? <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMenuOpen(false)} /> : null}
-      <aside className={`h-screen w-64 fixed left-0 top-0 flex flex-col bg-slate-50 border-r border-slate-200 z-50 overflow-y-auto overscroll-contain transition-transform lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside ref={sidebarRef} className={`h-screen w-64 fixed left-0 top-0 flex flex-col bg-slate-50 border-r border-slate-200 z-50 overflow-y-auto overscroll-contain transition-transform lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6">
           <h1 className="text-xl font-black text-slate-900 tracking-tight">RealtIQ</h1>
           <p className="text-xs text-secondary font-medium uppercase tracking-widest mt-1">Landlord Portal</p>
@@ -71,6 +73,7 @@ const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: La
               key={item.key}
               to={item.to}
               onClick={() => setMenuOpen(false)}
+              aria-current={item.key === active ? 'page' : undefined}
               className={
                 item.key === active
                   ? 'bg-white text-slate-900 font-bold rounded-lg shadow-sm px-4 py-3 flex items-center gap-3'

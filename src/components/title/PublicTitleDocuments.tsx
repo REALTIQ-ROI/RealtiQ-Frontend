@@ -36,6 +36,7 @@ const PublicTitleDocuments = ({
   const [documents, setDocuments] = useState<PublicTitleDocument[]>([]);
   const [statuses, setStatuses] = useState<Record<string, TitleDocumentAccessStatus>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [cartBusyId, setCartBusyId] = useState<string | null>(null);
   const [guestEmailByDocument, setGuestEmailByDocument] = useState<Record<string, string>>({});
@@ -53,6 +54,9 @@ const PublicTitleDocuments = ({
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setLoadError(null);
+    setDocuments([]);
+    setStatuses({});
     titleDocumentService.listPublic(propertyId)
       .then(async (result) => {
         if (!active) return;
@@ -65,7 +69,14 @@ const PublicTitleDocuments = ({
         if (active) setStatuses(Object.fromEntries(entries));
       })
       .catch((error) => {
-        if (active) toast.error(error instanceof Error ? error.message : 'Unable to load title documents.');
+        if (!active) return;
+        onDocumentsLoaded?.([]);
+        if (error instanceof ApiRequestError && (error.status === 401 || error.status === 403)) {
+          setLoadError('Title-document metadata is not available for this listing.');
+          return;
+        }
+        setLoadError('Title-document metadata could not be loaded. Property details are still available.');
+        toast.error(error instanceof Error ? error.message : 'Unable to load title documents.');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -142,6 +153,7 @@ const PublicTitleDocuments = ({
   };
 
   if (loading) return <p className="text-sm text-secondary">Loading verified title documents...</p>;
+  if (loadError) return <p role="status" className="text-sm text-secondary">{loadError}</p>;
   if (documents.length === 0) return <p className="text-sm text-secondary">No buyer-viewable title-document metadata is available.</p>;
 
   return (

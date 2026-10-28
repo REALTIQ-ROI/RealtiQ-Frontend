@@ -3,7 +3,6 @@ import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { escrowErrorDetails, escrowService } from '../../services/escrowService';
 import type { Escrow } from '../../types/escrow';
-import { populated } from '../../types/escrow';
 import { formatDateTime } from './escrowConfig';
 
 const referenceId = (value: unknown): string | null => {
@@ -12,11 +11,6 @@ const referenceId = (value: unknown): string | null => {
   const reference = value as { _id?: unknown; id?: unknown };
   if (typeof reference._id === 'string') return reference._id;
   return typeof reference.id === 'string' ? reference.id : null;
-};
-
-const partyName = (value: unknown) => {
-  const party = populated(value as { _id: string; name?: string } | string | null);
-  return party?.name ?? (typeof value === 'string' ? 'Participant' : 'Unknown');
 };
 
 const EscrowDisputePanel = ({
@@ -162,8 +156,8 @@ const EscrowDisputePanel = ({
       ) : null}
 
       <div className="mt-5 space-y-3">
-        {disputes.map((dispute) => (
-          <article key={dispute._id} className="rounded-xl border border-outline-variant/20 p-4 text-sm">
+        {disputes.map((dispute, index) => (
+          <article key={dispute._id ?? dispute.id ?? `${dispute.openedAt}-${index}`} className="rounded-xl border border-outline-variant/20 p-4 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <strong>{dispute.reason}</strong>
               <span className="rounded-full bg-surface-container-low px-3 py-1 text-xs font-bold capitalize">
@@ -172,7 +166,7 @@ const EscrowDisputePanel = ({
             </div>
             {dispute.description ? <p className="mt-2 text-secondary">{dispute.description}</p> : null}
             <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-              <div><dt className="font-bold">Opened by</dt><dd>{partyName(dispute.raisedBy)}</dd></div>
+              <div><dt className="font-bold">Opened by</dt><dd>{dispute.openedBy?.name?.trim() || 'Participant details unavailable'}</dd></div>
               <div><dt className="font-bold">Opened</dt><dd>{formatDateTime(dispute.openedAt)}</dd></div>
               <div><dt className="font-bold">Pre-dispute status</dt><dd className="capitalize">{dispute.preDisputeStatus.replaceAll('_', ' ')}</dd></div>
               <div><dt className="font-bold">Resolution</dt><dd className="capitalize">{dispute.resolution?.replaceAll('_', ' ') ?? 'Pending'}</dd></div>
@@ -182,7 +176,7 @@ const EscrowDisputePanel = ({
             {dispute.evidence?.length ? (
               <ul className="mt-3 space-y-1 text-xs text-secondary">
                 {dispute.evidence.map((item, index) => (
-                  <li key={`${dispute._id}-evidence-${index}`}>
+                  <li key={`${dispute._id ?? dispute.id ?? `dispute-${index}`}-evidence-${index}`}>
                     Evidence: {typeof item.label === 'string' ? item.label : 'Referenced record'}
                     {typeof item.documentId === 'string' ? ` (${item.documentId})` : ''}
                   </li>

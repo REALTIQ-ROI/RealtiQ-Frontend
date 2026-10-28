@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import api from '../lib/axios';
-import { parseProxyEvidenceList, parseProxyInspectionDetail, proxyNetworkService } from './proxyNetworkService';
+import { normalizeAdminInspectorDocumentPath, parseProxyEvidenceList, parseProxyInspectionDetail, proxyNetworkService } from './proxyNetworkService';
 
 vi.mock('../lib/axios', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn() },
@@ -74,6 +74,65 @@ describe('proxyNetworkService contracts', () => {
       signal: undefined,
     });
     expect(facetProfiles.map((profile) => profile._id)).toEqual(['admin-p1', 'admin-p2']);
+  });
+
+  it('does not request admin agent details with a missing profile ID and encodes a valid ID', async () => {
+    await expect(proxyNetworkService.getAdminInspector('undefined')).rejects.toThrow('profile ID is missing');
+    await expect(proxyNetworkService.getAdminInspector('null')).rejects.toThrow('profile ID is missing');
+    expect(api.get).not.toHaveBeenCalled();
+
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { profile: { _id: 'profile/1' } } } as never);
+    await proxyNetworkService.getAdminInspector('profile/1');
+    expect(api.get).toHaveBeenCalledWith('/admin/proxy-inspectors/profile%2F1', { signal: undefined });
+  });
+
+  it('returns the populated account and KYC projection from the single profile-detail request', async () => {
+    const response = {
+      profile: { _id: 'profile-1', user: { _id: 'account-1', email: 'agent@example.test', kyc: { status: 'under_review', nationalId: '12345678901' } } },
+      jobCount: 9,
+      disputeCount: 2,
+      payoutAccount: null,
+      payoutSummary: { currency: 'NGN', released: { count: 3, amount: 45000 }, pending: { count: 1, amount: 15000 } },
+      reviews: [{ id: 'review-1', rating: 5 }],
+    };
+    vi.mocked(api.get).mockResolvedValueOnce({ data: response } as never);
+
+    await expect(proxyNetworkService.getAdminInspector('profile-1')).resolves.toEqual(response);
+    expect(api.get).toHaveBeenCalledTimes(1);
+    expect(api.get).toHaveBeenCalledWith('/admin/proxy-inspectors/profile-1', { signal: undefined });
+  });
+
+  it('fetches KYC file bytes only from the documented protected legacy-file route', async () => {
+    const signal = new AbortController().signal;
+    const content = new Blob(['protected bytes'], { type: 'application/pdf' });
+    vi.mocked(api.get).mockResolvedValueOnce({ data: content, headers: { 'content-type': 'application/pdf' } } as never);
+
+    await expect(proxyNetworkService.fetchAdminInspectorDocument({
+      status: 'protected_route',
+      method: 'GET',
+      path: '/api/documents/private-migrations/legacy-files/660000000000000000000008/content',
+    }, signal)).resolves.toEqual({ blob: content, contentType: 'application/pdf' });
+
+    expect(api.get).toHaveBeenCalledWith('/documents/private-migrations/legacy-files/660000000000000000000008/content', {
+      signal,
+      responseType: 'blob',
+    });
+  });
+
+  it('rejects withheld, external, query-bearing and unrelated KYC content routes', async () => {
+    await expect(proxyNetworkService.fetchAdminInspectorDocument({
+      status: 'withheld', reasonCode: 'KYC_FILE_NOT_LINKED_TO_PROTECTED_STORAGE',
+    })).rejects.toThrow(/not available/i);
+    expect(() => normalizeAdminInspectorDocumentPath({
+      status: 'protected_route', method: 'GET', path: 'https://storage.invalid/file.pdf',
+    })).toThrow(/invalid/i);
+    expect(() => normalizeAdminInspectorDocumentPath({
+      status: 'protected_route', method: 'GET', path: '/api/documents/private-migrations/legacy-files/document-1/content?download=1',
+    })).toThrow(/invalid/i);
+    expect(() => normalizeAdminInspectorDocumentPath({
+      status: 'protected_route', method: 'GET', path: '/api/admin/users',
+    })).toThrow(/invalid/i);
+    expect(api.get).not.toHaveBeenCalled();
   });
 
   it('constructs exact registration multipart fields without a content-type header', async () => {
@@ -223,5 +282,30 @@ describe('proxyNetworkService contracts', () => {
     expect(api.post).toHaveBeenNthCalledWith(2, '/admin/proxy-inspections/request-1/release-payment', {}, {
       headers: { 'X-Step-Up-Challenge': 'challenge-payout' },
     });
+  });
+
+  it('preserves the server schedule response and sends the documented UTC timestamp', async () => {
+    const response = { _id: 'request-1', status: 'scheduled', scheduledAt: '2026-10-27T10:00:00.000Z' };
+    vi.mocked(api.patch).mockResolvedValue({ data: response });
+
+    await expect(proxyNetworkService.schedule('request-1', '2026-10-27T10:00:00.000Z')).resolves.toEqual(response);
+    expect(api.patch).toHaveBeenCalledWith('/proxy-inspections/request-1/schedule', { scheduledAt: '2026-10-27T10:00:00.000Z' });
+  });
+
+  it('returns the authoritative in-progress state after a start request', async () => {
+    const response = { _id: 'request-1', status: 'in_progress' };
+    vi.mocked(api.post).mockResolvedValue({ data: response });
+
+    await expect(proxyNetworkService.start('request-1')).resolves.toEqual(response);
+    expect(api.post).toHaveBeenCalledWith('/proxy-inspections/request-1/start');
+  });
+
+  it('preserves a partially updated report projection and uses PATCH for an existing report', async () => {
+    const input = { declarationAccepted: true, signedByName: 'Ada Okafor', summary: 'Draft summary' };
+    const response = { _id: 'report-1', declarationAccepted: true, signedByName: 'Ada Okafor' };
+    vi.mocked(api.patch).mockResolvedValue({ data: response });
+
+    await expect(proxyNetworkService.saveReport('request-1', input, true)).resolves.toEqual(response);
+    expect(api.patch).toHaveBeenCalledWith('/proxy-inspections/request-1/report', input);
   });
 });

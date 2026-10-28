@@ -4,8 +4,13 @@ import LoadingState from '../ui/LoadingState';
 import ErrorState from '../ui/ErrorState';
 import { propertyService, type PropertyPriceHistoryChartResponse, type PropertyPriceHistoryResponse } from '../../services/propertyService';
 
-const formatCurrency = (value: number, currency = 'NGN') =>
-  new Intl.NumberFormat('en-NG', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value || 0);
+const formatCurrency = (value: number | null | undefined, currency = 'NGN') =>
+  typeof value === 'number' && Number.isFinite(value)
+    ? new Intl.NumberFormat('en-NG', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value)
+    : '—';
+
+const formatPercentage = (value: number | null | undefined) =>
+  typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(2)}%` : '—';
 
 const formatDate = (value: string) =>
   new Date(value).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -79,7 +84,7 @@ const PriceHistorySection = ({ propertyId }: { propertyId: string }) => {
             ['Initial price', formatCurrency(history.summary.initialPrice, currency)],
             ['Current price', formatCurrency(history.summary.currentPrice, currency)],
             ['Total change', formatCurrency(history.summary.absoluteChange, currency)],
-            ['Percentage', `${history.summary.percentageChange.toFixed(2)}%`],
+            ['Percentage', formatPercentage(history.summary.percentageChange)],
             ['High / low', `${formatCurrency(history.summary.highestPrice, currency)} / ${formatCurrency(history.summary.lowestPrice, currency)}`],
           ].map(([label, value]) => (
             <div key={label} className="rounded-xl border border-outline-variant/10 bg-white p-4">
@@ -120,7 +125,7 @@ const PriceHistorySection = ({ propertyId }: { propertyId: string }) => {
                   <td className="px-4 py-3">{formatCurrency(item.previousPrice, item.currency)}</td>
                   <td className="px-4 py-3 font-bold">{formatCurrency(item.newPrice, item.currency)}</td>
                   <td className="px-4 py-3">{formatCurrency(item.absoluteChange, item.currency)}</td>
-                  <td className="px-4 py-3">{item.percentageChange.toFixed(2)}%</td>
+                  <td className="px-4 py-3">{formatPercentage(item.percentageChange)}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2 py-1 text-[11px] font-bold capitalize ${directionClass(item.changeType)}`}>
                       {item.changeType}

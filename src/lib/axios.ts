@@ -132,7 +132,8 @@ export const normalizeApiError = (error: AxiosError<unknown>): Error => {
   const status = response.status;
   const requestId = responseHeader(response.headers, 'x-request-id');
   const retryAfter = responseHeader(response.headers, 'retry-after');
-  if (status === 401 && typeof window !== 'undefined') {
+  const authenticatedRequest = Boolean(responseHeader(error.config?.headers, 'Authorization'));
+  if (status === 401 && authenticatedRequest && typeof window !== 'undefined') {
     window.dispatchEvent(new Event('realtiq:session-expired'));
   }
 

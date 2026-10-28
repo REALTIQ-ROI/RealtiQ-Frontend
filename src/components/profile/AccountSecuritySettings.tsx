@@ -9,6 +9,7 @@ import { userService } from '../../services/userService';
 import type { UpdateUserPayload, User } from '../../types';
 import Button from '../ui/Button';
 import StepUpDialog from '../auth/StepUpDialog';
+import AuthenticatorEnrollmentQrCode from '../auth/AuthenticatorEnrollmentQrCode';
 
 interface AccountSecuritySettingsProps {
   user: User;
@@ -427,7 +428,7 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
         </form>}
       </section> : null}
 
-      <div className="border-t border-outline-variant/10 pt-5">
+      <div id="authenticator-enrollment" className="border-t border-outline-variant/10 pt-5">
         <h4 className="font-bold">Authenticator enrollment</h4>
         <p className="mt-1 text-sm text-secondary">Account status: {twoStepEnabled === null ? 'checking…' : twoStepEnabled ? 'Authenticator enabled' : 'Authenticator not enabled'}.</p>
         {twoStepError ? <p role="alert" className="mt-2 text-sm text-error">{twoStepError}</p> : null}
@@ -435,7 +436,17 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
           <label htmlFor="two-step-password" className="min-w-56 flex-1 space-y-1 text-xs font-bold">Current password<input id="two-step-password" type="password" autoComplete="current-password" value={twoStepPassword} onChange={(event) => setTwoStepPassword(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 bg-white px-3 py-2 text-sm font-normal" /></label>
           <Button type="submit" disabled={twoStepBusy || !twoStepPassword} loading={twoStepBusy} loadingLabel="Preparing…">Set up authenticator</Button>
         </form> : null}
-        {twoStepEnrollment ? <div className="mt-3 rounded-lg bg-surface-container-low p-4"><p className="text-sm">Add this account to your authenticator app before {new Date(twoStepEnrollment.expiresAt).toLocaleString()}.</p><label className="mt-3 block text-xs font-bold">Setup key (shown only during this enrollment)<textarea readOnly value={twoStepEnrollment.secret} rows={2} className="mt-1 w-full rounded-lg border border-outline-variant/20 bg-white p-3 font-mono text-sm" /></label><label className="mt-3 block text-xs font-bold">Provisioning URI<textarea readOnly value={twoStepEnrollment.provisioningUri} rows={3} className="mt-1 w-full rounded-lg border border-outline-variant/20 bg-white p-3 font-mono text-xs" /></label><form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={(event) => void confirmTwoStepEnrollment(event)}><label htmlFor="two-step-confirm-code" className="min-w-48 flex-1 space-y-1 text-xs font-bold">Authenticator code<input id="two-step-confirm-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={twoStepCode} onChange={(event) => setTwoStepCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-lg border border-outline-variant/20 bg-white px-3 py-2 text-sm font-normal" /></label><Button type="submit" disabled={twoStepBusy || twoStepCode.length !== 6} loading={twoStepBusy} loadingLabel="Verifying…">Confirm authenticator</Button><Button type="button" variant="secondary" disabled={twoStepBusy} onClick={() => { setTwoStepEnrollment(null); setTwoStepCode(''); }}>Cancel</Button></form></div> : null}
+        {twoStepEnrollment ? <div className="mt-3 rounded-lg bg-surface-container-low p-4">
+          <p className="text-sm">Scan this QR code with your authenticator app before {new Date(twoStepEnrollment.expiresAt).toLocaleString()}.</p>
+          <div className="mt-3 flex justify-center">
+            <AuthenticatorEnrollmentQrCode provisioningUri={twoStepEnrollment.provisioningUri} />
+          </div>
+          <form className="mt-4 flex flex-wrap items-end gap-2" onSubmit={(event) => void confirmTwoStepEnrollment(event)}>
+            <label htmlFor="two-step-confirm-code" className="min-w-48 flex-1 space-y-1 text-xs font-bold">Authenticator code<input id="two-step-confirm-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={twoStepCode} onChange={(event) => setTwoStepCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-lg border border-outline-variant/20 bg-white px-3 py-2 text-sm font-normal" /></label>
+            <Button type="submit" disabled={twoStepBusy || twoStepCode.length !== 6} loading={twoStepBusy} loadingLabel="Verifying…">Confirm authenticator</Button>
+            <Button type="button" variant="secondary" disabled={twoStepBusy} onClick={() => { setTwoStepEnrollment(null); setTwoStepCode(''); }}>Cancel</Button>
+          </form>
+        </div> : null}
       </div>
 
       {activeProfile && (activeProfile.structure === 'company' || activeProfile.structure === 'cooperative') ? <section className="border-t border-outline-variant/10 pt-5">

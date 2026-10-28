@@ -36,7 +36,7 @@ export const stepUpErrorMessage = (error: unknown): string => {
     return delay && delay > 0 ? `${message} Wait at least ${Math.ceil(delay / 1000)} seconds before trying again.` : message;
   };
   switch (error.code) {
-    case 'AUTH_FACTOR_REQUIRED': return 'Enable the authenticator factor on this account before continuing.';
+    case 'AUTH_FACTOR_REQUIRED': return 'An authenticator is required. Enable it in Account Security before continuing.';
     case 'AUTH_FACTOR_CODE_INVALID': return 'That authenticator code was not accepted. Enter the current code and try again.';
     case 'AUTH_FACTOR_RATE_LIMITED': return waitMessage('Authenticator verification is temporarily locked.');
     case 'AUTH_CHALLENGE_RATE_LIMITED': return waitMessage('Too many security challenges were requested.');
@@ -62,10 +62,12 @@ export const useBoundStepUp = <T,>() => {
   const [challenge, setChallenge] = useState<BoundStepUpChallenge | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const errorRef = useRef<string | null>(null);
-  const publishError = useCallback((message: string | null) => {
+  const publishError = useCallback((message: string | null, code: string | null = null) => {
     errorRef.current = message;
     setError(message);
+    setErrorCode(code);
   }, []);
 
   const clear = useCallback((message?: string) => {
@@ -118,7 +120,7 @@ export const useBoundStepUp = <T,>() => {
       setChallenge({ ...started, label: action.label });
       return true;
     } catch (raw) {
-      publishError(stepUpErrorMessage(raw));
+      publishError(stepUpErrorMessage(raw), raw instanceof ApiRequestError ? raw.code ?? null : null);
       return false;
     } finally {
       busyRef.current = false;
@@ -176,7 +178,7 @@ export const useBoundStepUp = <T,>() => {
         actionRef.current = null;
         setChallenge(null);
       }
-      publishError(message);
+      publishError(message, codeValue ?? null);
       return { ok: false, error: message };
     } finally {
       busyRef.current = false;
@@ -187,5 +189,5 @@ export const useBoundStepUp = <T,>() => {
   const cancel = useCallback(() => clear(), [clear]);
   const clearError = useCallback(() => publishError(null), [publishError]);
   const getError = useCallback(() => errorRef.current, []);
-  return { challenge, busy, error, begin, complete, cancel, clearError, getError };
+  return { challenge, busy, error, errorCode, begin, complete, cancel, clearError, getError };
 };

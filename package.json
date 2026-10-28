@@ -23,6 +23,7 @@
     "lucide-react": "^1.14.0",
     "mapbox-gl": "^3.29.0",
     "postcss": "^8.5.8",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",

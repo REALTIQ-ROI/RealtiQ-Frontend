@@ -1,10 +1,51 @@
 import api from '../lib/axios';
 import type { User, LoginPayload, RegisterPayload } from '../types';
 
-export interface LoginResponse {
+export interface AuthenticatedLoginResponse {
   user: User;
   token: string;
 }
+
+export interface LoginSecondFactorChallenge {
+  code: 'AUTH_SECOND_FACTOR_REQUIRED';
+  challengeId: string;
+  expiresAt: string;
+  method: 'totp';
+}
+
+export type LoginResponse = AuthenticatedLoginResponse | LoginSecondFactorChallenge;
+
+export const isLoginSecondFactorChallenge = (response: LoginResponse): response is LoginSecondFactorChallenge =>
+  'code' in response && response.code === 'AUTH_SECOND_FACTOR_REQUIRED';
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const parseAuthenticatedLoginResponse = (value: unknown): AuthenticatedLoginResponse => {
+  if (!isRecord(value) || !isRecord(value.user) || typeof value.token !== 'string' || !value.token) {
+    throw new Error('The sign-in response was incomplete. Please try signing in again.');
+  }
+  return value as unknown as AuthenticatedLoginResponse;
+};
+
+export const parseLoginResponse = (value: unknown, status: number): LoginResponse => {
+  if (status === 202) {
+    if (
+      isRecord(value) &&
+      value.code === 'AUTH_SECOND_FACTOR_REQUIRED' &&
+      typeof value.challengeId === 'string' && value.challengeId.length > 0 &&
+      typeof value.expiresAt === 'string' && Number.isFinite(Date.parse(value.expiresAt)) &&
+      value.method === 'totp' &&
+      !('user' in value) && !('token' in value)
+    ) {
+      return value as unknown as LoginSecondFactorChallenge;
+    }
+    throw new Error('The sign-in verification challenge response was incomplete. Start sign-in again or contact support.');
+  }
+
+  if (status !== 200) throw new Error('The sign-in response used an unsupported status. Please try again.');
+  return parseAuthenticatedLoginResponse(value);
+};
 
 export interface RegisterResponse {
   message?: string;
@@ -88,13 +129,16 @@ export const authService = {
     await api.post('/auth/logout', undefined, { headers: { Authorization: `Bearer ${token}` } });
   },
   async login(payload: LoginPayload): Promise<LoginResponse> {
-    const { data } = await api.post<LoginResponse>('/auth/login', payload);
-    return data;
+    // The selected login portal is a frontend hint only; the mounted login DTO is email/password.
+    const { email, password } = payload;
+    const { data, status } = await api.post<unknown>('/auth/login', { email, password });
+    return parseLoginResponse(data, status);
   },
 
-  async completeLoginSecondFactor(challengeId: string, code: string): Promise<LoginResponse> {
-    const { data } = await api.post<LoginResponse>('/auth/login/second-factor', { challengeId, code });
-    return data;
+  async completeLoginSecondFactor(challengeId: string, code: string): Promise<AuthenticatedLoginResponse> {
+    const { data, status } = await api.post<unknown>('/auth/login/second-factor', { challengeId, code });
+    if (status !== 200) throw new Error('The authenticator response used an unsupported status. Please try signing in again.');
+    return parseAuthenticatedLoginResponse(data);
   },
 
   async register(payload: RegisterPayload): Promise<RegisterResponse> {

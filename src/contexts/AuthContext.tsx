@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { authService, type RegisterResponse } from '../services/authService';
+import { authService, isLoginSecondFactorChallenge, type LoginSecondFactorChallenge, type RegisterResponse } from '../services/authService';
 import { userService } from '../services/userService';
 import { profileService, type AccountProfileSummary } from '../services/profileService';
 import type { LoginPayload, RegisterPayload, User } from '../types';
@@ -15,7 +15,10 @@ interface AuthContextValue {
   profileError: string | null;
   refreshProfiles: () => Promise<void>;
   switchProfile: (id: string) => Promise<void>;
-  login: (payload: LoginPayload) => Promise<User>;
+  login: (payload: LoginPayload) => Promise<User | null>;
+  loginChallenge: LoginSecondFactorChallenge | null;
+  completeLoginSecondFactor: (code: string) => Promise<User>;
+  cancelLoginChallenge: () => void;
   register: (payload: RegisterPayload) => Promise<RegisterResponse>;
   updateUser: (nextUser: User) => void;
   refreshUser: () => Promise<User | null>;
@@ -40,6 +43,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profiles, setProfiles] = useState<AccountProfileSummary[]>([]);
   const [activeProfile, setActiveProfile] = useState<AccountProfileSummary | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [loginChallenge, setLoginChallenge] = useState<LoginSecondFactorChallenge | null>(null);
 
   const clearSession = useCallback(() => {
     window.dispatchEvent(new Event('realtiq:session-changed'));
@@ -51,6 +55,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setProfiles([]);
     setActiveProfile(null);
     setProfileError(null);
+    setLoginChallenge(null);
     setIsLoading(false);
   }, []);
 
@@ -63,6 +68,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(nextToken);
     setProfiles([]);
     setActiveProfile(null);
+    setLoginChallenge(null);
   };
 
   const refreshProfiles = useCallback(async () => {
@@ -103,24 +109,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(nextUser);
   }, []);
 
+  const userId = user?._id;
+
   const refreshUser = useCallback(async (): Promise<User | null> => {
-    if (!user?._id) {
+    if (!userId) {
       return null;
     }
 
-    const refreshed = await userService.fetchUserById(user._id);
+    const refreshed = await userService.fetchUserById(userId);
     updateUser(refreshed);
     return refreshed;
-  }, [updateUser, user?._id]);
+  }, [updateUser, userId]);
 
-  const userId = user?._id;
-
-  const login = useCallback(async (payload: LoginPayload): Promise<User> => {
+  const login = useCallback(async (payload: LoginPayload): Promise<User | null> => {
+    setLoginChallenge(null);
     setIsLoading(true);
     try {
       const response = await authService.login(payload);
-      if (!response.token || !response.user) {
-        throw new Error('Additional sign-in verification is required. The second-factor form is unavailable until its request contract is documented.');
+      if (isLoginSecondFactorChallenge(response)) {
+        setLoginChallenge(response);
+        setIsLoading(false);
+        return null;
       }
       persistSession(response.user, response.token);
       return response.user;
@@ -129,6 +138,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const message = error instanceof Error ? error.message : 'Unable to login.';
       throw new Error(message);
     }
+  }, []);
+
+  const completeLoginSecondFactor = useCallback(async (code: string): Promise<User> => {
+    const challenge = loginChallenge;
+    if (!challenge) throw new Error('There is no active sign-in verification challenge. Start sign-in again.');
+    if (Date.parse(challenge.expiresAt) <= Date.now()) {
+      setLoginChallenge(null);
+      throw new Error('This sign-in verification challenge has expired. Start sign-in again.');
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await authService.completeLoginSecondFactor(challenge.challengeId, code);
+      persistSession(response.user, response.token);
+      return response.user;
+    } catch (error) {
+      setIsLoading(false);
+      throw error instanceof Error ? error : new Error('Unable to verify the authenticator code.');
+    }
+  }, [loginChallenge]);
+
+  const cancelLoginChallenge = useCallback(() => {
+    setLoginChallenge(null);
+    setIsLoading(false);
   }, []);
 
   const register = useCallback(async (payload: RegisterPayload): Promise<RegisterResponse> => {
@@ -185,12 +218,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       refreshProfiles,
       switchProfile,
       login,
+      loginChallenge,
+      completeLoginSecondFactor,
+      cancelLoginChallenge,
       register,
       updateUser,
       refreshUser,
       logout,
     }),
-    [user, token, isLoading, profiles, activeProfile, profileError, refreshProfiles, switchProfile, login, register, updateUser, refreshUser, logout],
+    [user, token, isLoading, profiles, activeProfile, profileError, refreshProfiles, switchProfile, login, loginChallenge, completeLoginSecondFactor, cancelLoginChallenge, register, updateUser, refreshUser, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

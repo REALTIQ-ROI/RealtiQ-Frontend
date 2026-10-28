@@ -23,10 +23,20 @@ export type EscrowRuleType =
 
 export type EscrowMetadata = Record<string, unknown>;
 export type EscrowParty = Pick<User, '_id' | 'name' | 'email' | 'role'>;
+export interface EscrowParticipantIdentity {
+  profileId: string;
+  name: string;
+}
+export interface EscrowParticipants {
+  buyer: EscrowParticipantIdentity | null;
+  seller: EscrowParticipantIdentity | null;
+}
 export type EscrowProperty = Pick<Property, '_id' | 'publicReference' | 'title' | 'price' | 'location' | 'currency' | 'propertyType' | 'media' | 'status'> & { media: MediaItem[] };
 
 export interface EscrowRule {
   _id: string;
+  /** Some escrow projections serialize rule identifiers as `id`. */
+  id?: string;
   sequence?: number;
   type: EscrowRuleType;
   description: string;
@@ -95,9 +105,13 @@ export interface RefundDetailsPayload { accountNumber: string; bankName: string;
 export interface ProcessRefundResponse { escrow?: Escrow; message?: string }
 
 export interface EscrowDispute {
-  _id: string;
+  _id?: string;
+  id?: string;
   escrow: Escrow | string;
-  raisedBy: EscrowParty | string;
+  /** Legacy/raw dispute projections may include the actor reference. */
+  raisedBy?: EscrowParty | string;
+  /** Safe identity projection returned on escrow detail disputes. */
+  openedBy?: EscrowParticipantIdentity | null;
   raisedAgainst?: EscrowParty | string;
   reason: string;
   description?: string;
@@ -221,12 +235,16 @@ export interface PayoutAccountPayload {
 
 export interface Escrow {
   _id: string;
+  /** Some safe API projections expose `id` instead of Mongoose's `_id`. */
+  id?: string;
   property?: EscrowProperty | string;
   propertyId?: EscrowProperty | string;
   buyer?: EscrowParty | string;
   buyerId?: EscrowParty | string;
   seller?: EscrowParty | string;
   sellerId?: EscrowParty | string;
+  /** Added by GET /api/escrow/:id; list responses do not include this projection. */
+  participants?: EscrowParticipants | null;
   payment?: ApiPayment | string | null;
   paymentId?: ApiPayment | string | null;
   amount: number;
@@ -281,8 +299,28 @@ export interface SatisfyEscrowRuleResponse {
 export type EscrowMilestone = EscrowRule;
 
 export const populated = <T extends { _id: string }>(value?: T | string | null): T | null => value && typeof value !== 'string' ? value : null;
-export const escrowProperty = (escrow: Escrow) => populated(escrow.property ?? escrow.propertyId);
-export const escrowBuyer = (escrow: Escrow) => populated(escrow.buyer ?? escrow.buyerId);
-export const escrowSeller = (escrow: Escrow) => populated(escrow.seller ?? escrow.sellerId);
-export const escrowPayment = (escrow: Escrow) => populated(escrow.payment ?? escrow.paymentId);
+const populatedFrom = <T extends { _id: string }>(
+  values: Array<T | string | null | undefined>,
+  isPreferred?: (value: T) => boolean,
+): T | null => {
+  const references = values.map((value) => populated(value)).filter((value): value is T => value !== null);
+  return references.find((value) => isPreferred?.(value)) ?? references[0] ?? null;
+};
+
+export const escrowProperty = (escrow: Escrow) => populatedFrom(
+  [escrow.property, escrow.propertyId],
+  (value) => Array.isArray(value.media) && value.media.some((media) =>
+    Boolean(media?.url) && media.type !== 'video' && media.resourceType !== 'video' &&
+    (media.type === 'image' || media.resourceType === 'image'),
+  ),
+);
+export const escrowBuyer = (escrow: Escrow) => populatedFrom(
+  [escrow.buyer, escrow.buyerId],
+  (value) => typeof value.name === 'string' && Boolean(value.name.trim()),
+);
+export const escrowSeller = (escrow: Escrow) => populatedFrom(
+  [escrow.seller, escrow.sellerId],
+  (value) => typeof value.name === 'string' && Boolean(value.name.trim()),
+);
+export const escrowPayment = (escrow: Escrow) => populatedFrom([escrow.payment, escrow.paymentId]);
 export const isRuleSatisfied = (rule: EscrowRule) => Boolean(rule.satisfied ?? rule.isSatisfied);

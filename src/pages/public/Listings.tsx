@@ -16,7 +16,6 @@ import type { CanonicalMapMarker } from '../../types/canonicalMap';
 import { canonicalMapMarkers } from '../../utils/canonicalMapMarkers';
 import { cataloguePageFromQuery, readCatalogueQuery, writeCatalogueQuery } from "../../utils/catalogueQuery";
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
-import { summarizeCatalogueFacets } from '../../utils/catalogueFacets';
 import { savedSearchFiltersFromUrl } from '../../utils/savedSearchQuery';
 import type { SavedSearch } from '../../types';
 import { ApiRequestError } from '../../lib/axios';
@@ -53,6 +52,12 @@ const Listings = () => {
   const [initialFilters] = useState(() => new URLSearchParams(searchParams));
   const [initialPage] = useState(() => cataloguePageFromQuery(searchParams));
   const appliedQueryKey = useRef(searchParams.toString());
+  const useNewestWhenRecommendedUnavailable = useCallback(() => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('sort', 'newest');
+    appliedQueryKey.current = nextParams.toString();
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
   const { user, activeProfile } = useAuth();
   const {
     properties,
@@ -60,14 +65,19 @@ const Listings = () => {
     error,
     notices,
     diagnostics,
-    facets,
     total,
     page,
     filters,
     fetchProperties,
     applyFilters,
     goToPage,
-  } = usePropertyCatalog({ autoFetch: true, limit: LIMIT, initialFilters, initialPage });
+  } = usePropertyCatalog({
+    autoFetch: true,
+    limit: LIMIT,
+    initialFilters,
+    initialPage,
+    onRecommendedUnavailable: useNewestWhenRecommendedUnavailable,
+  });
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(
     null,
   );
@@ -93,11 +103,8 @@ const Listings = () => {
     return { north: north!, south: south!, east: east!, west: west!, zoom: zoom! };
   }, [searchParams]);
   const mapLoading = mapActive && mapState.queryKey !== mapQueryKey;
-  const mapResultCount = mapState.queryKey === mapQueryKey ? mapState.count : null;
   const mapError = mapState.queryKey === mapQueryKey ? mapState.error : null;
   const activeMapMarkers = mapActive && mapState.queryKey === mapQueryKey ? mapState.markers : [];
-  const catalogueFacets = summarizeCatalogueFacets(facets);
-  const mapFacets = summarizeCatalogueFacets(mapState.facets);
   const resultsRef = useRef<HTMLDivElement>(null);
   const viewportKey = useRef("");
   const viewportInteracted = useRef(false);
@@ -313,11 +320,9 @@ const Listings = () => {
                 Updating this area…
               </div>
             ) : null}
-            {searchParams.get('mapActive') === 'true' ? <div className="absolute bottom-4 left-4 z-[1000] max-w-[min(90%,340px)] rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-secondary shadow" role="status">
-              {mapLoading ? 'Checking map results…' : mapError ? `Map results unavailable: ${mapError}` : mapResultCount === null ? 'Map result count unavailable.' : `${mapResultCount} properties match this map area.`}
-              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey ? <span className="mt-1 block font-normal">{mapState.mode === 'clusters' ? `${mapState.markers.length} server clusters shown.` : `${mapState.markers.length} server property markers shown${mapState.truncated ? ' (page limit reached)' : ''}.`}{mapState.skipped ? ` ${mapState.skipped} returned items lacked safe marker coordinates or references.` : ''}</span> : null}
-              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey && mapFacets ? <span className="mt-1 block font-normal">Facets: {mapFacets}</span> : null}
-              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey && mapState.priceAggregateState === 'fx_unconfigured' ? <span className="mt-1 block font-semibold text-amber-800">Price aggregates are unavailable because currency conversion is not configured.</span> : null}
+            {searchParams.get('mapActive') === 'true' && (mapLoading || mapError || (mapState.queryKey === mapQueryKey && (mapState.priceAggregateState === 'fx_unconfigured' || mapState.normalizationNotices.length > 0))) ? <div className="absolute bottom-4 left-4 z-[1000] max-w-[min(90%,340px)] rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-secondary shadow" role="status">
+              {mapLoading ? 'Checking map results…' : mapError ? `Map results unavailable: ${mapError}` : null}
+              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey && mapState.priceAggregateState === 'fx_unconfigured' ? <span className="block font-semibold text-amber-800">Price aggregates are unavailable because currency conversion is not configured.</span> : null}
               {!mapLoading && !mapError && mapState.queryKey === mapQueryKey ? mapState.normalizationNotices.map((notice, index) => mapNoticeText(notice) ? <span key={`map-notice-${index}`} className="mt-1 block font-normal">Search notice: {mapNoticeText(notice)}</span> : null) : null}
             </div> : null}
           </section>
@@ -334,7 +339,6 @@ const Listings = () => {
                   <p className="mt-1 text-xs font-semibold text-secondary">
                     {formatRange(page, total)}
                   </p>
-                  {catalogueFacets ? <p className="mt-1 text-[11px] text-secondary">Available facets: {catalogueFacets}</p> : null}
                 </div>
                 <button
                   type="button"

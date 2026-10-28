@@ -2,8 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
+import usePreservedSidebarScroll from '../../hooks/usePreservedSidebarScroll';
 import AdminGlobalSearch from '../admin/AdminGlobalSearch';
-import ProfileSwitcher from './ProfileSwitcher';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -21,7 +21,8 @@ const navLinks = [
   { to: '/dashboard/admin/kyc', label: 'KYC Review', icon: 'verified_user' },
   { to: '/dashboard/admin/data-protection-execution', label: 'Privacy Execution', icon: 'privacy_tip' },
   { to: '/dashboard/admin/legal-holds', label: 'Legal Holds', icon: 'gavel' },
-  { to: '/dashboard/admin/staff-access-changes', label: 'Staff Access', icon: 'admin_panel_settings' },
+  // Temporarily hidden: the current general-admin model has no separate staff access to manage.
+  // { to: '/dashboard/admin/staff-access-changes', label: 'Staff Access', icon: 'admin_panel_settings' },
   { to: '/dashboard/admin/manage-inquiries', label: 'Inquiries', icon: 'mail' },
   { to: '/dashboard/admin/message-moderation', label: 'Message Moderation', icon: 'shield' },
   { to: '/dashboard/notifications', label: 'Notifications', icon: 'notifications' },
@@ -40,13 +41,13 @@ const navLinks = [
   { to: '/dashboard/admin/escrow-disputes', label: 'Escrow Disputes', icon: 'gavel' },
   { to: '/dashboard/admin/installments', label: 'Installments', icon: 'schedule' },
   { to: '/dashboard/admin/roi-assumptions', label: 'ROI Assumptions', icon: 'monitoring' },
-  { to: '/dashboard/admin/settings', label: 'Settings', icon: 'settings' },
 ];
 
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const hasScrolled = useHasScrolled(8);
+  const sidebarRef = usePreservedSidebarScroll('admin');
   const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
@@ -65,7 +66,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     <div className="antialiased text-on-surface">
       {/* Fixed Sidebar */}
       {menuOpen ? <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMenuOpen(false)} /> : null}
-      <aside className={`h-screen w-64 fixed left-0 top-0 bg-slate-50 flex flex-col p-4 z-50 overflow-y-auto overscroll-contain transition-transform lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside ref={sidebarRef} className={`h-screen w-64 fixed left-0 top-0 bg-slate-50 flex flex-col p-4 z-50 overflow-y-auto overscroll-contain transition-transform lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="mb-10 px-4">
           <h1 className="text-2xl font-bold tracking-tighter text-slate-900 font-headline">RealtIQ</h1>
           <p className="text-xs text-secondary font-medium uppercase tracking-widest mt-1">Admin Console</p>
@@ -91,13 +92,6 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         </nav>
 
         <div className="mt-auto pt-6 border-t border-slate-200 space-y-1">
-          <NavLink
-            to="/dashboard/admin/manage-properties"
-            className="w-full flex items-center gap-3 px-4 py-3 mb-4 bg-primary text-on-primary rounded-lg font-bold transition-all hover:opacity-90"
-          >
-            <span className="material-symbols-outlined">add</span>
-            <span>New Listing</span>
-          </NavLink>
           <NavLink
             to="/dashboard/admin/settings"
             className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 transition-colors"
@@ -125,7 +119,6 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         <AdminGlobalSearch />
 
         <div className="flex items-center gap-3 sm:gap-6 text-sm font-medium justify-end">
-          <ProfileSwitcher />
           <button className="hidden text-primary font-bold hover:underline sm:block" onClick={() => void navigate('/contact')}>
             Support
           </button>

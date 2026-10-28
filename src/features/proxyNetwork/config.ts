@@ -16,3 +16,16 @@ export const DECLARATION_TEXT = 'I certify that I personally inspected this prop
 export const formatLabel = (value?: string) => value ? value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : '—';
 export const formatNgn = (value?: number) => value == null ? '—' : new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value);
 export const refId = <T extends { _id: string }>(value?: string | T | null) => typeof value === 'string' ? value : value?._id ?? '';
+
+/** Resolve only the professional profile's own identifier; never substitute its user/account ID. */
+export const adminInspectorProfileId = (value: unknown): string | null => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const profile = value as Record<string, unknown>;
+  for (const key of ['_id', 'profileId', 'id']) {
+    const id = profile[key];
+    if (typeof id !== 'string') continue;
+    const normalized = id.trim();
+    if (normalized && normalized !== 'undefined' && normalized !== 'null') return normalized;
+  }
+  return null;
+};

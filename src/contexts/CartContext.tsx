@@ -35,13 +35,15 @@ const fallbackCartContext: CartContextValue = {
 };
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const [cart, setCart] = useState<CartResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   const refreshCart = useCallback(async () => {
-    if (isAuthenticated && user?.role !== 'buyer') {
+    if (authLoading) return null;
+    if (!isAuthenticated || user?.role !== 'buyer') {
       setCart(null);
+      setLoading(false);
       return null;
     }
     setLoading(true);
@@ -55,7 +57,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, user?.role]);
+  }, [authLoading, isAuthenticated, user?.role]);
 
   useEffect(() => {
     void refreshCart().catch(() => undefined);
