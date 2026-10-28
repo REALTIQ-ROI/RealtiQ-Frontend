@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
+import { normalizeVerificationEmail } from '../../../lib/emailVerification';
 
 const validatePassword = (pwd: string): string | null => {
   if (pwd.length < 8) return 'Password must be at least 8 characters';
@@ -33,8 +34,8 @@ const LandlordRegistration = () => {
 
     try {
       await register({ name, email, password, role: 'landlord' });
-      toast.success('Registration successful. Please check your email to verify your account.');
-      navigate('/registration-success');
+      toast.success('Registration successful. Check your inbox and spam folder for a verification email.');
+      navigate('/registration-success', { state: { email: normalizeVerificationEmail(email), verificationRequestedAt: Date.now() } });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to register. Please try again.';
       toast.error(message);

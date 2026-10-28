@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import AdminLayout from '../../components/layout/AdminLayout';
@@ -17,6 +17,7 @@ import { installmentService } from '../../services/installmentService';
 import { paymentService } from '../../services/paymentService';
 import { propertyService } from '../../services/propertyService';
 import { propertyRouteReference } from '../../types';
+import { loadInstallmentProperties } from '../../utils/installmentProperties';
 import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
 import type {
   CustomInstallmentCreatePayload,
@@ -875,10 +876,14 @@ const InstallmentDetail = ({
 };
 
 const Installments = () => {
-  const { user } = useAuth();
+  const { user, token, activeProfile } = useAuth();
   const { id } = useParams<{ id?: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const role = user?.role === 'proxy_inspector' ? undefined : user?.role;
+  const propertyScopeKey = JSON.stringify([user?._id ?? null, activeProfile?.id ?? null, role, token]);
+  const propertyRequestSequence = useRef(0);
+  const currentPropertyScope = useRef(propertyScopeKey);
   const [query, setQuery] = useState('');
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [selected, setSelected] = useState<Installment | null>(null);
@@ -891,8 +896,16 @@ const Installments = () => {
   const [listError, setListError] = useState<string | null>(null);
   const [propertyError, setPropertyError] = useState<string | null>(null);
 
-  const role = user?.role === 'proxy_inspector' ? undefined : user?.role;
   const routeBase = role === 'admin' ? '/dashboard/admin/installments' : role === 'landlord' ? '/dashboard/landlord/installments' : '/dashboard/buyer/installments';
+
+  useLayoutEffect(() => {
+    if (currentPropertyScope.current === propertyScopeKey) return;
+    currentPropertyScope.current = propertyScopeKey;
+    propertyRequestSequence.current += 1;
+    setProperties([]);
+    setPropertyError(null);
+    setLoadingProperties(role === 'buyer');
+  }, [propertyScopeKey, role]);
 
   const loadList = useCallback(async () => {
     setLoadingList(true);
@@ -909,17 +922,24 @@ const Installments = () => {
 
   const loadProperties = useCallback(async () => {
     if (role !== 'buyer') return;
+    const requestId = ++propertyRequestSequence.current;
+    const requestScope = propertyScopeKey;
+    const isCurrentRequest = () => requestId === propertyRequestSequence.current &&
+      currentPropertyScope.current === requestScope;
     setLoadingProperties(true);
     setPropertyError(null);
     try {
-      const response = await propertyService.getProperties({ status: 'available', limit: 500 });
-      setProperties(response.properties ?? []);
+      const availableProperties = await loadInstallmentProperties(
+        (page, limit) => propertyService.getProperties({ status: 'available', page, limit }),
+        { isCurrent: isCurrentRequest },
+      );
+      if (isCurrentRequest()) setProperties(availableProperties);
     } catch (error) {
-      setPropertyError(apiMessage(error, 'Unable to load eligible properties.'));
+      if (isCurrentRequest()) setPropertyError(apiMessage(error, 'Unable to load eligible properties.'));
     } finally {
-      setLoadingProperties(false);
+      if (isCurrentRequest()) setLoadingProperties(false);
     }
-  }, [role]);
+  }, [propertyScopeKey, role]);
 
   const loadDetail = useCallback(async (installmentId: string) => {
     setLoadingDetail(true);
@@ -948,6 +968,7 @@ const Installments = () => {
   useEffect(() => {
     void loadList();
     void loadProperties();
+    return () => { propertyRequestSequence.current += 1; };
   }, [loadList, loadProperties]);
 
   useEffect(() => {

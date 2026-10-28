@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import BuyerPortalLayout from '../../components/layout/BuyerPortalLayout';
 import { useProperties } from '../../contexts/PropertiesContext';
-import { REQUESTED_SERVICES } from '../../features/proxyNetwork/config';
+import { publicInspectorDisplayName, REQUESTED_SERVICES } from '../../features/proxyNetwork/config';
 import { ApiRequestError } from '../../lib/axios';
 import { proxyNetworkService } from '../../services/proxyNetworkService';
 import type { ProxyInspectionRequest, RequestedService } from '../../types/proxyNetwork';
@@ -36,7 +36,7 @@ const CreateProxyInspection = () => {
     const controller = new AbortController();
     proxyNetworkService.getPublicInspector(inspectorId, controller.signal)
       .then((profile) => {
-        setInspectorName(typeof profile.user === 'string' ? 'RealtIQ Verified Property Agent' : profile.user.name);
+        setInspectorName(publicInspectorDisplayName(profile.user));
         setInspectorLookupError('');
       })
       .catch(() => setInspectorLookupError('The selected Property Agent could not be loaded. Choose an agent again from the directory.'));

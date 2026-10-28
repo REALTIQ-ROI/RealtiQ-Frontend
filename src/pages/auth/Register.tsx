@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import type { UserRole } from '../../types';
 import { clearMarketAccessIntent, marketAuthPath, useMarketAccessIntent } from '../../hooks/useMarketAccessIntent';
+import { normalizeVerificationEmail } from '../../lib/emailVerification';
 
 type RegisterRole = Extract<UserRole, 'buyer' | 'landlord'>;
 
@@ -67,19 +68,24 @@ const Register = ({ purchaseMode = false }: RegisterProps) => {
           ? { buyerProfile: { structure: buyerStructure, ...(buyerProfileName.trim() ? { name: buyerProfileName.trim() } : {}) } }
           : {}),
       });
+      const verificationSuccessState = {
+        email: normalizeVerificationEmail(email),
+        verificationRequestedAt: Date.now(),
+      };
       if (!purchaseMode && marketRedirect) {
         if (response?.token) {
           clearMarketAccessIntent();
           toast.success('Account created. Continue to market analysis.');
           navigate(marketRedirect, { replace: true });
         } else {
-          toast.success('Please verify your email, then sign in to continue to payment.');
-          navigate(marketAuthPath('/registration-success', marketRedirect));
+          toast.success('If your account is eligible, check your inbox for a verification email.');
+          navigate(marketAuthPath('/registration-success', marketRedirect), { state: verificationSuccessState });
         }
         return;
       }
-      toast.success('Registration successful. Please check your email to verify your account.');
-      navigate(purchaseMode ? buyerRedirect ?? '/checkout' : '/registration-success');
+      toast.success('Registration successful. Check your inbox and spam folder for a verification email.');
+      if (purchaseMode) navigate(buyerRedirect ?? '/checkout');
+      else navigate('/registration-success', { state: verificationSuccessState });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to register. Please try again.';
       toast.error(message);

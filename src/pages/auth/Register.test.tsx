@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import Register from './Register';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -15,11 +15,16 @@ describe('Register organization profile option', () => {
     register.mockResolvedValue({ user: { _id: 'identity-1', name: 'Alex User', email: 'alex@example.test', role: 'buyer' } });
   });
 
+  const RegistrationSuccessState = () => {
+    const location = useLocation();
+    return <p data-testid="registration-success-state">{JSON.stringify(location.state)}</p>;
+  };
+
   const renderForm = () => render(
     <MemoryRouter initialEntries={['/register']}>
       <Routes>
         <Route path="/register" element={<Register />} />
-        <Route path="/registration-success" element={<p>Registration complete</p>} />
+        <Route path="/registration-success" element={<RegistrationSuccessState />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -40,7 +45,20 @@ describe('Register organization profile option', () => {
       role: 'buyer',
       buyerProfile: { structure: 'company', name: 'Alex Holdings' },
     }));
-    expect(await screen.findByText('Registration complete')).toBeInTheDocument();
+    expect(await screen.findByTestId('registration-success-state')).toHaveTextContent('"email":"alex@example.test"');
+    expect(screen.getByTestId('registration-success-state').textContent).toMatch(/"verificationRequestedAt":\d+/);
+  });
+
+  it('passes the submitted email and initial cooldown timestamp to registration success', async () => {
+    renderForm();
+    fireEvent.change(screen.getByLabelText('Full Name'), { target: { value: 'Alex User' } });
+    fireEvent.change(screen.getByLabelText('Email Address'), { target: { value: 'Alex@Example.Test' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'StrongPass1!' } });
+    fireEvent.click(screen.getByRole('button', { name: /start curating/i }));
+
+    const state = await screen.findByTestId('registration-success-state');
+    expect(state).toHaveTextContent('"email":"alex@example.test"');
+    expect(state.textContent).toMatch(/"verificationRequestedAt":\d+/);
   });
 
   it('keeps standard individual registration on the existing request shape', async () => {

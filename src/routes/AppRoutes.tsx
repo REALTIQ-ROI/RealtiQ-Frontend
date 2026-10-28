@@ -104,6 +104,7 @@ import RoiV1DetailPage from '../pages/dashboard/ROI/RoiV1DetailPage';
 import RoiV1HistoryPage from '../pages/dashboard/ROI/RoiV1HistoryPage';
 import ROIAssumptions from '../pages/dashboard/Admin/ROIAssumptions';
 import AdminSettings from '../pages/dashboard/Admin/AdminSettings';
+import AdminPolicies from '../pages/dashboard/Admin/AdminPolicies';
 import AdminVirtualTours from '../pages/dashboard/Admin/AdminVirtualTours';
 import AdminVirtualTourDetail from '../pages/dashboard/Admin/AdminVirtualTourDetail';
 import AdminWallet from '../pages/dashboard/Admin/AdminWallet';
@@ -337,6 +338,7 @@ const AppRoutes = () => {
           <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />
           <Route path="/dashboard/admin/roi-assumptions" element={<ROIAssumptions />} />
           <Route path="/dashboard/admin/settings" element={<AdminSettings />} />
+          <Route path="/dashboard/admin/policies" element={<AdminPolicies />} />
           <Route path="/dashboard/admin/virtual-tours" element={<AdminVirtualTours />} />
           <Route path="/dashboard/admin/virtual-tours/:propertyId" element={<AdminVirtualTourDetail />} />
           <Route path="/dashboard/admin/wallet" element={<AdminWallet />} />

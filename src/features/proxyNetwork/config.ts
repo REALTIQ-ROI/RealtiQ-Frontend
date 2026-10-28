@@ -17,6 +17,12 @@ export const formatLabel = (value?: string) => value ? value.replaceAll('_', ' '
 export const formatNgn = (value?: number) => value == null ? '—' : new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(value);
 export const refId = <T extends { _id: string }>(value?: string | T | null) => typeof value === 'string' ? value : value?._id ?? '';
 
+export const publicInspectorDisplayName = (user: unknown): string => {
+  if (typeof user !== 'object' || user === null || Array.isArray(user)) return 'Verified professional';
+  const name = (user as Record<string, unknown>).name;
+  return typeof name === 'string' && name.trim() ? name.trim() : 'Verified professional';
+};
+
 /** Resolve only the professional profile's own identifier; never substitute its user/account ID. */
 export const adminInspectorProfileId = (value: unknown): string | null => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;

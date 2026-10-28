@@ -1,4 +1,4 @@
-import api from '../lib/axios';
+import api, { ApiRequestError, type AuthlessRequestConfig } from '../lib/axios';
 import type { User, LoginPayload, RegisterPayload } from '../types';
 
 export interface AuthenticatedLoginResponse {
@@ -14,6 +14,11 @@ export interface LoginSecondFactorChallenge {
 }
 
 export type LoginResponse = AuthenticatedLoginResponse | LoginSecondFactorChallenge;
+
+export const EMAIL_UNVERIFIED_LOGIN_MESSAGE = 'Please verify your email address before logging in. Check your inbox for the verification link.';
+
+export const isEmailUnverifiedLoginError = (error: unknown): error is ApiRequestError =>
+  error instanceof ApiRequestError && error.status === 403 && error.message === EMAIL_UNVERIFIED_LOGIN_MESSAGE;
 
 export const isLoginSecondFactorChallenge = (response: LoginResponse): response is LoginSecondFactorChallenge =>
   'code' in response && response.code === 'AUTH_SECOND_FACTOR_REQUIRED';
@@ -70,6 +75,11 @@ export interface ResetPasswordPayload {
 }
 
 export interface AuthMessageResponse {
+  message: string;
+}
+
+export interface ResendVerificationEmailResponse {
+  code: 'AUTH_EMAIL_REQUEST_ACCEPTED';
   message: string;
 }
 
@@ -144,6 +154,14 @@ export const authService = {
   async register(payload: RegisterPayload): Promise<RegisterResponse> {
     const { data } = await api.post<RegisterResponse>('/auth/register', payload);
     return data;
+  },
+
+  async resendVerificationEmail(email: string): Promise<ResendVerificationEmailResponse> {
+    const { data, status } = await api.post<unknown>('/auth/resend-verification', { email }, { skipAuth: true } as AuthlessRequestConfig);
+    if (status !== 202 || !isRecord(data) || data.code !== 'AUTH_EMAIL_REQUEST_ACCEPTED' || typeof data.message !== 'string') {
+      throw new Error('The verification email request could not be confirmed. Please wait before trying again.');
+    }
+    return { code: 'AUTH_EMAIL_REQUEST_ACCEPTED', message: data.message };
   },
 
   async verifyEmail(token: string): Promise<VerifyEmailResponse> {

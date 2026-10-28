@@ -1,8 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/AuthContext';
 import LoginSecondFactorForm from '../../../components/auth/LoginSecondFactorForm';
+import EmailVerificationResend from '../../../components/auth/EmailVerificationResend';
+import { normalizeVerificationEmail } from '../../../lib/emailVerification';
+import { isEmailUnverifiedLoginError } from '../../../services/authService';
 
 const LandlordLogin = () => {
   const navigate = useNavigate();
@@ -11,6 +14,10 @@ const LandlordLogin = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [verificationRequired, setVerificationRequired] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [autoResendKey, setAutoResendKey] = useState(0);
+  const loginSubmissionRef = useRef(false);
   const requestedRedirect = (location.state as { redirectTo?: unknown } | null)?.redirectTo;
   const landlordRedirect =
     typeof requestedRedirect === 'string' &&
@@ -21,13 +28,25 @@ const LandlordLogin = () => {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (loginSubmissionRef.current) return;
+    loginSubmissionRef.current = true;
+    setVerificationRequired(false);
     try {
       const user = await login({ email, password, role: 'landlord' });
       if (!user) return;
       finishLogin(user);
     } catch (err) {
+      if (isEmailUnverifiedLoginError(err)) {
+        const normalizedEmail = normalizeVerificationEmail(email);
+        setVerificationEmail(normalizedEmail);
+        setVerificationRequired(true);
+        if (normalizedEmail) setAutoResendKey((current) => current + 1);
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Unable to login. Please check your details.';
       toast.error(message);
+    } finally {
+      loginSubmissionRef.current = false;
     }
   };
 
@@ -130,7 +149,7 @@ const LandlordLogin = () => {
                   type="email"
                   placeholder="curator@realtiq.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => { setEmail(e.target.value); setVerificationRequired(false); }}
                   required
                 />
               </div>
@@ -186,6 +205,12 @@ const LandlordLogin = () => {
                 {isLoading ? 'Signing In...' : 'Sign In'}
               </button>
             </form>
+
+            {verificationRequired ? <section className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-left" aria-labelledby="landlord-login-email-verification-title">
+              <h2 id="landlord-login-email-verification-title" className="font-bold text-amber-950">Email verification required</h2>
+              <p className="mt-1 text-sm text-amber-900">Please verify your email before signing in. Check the resend status below for the verification request.</p>
+            </section> : null}
+            <EmailVerificationResend email={verificationEmail} visible={verificationRequired && !loginChallenge} autoRequestKey={verificationRequired ? autoResendKey : null} />
 
             <p className="mt-8 text-center text-secondary text-sm">
               Don&apos;t have an account?{' '}

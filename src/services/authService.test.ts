@@ -71,6 +71,17 @@ describe('authService account security endpoints', () => {
     });
   });
 
+  it('requests verification resend with only the email through the unauthenticated client mode', async () => {
+    const response = {
+      code: 'AUTH_EMAIL_REQUEST_ACCEPTED',
+      message: 'If the account is eligible, instructions will be sent. Check your inbox or request another link later.',
+    };
+    vi.mocked(api.post).mockResolvedValueOnce({ data: response, status: 202 } as never);
+
+    await expect(authService.resendVerificationEmail('person@example.com')).resolves.toEqual(response);
+    expect(api.post).toHaveBeenCalledWith('/auth/resend-verification', { email: 'person@example.com' }, { skipAuth: true });
+  });
+
   it('requires a 200 authenticated response after second-factor verification', async () => {
     vi.mocked(api.post).mockResolvedValueOnce({ data: { status: 'pending' }, status: 202 } as never);
     await expect(authService.completeLoginSecondFactor('challenge-1', '123456')).rejects.toThrow('unsupported status');

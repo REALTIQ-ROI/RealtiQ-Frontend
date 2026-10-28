@@ -1,10 +1,13 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import LoginSecondFactorForm from '../../components/auth/LoginSecondFactorForm';
 import type { UserRole } from '../../types';
 import { clearMarketAccessIntent, marketAuthPath, useMarketAccessIntent } from '../../hooks/useMarketAccessIntent';
+import EmailVerificationResend from '../../components/auth/EmailVerificationResend';
+import { normalizeVerificationEmail } from '../../lib/emailVerification';
+import { isEmailUnverifiedLoginError } from '../../services/authService';
 
 type Role = Extract<UserRole, 'buyer' | 'landlord' | 'proxy_inspector'>;
 
@@ -34,6 +37,10 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [verificationRequired, setVerificationRequired] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [autoResendKey, setAutoResendKey] = useState(0);
+  const loginSubmissionRef = useRef(false);
   const requestedRedirect = (location.state as { redirectTo?: unknown } | null)?.redirectTo;
   const buyerRedirect =
     typeof requestedRedirect === 'string' &&
@@ -69,14 +76,26 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (loginSubmissionRef.current) return;
+    loginSubmissionRef.current = true;
+    setVerificationRequired(false);
     const loginRole: Role = purchaseMode ? 'buyer' : role;
     try {
       const user = await login({ email, password, role: loginRole });
       if (!user) return;
       finishLogin(user, loginRole);
     } catch (err) {
+      if (isEmailUnverifiedLoginError(err)) {
+        const normalizedEmail = normalizeVerificationEmail(email);
+        setVerificationEmail(normalizedEmail);
+        setVerificationRequired(true);
+        if (normalizedEmail) setAutoResendKey((current) => current + 1);
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Unable to login. Please check your details.';
       toast.error(message);
+    } finally {
+      loginSubmissionRef.current = false;
     }
   };
 
@@ -167,7 +186,7 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
                       ? 'bg-white text-on-surface shadow-sm'
                       : 'text-on-surface-variant hover:text-on-surface'
                   }`}
-                  onClick={() => setRole(value)}
+                  onClick={() => { setRole(value); setVerificationRequired(false); }}
                 >
                   {label}
                 </button>
@@ -189,7 +208,7 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
                   type="email"
                   placeholder="curator@realtiq.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => { setEmail(e.target.value); setVerificationRequired(false); }}
                   required
                 />
               </div>
@@ -245,6 +264,12 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
                 {isLoading ? 'Signing In...' : purchaseMode ? 'Sign In to Purchase' : 'Sign In'}
               </button>
             </form>
+
+            {verificationRequired ? <section className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-left" aria-labelledby="login-email-verification-title">
+              <h2 id="login-email-verification-title" className="font-bold text-amber-950">Email verification required</h2>
+              <p className="mt-1 text-sm text-amber-900">Please verify your email before signing in. Check the resend status below for the verification request.</p>
+            </section> : null}
+            <EmailVerificationResend email={verificationEmail} visible={verificationRequired && !loginChallenge} autoRequestKey={verificationRequired ? autoResendKey : null} />
 
             <p className="mt-8 text-center text-secondary text-sm">
               Don't have an account?{' '}

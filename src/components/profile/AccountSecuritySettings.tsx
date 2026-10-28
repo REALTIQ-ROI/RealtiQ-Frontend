@@ -7,6 +7,7 @@ import { authService, type AuthSession, type PhoneVerificationEvent, type PhoneV
 import { profileService } from '../../services/profileService';
 import { userService } from '../../services/userService';
 import type { UpdateUserPayload, User } from '../../types';
+import { getAuthenticatorAccountEmail } from '../../utils/authenticatorEnrollment';
 import Button from '../ui/Button';
 import StepUpDialog from '../auth/StepUpDialog';
 import AuthenticatorEnrollmentQrCode from '../auth/AuthenticatorEnrollmentQrCode';
@@ -50,6 +51,7 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
   const [twoStepEnrollment, setTwoStepEnrollment] = useState<Awaited<ReturnType<typeof authService.enrollTwoStep>> | null>(null);
   const [twoStepBusy, setTwoStepBusy] = useState(false);
   const [twoStepError, setTwoStepError] = useState<string | null>(null);
+  const twoStepAccountEmail = getAuthenticatorAccountEmail(twoStepEnrollment?.provisioningUri ?? '', user.email);
   const [pendingStepUp, setPendingStepUp] = useState<'identity' | 'signatory' | 'privacy' | null>(null);
   const [profileVisibility, setProfileVisibility] = useState<'private' | 'public'>('private');
   const [profileFollowable, setProfileFollowable] = useState(false);
@@ -431,6 +433,8 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
       <div id="authenticator-enrollment" className="border-t border-outline-variant/10 pt-5">
         <h4 className="font-bold">Authenticator enrollment</h4>
         <p className="mt-1 text-sm text-secondary">Account status: {twoStepEnabled === null ? 'checking…' : twoStepEnabled ? 'Authenticator enabled' : 'Authenticator not enabled'}.</p>
+        <p className="mt-2 text-sm text-secondary">Issuer: <strong className="text-on-surface">REALTIQ</strong> · Account label: <strong className="text-on-surface">{twoStepAccountEmail}</strong></p>
+        <p className="mt-1 text-xs text-secondary">Authenticator apps save this label when you scan the QR code.</p>
         {twoStepError ? <p role="alert" className="mt-2 text-sm text-error">{twoStepError}</p> : null}
         {twoStepEnabled === false && !twoStepEnrollment ? <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={(event) => void beginTwoStepEnrollment(event)}>
           <label htmlFor="two-step-password" className="min-w-56 flex-1 space-y-1 text-xs font-bold">Current password<input id="two-step-password" type="password" autoComplete="current-password" value={twoStepPassword} onChange={(event) => setTwoStepPassword(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 bg-white px-3 py-2 text-sm font-normal" /></label>
@@ -441,6 +445,11 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
           <div className="mt-3 flex justify-center">
             <AuthenticatorEnrollmentQrCode provisioningUri={twoStepEnrollment.provisioningUri} />
           </div>
+          <details className="mt-3 rounded-lg border border-outline-variant/20 bg-white p-3">
+            <summary className="cursor-pointer text-sm font-semibold">Set up manually with a key</summary>
+            <p className="mt-2 text-xs text-secondary">Issuer: REALTIQ · Account: {twoStepAccountEmail}</p>
+            <code className="mt-2 block break-all rounded bg-surface-container-low p-3 text-sm select-all" aria-label="Authenticator setup key">{twoStepEnrollment.secret}</code>
+          </details>
           <form className="mt-4 flex flex-wrap items-end gap-2" onSubmit={(event) => void confirmTwoStepEnrollment(event)}>
             <label htmlFor="two-step-confirm-code" className="min-w-48 flex-1 space-y-1 text-xs font-bold">Authenticator code<input id="two-step-confirm-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={twoStepCode} onChange={(event) => setTwoStepCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-lg border border-outline-variant/20 bg-white px-3 py-2 text-sm font-normal" /></label>
             <Button type="submit" disabled={twoStepBusy || twoStepCode.length !== 6} loading={twoStepBusy} loadingLabel="Verifying…">Confirm authenticator</Button>

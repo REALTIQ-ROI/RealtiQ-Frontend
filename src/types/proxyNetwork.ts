@@ -25,7 +25,7 @@ export interface ProxyPricing {
 
 export interface PublicInspectorProfile {
   _id: string;
-  user: EntityRef<{ _id: string; name: string }>;
+  user?: EntityRef<{ _id: string; name: string }> | null;
   professionalType: ProfessionalType;
   professionalTitle?: string; bio?: string; yearsOfExperience?: number; specialties?: string[];
   profilePhoto?: { url?: string; accessUrl?: string; public_id?: string };

@@ -7,7 +7,7 @@ import ErrorState from '../../components/ui/ErrorState';
 import { PROFESSIONAL_TYPES } from '../../features/proxyNetwork/config';
 import { useProxyResource } from '../../features/proxyNetwork/useProxyResource';
 import { proxyNetworkService } from '../../services/proxyNetworkService';
-import type { AvailabilityStatus, ProfessionalType, PublicInspectorFilters } from '../../types/proxyNetwork';
+import type { AvailabilityStatus, ProfessionalType, PublicInspectorFilters, PublicInspectorProfile } from '../../types/proxyNetwork';
 
 const PublicInspectorDirectory = () => {
   const [params, setParams] = useSearchParams();
@@ -25,6 +25,9 @@ const PublicInspectorDirectory = () => {
     page: Number(params.get('page') || 1), limit: Number(params.get('limit') || 20),
   }), [params]);
   const resource = useProxyResource((signal) => proxyNetworkService.listPublicInspectors(filters, signal), [JSON.stringify(filters)]);
+  const inspectors: PublicInspectorProfile[] = Array.isArray(resource.data?.inspectors)
+    ? (resource.data.inspectors as unknown[]).filter((item): item is PublicInspectorProfile => typeof item === 'object' && item !== null && !Array.isArray(item))
+    : [];
   const facets = useProxyResource((signal) => proxyNetworkService.listPublicInspectorFacetProfiles(signal), []);
   const facetOptions = useMemo(() => {
     const profiles = facets.data ?? [];
@@ -89,8 +92,8 @@ const PublicInspectorDirectory = () => {
         {facets.error ? <p role="status" className="mt-3 text-sm text-error">Filter options could not be refreshed. <button type="button" className="font-bold underline" onClick={() => void facets.reload()}>Retry</button></p> : null}
         {resource.loading ? <LoadingState label="Finding verified property agents..." /> : null}
         {resource.error ? <ErrorState message={resource.error.message} onRetry={() => void resource.reload()} /> : null}
-        {resource.data?.inspectors.length === 0 ? <div className="py-16 text-center"><h2 className="text-xl font-bold">No property agents found</h2><p className="mt-2 text-secondary">Try a broader location or fewer filters.</p></div> : null}
-        <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{resource.data?.inspectors.map((item) => <ProxyInspectorCard key={item._id} inspector={item} propertyId={params.get('propertyId') || undefined} />)}</div>
+        {resource.data && inspectors.length === 0 ? <div className="py-16 text-center"><h2 className="text-xl font-bold">No property agents found</h2><p className="mt-2 text-secondary">Try a broader location or fewer filters.</p></div> : null}
+        <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{inspectors.map((item, index) => <ProxyInspectorCard key={`${item._id || 'inspector'}-${index}`} inspector={item} propertyId={params.get('propertyId') || undefined} />)}</div>
         {resource.data ? <nav aria-label="Property agent pages" className="mt-8 flex items-center justify-between"><p className="text-sm text-secondary">Page {resource.data.page} · {resource.data.total} professionals</p><div className="flex gap-2"><button disabled={resource.data.page <= 1} onClick={() => update('page', String(resource.data!.page - 1))} className="rounded-lg bg-white px-4 py-2 disabled:opacity-40">Previous</button><button disabled={resource.data.page * resource.data.limit >= resource.data.total} onClick={() => update('page', String(resource.data!.page + 1))} className="rounded-lg bg-white px-4 py-2 disabled:opacity-40">Next</button></div></nav> : null}
       </section>
     </PublicLayout>

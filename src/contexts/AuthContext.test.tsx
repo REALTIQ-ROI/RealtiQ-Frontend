@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth } from './AuthContext';
 import { authService } from '../services/authService';
 import { profileService, type AccountProfileSummary } from '../services/profileService';
+import { ApiRequestError } from '../lib/axios';
 import type { User } from '../types';
 
 vi.mock('../services/authService', () => ({
@@ -120,6 +121,20 @@ describe('AuthProvider account and profile lifecycle', () => {
     expect(localStorage.getItem('token')).toBe('verified-session-token');
     expect(JSON.parse(localStorage.getItem('user') ?? 'null')).toEqual(account);
     expect(result.current.loginChallenge).toBeNull();
+  });
+
+  it('preserves the exact unverified-email HTTP error without creating or persisting a session', async () => {
+    const error = new ApiRequestError('Please verify your email address before logging in. Check your inbox for the verification link.', { status: 403 });
+    vi.mocked(authService.login).mockRejectedValueOnce(error);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await act(async () => {
+      await expect(result.current.login({ email: account.email, password: 'password' })).rejects.toBe(error);
+    });
+
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(localStorage.getItem('user')).toBeNull();
   });
 
   it('preserves an active challenge after an invalid code without creating a session', async () => {

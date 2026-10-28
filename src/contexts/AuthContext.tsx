@@ -135,8 +135,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return response.user;
     } catch (error) {
       setIsLoading(false);
-      const message = error instanceof Error ? error.message : 'Unable to login.';
-      throw new Error(message);
+      throw error instanceof Error ? error : new Error('Unable to login.');
     }
   }, []);
 

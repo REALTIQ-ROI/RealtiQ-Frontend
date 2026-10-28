@@ -1,4 +1,6 @@
-import axios, { type AxiosError } from 'axios';
+import axios, { type AxiosError, type AxiosRequestConfig } from 'axios';
+
+export type AuthlessRequestConfig = AxiosRequestConfig & { skipAuth: true };
 
 export interface ApiFieldError {
   path?: string;
@@ -185,6 +187,12 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
+  if ((config as typeof config & { skipAuth?: boolean }).skipAuth) {
+    delete config.headers.Authorization;
+    delete config.headers['X-Profile-ID'];
+    config.withCredentials = false;
+    return config;
+  }
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

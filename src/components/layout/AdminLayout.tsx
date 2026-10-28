@@ -41,6 +41,7 @@ const navLinks = [
   { to: '/dashboard/admin/escrow-disputes', label: 'Escrow Disputes', icon: 'gavel' },
   { to: '/dashboard/admin/installments', label: 'Installments', icon: 'schedule' },
   { to: '/dashboard/admin/roi-assumptions', label: 'ROI Assumptions', icon: 'monitoring' },
+  { to: '/dashboard/admin/policies', label: 'Policies', icon: 'policy' },
 ];
 
 const AdminLayout = ({ children }: AdminLayoutProps) => {
@@ -85,7 +86,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
                   : 'flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 transition-all duration-200 ease-in-out'
               }
             >
-              <span className="material-symbols-outlined">{link.icon}</span>
+              <span aria-hidden="true" className="material-symbols-outlined">{link.icon}</span>
               <span>{link.label}</span>
             </NavLink>
           ))}
@@ -96,14 +97,14 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             to="/dashboard/admin/settings"
             className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 transition-colors"
           >
-            <span className="material-symbols-outlined">settings</span>
+            <span aria-hidden="true" className="material-symbols-outlined">settings</span>
             <span>Settings</span>
           </NavLink>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 transition-colors"
           >
-            <span className="material-symbols-outlined">logout</span>
+            <span aria-hidden="true" className="material-symbols-outlined">logout</span>
             <span>Logout</span>
           </button>
         </div>
@@ -124,10 +125,10 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           </button>
           <div className="flex items-center gap-3 text-slate-500">
             <Link to="/dashboard/admin/notifications/digest" className="hover:text-slate-900 transition-opacity duration-150">
-              <span className="material-symbols-outlined">notifications</span>
+              <span aria-hidden="true" className="material-symbols-outlined">notifications</span>
             </Link>
             <Link to="/dashboard/admin/manage-inquiries" className="hover:text-slate-900 transition-opacity duration-150">
-              <span className="material-symbols-outlined">help_outline</span>
+              <span aria-hidden="true" className="material-symbols-outlined">help_outline</span>
             </Link>
           </div>
           <div className="flex items-center gap-3 border-l border-slate-200 pl-3 sm:pl-6">

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AxiosAdapter, AxiosError } from 'axios';
-import api, { ApiRequestError, normalizeApiError, retryAfterDelayMs } from './axios';
+import api, { ApiRequestError, normalizeApiError, retryAfterDelayMs, type AuthlessRequestConfig } from './axios';
 
 const responseError = (
   status: number,
@@ -29,6 +29,22 @@ describe('API profile context', () => {
     });
     const { data } = await api.get('/profiles/current', { adapter });
     expect(data).toEqual({ authorization: 'Bearer test-access-token', profileId: 'profile-2' });
+  });
+
+  it('omits bearer, selected profile, and credentials for public requests', async () => {
+    localStorage.setItem('token', 'must-not-be-sent');
+    localStorage.setItem('activeProfileId', 'staff-profile');
+    const adapter: AxiosAdapter = async (config) => ({
+      data: {
+        authorization: config.headers.Authorization,
+        profileId: config.headers['X-Profile-ID'],
+        withCredentials: config.withCredentials,
+      },
+      status: 202, statusText: 'Accepted', headers: {}, config,
+    });
+
+    const { data } = await api.post('/auth/resend-verification', { email: 'person@example.test' }, { skipAuth: true, adapter } as AuthlessRequestConfig);
+    expect(data).toEqual({ authorization: undefined, profileId: undefined, withCredentials: false });
   });
 });
 

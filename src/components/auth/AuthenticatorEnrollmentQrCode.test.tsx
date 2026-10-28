@@ -4,7 +4,7 @@ import AuthenticatorEnrollmentQrCode from './AuthenticatorEnrollmentQrCode';
 
 describe('AuthenticatorEnrollmentQrCode', () => {
   it('renders a local QR image from the provisioning URI without displaying the secret text', () => {
-    const provisioningUri = 'otpauth://totp/RealtiQ:admin?secret=JBSWY3DPEHPK3PXP&issuer=RealtiQ';
+    const provisioningUri = 'otpauth://totp/REALTIQ:buyer%40example.test?secret=JBSWY3DPEHPK3PXP&issuer=REALTIQ&algorithm=SHA1&digits=6&period=30';
     const { container } = render(<AuthenticatorEnrollmentQrCode provisioningUri={provisioningUri} />);
 
     const qrCode = container.querySelector('svg');
@@ -17,14 +17,14 @@ describe('AuthenticatorEnrollmentQrCode', () => {
 
   it('encodes a changed provisioning URI into a changed QR matrix', () => {
     const { container, rerender } = render(
-      <AuthenticatorEnrollmentQrCode provisioningUri="otpauth://totp/RealtiQ:admin?secret=FIRSTSECRET&issuer=RealtiQ" />,
+      <AuthenticatorEnrollmentQrCode provisioningUri="otpauth://totp/REALTIQ:buyer%40example.test?secret=FIRSTSECRET&issuer=REALTIQ" />,
     );
-    const firstMatrix = container.querySelector('path')?.getAttribute('d');
+    const firstMatrix = container.querySelector('svg')?.innerHTML;
 
     rerender(
-      <AuthenticatorEnrollmentQrCode provisioningUri="otpauth://totp/RealtiQ:admin?secret=SECONDSECRET&issuer=RealtiQ" />,
+      <AuthenticatorEnrollmentQrCode provisioningUri="otpauth://totp/REALTIQ:buyer%40example.test?secret=SECONDSECRET&issuer=REALTIQ" />,
     );
 
-    expect(container.querySelector('path')?.getAttribute('d')).not.toBe(firstMatrix);
+    expect(container.querySelector('svg')?.innerHTML).not.toBe(firstMatrix);
   });
 });

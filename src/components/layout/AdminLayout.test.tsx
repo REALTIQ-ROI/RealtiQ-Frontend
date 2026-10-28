@@ -36,6 +36,7 @@ describe('AdminLayout sidebar navigation', () => {
     const settingsLinks = screen.getAllByRole('link', { name: 'Settings' });
     expect(settingsLinks).toHaveLength(1);
     expect(settingsLinks[0]).toHaveAttribute('href', '/dashboard/admin/settings');
+    expect(screen.getByRole('link', { name: /Policies/ })).toHaveAttribute('href', '/dashboard/admin/policies');
     expect(screen.queryByRole('link', { name: 'New Listing' })).not.toBeInTheDocument();
   });
 

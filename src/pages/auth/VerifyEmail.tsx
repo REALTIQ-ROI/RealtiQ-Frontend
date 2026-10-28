@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { authService } from '../../services/authService';
 import AuthLoader from '../../components/common/AuthLoader';
 import { marketAuthPath, useMarketAccessIntent } from '../../hooks/useMarketAccessIntent';
@@ -8,8 +8,10 @@ type Status = 'loading' | 'success' | 'error';
 
 const VerifyEmail = () => {
   const { token: pathToken } = useParams<{ token: string }>();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token') ?? pathToken;
+  const fragmentParams = new URLSearchParams(location.hash.startsWith('#') ? location.hash.slice(1) : location.hash);
+  const token = searchParams.get('token') ?? pathToken ?? fragmentParams.get('token');
   const proxyInspectorVerification = searchParams.get('role') === 'proxy_inspector';
   const navigate = useNavigate();
   const marketRedirect = useMarketAccessIntent();

@@ -33,6 +33,7 @@ function setup(entry: string) {
       <Route path="/login" element={<Login />} />
       <Route path="/registration-success" element={<RegistrationSuccess />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/auth/verify-email" element={<VerifyEmail />} />
       <Route path="/dashboard/buyer" element={<p>Buyer dashboard</p>} />
       <Route path={MARKET_ACCESS_PATH} element={<p>Market payment destination</p>} />
       <Route element={<ProtectedRoute />}><Route path="/analytics/property-market" element={<p>Analytics</p>} /></Route>
@@ -88,6 +89,14 @@ describe('public market analysis purchase flow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
     expect(await screen.findByText('Market payment destination')).toBeInTheDocument();
     expect(localStorage.getItem(storageKey)).toBeNull();
+  });
+
+  it('reads the verification token from the URL fragment used by email links', async () => {
+    setup('/auth/verify-email#token=fragment-token_123-abc');
+
+    expect(await screen.findByRole('heading', { name: 'Email Verified' })).toBeInTheDocument();
+    expect(authService.verifyEmail).toHaveBeenCalledTimes(1);
+    expect(authService.verifyEmail).toHaveBeenCalledWith('fragment-token_123-abc');
   });
 
   it('sends signed in homepage visitors directly to access', async () => {
