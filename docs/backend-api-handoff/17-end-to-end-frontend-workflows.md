@@ -108,7 +108,7 @@ Exact route payload variants are endpoint-specific in [01](01-auth-accounts-prof
 
 1. Request/list document metadata using active profile.
 2. Create access request or initiate paid access only for a version-bound document.
-3. Wait for grant/payment and current scan state.
+3. Wait for grant/payment and the current content-validation state.
 4. Open the viewer session; render only through the authorized viewer content route.
 5. End the viewer when leaving. A profile switch, expiry, revocation, scan change or document replacement invalidates old grant/session.
 6. On unsupported format or missing renderer configuration, show unavailable state; never fall back to storage URL.

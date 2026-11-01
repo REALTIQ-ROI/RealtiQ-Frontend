@@ -8,6 +8,7 @@ import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
 import { paymentService } from '../../../services/paymentService';
 import { propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
+import { isVerifiedLandlord } from '../../../utils/landlordPropertyAccess';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-NG', {
@@ -26,6 +27,7 @@ const formatRelativeDate = (date?: string) => {
 
 const LandlordDashboard = () => {
   const { user } = useAuth();
+  const canAddProperty = isVerifiedLandlord(user);
   const { properties } = useProperties();
   const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
   const { data: payments } = useAsync(() => paymentService.getPayments(), true);
@@ -93,11 +95,11 @@ const LandlordDashboard = () => {
           </div>
           <div className="flex gap-3 flex-wrap">
             <Link
-              to="/dashboard/landlord/add-property"
+              to={canAddProperty ? '/dashboard/landlord/add-property' : '/dashboard/landlord/settings/verification'}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-on-primary rounded-lg text-sm font-bold hover:opacity-90 transition-opacity"
             >
-              <span className="material-symbols-outlined text-[18px]">add</span>
-              Add Property
+              <span className="material-symbols-outlined text-[18px]">{canAddProperty ? 'add' : 'verified_user'}</span>
+              {canAddProperty ? 'Add Property' : 'Complete Verification'}
             </Link>
             <Link
               to="/tools/roi-calculator"

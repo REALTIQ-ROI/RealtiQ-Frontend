@@ -76,7 +76,7 @@ Content-Type: multipart/form-data; boundary=<browser-generated>
 
 Parts: `file`, `purpose=nin`, `subject=self`, `documentKind=nin_slip`, `operationKey=evidence_nin_20261025_a1b2`, and the digest field above. Do not manually set a multipart boundary; let the HTTP client encode it. The server checks the digest against the bytes, consumes the challenge and removes `__stepUpFileSha256` before the upload controller sees the body.
 
-The router caps this request at one 50 MiB file, five text fields and 1 KiB per field; active evidence policy can impose a lower file limit. Upload validation, storage and scanning follow the existing evidence service. A metadata edit (for example changing `purpose`) or byte change requires a new challenge. Switching profile invalidates the proof. Expired, wrong-scope, wrong-body, wrong-file and replayed proofs fail with `AUTH_STEP_UP_REQUIRED`; challenge verification errors include `AUTH_CHALLENGE_INVALID`, `AUTH_CHALLENGE_FORBIDDEN`, `AUTH_CHALLENGE_REVOKED`, `AUTH_FACTOR_CODE_INVALID` and `AUTH_FACTOR_RATE_LIMITED`.
+The router caps this request at one 50 MiB file, five text fields and 1 KiB per field; active evidence policy can impose a lower file limit. Content validation and private storage follow the existing evidence service. A metadata edit (for example changing `purpose`) or byte change requires a new challenge. Switching profile invalidates the proof. Expired, wrong-scope, wrong-body, wrong-file and replayed proofs fail with `AUTH_STEP_UP_REQUIRED`; challenge verification errors include `AUTH_CHALLENGE_INVALID`, `AUTH_CHALLENGE_FORBIDDEN`, `AUTH_CHALLENGE_REVOKED`, `AUTH_FACTOR_CODE_INVALID` and `AUTH_FACTOR_RATE_LIMITED`.
 
 **Contract status:** implementable. The earlier chapter 19 statement that this route performs step-up before parsing is historical and superseded by this correction. The evidence DTO, list/read/content/retry/delete and verification-case workflows remain as specified in chapter 19.
 
@@ -351,7 +351,7 @@ Use chapter 01 for authentication, profile, seats, membership and organization r
 
 - TOTP: `GET /api/auth/two-step` → `{enabled}`; `POST /api/auth/two-step/enroll` body `{password?}` → `201 {secret,provisioningUri,expiresAt}`; `POST /api/auth/two-step/confirm` body `{code}` → `{enabled:true}`. Enrollment requires current password; secret is returned only for provisioning and must not be logged.
 - Verification cases: holder routes are `/api/profiles/current/verification-cases` and `/api/profiles/current/verification-cases/:id` plus `/history` and POST `/:id/state`; staff routes are under `/api/admin/verification-cases`. All profile routes use current account/session and active profile. State-changing submit/withdraw/claim/decision operations require step-up; staff decision requires Trust & Safety, current case claim, version/policy/evidence checks and separation of duties.
-- Profile evidence upload uses the byte-bound step-up sequence in §1. Existing upload success status is 202; evidence state can remain queued/quarantined while scanning is pending.
+- Profile evidence upload uses the byte-bound step-up sequence in §1. Existing upload success status is 202; the current evidence state and `contentValidatedAt` are authoritative, and a pending response may remain `validating` or another documented pending state.
 
 There is no new contract for an unmounted endpoint. Any enrollment, roster, signatory or verification operation not listed in actual mounted routers remains governed by chapters 01/19 and the actual current routes.
 

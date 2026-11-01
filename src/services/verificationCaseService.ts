@@ -25,7 +25,7 @@ export interface ProfileEvidence {
   size: number;
   state: string;
   errorCode: string | null;
-  scannedAt: string | null;
+  contentValidatedAt: string | null;
   createdAt: string;
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProfileEvidenceContract } from '../services/verificationCaseService';
-import { buildBoundEvidenceFormData, buildEvidenceStepUpBody, isProfileEvidenceProcessing, sha256File, validateEvidenceUpload } from './profileEvidenceUpload';
+import { buildBoundEvidenceFormData, buildEvidenceStepUpBody, isProfileEvidenceAvailable, isProfileEvidenceProcessing, sha256File, validateEvidenceUpload } from './profileEvidenceUpload';
 
 const contract: ProfileEvidenceContract = {
   version: 1, formats: ['application/pdf', 'image/png'], purposes: ['nin'], documentKinds: { nin: ['nin_slip'] }, maxBytes: 1024,
@@ -43,11 +43,18 @@ describe('profile evidence byte-bound multipart request', () => {
     expect(validateEvidenceUpload(new File(['x'.repeat(2048)], 'large.pdf', { type: 'application/pdf' }), metadata, contract)).toContain('no larger');
   });
 
-  it('polls only backend-reported processing states and leaves terminal outcomes alone', () => {
+  it('polls current backend validation and removal states', () => {
+    expect(isProfileEvidenceProcessing('migration_pending')).toBe(true);
+    expect(isProfileEvidenceProcessing('awaiting_upload')).toBe(true);
     expect(isProfileEvidenceProcessing('quarantined')).toBe(true);
-    expect(isProfileEvidenceProcessing('scanning')).toBe(true);
+    expect(isProfileEvidenceProcessing('validating')).toBe(true);
+    expect(isProfileEvidenceProcessing('activation_pending')).toBe(true);
     expect(isProfileEvidenceProcessing('deleting')).toBe(true);
-    expect(isProfileEvidenceProcessing('clean')).toBe(false);
+    expect(isProfileEvidenceProcessing('privacy_deleting')).toBe(true);
+    expect(isProfileEvidenceProcessing('available')).toBe(false);
     expect(isProfileEvidenceProcessing('rejected')).toBe(false);
+    expect(isProfileEvidenceProcessing('retry')).toBe(false);
+    expect(isProfileEvidenceAvailable('available')).toBe(true);
+    expect(isProfileEvidenceAvailable('validating')).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
@@ -9,9 +9,11 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import type { CreatePropertyPayload, CreatePropertyResponse } from '../../../services/propertyService';
 import type { Property } from '../../../types';
+import { isVerifiedLandlord } from '../../../utils/landlordPropertyAccess';
 
 const AddProperty = () => {
   const { user, activeProfile } = useAuth();
+  const canAddProperty = isVerifiedLandlord(user);
   const { addProperty } = useProperties();
   const navigate = useNavigate();
   const stepUp = useBoundStepUp<CreatePropertyResponse>();
@@ -26,6 +28,11 @@ const AddProperty = () => {
   };
 
   const handleSubmit = async (payload: CreatePropertyPayload & { status?: string }) => {
+    if (!canAddProperty) {
+      toast.error('Complete landlord verification before adding a property.');
+      return undefined;
+    }
+
     if (!user) {
       toast.error('You must be logged in to create a property.');
       return undefined;
@@ -65,7 +72,27 @@ const AddProperty = () => {
           <span className="text-primary">Add New</span>
         </nav>
 
-        {activeProfile ? (
+        {!canAddProperty ? (
+          <section className="rounded-2xl border border-amber-200 bg-amber-50 p-8 lg:p-12">
+            <div className="mx-auto max-w-2xl space-y-4 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white text-amber-700">
+                <span className="material-symbols-outlined text-3xl">verified_user</span>
+              </div>
+              <h3 className="text-3xl font-extrabold tracking-tight">Landlord verification required</h3>
+              <p className="text-sm text-secondary">
+                Your landlord account must be verified before you can add a property. Complete KYC to submit your landlord verification.
+              </p>
+              <div className="flex justify-center pt-2">
+                <Link
+                  to="/dashboard/landlord/settings/verification"
+                  className="rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-on-primary hover:opacity-90"
+                >
+                  Go to verification
+                </Link>
+              </div>
+            </div>
+          </section>
+        ) : activeProfile ? (
           <>
             <p className="mb-5 rounded-lg bg-surface-container-low p-4 text-sm text-secondary">The server checks the selected profile's current verification, permission and publication eligibility when you submit.</p>
             {stepUp.error && !stepUp.challenge ? <p role="alert" className="mb-4 rounded-lg bg-error-container p-4 text-sm text-on-error-container">{stepUp.error}</p> : null}

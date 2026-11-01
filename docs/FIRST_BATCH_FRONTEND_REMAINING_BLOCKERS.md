@@ -14,7 +14,7 @@ The 41-row reconciliation remains the historical source for the original issue a
 | ID / current status | Affected workflow and UI | Relevant frontend evidence/files | Missing requirement → owner action | Priority / owner | Acceptance criterion |
 |---|---|---|---|---|---|
 | B07-01 — PARTIAL | WF17-13/17, buyer/developer escrow and installments | `src/services/escrowService.ts`, `src/pages/dashboard/Escrow/EscrowDetails.tsx`, `src/pages/dashboard/Installments.tsx` | Legacy participant operation-specific bodies, step-up/state variants → publish exact per-route contracts; connect only the supported operations. | P0 — backend contract + finance | Each mutation submits the specified profile/version/step-up data; pending/settled outcomes are distinct in focused and authorized staging tests. |
-| B06-01 — PARTIAL | WF17-03/05/12, owner title/evidence and operational title files | `src/utils/titleUploadStepUp.ts`, `src/services/documentService.ts`, `src/pages/dashboard/Landlord/LandlordTitleVerifications.tsx` | Broader title asset/survey/custody flows and private storage/scanning → specify authorized UI scope and verify storage/scanner deployment. | P0 — frontend + backend/operations | Exact bytes/metadata are challenge-bound; changed file cannot reuse challenge; scan/private access tested; no public URL fallback. |
+| B06-01 — PARTIAL | WF17-03/05/12, owner title/evidence and operational title files | `src/utils/titleUploadStepUp.ts`, `src/services/documentService.ts`, `src/pages/dashboard/Landlord/LandlordTitleVerifications.tsx` | Broader title asset/survey/custody flows and private storage → specify authorized UI scope and verify storage deployment. | P0 — frontend + backend/operations | Exact bytes/metadata are challenge-bound; changed file cannot reuse challenge; content-validation/private access tested; no public URL fallback. |
 | B01-01 — PARTIAL | WF17-01, login | `src/services/authService.ts`, `src/contexts/AuthContext.tsx`, `src/pages/auth/*` | `POST /api/auth/login` challenge discriminator/response missing → backend documents exact trigger, fields and failure variants; frontend then adds challenge UI. | P0 — backend contract + frontend | Login challenge and ordinary login branches have exact DTO tests; session/profile isolation remains intact. |
 | B01-03 — PARTIAL | WF17-02/04, organization Team and signatory | `src/services/organizationManagementService.ts`, `src/pages/dashboard/OrganizationManagement.tsx`, `src/components/profile/AccountSecuritySettings.tsx` | Custom role/mandate lifecycle and signatory queue/detail read route → backend defines queue/target/version/read and decision DTOs. | P1 — backend contract + organization | Admin can open the correct signatory case, review authoritative data, submit permitted decision and see refreshed audit/state. |
 | B05-01 — PARTIAL | WF17-08, developer Imports | `src/utils/projectImportMapping.ts`, `src/pages/dashboard/Landlord/ProjectPropertyImports.tsx` | Exact row correction and existing-unit/new-type confirmation bodies missing → backend documents full request, response and retry semantics. | P1 — backend contract + frontend | Corrected row is revalidated without duplicate successful rows; existing-unit/type decision is reviewed, submitted once and reflected in final job results. |
@@ -48,7 +48,7 @@ F10-01 is frontend-owned and C04-01 is a contract gap. Neither is counted in the
 | ID | Pass / area | Current classification | Exact remaining dependency |
 |---|---|---|---|
 | B07-01 | 07 — participant escrow | PARTIAL | Some legacy participant mutation request DTOs and operation-specific states remain outside connected paths; live provider acceptance is not verified. |
-| B06-01 | 06 — title/evidence | PARTIAL | Broader title-asset, registered-survey and staff/operator custody UI is not connected; private storage/scanning is a deployment gate. Ambiguous uploads remain non-retryable until status is resolved. |
+| B06-01 | 06 — title/evidence | PARTIAL | Broader title-asset, registered-survey and staff/operator custody UI is not connected; private storage is a deployment gate. Ambiguous uploads remain non-retryable until status is resolved. |
 | B01-01 | 01 — login MFA | PARTIAL | `POST /api/auth/login` lacks the exact first-login MFA challenge discriminator/response needed to render the challenge branch. Do not guess it. |
 | B01-03 | 01 — organization authority | PARTIAL | Custom roles and mandates remain incomplete; staff signatory review has a mutation route but no queue/detail read route. |
 | B05-01 | 05 — imports | PARTIAL | Exact correction and explicit existing-unit/new-unit-type confirmation bodies are not fully documented. Keep those submissions unavailable. |
@@ -90,7 +90,7 @@ No decision was selected by the frontend.
 
 All nine remain **unverified** because no deployment evidence was available:
 
-1. Approved private storage, encryption keys, scanner and protected renderer resources.
+1. Approved private storage, encryption keys and protected renderer resources.
 2. Approved/licensed gazetteer and boundary data; Mapbox activation only after licensing/data-handling approval.
 3. Approved FX source, rates and freshness policy.
 4. Approved Console ranking, completeness, sponsored placement, alert cadence, trust and freshness policies.

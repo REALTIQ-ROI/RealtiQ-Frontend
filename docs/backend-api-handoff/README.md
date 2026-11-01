@@ -61,7 +61,7 @@ The focused source review confirms that the last two reported internal changes a
 ## Known limitations
 
 - A 503 may represent a deliberately unavailable feature gate; keep the filter/form state and show the returned code/message rather than silently dropping the criterion.
-- USD price comparisons, nearby-radius limits, commute routing, readable gazetteer resolution, trust tiers, freshness-dependent ranking, daily/weekly alerts, KYC rules, payments, private storage/scanning and some protected renderers require approved configuration/provider activation.
+- USD price comparisons, nearby-radius limits, commute routing, readable gazetteer resolution, trust tiers, freshness-dependent ranking, daily/weekly alerts, KYC rules, payments, private storage/content validation and some protected renderers require approved configuration/provider activation.
 - RQS-02/RQS-03 state 16 construction milestones while the current named list contains 15. Do not add a client-side sixteenth value.
 - Sponsorship and profile-completeness only affect ranking under the approved Console policies and current eligible source records. Client flags, payment history, Featured, or local client scores cannot create those signals.
 - The source-defined search P95 target has not been certified by this source review.

@@ -14,8 +14,8 @@ vi.mock('../lib/axios', () => ({
 describe('verificationCaseService evidence mutations', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('retries a versioned profile evidence scan with the bound challenge header', async () => {
-    const evidence = { id: 'evidence-1', version: 3, state: 'quarantined' };
+  it('requests versioned profile evidence content validation with the bound challenge header', async () => {
+    const evidence = { id: 'evidence-1', version: 3, state: 'validating', contentValidatedAt: null };
     vi.mocked(api.post).mockResolvedValue({ data: evidence });
     const body = { expectedVersion: 2 };
 
@@ -25,6 +25,18 @@ describe('verificationCaseService evidence mutations', () => {
       body,
       { headers: { 'X-Step-Up-Challenge': 'challenge-1' } },
     );
+  });
+
+  it('uses the current evidence DTO timestamp and does not depend on legacy scan fields', async () => {
+    const evidence = {
+      id: 'evidence-available', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin_slip',
+      version: 1, previousEvidenceId: null, mimeType: 'application/pdf', size: 100, state: 'available',
+      errorCode: null, contentValidatedAt: '2026-10-25T10:45:00.000Z', createdAt: '2026-10-25T10:45:00.000Z',
+    };
+    vi.mocked(api.get).mockResolvedValue({ data: evidence });
+
+    await expect(verificationCaseService.getEvidence('evidence-available')).resolves.toEqual(evidence);
+    expect(api.get).toHaveBeenCalledWith('/profiles/current/onboarding/evidence/evidence-available');
   });
 
   it('requests versioned evidence removal without putting private identifiers in a query string', async () => {

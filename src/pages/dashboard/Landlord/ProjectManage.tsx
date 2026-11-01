@@ -19,6 +19,7 @@ import { downloadBlob } from '../../../utils/download';
 import UnitGridPanel from '../../../components/project/UnitGridPanel';
 import UnitTypeManagement from '../../../components/project/UnitTypeManagement';
 import { useAuth } from '../../../contexts/AuthContext';
+import { isVerifiedLandlord } from '../../../utils/landlordPropertyAccess';
 
 interface LandlordProjectManageData {
   project: ProjectDetail;
@@ -34,7 +35,8 @@ const loadLandlordProjectManage = async (id: string): Promise<LandlordProjectMan
 
 const ProjectManage = () => {
   const navigate = useNavigate();
-  const { activeProfile } = useAuth();
+  const { activeProfile, user } = useAuth();
+  const canAddProperty = isVerifiedLandlord(user);
   const [savingTourPreference, setSavingTourPreference] = useState(false);
   const [exportingGrid, setExportingGrid] = useState(false);
   const [jobIdInput, setJobIdInput] = useState('');
@@ -334,8 +336,8 @@ const ProjectManage = () => {
                   <h2 className="text-xl font-black">Child property units</h2>
                   <p className="text-sm text-secondary">Create or edit a property and choose this project to attach it as a unit. Use the canonical grid above for effective values, provenance and bulk actions.</p>
                 </div>
-                <Link to={`/dashboard/landlord/add-property?projectId=${project._id}`} className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary">
-                  Add unit
+                <Link to={canAddProperty ? `/dashboard/landlord/add-property?projectId=${project._id}` : '/dashboard/landlord/settings/verification'} className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary">
+                  {canAddProperty ? 'Add unit' : 'Complete verification to add a unit'}
                 </Link>
               </div>
               <p className="mt-3 rounded-lg bg-surface-container-low p-3 text-xs text-secondary">Select a project unit type when creating each unit. Project unit identity is stored as a unit number and must match the canonical unit identifier.</p>

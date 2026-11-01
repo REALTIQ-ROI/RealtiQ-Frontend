@@ -171,7 +171,7 @@ Executed `npx vitest --config vitest.pass15.config.mjs --configLoader native [11
 ### Configuration/deployment/live acceptance
 
 - Payment provider activation and payment-attempt uniqueness-index deployment evidence.
-- Evidence storage/scanning/private delivery and verification policy activation.
+- Evidence content validation/private delivery and verification policy activation.
 - Gazetteer dataset, FX and notification-provider policy/credentials.
 - Backend/provider acceptance for protected exports, uploads, payment reconciliation and escrow outcomes.
 

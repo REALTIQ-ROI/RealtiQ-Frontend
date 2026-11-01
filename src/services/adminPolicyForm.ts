@@ -182,6 +182,7 @@ const serializeField = (field: AdminPolicyField, draft: unknown, path: string, c
     return false;
   }
   const text = typeof draft === 'string' ? draft : '';
+  if (field.format === 'date-time' && text && !isValidIsoDateTime(text)) context.errors.push(path + ': enter a valid ISO-8601 timestamp.');
   if (missing || !text.trim()) context.errors.push(`${path}: enter a value.`);
   if (field.minLength !== undefined && text.length < field.minLength) context.errors.push(`${path}: use at least ${field.minLength} character${field.minLength === 1 ? '' : 's'}.`);
   if (field.maxLength !== undefined && text.length > field.maxLength) context.errors.push(`${path}: use no more than ${field.maxLength} characters.`);
@@ -198,6 +199,24 @@ const asNumber = (record: Record<string, unknown>, key: string) => typeof record
 const asStringArray = (record: Record<string, unknown>, key: string) => Array.isArray(record[key]) ? record[key] as string[] : [];
 const isNondecreasing = (values: number[]) => values.every((value, index) => index === 0 || value >= values[index - 1]);
 const isUniqueBy = <T,>(values: T[], selector: (value: T) => string) => new Set(values.map(selector)).size === values.length;
+const isValidIsoDateTime = (value: string) => {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|([+-])(\d{2}):?(\d{2}))$/);
+  if (!match) return false;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, , , offsetHourText, offsetMinuteText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const offsetHour = offsetHourText === undefined ? 0 : Number(offsetHourText);
+  const offsetMinute = offsetMinuteText === undefined ? 0 : Number(offsetMinuteText);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+  if (!daysInMonth || day < 1 || day > daysInMonth || hour > 23 || minute > 59 || second > 59) return false;
+  if (offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) return false;
+  return Number.isFinite(Date.parse(value));
+};
 
 export const validatePolicyCrossFields = (key: AdminPolicyKey, value: Record<string, AdminPolicyJsonValue>): string[] => {
   const errors: string[] = [];
@@ -238,11 +257,6 @@ export const validatePolicyCrossFields = (key: AdminPolicyKey, value: Record<str
       if (proxyVisitor && (row.proxyVettingRequired !== true || (Array.isArray(row.requiredLicenseKinds) && row.requiredLicenseKinds.length > 0))) errors.push(`requirements[${index}]: proxy_visitor requires proxy vetting and no required licenses.`);
       if (!proxyVisitor && row.proxyVettingRequired === true) errors.push(`requirements[${index}]: proxy vetting is only allowed for proxy_visitor.`);
     }
-  }
-  if (key === 'private_evidence') {
-    countCheck('scanAttempts');
-    const scanner = value.scanner as Record<string, AdminPolicyJsonValue>;
-    if (Array.isArray(scanner.allowedEngineVersions) && !isUniqueBy(scanner.allowedEngineVersions as string[], (version) => version)) errors.push('scanner.allowedEngineVersions: versions must be unique.');
   }
   if (key === 'trust_tier_thresholds') {
     if (!(numbers('platinumMinimumScore') > numbers('goldMinimumScore') && numbers('goldMinimumScore') > numbers('silverMinimumScore') && numbers('silverMinimumScore') > numbers('bronzeMinimumScore'))) errors.push('Thresholds must strictly descend from platinum to bronze.');

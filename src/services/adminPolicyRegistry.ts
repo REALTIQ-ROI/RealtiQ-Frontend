@@ -16,6 +16,7 @@ export interface AdminPolicyField {
   maxLength?: number;
   pattern?: string;
   patternMessage?: string;
+  format?: 'date-time';
   options?: readonly string[];
   minItems?: number;
   maxItems?: number;
@@ -43,12 +44,24 @@ const b = (key: string, label: string, options: Partial<AdminPolicyField> = {}):
 const e = (key: string, label: string, options: readonly string[], extra: Partial<AdminPolicyField> = {}): AdminPolicyField => ({ key, label, type: 'enum', options, ...extra });
 const nullable = (key: string, label: string, nullableType: 'string' | 'number', options: Partial<AdminPolicyField> = {}): AdminPolicyField => ({ key, label, type: 'nullable', nullableType, ...options });
 const obj = (key: string, label: string, fields: readonly AdminPolicyField[], options: Partial<AdminPolicyField> = {}): AdminPolicyField => ({ key, label, type: 'object', fields, ...options });
-const arr = (key: string, label: string, item: AdminPolicyField, minItems = 0, maxItems = 1000, options: Partial<AdminPolicyField> = {}): AdminPolicyField => ({ key, label, type: 'array', item, minItems, maxItems, ...options });
+const arr = (key: string, label: string, item: AdminPolicyField, minItems = 0, maxItems?: number, options: Partial<AdminPolicyField> = {}): AdminPolicyField => ({
+  key, label, type: 'array', item, minItems, ...(maxItems === undefined ? {} : { maxItems }), ...options,
+});
 const strItem = (options: Partial<AdminPolicyField> = {}): AdminPolicyField => s('_item', 'Value', options);
 const numItem = (min: number, max: number, options: Partial<AdminPolicyField> = {}): AdminPolicyField => n('_item', 'Value', min, max, options);
 const enumItem = (options: readonly string[]): AdminPolicyField => e('_item', 'Value', options);
 const retrySeconds = (max: number, help?: string, lengthFrom?: string, itemMaxFrom?: string) => arr('retrySeconds', 'Retry delays (seconds)', numItem(1, max, { itemMaxFrom }), 0, 100, { help, lengthFrom });
 const sourceOptions = ['original_document', 'official_registry', 'approved_provider'] as const;
+const nonExpiringPurposeOptions = [
+  'selfie', 'bvn', 'nin', 'additional_government_id', 'proof_of_address', 'passport',
+  'residence_national_id', 'overseas_address_proof', 'company_registration', 'tin',
+  'registered_address', 'cooperative_registration', 'authority', 'purchase_resolution',
+  'scuml', 'state_registration', 'professional_membership', 'professional_nba',
+  'professional_coren', 'professional_surcon', 'professional_esvarbon', 'professional_arcon',
+  'professional_corbon', 'professional_toprec', 'professional_qsrbn', 'professional_citn',
+  'professional_laboratory_accreditation', 'professional_indemnity_insurance',
+  'proxy_inspector_identity_document', 'proxy_inspector_selfie', 'proxy_inspector_professional_credential',
+] as const;
 const keyPattern = '^[a-z][a-z0-9_]{0,79}$';
 const objectArray = (key: string, label: string, fields: readonly AdminPolicyField[], minItems: number, maxItems: number, help?: string) => arr(key, label, obj('_item', 'Entry', fields), minItems, maxItems, { help });
 
@@ -89,15 +102,15 @@ const definitions = {
     fields: [b('email', 'Email channel'), b('sms', 'SMS channel'), b('whatsapp', 'WhatsApp channel'), b('push', 'Push channel'), n('maxAttempts', 'Maximum delivery attempts', 1, 20), retrySeconds(604800, 'Enter exactly one nondecreasing delay per attempt.', 'maxAttempts')],
   },
   company_verification: {
-    label: 'Company verification', category: 'Verification, trust, and credentials', department: 'compliance_data_protection',
+    label: 'Identity verification policy', category: 'Verification, trust, and credentials', department: 'compliance_data_protection',
     fields: [
       s('legalPolicyReference', 'Legal policy reference', { minLength: 1, maxLength: 300 }),
-      arr('manualSources', 'Manual review sources', enumItem(sourceOptions), 1, 3, { unique: true }),
+      arr('manualSources', 'Manual review sources', enumItem(sourceOptions), 1),
       objectArray('internationalIds', 'International ID definitions', [s('country', 'Country code', { pattern: '^[A-Z]{2}$' }), s('key', 'Identifier key', { pattern: '^[a-z][a-z0-9_]{0,79}$' }), s('label', 'Label', { minLength: 1, maxLength: 120 })], 0, 1000),
-      arr('nonExpiringPurposes', 'Non-expiring evidence purposes', strItem({ help: 'Use a purpose from the backend profile-evidence purpose enum. The exact option list is not present in the local frontend handoff; the backend validates values.' }), 0, 1000, { unique: true, help: 'The backend validates profile-evidence purpose values; the exact enum list is not available in this frontend contract.' }),
+      arr('nonExpiringPurposes', 'Non-expiring evidence purposes', enumItem(nonExpiringPurposeOptions), 0, undefined, { help: 'Select only purposes authorized by the responsible Compliance/Legal policy owner.' }),
       e('corporateBuyerScuml', 'Corporate buyer SCUML policy', ['required', 'case_review']), n('reminderDays', 'Reminder interval (days)', 1, 365),
     ],
-    note: 'Legal-policy references are operator-supplied references validated by the backend; they do not prove external approval.',
+    note: 'This policy defines verification rules; it does not verify a user, approve a company, create evidence, or supply a licensed gazetteer. External data and protected evidence can remain operational dependencies.',
   },
   verification_case_review: {
     label: 'Verification case review', category: 'Verification, trust, and credentials', department: 'trust_safety',
@@ -114,12 +127,9 @@ const definitions = {
     note: 'The backend requires a complete row for every supported profile-kind/specialty pair. The exact pair and license enums are not in the local frontend handoff; the server validates them.',
   },
   private_evidence: {
-    label: 'Private evidence', category: 'Verification, trust, and credentials', department: 'technical',
-    fields: [n('maxBytes', 'Maximum file size (bytes)', 1024, 52428800), n('scanAttempts', 'Scan attempts', 1, 10), arr('retrySeconds', 'Scan retry delays (seconds)', numItem(1, 86400), 0, 10, { lengthFrom: 'scanAttempts', help: 'Enter exactly one nondecreasing delay per scan attempt.' }), obj('scanner', 'Scanner configuration', [
-      e('backend', 'Scanner backend', ['clamav_mtls']), s('serviceId', 'Scanner service ID', { minLength: 1, maxLength: 100 }), s('approvedUntil', 'Approved until (ISO-8601)', { pattern: '^\\d{4}-\\d{2}-\\d{2}T.*(?:Z|[+-]\\d{2}:?\\d{2})$' }),
-      arr('allowedEngineVersions', 'Allowed engine versions', strItem({ pattern: '^\\d+\\.\\d+\\.\\d+$' }), 1, 20, { unique: true }), n('minimumDatabaseVersion', 'Minimum database version', 1, 1000000000), n('timeoutSeconds', 'Scanner timeout (seconds)', 5, 120),
-    ])],
-    note: 'This policy does not supply scanner service credentials or certificates. Runtime scanner readiness is a separate deployment dependency.',
+    label: 'Evidence upload policy', category: 'Verification, trust, and credentials', department: 'technical',
+    fields: [n('maxBytes', 'Maximum file size (bytes)', 1024, 52428800)],
+    note: 'This policy sets the maximum upload size. A successful file-content validation does not approve identity, KYC, or title verification; those workflows use their own backend states.',
   },
   listing_verification: {
     label: 'Listing verification', category: 'Verification, trust, and credentials', department: 'listings_quality',

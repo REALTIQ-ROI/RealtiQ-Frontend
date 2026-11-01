@@ -20,7 +20,7 @@ The APIs below have provider-independent code paths, but some calls deliberately
 
 ## Documents, verification and providers
 
-Private document processing depends on private encrypted storage/keyrings, an approved storage adapter, malware scanning (such as configured ClamAV), inspection, and protected renderer resources. `.env.example` includes `CLOUDINARY_*` provider settings where used, scanner settings, `LEGACY_MEDIA_ROOT`, `LEGACY_MEDIA_KEYS`, `LEGACY_MEDIA_ACTIVE_KEY`, `MEDIA_FFPROBE_PATH`, and data-protection export root/key settings. Missing scanner/storage configuration keeps content quarantined or unavailable; it never permits use of an unprotected provider URL.
+Private document processing depends on private encrypted storage/keyrings, an approved storage adapter, supported file-content validation, inspection, and protected renderer resources. `.env.example` includes `CLOUDINARY_*` provider settings where used, `LEGACY_MEDIA_ROOT`, `LEGACY_MEDIA_KEYS`, `LEGACY_MEDIA_ACTIVE_KEY`, `MEDIA_FFPROBE_PATH`, and data-protection export root/key settings. Missing storage/renderer configuration keeps private content unavailable; it never permits use of an unprotected provider URL. Content validation does not detect malware or approve identity, KYC, or title.
 
 KYC and organization verification use current policy and staff review. A frontend can submit the case and evidence, but cannot set a profile to verified; render the server-returned case state and blockers. Missing provider/policy activation leaves the case pending/unavailable or limits eligibility according to the backend state.
 
@@ -43,7 +43,7 @@ Destructive execution is disabled by default (`PRIVACY_DELETION_EXECUTION_ENABLE
 
 ## Activation checklist
 
-- [ ] Configure approved private storage, encryption keys, scanner and protected renderer resources.
+- [ ] Configure approved private storage, encryption keys and protected renderer resources.
 - [ ] Approve/load gazetteer and boundary data; activate Mapbox only after licensing/data-handling approval.
 - [ ] Approve FX source/rates and freshness policy.
 - [ ] Approve Console ranking, completeness, sponsored placement, alert cadence, trust and freshness policies.

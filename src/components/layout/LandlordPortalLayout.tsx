@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
 import usePreservedSidebarScroll from '../../hooks/usePreservedSidebarScroll';
+import { isVerifiedLandlord } from '../../utils/landlordPropertyAccess';
 import ProfileSwitcher from './ProfileSwitcher';
 
 type LandlordNavKey =
@@ -53,7 +54,8 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
 ];
 
 const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: LandlordPortalLayoutProps) => {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const canAddProperty = isVerifiedLandlord(user);
   const hasScrolled = useHasScrolled(8);
   const sidebarRef = usePreservedSidebarScroll('landlord');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -68,7 +70,7 @@ const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: La
         </div>
 
         <nav className="flex flex-col gap-2 px-4 pb-6">
-          {navItems.map((item) => (
+          {navItems.filter((item) => item.key !== 'add-property' || canAddProperty).map((item) => (
             <Link
               key={item.key}
               to={item.to}
@@ -87,8 +89,8 @@ const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: La
         </nav>
 
         <div className="mt-auto p-6 flex flex-col gap-2 border-t border-slate-200/70">
-          <Link to="/dashboard/landlord/add-property" className="w-full bg-primary text-on-primary py-3 rounded-md font-bold text-sm tracking-tight mb-2 text-center">
-            Add Property
+          <Link to={canAddProperty ? '/dashboard/landlord/add-property' : '/dashboard/landlord/settings/verification'} className="w-full bg-primary text-on-primary py-3 rounded-md font-bold text-sm tracking-tight mb-2 text-center">
+            {canAddProperty ? 'Add Property' : 'Complete Verification'}
           </Link>
           <Link to="/contact" className="text-slate-500 px-4 py-2 hover:bg-slate-200/50 rounded-lg transition-all flex items-center gap-3 text-sm text-left">
             <span className="material-symbols-outlined text-lg">help</span>
@@ -128,6 +130,20 @@ const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: La
               </>
             )}
           </div>
+          {user?.role === 'landlord' && !canAddProperty ? (
+            <div role="status" className="flex w-full flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span aria-hidden="true" className="material-symbols-outlined mt-0.5 text-amber-700">info</span>
+                <p className="text-sm font-medium">Your landlord account must be verified before you can add properties. Complete KYC to submit your landlord verification.</p>
+              </div>
+              <Link
+                to="/dashboard/landlord/settings/verification"
+                className="inline-flex shrink-0 items-center justify-center rounded-lg bg-amber-900 px-4 py-2 text-sm font-bold text-white hover:bg-amber-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-900"
+              >
+                Complete verification
+              </Link>
+            </div>
+          ) : null}
         </header>
         {children}
       </main>

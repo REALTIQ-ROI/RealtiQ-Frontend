@@ -70,6 +70,8 @@ export interface StagedAttachment {
   originalFileName: string;
   fileSizeBytes: number;
   expiresAt: string;
+  contentStatus: string;
+  attachable: boolean;
 }
 export interface ReadReceipt {
   conversationId: string;

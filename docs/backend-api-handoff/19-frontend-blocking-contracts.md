@@ -168,9 +168,9 @@ The values above illustrate shape only. `maxBytes`, policy revisions, accepted I
       "previousEvidenceId": null,
       "mimeType": "application/pdf",
       "size": 245120,
-      "state": "clean",
+      "state": "available",
       "errorCode": null,
-      "scannedAt": "2026-10-25T11:00:00.000Z",
+      "contentValidatedAt": "2026-10-25T11:00:00.000Z",
       "createdAt": "2026-10-25T10:45:00.000Z"
     }
   ],
@@ -178,7 +178,7 @@ The values above illustrate shape only. `maxBytes`, policy revisions, accepted I
 }
 ```
 
-`legacyFileId` is present only for legacy-linked evidence. Evidence states in the model are `migration_pending`, `awaiting_upload`, `quarantined`, `scanning`, `clean`, `rejected`, `retry`, `activation_pending`, `held`, `deleting`, `privacy_deleting`, and `deleted`.
+`legacyFileId` is present only for legacy-linked evidence. Current evidence states are `migration_pending`, `awaiting_upload`, `quarantined`, `validating`, `available`, `rejected`, `retry`, `activation_pending`, `held`, `deleting`, `privacy_deleting`, and `deleted`. The DTO has `contentValidatedAt`, not a scan timestamp. `available` means supported file checks and private-storage write succeeded; it is not KYC approval. Content validation checks supported format/signature, structure, size, and content hash, but does not detect malware, prove identity, approve KYC, or verify title.
 
 #### `GET /api/profiles/current/onboarding/evidence/:id`
 
@@ -186,7 +186,7 @@ Returns one evidence DTO in the same shape as a `evidence[]` element.
 
 #### `GET /api/profiles/current/onboarding/evidence/:id/content`
 
-Returns the complete private file bytes, not JSON. Access is limited to its holder/current profile and only when current scan policy, content hash and clean state pass. Range requests and query parameters are rejected. Response is `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`, sandbox CSP and inline content disposition.
+Returns the complete private file bytes, not JSON. Access is limited to its holder/current profile and only when the current evidence state, content hash, and private-storage authorization pass. Range requests and query parameters are rejected. Response is `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`, sandbox CSP and inline content disposition.
 
 ### Evidence upload, retry and delete request
 
@@ -194,7 +194,7 @@ Returns the complete private file bytes, not JSON. Access is limited to its hold
 
 Multipart fields: `file` (exactly one; accepted PDF/JPEG/PNG/WebP), `purpose` (required), `subject` (optional; defaults `self`), `documentKind` (optional; defaults to purpose), `operationKey` (required, 8–100 allowed by shared validator and not `legacy_` prefix), `previousEvidenceId` (optional, required to match the current version when replacing).
 
-Upload middleware limits: one file, 50 MiB hard request limit, five text fields, 1 KiB each. The active private-evidence policy may impose a lower maximum. Success is **202 Accepted** and returns the evidence DTO in quarantine/pending processing state.
+Upload middleware limits: one file, 50 MiB hard request limit, five text fields, 1 KiB each. The active private-evidence policy may impose a lower maximum. Success is **202 Accepted** and returns the evidence DTO with the authoritative current state; a successful upload normally reports `available` after file checks and private-storage write succeed, but pending states may also be returned.
 
 ```text
 POST /api/profiles/current/onboarding/evidence
@@ -221,9 +221,9 @@ operationKey=evidence_nin_20261025_a1b2
   "previousEvidenceId": null,
   "mimeType": "application/pdf",
   "size": 245120,
-  "state": "quarantined",
+  "state": "available",
   "errorCode": null,
-  "scannedAt": null,
+  "contentValidatedAt": "2026-10-25T10:45:00.000Z",
   "createdAt": "2026-10-25T10:45:00.000Z"
 }
 ```
@@ -232,7 +232,7 @@ On a replacement, `previousEvidenceId` must name the latest evidence version for
 
 #### `POST /api/profiles/current/onboarding/evidence/:id/retry`
 
-JSON body `{ "expectedVersion": 1 }`; requires step-up. Returns 202 and evidence DTO after scan retry is queued.
+JSON body `{ "expectedVersion": 1 }`; requires step-up. Returns 202 and evidence DTO after current file-content validation is requested; a pending response may have `state: "validating"`.
 
 #### `DELETE /api/profiles/current/onboarding/evidence/:id`
 

@@ -6,6 +6,7 @@ import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayou
 import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
+import { useAuth } from '../../../contexts/AuthContext';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../../lib/axios';
 import { projectService } from '../../../services/projectService';
@@ -13,6 +14,7 @@ import type { ImportRowStatus, ProjectDetail, ProjectImportListItem, ProjectImpo
 import { downloadBlob, rowDataDisplayValue, rowDataValue, sanitizeImportRowPayload, validateProjectImportFile } from '../../../utils/projectImport';
 import { formatDate, labelize } from '../../../utils/projectFormatters';
 import { buildProjectImportMapping, IGNORE_IMPORT_COLUMN, parseCsvHeader, type ImportColumnMappingDraft } from '../../../utils/projectImportMapping';
+import { isVerifiedLandlord } from '../../../utils/landlordPropertyAccess';
 
 const numericFields = new Set(['price', 'bedrooms', 'bathrooms', 'squareFeet', 'constructionProgress', 'reservationAmount', 'minimumInitialDeposit', 'installmentDurationMonths']);
 const statusOptions: Array<ImportRowStatus | 'all'> = ['all', 'valid', 'invalid', 'removed', 'imported', 'failed'];
@@ -33,6 +35,8 @@ const sessionId = (session: ProjectImportSession | ProjectImportListItem) => 'im
 const ProjectPropertyImports = () => {
   const { id = '', importId = '' } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canAddProperty = isVerifiedLandlord(user);
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [schema, setSchema] = useState<ProjectImportSchema | null>(null);
   const [imports, setImports] = useState<ProjectImportListItem[]>([]);
@@ -151,6 +155,10 @@ const ProjectPropertyImports = () => {
 
   const upload = async (file: File) => {
     if (uploading) return;
+    if (!canAddProperty) {
+      toast.error('Complete landlord verification before starting a property import.');
+      return;
+    }
     setSelectedFile(file);
     const fileError = validateProjectImportFile(file, schema?.limits.maxFileMB);
     if (fileError) { toast.error(fileError); return; }
@@ -247,6 +255,10 @@ const ProjectPropertyImports = () => {
 
   const beginProtectedImportAction = async (action: 'confirm' | 'retry') => {
     if (!session || pendingAction) return;
+    if (!canAddProperty) {
+      toast.error('Complete landlord verification before importing properties.');
+      return;
+    }
     const currentImportId = sessionId(session);
     const body: Record<string, never> = {};
     const suffix = action === 'confirm' ? 'confirm' : 'retry-failed';
@@ -379,6 +391,7 @@ const ProjectPropertyImports = () => {
               <p className="text-xs font-bold uppercase tracking-widest text-secondary">{project?.name ?? 'Project'}</p>
               <h1 className="mt-2 text-4xl font-black tracking-tight">Bulk upload properties</h1>
               <p className="mt-3 max-w-3xl text-sm text-secondary">Upload CSV/XLSX text data for this project only. No Properties are created until you confirm a valid preview.</p>
+              {!canAddProperty ? <p role="status" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">Only verified landlord accounts can add properties. New imports, confirmations and failed-row retries are unavailable until verification is complete. You can still review existing import sessions. <Link className="font-bold underline" to="/dashboard/landlord/settings/verification">Complete landlord verification</Link></p> : null}
               <div className="mt-5 flex flex-wrap gap-3">
                 <label className="flex items-center gap-2 text-sm font-semibold">Template format
                   <select aria-label="Template format" value={templateFormat} onChange={(event) => setTemplateFormat(event.target.value as 'csv' | 'xlsx')} className="rounded-lg bg-surface-container-low px-3 py-2">
@@ -386,9 +399,9 @@ const ProjectPropertyImports = () => {
                   </select>
                 </label>
                 <Button type="button" loading={templateLoading} loadingLabel="Downloading..." onClick={() => void downloadTemplate()}>Download {templateFormat.toUpperCase()} Template</Button>
-                <label className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-on-primary transition-all hover:opacity-90">
-                  {uploading ? 'Uploading...' : 'Select CSV/XLSX'}
-                  <input type="file" accept=".csv,.xlsx" className="sr-only" disabled={uploading || uploadOutcomeUnknown} onChange={(event) => {
+                <label className={`inline-flex items-center justify-center rounded-lg px-6 py-3 text-sm font-semibold transition-all ${canAddProperty ? 'cursor-pointer bg-primary text-on-primary hover:opacity-90' : 'cursor-not-allowed bg-slate-200 text-slate-500'}`}>
+                  {!canAddProperty ? 'Complete verification to upload' : uploading ? 'Uploading...' : 'Select CSV/XLSX'}
+                  <input type="file" accept=".csv,.xlsx" className="sr-only" disabled={!canAddProperty || uploading || uploadOutcomeUnknown} onChange={(event) => {
                     const file = event.currentTarget.files?.[0];
                     event.currentTarget.value = '';
                     if (file) void upload(file);
@@ -400,7 +413,7 @@ const ProjectPropertyImports = () => {
                 <p>Do not upload it again until you inspect the refreshed import history.</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button type="button" variant="secondary" onClick={() => void checkImportHistoryAfterUpload()}>Check import history</Button>
-                  {uploadHistoryChecked && selectedFile ? <Button type="button" disabled={uploading} loading={uploading} loadingLabel="Staging..." onClick={() => void upload(selectedFile)}>I reviewed history — stage this file again</Button> : null}
+                  {uploadHistoryChecked && selectedFile ? <Button type="button" disabled={!canAddProperty || uploading} loading={uploading} loadingLabel="Staging..." onClick={() => void upload(selectedFile)}>I reviewed history — stage this file again</Button> : null}
                 </div>
               </div> : null}
             </header>
@@ -456,8 +469,8 @@ const ProjectPropertyImports = () => {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" variant="secondary" disabled={!importId || pendingAction !== ''} onClick={() => void refreshSession()}>Refresh status</Button>
-                    {canConfirm ? <Button type="button" loading={pendingAction === 'confirm' || (protectedImportAction === 'confirm' && importStepUp.busy)} loadingLabel="Confirming..." disabled={Boolean(pendingAction || protectedOutcomeUnknown)} onClick={() => void beginProtectedImportAction('confirm')}>Import Properties</Button> : null}
-                    {canRetry ? <Button type="button" variant="secondary" loading={pendingAction === 'retry' || (protectedImportAction === 'retry' && importStepUp.busy)} loadingLabel="Retrying..." disabled={Boolean(pendingAction || protectedOutcomeUnknown)} onClick={() => void beginProtectedImportAction('retry')}>Retry eligible failed rows</Button> : null}
+                    {canConfirm ? <Button type="button" loading={pendingAction === 'confirm' || (protectedImportAction === 'confirm' && importStepUp.busy)} loadingLabel="Confirming..." disabled={!canAddProperty || Boolean(pendingAction || protectedOutcomeUnknown)} onClick={() => void beginProtectedImportAction('confirm')}>Import Properties</Button> : null}
+                    {canRetry ? <Button type="button" variant="secondary" loading={pendingAction === 'retry' || (protectedImportAction === 'retry' && importStepUp.busy)} loadingLabel="Retrying..." disabled={!canAddProperty || Boolean(pendingAction || protectedOutcomeUnknown)} onClick={() => void beginProtectedImportAction('retry')}>Retry eligible failed rows</Button> : null}
                     {canCancel ? <Button type="button" variant="ghost" disabled={Boolean(pendingAction)} onClick={() => setCancelReviewOpen(true)}>Cancel import</Button> : null}
                   </div>
                 </div>

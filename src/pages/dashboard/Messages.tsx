@@ -97,6 +97,10 @@ function MessagesContent() {
 
   const submit = async () => {
     if (!conversationId || sending || (!draft.trim() && !upload)) return;
+    if (upload && !upload.attachable) {
+      setError(`This attachment cannot be sent yet. Current file content status: ${upload.contentStatus.replaceAll('_', ' ')}.`);
+      return;
+    }
     if (upload && new Date(upload.expiresAt).getTime() <= Date.now()) {
       setError('This staged attachment expired. Please upload it again.');
       setUpload(null);
@@ -169,12 +173,12 @@ function MessagesContent() {
             </div>
 
             <div className='border-t border-slate-200 bg-white p-3 sm:p-4'>
-              {upload && <div className='mb-3 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm'><span className='material-symbols-outlined text-emerald-700'>draft</span><span className='min-w-0 flex-1 truncate font-semibold text-slate-700'>{upload.originalFileName}</span><span className='text-xs text-slate-500'>{fileSize(upload.fileSizeBytes)}</span><button className='grid h-7 w-7 place-items-center rounded-full hover:bg-emerald-100' aria-label='Remove attachment' onClick={() => setUpload(null)}>×</button></div>}
+              {upload && <div className='mb-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm'><div className='flex items-center gap-3'><span className='material-symbols-outlined text-emerald-700'>draft</span><span className='min-w-0 flex-1 truncate font-semibold text-slate-700'>{upload.originalFileName}</span><span className='text-xs text-slate-500'>{fileSize(upload.fileSizeBytes)}</span><button className='grid h-7 w-7 place-items-center rounded-full hover:bg-emerald-100' aria-label='Remove attachment' onClick={() => setUpload(null)}>×</button></div><p role='status' className='mt-2 text-xs text-slate-600'>File content status: {upload.contentStatus.replaceAll('_', ' ')}. {upload.attachable ? 'The server currently allows this file to be attached.' : 'The server has not marked this file attachable, so it cannot be sent yet.'}</p></div>}
               {progress > 0 && <progress aria-label='Attachment upload progress' value={progress} max='100' className='mb-2 h-1.5 w-full accent-emerald-700' />}
               <div className='flex items-center gap-2'>
                 <label className='inline-flex h-12 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 font-semibold text-slate-700 transition hover:border-primary hover:text-primary focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2' aria-label='Select an attachment'><span className='material-symbols-outlined' aria-hidden='true'>attach_file</span><span className='hidden lg:inline'>Attach</span><input className='sr-only' type='file' accept='.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx' onChange={(event) => void selectFile(event.target.files?.[0])} /></label>
                 <textarea rows={1} aria-label='Message' placeholder='Write a message…' maxLength={5000} className='h-12 min-h-12 flex-1 resize-none rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 leading-6 outline-none transition placeholder:text-slate-400 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15' value={draft} onChange={(event) => { setDraft(event.target.value); realtime.startTyping(conversationId); }} onBlur={() => realtime.stopTyping(conversationId)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submit(); } }} />
-                <button className='inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 font-bold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45' disabled={sending || (!draft.trim() && !upload) || conversation?.status !== 'open'} onClick={() => void submit()}><span className='hidden sm:inline'>{sending ? 'Sending' : 'Send'}</span><span className='material-symbols-outlined text-xl' aria-hidden='true'>{sending ? 'progress_activity' : 'send'}</span></button>
+                <button className='inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 font-bold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45' disabled={sending || (!draft.trim() && !upload) || Boolean(upload && !upload.attachable) || conversation?.status !== 'open'} onClick={() => void submit()}><span className='hidden sm:inline'>{sending ? 'Sending' : 'Send'}</span><span className='material-symbols-outlined text-xl' aria-hidden='true'>{sending ? 'progress_activity' : 'send'}</span></button>
               </div>
               <p className='mt-2 hidden text-[11px] text-slate-400 sm:block'>Press Enter to send · Shift + Enter for a new line · Maximum 5,000 characters</p>
             </div>

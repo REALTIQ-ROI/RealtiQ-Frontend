@@ -37,6 +37,7 @@ interface PolicyPanelState {
   loading: boolean;
   historyLoading: boolean;
   loadingMore: boolean;
+  writeDenied: boolean;
   policyError: string | null;
   historyError: string | null;
   validationErrors: string[];
@@ -53,7 +54,7 @@ type EditorDraft = {
 
 const makePanel = (): PolicyPanelState => ({
   revisions: [], nextCursor: null, loading: true, historyLoading: false, loadingMore: false,
-  policyError: null, historyError: null, validationErrors: [], notice: null, needsReview: false,
+  writeDenied: false, policyError: null, historyError: null, validationErrors: [], notice: null, needsReview: false,
 });
 
 const makePanels = (): PolicyPanels => Object.fromEntries(adminPolicyKeys.map((key) => [key, makePanel()])) as PolicyPanels;
@@ -112,6 +113,11 @@ const errorText = (error: unknown) => {
   if (error instanceof ApiRequestError && error.code) return `${error.message} (${error.code})`;
   return error instanceof Error ? error.message : 'The policy request could not be completed.';
 };
+
+const isPolicyWriteDenied = (code: string | null | undefined) =>
+  code === 'PERMISSION_DEPARTMENT_REQUIRED'
+  || code === 'PERMISSION_STAFF_PROFILE_REQUIRED'
+  || code === 'AUTH_PROFILE_FORBIDDEN';
 
 const validationMessages = (error: unknown): string[] => {
   if (!(error instanceof ApiRequestError)) return [];
@@ -298,7 +304,8 @@ const PolicyEditor = ({
         {panel.validationErrors.length ? <ul role="alert" aria-label="Server validation errors" className="list-disc space-y-1 rounded-lg bg-red-50 p-3 pl-8 text-sm text-red-800">{panel.validationErrors.map((message, index) => <li key={`${index}:${message}`}>{message}</li>)}</ul> : null}
         {panel.needsReview ? <label className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><input className="mt-1" type="checkbox" onChange={() => onAcknowledgeReview(policyKey)} /><span>I reviewed the refreshed current policy and revision history before preparing another revision.</span></label> : null}
         {panel.notice ? <div role="status" className="rounded-lg bg-surface-container-low p-3 text-sm"><p>{panel.notice}</p>{panel.notice.toLowerCase().includes('authenticator') ? <Link className="mt-2 inline-block font-bold text-primary underline" to="/dashboard/admin/settings">Open account security settings</Link> : null}</div> : null}
-        <Button type="submit" loading={protectedBusy} disabled={protectedBusy || panel.loading || panel.needsReview || !schemaAvailable}>Submit policy revision</Button>
+        {panel.writeDenied ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">The backend denied policy write access for this selected staff profile. Policy changes are disabled.</p> : null}
+        <Button type={panel.writeDenied ? 'button' : 'submit'} loading={protectedBusy} disabled={panel.writeDenied || protectedBusy || panel.loading || panel.needsReview || !schemaAvailable}>{panel.writeDenied ? 'Policy editing unavailable' : 'Submit policy revision'}</Button>
       </form>
     </div>
 
@@ -348,7 +355,7 @@ const PolicyIndex = ({ panels, onSelect, onRefresh }: PolicyIndexProps) => <div 
         const policy = panel.policy;
         return <li key={key} className="rounded-xl border border-outline-variant/15 bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between gap-2">
-            <div><h3 className="font-bold">{metadata.label}</h3><p className="mt-1 break-all font-mono text-xs text-secondary">{key}</p></div>
+            <div><h3 className="font-bold">{metadata.label}</h3><p className="mt-1 break-all font-mono text-xs text-secondary">{key}</p><p className="mt-1 text-xs text-secondary">Department: <span className="font-mono">{metadata.department}</span></p></div>
             {policy ? <span className="rounded-full bg-surface-container-low px-2 py-1 text-xs font-semibold capitalize">{policy.state}</span> : null}
           </div>
           {panel.loading && !policy ? <p className="mt-3 text-sm text-secondary">Loading current policy…</p> : null}
@@ -531,7 +538,12 @@ const AdminPolicies = () => {
     if (!action) return false;
     const result = await stepUp.complete(code);
     if (!result.ok) {
-      setPanels((current) => ({ ...current, [action.key]: { ...current[action.key], notice: result.error ?? 'Authenticator verification did not complete.' } }));
+      const writeDenied = action.kind === 'prepare' && isPolicyWriteDenied(stepUp.errorCode);
+      setPanels((current) => ({ ...current, [action.key]: {
+        ...current[action.key],
+        writeDenied: current[action.key].writeDenied || writeDenied,
+        notice: result.error ?? 'Authenticator verification did not complete.',
+      } }));
       return false;
     }
     actionRef.current = null;

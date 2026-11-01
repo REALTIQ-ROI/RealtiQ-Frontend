@@ -10,6 +10,7 @@ import { useProperties } from '../../../contexts/PropertiesContext';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import type { Property } from '../../../types';
 import { propertyDisplayReference, propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
+import { isVerifiedLandlord } from '../../../utils/landlordPropertyAccess';
 
 const statusConfig = {
   available: { label: 'Active', className: 'bg-emerald-100 text-emerald-800' },
@@ -27,6 +28,7 @@ const approvalLabel = (status?: string) => {
 
 const LandlordMyProperties = () => {
   const { user } = useAuth();
+  const canAddProperty = isVerifiedLandlord(user);
   const { properties, deleteProperty } = useProperties();
   const archiveStepUp = useBoundStepUp<void>();
   const [activeFilter, setActiveFilter] = useState<'all' | 'available' | 'sold'>('all');
@@ -142,11 +144,11 @@ const LandlordMyProperties = () => {
               </p>
             </div>
             <Link
-              to="/dashboard/landlord/add-property"
+              to={canAddProperty ? '/dashboard/landlord/add-property' : '/dashboard/landlord/settings/verification'}
               className="flex items-center gap-2 bg-primary text-on-primary px-6 py-3 rounded-md font-bold transition-transform active:scale-95 shadow-lg shadow-black/10"
             >
-              <span className="material-symbols-outlined text-xl">add</span>
-              <span>List New Property</span>
+              <span className="material-symbols-outlined text-xl">{canAddProperty ? 'add' : 'verified_user'}</span>
+              <span>{canAddProperty ? 'List New Property' : 'Complete Verification to List'}</span>
             </Link>
           </div>
         </div>
@@ -424,10 +426,11 @@ const LandlordMyProperties = () => {
       </footer>
 
       <Link
-        to="/dashboard/landlord/add-property"
+        to={canAddProperty ? '/dashboard/landlord/add-property' : '/dashboard/landlord/settings/verification'}
+        aria-label={canAddProperty ? 'Add property' : 'Complete verification to add property'}
         className="fixed bottom-8 right-8 w-14 h-14 bg-primary text-on-primary rounded-full shadow-2xl flex items-center justify-center md:hidden z-50"
       >
-        <span className="material-symbols-outlined">add</span>
+        <span className="material-symbols-outlined">{canAddProperty ? 'add' : 'verified_user'}</span>
       </Link>
     </LandlordPortalLayout>
     <StepUpDialog challenge={archiveStepUp.challenge} busy={archiveStepUp.busy} error={archiveStepUp.error} onCancel={archiveStepUp.cancel} onSubmit={finishArchive} />

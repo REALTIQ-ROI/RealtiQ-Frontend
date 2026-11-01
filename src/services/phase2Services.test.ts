@@ -35,6 +35,17 @@ describe("Phase 2 contract services", () => {
       { attachmentIds: ["asset-1"] },
     );
   });
+  it('preserves server content validation status and attachability for staged message attachments', async () => {
+    const staged = {
+      assetId: 'asset-pending', mimeType: 'application/pdf', originalFileName: 'evidence.pdf',
+      fileSizeBytes: 1200, expiresAt: '2026-10-31T13:00:00.000Z', contentStatus: 'pending', attachable: false,
+    };
+    mocked.post.mockResolvedValueOnce({ data: { attachment: staged } });
+    const attachment = await messageService.upload('conversation-1', new File(['pdf'], 'evidence.pdf', { type: 'application/pdf' }));
+    expect(attachment).toEqual(staged);
+    expect(attachment.attachable).toBe(false);
+    expect(mocked.post).toHaveBeenCalledWith('/messages/conversations/conversation-1/attachments', expect.any(FormData), expect.objectContaining({ onUploadProgress: expect.any(Function) }));
+  });
   it("uses idempotent PUT and DELETE favourite commands", async () => {
     mocked.put.mockResolvedValueOnce({
       data: { propertyReference: "RTQ-PROP-1", isFavourite: true, saves: 1 },

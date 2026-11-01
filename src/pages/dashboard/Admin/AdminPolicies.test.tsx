@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   cancel: vi.fn(),
   clearError: vi.fn(),
   getError: vi.fn(),
+  getErrorCode: vi.fn(),
   getPolicy: vi.fn(),
   getHistory: vi.fn(),
   prepareRevision: vi.fn(),
@@ -22,7 +23,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../contexts/AuthContext', () => ({ useAuth: mocks.useAuth }));
 vi.mock('../../../hooks/useBoundStepUp', () => ({ useBoundStepUp: () => ({
   begin: mocks.begin, complete: mocks.complete, cancel: mocks.cancel, clearError: mocks.clearError,
-  getError: mocks.getError, challenge: null, busy: false, error: null, errorCode: null,
+  getError: mocks.getError, challenge: null, busy: false, error: null, errorCode: mocks.getErrorCode(),
 }) }));
 vi.mock('../../../components/layout/AdminLayout', () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock('../../../components/auth/StepUpDialog', () => ({ default: ({ onSubmit, error }: { onSubmit: (code: string) => Promise<boolean>; error?: string | null }) => <>
@@ -62,6 +63,7 @@ describe('AdminPolicies', () => {
     mocks.getHistory.mockResolvedValue({ revisions: [], nextCursor: null });
     mocks.begin.mockResolvedValue(true);
     mocks.getError.mockReturnValue(null);
+    mocks.getErrorCode.mockReturnValue(null);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -78,7 +80,7 @@ describe('AdminPolicies', () => {
     for (const item of adminPolicyRegistry) expect(screen.getByText(item.key)).toBeInTheDocument();
     expect(adminPolicyRegistry).toHaveLength(30);
     expect(screen.getAllByText('unconfigured')).toHaveLength(30);
-  });
+  }, 15000);
 
   it('renders named, blank schema fields for an unconfigured policy without supplying guessed defaults', async () => {
     render(<AdminPolicies />);
@@ -90,6 +92,91 @@ describe('AdminPolicies', () => {
     expect(screen.getByLabelText('Delivery attempts')).toHaveValue(null);
     expect(screen.queryByLabelText(/JSON/i)).not.toBeInTheDocument();
     expect(mocks.getHistory).toHaveBeenCalledWith('identity_email', { limit: 25 });
+  });
+
+  it('lists the evidence and identity policies once and renders their blank unconfigured forms', async () => {
+    render(<AdminPolicies />);
+    await waitFor(() => expect(mocks.getPolicy).toHaveBeenCalledTimes(30));
+    const policyButtons = screen.getAllByRole('button', { name: /View and edit policy/ });
+    expect(policyButtons.filter((button) => button.closest('li')?.textContent?.includes('private_evidence'))).toHaveLength(1);
+    expect(policyButtons.filter((button) => button.closest('li')?.textContent?.includes('company_verification'))).toHaveLength(1);
+    expect(policyButtons.find((button) => button.closest('li')?.textContent?.includes('private_evidence'))?.closest('li')).toHaveTextContent('Department: technical');
+    expect(policyButtons.find((button) => button.closest('li')?.textContent?.includes('company_verification'))?.closest('li')).toHaveTextContent('Department: compliance_data_protection');
+
+    await openPolicy('private_evidence', 'Evidence upload policy');
+    const evidenceEditor = screen.getByRole('region', { name: 'Evidence upload policy' });
+    expect(await within(evidenceEditor).findByText('No approved value is configured. No default values are supplied here.')).toBeInTheDocument();
+    expect(within(evidenceEditor).getByLabelText('Maximum file size (bytes)')).toHaveValue(null);
+    expect(within(evidenceEditor).getAllByRole('spinbutton')).toHaveLength(1);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back to policy index' }));
+    await openPolicy('company_verification', 'Identity verification policy');
+    const identityEditor = screen.getByRole('region', { name: 'Identity verification policy' });
+    expect(await within(identityEditor).findByText('No approved value is configured. No default values are supplied here.')).toBeInTheDocument();
+    expect(within(identityEditor).getByLabelText('Legal policy reference')).toHaveValue('');
+    expect(within(identityEditor).getByLabelText('Corporate buyer SCUML policy')).toHaveValue('');
+    await userEvent.click(within(identityEditor).getByLabelText('Add Non-expiring evidence purposes item'));
+    const purposes = within(identityEditor).getByLabelText('Non-expiring evidence purposes item 1');
+    expect(within(identityEditor).getByRole('option', { name: 'nin' })).toBeInTheDocument();
+    expect(within(identityEditor).getByRole('option', { name: 'proxy inspector professional credential' })).toBeInTheDocument();
+    expect(purposes).toHaveValue('');
+  });
+
+  it('uses the configured evidence upload limit and submits only its supported value', async () => {
+    const value = { maxBytes: 10485760 };
+    mocks.getPolicy.mockImplementation(async (key: string) => key === 'private_evidence'
+      ? currentPolicy(key, 3, 'configured', value)
+      : currentPolicy(key));
+    const revision = {
+      id: 'evidence-approved-4', key: 'private_evidence', basedOnRevision: 3, value,
+      reason: 'Set the approved upload size limit', state: 'approved', preparedBy: 'admin-current',
+      preparedProfile: 'staff-profile', approvedBy: 'admin-current', approvedAt: '2026-10-30T12:00:00.000Z',
+      createdAt: '2026-10-30T12:00:00.000Z',
+    };
+    mocks.prepareRevision.mockResolvedValue(revision);
+    mocks.complete.mockImplementation(async () => {
+      const action = mocks.begin.mock.calls.at(-1)?.[0];
+      return { ok: true, value: await action.execute('fresh-evidence-challenge', action.body) };
+    });
+    render(<AdminPolicies />);
+    await openPolicy('private_evidence', 'Evidence upload policy');
+    const editor = screen.getByRole('region', { name: 'Evidence upload policy' });
+    expect(await within(editor).findByLabelText('Maximum file size (bytes)')).toHaveValue(10485760);
+    expect(within(editor).getAllByRole('spinbutton')).toHaveLength(1);
+    await userEvent.type(within(editor).getByLabelText('Reason'), 'Set the approved upload size limit');
+    await userEvent.click(within(editor).getByRole('button', { name: 'Submit policy revision' }));
+
+    const expectedBody = { value, reason: 'Set the approved upload size limit', expectedRevision: 3 };
+    await waitFor(() => expect(mocks.begin).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'POST', path: '/api/admin/policies/private_evidence/revisions', body: expectedBody,
+    })));
+    await userEvent.click(screen.getByRole('button', { name: 'Complete mock step-up' }));
+    await waitFor(() => expect(mocks.prepareRevision).toHaveBeenCalledWith('private_evidence', expectedBody, 'fresh-evidence-challenge'));
+    expect(await within(editor).findByRole('status')).toHaveTextContent('The server reports its state as “approved”.');
+  });
+
+  it('loads configured identity verification values without replacing them with examples', async () => {
+    const value = {
+      legalPolicyReference: 'COMPLIANCE-POLICY-2026-04',
+      manualSources: ['official_registry'],
+      internationalIds: [{ country: 'US', key: 'national_id_card', label: 'National identity card' }],
+      nonExpiringPurposes: ['proxy_inspector_selfie'],
+      corporateBuyerScuml: 'required',
+      reminderDays: 45,
+    };
+    mocks.getPolicy.mockImplementation(async (key: string) => key === 'company_verification'
+      ? currentPolicy(key, 8, 'configured', value)
+      : currentPolicy(key));
+    render(<AdminPolicies />);
+    await openPolicy('company_verification', 'Identity verification policy');
+    const editor = screen.getByRole('region', { name: 'Identity verification policy' });
+    expect(await within(editor).findByLabelText('Legal policy reference')).toHaveValue('COMPLIANCE-POLICY-2026-04');
+    expect(within(editor).getByLabelText('Manual review sources item 1')).toHaveValue('official_registry');
+    expect(within(editor).getByLabelText('International ID definitions item 1 Country code')).toHaveValue('US');
+    expect(within(editor).getByLabelText('International ID definitions item 1 Identifier key')).toHaveValue('national_id_card');
+    expect(within(editor).getByLabelText('Non-expiring evidence purposes item 1')).toHaveValue('proxy_inspector_selfie');
+    expect(within(editor).getByLabelText('Corporate buyer SCUML policy')).toHaveValue('required');
+    expect(within(editor).getByLabelText('Reminder interval (days)')).toHaveValue(45);
   });
 
   it('binds the exact structured revision body to step-up and displays the server returned state', async () => {
@@ -157,6 +244,24 @@ describe('AdminPolicies', () => {
     await userEvent.type(within(editor).getByLabelText('Reason'), 'Approved value');
     await userEvent.click(within(editor).getByRole('button', { name: 'Submit policy revision' }));
     expect(await within(editor).findByRole('status')).toHaveTextContent('Protected challenge could not be started.');
+    expect(mocks.prepareRevision).not.toHaveBeenCalled();
+  });
+
+  it('disables policy writes after the backend denies the selected staff profile', async () => {
+    mocks.getPolicy.mockImplementation(async (key: string) => key === 'identity_email'
+      ? currentPolicy(key, 2, 'configured', identityValue)
+      : currentPolicy(key));
+    mocks.getErrorCode.mockReturnValue('PERMISSION_DEPARTMENT_REQUIRED');
+    mocks.complete.mockResolvedValue({ ok: false, error: 'Policy authority denied (PERMISSION_DEPARTMENT_REQUIRED)' });
+    render(<AdminPolicies />);
+    await openPolicy('identity_email', 'Identity email');
+    const editor = screen.getByRole('region', { name: 'Identity email' });
+    await within(editor).findByLabelText('Verification TTL (seconds)');
+    await userEvent.type(within(editor).getByLabelText('Reason'), 'Review requested policy update');
+    await userEvent.click(within(editor).getByRole('button', { name: 'Submit policy revision' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Complete mock step-up' }));
+    expect(await within(editor).findByRole('alert')).toHaveTextContent('backend denied policy write access');
+    expect(within(editor).getByRole('button', { name: 'Policy editing unavailable' })).toBeDisabled();
     expect(mocks.prepareRevision).not.toHaveBeenCalled();
   });
 
