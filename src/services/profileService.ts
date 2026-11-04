@@ -26,6 +26,11 @@ export interface ProfileOnboardingDraft {
   updatedAt: string;
 }
 
+export interface ProfileOnboardingUpdate {
+  expectedVersion: number;
+  values: Record<string, unknown>;
+}
+
 export type CreateProfileKind =
   | 'buyer'
   | 'owner'
@@ -73,8 +78,17 @@ export const profileService = {
     return data;
   },
 
-  async getOnboarding(): Promise<ProfileOnboardingDraft> {
-    const { data } = await api.get<ProfileOnboardingDraft>('/profiles/current/onboarding');
+  async getOnboarding(profileId?: string): Promise<ProfileOnboardingDraft> {
+    const { data } = await api.get<ProfileOnboardingDraft>('/profiles/current/onboarding', {
+      ...(profileId ? { headers: { 'X-Profile-ID': profileId } } : {}),
+    });
+    return data;
+  },
+
+  async updateOnboarding(payload: ProfileOnboardingUpdate, challengeId: string, profileId: string): Promise<ProfileOnboardingDraft> {
+    const { data } = await api.patch<ProfileOnboardingDraft>('/profiles/current/onboarding', payload, {
+      headers: { 'X-Profile-ID': profileId, 'X-Step-Up-Challenge': challengeId },
+    });
     return data;
   },
 

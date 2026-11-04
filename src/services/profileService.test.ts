@@ -39,4 +39,19 @@ describe('profile context contract', () => {
     await expect(profileService.updatePrivacy(payload, 'challenge-privacy')).resolves.toMatchObject({ profile: { id: 'p1', version: 8 } });
     expect(api.patch).toHaveBeenCalledWith('/profiles/current/privacy', payload, { headers: { 'X-Step-Up-Challenge': 'challenge-privacy' } });
   });
+
+  it('loads and saves the current onboarding draft with its selected profile and bound step-up challenge', async () => {
+    const draft = { profileId: 'p1', kind: 'owner', structure: 'individual', version: 4, state: 'draft' as const, values: { countryOfResidence: 'NG' }, readiness: {}, fields: [], updatedAt: '2026-11-01T00:00:00.000Z' };
+    vi.mocked(api.get).mockResolvedValueOnce({ data: draft } as never);
+    vi.mocked(api.patch).mockResolvedValueOnce({ data: { ...draft, version: 5, values: { countryOfResidence: 'GB' } } } as never);
+
+    await expect(profileService.getOnboarding('p1')).resolves.toEqual(draft);
+    const payload = { expectedVersion: 4, values: { countryOfResidence: 'GB' } };
+    await expect(profileService.updateOnboarding(payload, 'challenge-onboarding', 'p1')).resolves.toMatchObject({ version: 5, values: { countryOfResidence: 'GB' } });
+
+    expect(api.get).toHaveBeenCalledWith('/profiles/current/onboarding', { headers: { 'X-Profile-ID': 'p1' } });
+    expect(api.patch).toHaveBeenCalledWith('/profiles/current/onboarding', payload, {
+      headers: { 'X-Profile-ID': 'p1', 'X-Step-Up-Challenge': 'challenge-onboarding' },
+    });
+  });
 });

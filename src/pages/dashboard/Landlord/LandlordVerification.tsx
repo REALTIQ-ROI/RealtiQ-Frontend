@@ -4,11 +4,12 @@ import { toast } from 'sonner';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import LandlordKycProgressTracker from '../../../components/verification/LandlordKycProgressTracker';
+import AuthorizedFilePreview from '../../../components/verification/AuthorizedFilePreview';
 import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
-import { ApiRequestError } from '../../../lib/axios';
+import { ApiRequestError, type ApiFieldError } from '../../../lib/axios';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import type { BoundStepUpChallenge } from '../../../hooks/useBoundStepUp';
 import { stepUpService } from '../../../services/stepUpService';
@@ -17,10 +18,28 @@ import { verificationCaseService, type ProfileEvidence, type ProfileEvidenceCont
 import { buildBoundEvidenceFormData, buildEvidenceStepUpBody, isProfileEvidenceAvailable, isProfileEvidenceProcessing, sha256File, validateEvidenceUpload, type BoundEvidenceMetadata } from '../../../utils/profileEvidenceUpload';
 import { buildLandlordKycProgress } from '../../../utils/landlordKycProgress';
 import { declaredVerificationPersonPaths, validateVerificationPersonRoutes } from '../../../utils/verificationCaseSubmission';
+import { onboardingDraftFieldDisplayValue, onboardingDraftFields, updateOnboardingDraftField } from '../../../utils/onboardingDraftFields';
 
 const formatStatus = (value?: string) => value ? value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Not submitted';
 const formatDate = (date?: string | null) => date ? new Date(date).toLocaleString('en-NG') : 'Not recorded';
 const statusClass = (state: string) => ['available', 'approved'].includes(state) ? 'text-emerald-700' : ['rejected', 'expired', 'deleted'].includes(state) ? 'text-error' : 'text-amber-800';
+const stepUpCodeCanRetryWithSameChallenge = (code?: string) => ['AUTH_FACTOR_CODE_INVALID', 'AUTH_FACTOR_RATE_LIMITED', 'AUTH_CHALLENGE_RATE_LIMITED'].includes(code ?? '');
+const serializeDraftValues = (values: Record<string, unknown>) => JSON.stringify(values, null, 2);
+const parseDraftValues = (text: string): { values?: Record<string, unknown>; error?: string } => {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { error: 'Draft values must be a JSON object.' };
+    return { values: parsed as Record<string, unknown> };
+  } catch {
+    return { error: 'Fix the JSON syntax before saving the profile draft.' };
+  }
+};
+const draftMissingFields = (readiness: unknown): string[] => {
+  if (!readiness || typeof readiness !== 'object' || Array.isArray(readiness)) return [];
+  const missing = (readiness as Record<string, unknown>).intakeMissing;
+  return Array.isArray(missing) ? missing.filter((item): item is string => typeof item === 'string') : [];
+};
+const formatDraftFieldName = (field: string) => field.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[._[\]]+/g, ' ').trim();
 type VerificationSection = 'draft' | 'evidence' | 'cases' | 'contract';
 type VerificationSectionState<T> = Record<VerificationSection, T>;
 
@@ -35,6 +54,12 @@ const LandlordVerification = () => {
   const { activeProfile, token } = useAuth();
   const [profile, setProfile] = useState<AccountProfileSummary | null>(null);
   const [onboardingDraft, setOnboardingDraft] = useState<ProfileOnboardingDraft | null>(null);
+  const [draftValuesText, setDraftValuesText] = useState('');
+  const [draftSavePending, setDraftSavePending] = useState(false);
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
+  const [draftSaveFieldErrors, setDraftSaveFieldErrors] = useState<ApiFieldError[]>([]);
+  const [draftConflict, setDraftConflict] = useState<{ latest: ProfileOnboardingDraft; message: string } | null>(null);
+  const [draftConflictReviewed, setDraftConflictReviewed] = useState(false);
   const [loadedProfileId, setLoadedProfileId] = useState<string | null>(null);
   const [contract, setContract] = useState<ProfileEvidenceContract | null>(null);
   const [evidence, setEvidence] = useState<ProfileEvidence[]>([]);
@@ -69,6 +94,8 @@ const LandlordVerification = () => {
   const withdrawStepUp = useBoundStepUp<VerificationCase>();
   const createCaseStepUp = useBoundStepUp<VerificationCase>();
   const cancelCreateCaseStepUp = createCaseStepUp.cancel;
+  const saveDraftStepUp = useBoundStepUp<ProfileOnboardingDraft>();
+  const cancelSaveDraftStepUp = saveDraftStepUp.cancel;
   const evidenceStepUp = useBoundStepUp<ProfileEvidence>();
   const profileId = activeProfile?.id;
   const previousProfileId = useRef(profileId);
@@ -91,6 +118,12 @@ const LandlordVerification = () => {
       operationKeyRef.current = null;
       setProfile(null);
       setOnboardingDraft(null);
+      setDraftValuesText('');
+      setDraftSavePending(false);
+      setDraftSaveError(null);
+      setDraftSaveFieldErrors([]);
+      setDraftConflict(null);
+      setDraftConflictReviewed(false);
       setLoadedProfileId(null);
       setContract(null);
       setEvidence([]);
@@ -114,10 +147,11 @@ const LandlordVerification = () => {
       setIdentityEvidence({});
       caseOperationKeyRef.current = null;
       cancelCreateCaseStepUp();
+      cancelSaveDraftStepUp();
       setUploadError('The active profile changed. Pending verification data and security challenges were cleared; the selected file remains available for a new challenge.');
       previousProfileId.current = profileId;
     }
-  }, [profileId, cancelCreateCaseStepUp]);
+  }, [profileId, cancelCreateCaseStepUp, cancelSaveDraftStepUp]);
 
   useEffect(() => {
     if (!contract) return;
@@ -170,7 +204,7 @@ const LandlordVerification = () => {
         if (isCurrentRequest()) setLoading(false);
       });
 
-    const draftRequest = profileService.getOnboarding()
+    const draftRequest = profileService.getOnboarding(requestedProfileId)
       .then((draft) => {
         if (!isSectionRequestCurrent('draft')) return;
         if (draft.profileId !== requestedProfileId) {
@@ -178,6 +212,11 @@ const LandlordVerification = () => {
           return;
         }
         setOnboardingDraft(draft);
+        setDraftValuesText(serializeDraftValues(draft.values));
+        setDraftConflict(null);
+        setDraftConflictReviewed(false);
+        setDraftSaveError(null);
+        setDraftSaveFieldErrors([]);
         setLoadedProfileId(requestedProfileId);
         setSectionError('draft', null);
       })
@@ -229,10 +268,15 @@ const LandlordVerification = () => {
     setSectionErrors((current) => ({ ...current, [section]: null }));
     try {
       if (section === 'draft') {
-        const draft = await profileService.getOnboarding();
+        const draft = await profileService.getOnboarding(requestedProfileId);
         if (!isCurrentRequest()) return;
         if (draft.profileId !== requestedProfileId) throw new Error('The onboarding draft belongs to a different profile. Select the correct profile and refresh.');
         setOnboardingDraft(draft);
+        setDraftValuesText(serializeDraftValues(draft.values));
+        setDraftConflict(null);
+        setDraftConflictReviewed(false);
+        setDraftSaveError(null);
+        setDraftSaveFieldErrors([]);
       } else if (section === 'evidence') {
         const page = await verificationCaseService.listEvidence({ limit: 25 });
         if (!isCurrentRequest()) return;
@@ -483,8 +527,139 @@ const LandlordVerification = () => {
     [onboardingDraft],
   );
 
+  const parsedDraftValues = useMemo(() => parseDraftValues(draftValuesText), [draftValuesText]);
+  const draftValuesDirty = Boolean(onboardingDraft && (
+    !parsedDraftValues.values || JSON.stringify(parsedDraftValues.values) !== JSON.stringify(onboardingDraft.values)
+  ));
+  const missingDraftFields = useMemo(() => draftMissingFields(onboardingDraft?.readiness), [onboardingDraft?.readiness]);
+  const draftFields = useMemo(
+    () => onboardingDraftFields(parsedDraftValues.values ?? onboardingDraft?.values ?? {}, missingDraftFields),
+    [missingDraftFields, onboardingDraft?.values, parsedDraftValues.values],
+  );
+  const protectedCaseSubmissionLocked = createCaseStepUp.busy || Boolean(createCaseStepUp.challenge);
+  const draftEditorLocked = draftSavePending || saveDraftStepUp.busy || Boolean(saveDraftStepUp.challenge) || protectedCaseSubmissionLocked;
+
+  const refreshDraftAfterConflict = async (requestedProfileId: string, message: string) => {
+    setSectionLoading((current) => ({ ...current, draft: true }));
+    setSectionErrors((current) => ({ ...current, draft: null }));
+    try {
+      const latest = await profileService.getOnboarding(requestedProfileId);
+      if (currentProfileIdRef.current !== requestedProfileId) return;
+      if (latest.profileId !== requestedProfileId) throw new Error('The latest draft belongs to a different profile. Refresh after selecting the intended profile.');
+      setOnboardingDraft(latest);
+      setDraftConflict({ latest, message });
+      setDraftConflictReviewed(false);
+      setSectionErrors((current) => ({ ...current, draft: null }));
+    } catch (raw) {
+      if (currentProfileIdRef.current === requestedProfileId) {
+        setDraftSaveError(`${message} The latest draft could not be loaded: ${readErrorMessage(raw, 'Profile setup draft')}`);
+        setSectionErrors((current) => ({ ...current, draft: readErrorMessage(raw, 'Profile setup draft') }));
+      }
+    } finally {
+      if (currentProfileIdRef.current === requestedProfileId) setSectionLoading((current) => ({ ...current, draft: false }));
+    }
+  };
+
+  const useLatestDraft = () => {
+    if (!draftConflict) return;
+    setDraftValuesText(serializeDraftValues(draftConflict.latest.values));
+    setDraftConflict(null);
+    setDraftConflictReviewed(false);
+    setDraftSaveError(null);
+    setDraftSaveFieldErrors([]);
+  };
+
+  const keepDraftEditsAfterReview = () => {
+    setDraftConflictReviewed(true);
+    setDraftSaveError(null);
+  };
+
+  const updateDraftField = (path: string, value: string | number | boolean | null) => {
+    if (!parsedDraftValues.values) return;
+    try {
+      setDraftValuesText(serializeDraftValues(updateOnboardingDraftField(parsedDraftValues.values, path, value)));
+      setDraftSaveError(null);
+      setDraftSaveFieldErrors([]);
+      if (draftConflict) setDraftConflictReviewed(false);
+    } catch (raw) {
+      setDraftSaveError(raw instanceof Error ? raw.message : 'This profile field could not be updated. Refresh the draft and try again.');
+    }
+  };
+
+  const beginDraftSave = async () => {
+    if (!profileId || !onboardingDraft || draftSavePending || saveDraftStepUp.busy || saveDraftStepUp.challenge) return;
+    if (draftConflict && !draftConflictReviewed) {
+      setDraftSaveError('Review the latest saved draft before saving your edits.');
+      return;
+    }
+    const parsed = parseDraftValues(draftValuesText);
+    if (parsed.error || !parsed.values) {
+      setDraftSaveError(parsed.error ?? 'Enter profile draft values as a JSON object.');
+      setDraftSaveFieldErrors([]);
+      return;
+    }
+    const requestedProfileId = profileId;
+    const body = { expectedVersion: onboardingDraft.version, values: parsed.values };
+    setDraftSavePending(true);
+    setDraftSaveError(null);
+    setDraftSaveFieldErrors([]);
+    const started = await saveDraftStepUp.begin({
+      method: 'PATCH',
+      path: '/api/profiles/current/onboarding',
+      body,
+      label: 'Save profile details for KYC',
+      execute: (challengeId, exactBody) => profileService.updateOnboarding(exactBody, challengeId, requestedProfileId),
+    });
+    if (!started) setDraftSavePending(false);
+  };
+
+  const completeDraftSave = async (code: string): Promise<boolean> => {
+    const requestedProfileId = profileId;
+    if (!requestedProfileId) return false;
+    const result = await saveDraftStepUp.complete(code);
+    if (!result.ok) {
+      setDraftSaveError(result.error ?? 'The draft could not be saved. Your edits are still here.');
+      setDraftSaveFieldErrors(result.fieldErrors ?? []);
+      if (stepUpCodeCanRetryWithSameChallenge(result.code)) return false;
+      setDraftSavePending(false);
+      if (result.code === 'CONFLICT_ONBOARDING_VERSION') {
+        await refreshDraftAfterConflict(requestedProfileId, 'The draft changed elsewhere. Review the latest saved version before continuing.');
+      } else if (!result.code && /timed out|unable to confirm a response|may have been processed/i.test(result.error ?? '')) {
+        await refreshDraftAfterConflict(requestedProfileId, 'The save result could not be confirmed. Review the latest saved version before trying again.');
+      }
+      return false;
+    }
+    if (currentProfileIdRef.current !== requestedProfileId || result.value.profileId !== requestedProfileId) return false;
+    setOnboardingDraft(result.value);
+    setDraftValuesText(serializeDraftValues(result.value.values));
+    setDraftSavePending(false);
+    setDraftSaveError(null);
+    setDraftSaveFieldErrors([]);
+    setDraftConflict(null);
+    setDraftConflictReviewed(false);
+    setSectionErrors((current) => ({ ...current, draft: null }));
+    toast.success('Profile draft saved. Review its readiness before submitting for verification.');
+    return true;
+  };
+
   const beginCaseSubmission = async () => {
     if (!profileId || !onboardingDraft || !contract || busy || createCaseStepUp.busy || createCaseStepUp.challenge) return;
+    if (draftSavePending || saveDraftStepUp.busy || saveDraftStepUp.challenge) {
+      setCaseSubmissionError('Wait for the profile draft save to finish before submitting for verification.');
+      return;
+    }
+    if (draftValuesDirty) {
+      setCaseSubmissionError('Save your profile edits before submitting for verification.');
+      return;
+    }
+    if (draftConflict && !draftConflictReviewed) {
+      setCaseSubmissionError('Review the latest saved profile draft before submitting again.');
+      return;
+    }
+    if (missingDraftFields.length) {
+      setCaseSubmissionError(`Complete the required profile fields before submitting: ${missingDraftFields.map(formatDraftFieldName).join(', ')}.`);
+      return;
+    }
     if (declaredPersonPaths.some((path) => !personRoutes[path]?.route || !personRoutes[path]?.country.trim())) {
       setCaseSubmissionError('Choose an identity route and country for every person declared in the current onboarding draft.');
       return;
@@ -505,8 +680,10 @@ const LandlordVerification = () => {
     if (isIndividual && !/^[A-Z]{2}$/.test(identityCountry.trim().toUpperCase())) { setCaseSubmissionError('Enter a two-letter identity country code.'); return; }
     if (isIndividual && identityRoute === 'nigerian' && identityCountry.trim().toUpperCase() !== 'NG') { setCaseSubmissionError('The Nigerian identity route requires country NG.'); return; }
     const identityItems = requiredIdentityPurposes.map((purpose) => ({ purpose, evidenceId: identityEvidence[purpose] ?? '' }));
-    if (identityItems.some((item) => !item.evidenceId || !evidence.some((record) => record.id === item.evidenceId && record.purpose === item.purpose && isProfileEvidenceAvailable(record.state)))) {
-      setCaseSubmissionError('Select current available private evidence for every identity purpose required by the configured policy.');
+    const missingIdentityPurposes = identityItems.filter((item) => !item.evidenceId || !evidence.some((record) => record.id === item.evidenceId && record.purpose === item.purpose && isProfileEvidenceAvailable(record.state)));
+    if (missingIdentityPurposes.length) {
+      const missingLabels = missingIdentityPurposes.map((item) => item.purpose.replaceAll('_', ' ')).join(', ');
+      setCaseSubmissionError(`Available private evidence is required for each configured identity purpose before submitting: ${missingLabels}.`);
       return;
     }
 
@@ -537,11 +714,21 @@ const LandlordVerification = () => {
 
   const completeCaseSubmission = async (code: string): Promise<boolean> => {
     const requestedProfileId = profileId;
+    if (draftSavePending || draftValuesDirty || !onboardingDraft || draftConflict && !draftConflictReviewed) {
+      cancelCreateCaseStepUp();
+      setCaseSubmissionError('The profile draft changed or is not saved. Review and save it before starting a new verification submission.');
+      return false;
+    }
     const result = await createCaseStepUp.complete(code);
     if (!result.ok) {
-      if (!createCaseStepUp.challenge) {
-        setCaseSubmissionError(result.error ?? 'The verification submission result could not be confirmed. Refresh the case list before attempting another submission.');
-        if (currentProfileIdRef.current === requestedProfileId) await load();
+      if (!stepUpCodeCanRetryWithSameChallenge(result.code)) {
+        setCaseSubmissionError(result.error ?? 'The verification submission could not be confirmed. Review the latest case and draft status before retrying.');
+        if (currentProfileIdRef.current === requestedProfileId) {
+          if (result.code === 'CONFLICT_ONBOARDING_VERSION') {
+            await refreshDraftAfterConflict(requestedProfileId, 'The onboarding draft changed before submission. Review the latest saved version; the case was not submitted against a stale draft.');
+          }
+          await retrySection('cases');
+        }
       }
       return false;
     }
@@ -564,7 +751,7 @@ const LandlordVerification = () => {
             <h1 className="text-4xl font-extrabold tracking-tight text-primary">Verification</h1>
             <p className="mt-2 max-w-2xl text-sm text-secondary">Evidence and case records are private to the current selected profile. Review status, history and authorized evidence from here.</p>
           </div>
-          <div className="flex gap-2"><Button type="button" variant="secondary" disabled={loading} onClick={() => void load()}>Refresh</Button><Link to="/dashboard/landlord/settings" className="inline-flex items-center rounded-lg bg-surface-container-high px-4 py-2 text-sm font-semibold">Back to Settings</Link></div>
+          <div className="flex gap-2"><Button type="button" variant="secondary" disabled={loading || draftValuesDirty || draftSavePending} onClick={() => void load()}>Refresh</Button><Link to="/dashboard/landlord/settings" className="inline-flex items-center rounded-lg bg-surface-container-high px-4 py-2 text-sm font-semibold">Back to Settings</Link></div>
         </header>
         {loading ? <LoadingState label="Loading profile verification..." /> : null}
         {error ? <ErrorState message={error} onRetry={() => void load()} /> : null}
@@ -608,29 +795,103 @@ const LandlordVerification = () => {
             <div className="mt-4 space-y-2">{cases.map((item) => <article key={item.id} className="rounded-lg bg-surface-container-low p-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold capitalize">{item.kind} · {item.structure}</p><p className="mt-1 text-xs text-secondary">Case {item.id} · Version {item.version} · Draft version {item.draftVersion}</p></div><span className={`text-xs font-bold ${statusClass(item.state)}`}>{formatStatus(item.state)}</span></div><p className="mt-1 text-xs text-secondary">Submitted {formatDate(item.submittedAt)} · Reviewed {formatDate(item.reviewedAt)} · Expires {formatDate(item.expiresAt)}</p><Button type="button" variant="ghost" disabled={busy} onClick={() => void openCase(item)}>Details and history</Button></article>)}{!cases.length && !sectionLoading.cases && !sectionErrors.cases ? <p className="rounded-lg border border-dashed p-4 text-sm text-secondary">No verification cases returned for this profile.</p> : null}</div>
             <div id="kyc-case-submission" className="mt-5 scroll-mt-6 rounded-lg border border-outline-variant/10 bg-surface-container-low p-4">
               <h3 className="font-bold">Submit a verification case</h3>
-              <p className="mt-1 text-sm text-secondary">Submission uses onboarding draft version {onboardingDraft?.version ?? 'unavailable'} and the exact declared-person paths returned in the current draft. The server checks draft completeness, evidence, identity policy and profile eligibility.</p>
-              {onboardingDraft ? <p className="mt-1 text-xs text-secondary">Draft updated {formatDate(onboardingDraft.updatedAt)} · readiness returned by server: {JSON.stringify(onboardingDraft.readiness)}</p> : sectionErrors.draft ? <div role="alert" className="mt-2 text-sm text-error"><p>{sectionErrors.draft}</p><Button type="button" variant="secondary" className="mt-2" disabled={sectionLoading.draft} onClick={() => void retrySection('draft')}>Retry profile draft</Button></div> : <p role="status" className="mt-2 text-sm text-amber-900">{sectionLoading.draft ? 'Loading the current onboarding draft…' : 'The current onboarding draft is unavailable. Refresh before submission.'}</p>}
+              <p className="mt-1 text-sm text-secondary">Complete your profile and required evidence before submitting for KYC review.</p>
+              {!onboardingDraft ? sectionErrors.draft ? <div role="alert" className="mt-2 text-sm text-error"><p>{sectionErrors.draft}</p><Button type="button" variant="secondary" className="mt-2" disabled={sectionLoading.draft} onClick={() => void retrySection('draft')}>Retry profile draft</Button></div> : <p role="status" className="mt-2 text-sm text-amber-900">{sectionLoading.draft ? 'Loading profile…' : 'Profile details are unavailable. Refresh before submission.'}</p> : null}
+              {onboardingDraft ? <div className="mt-3 rounded-lg bg-white p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="font-semibold">Profile draft</h4>
+                  <p role="status" className={draftValuesDirty || missingDraftFields.length ? 'text-sm font-semibold text-amber-800' : 'text-sm font-semibold text-emerald-700'}>
+                    {draftSavePending ? 'Saving draft…' : draftValuesDirty ? 'Unsaved changes' : missingDraftFields.length ? `Saved · version ${onboardingDraft.version} · required fields remain` : `Saved · version ${onboardingDraft.version}`}
+                  </p>
+                </div>
+                {missingDraftFields.length ? <p className="mt-2 text-sm text-amber-900"><strong>Still required:</strong> {missingDraftFields.map(formatDraftFieldName).join(', ')}.</p> : null}
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {draftFields.map((field) => {
+                    const fieldError = draftSaveFieldErrors.find((item) => item.path === field.path || item.path === `values.${field.path}`);
+                    if (field.inputType === 'checkbox') {
+                      return <div key={field.path} className="rounded-lg border border-outline-variant/20 p-3">
+                        <label className="flex items-center gap-2 text-sm font-semibold"><input aria-label={field.label} type="checkbox" checked={field.value === true} disabled={draftEditorLocked} onChange={(event) => updateDraftField(field.path, event.target.checked)} />{field.label}{field.required ? <span className="text-error">Required</span> : null}</label>
+                        {fieldError ? <p role="alert" className="mt-2 text-xs text-error">{fieldError.msg ?? 'Check this value.'}</p> : null}
+                      </div>;
+                    }
+                    return <label key={field.path} className="block text-xs font-bold">{field.label}{field.required ? <span className="ml-1 text-error">Required</span> : null}
+                      <input aria-label={field.label} type={field.inputType} step={field.inputType === 'number' ? 'any' : undefined} className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={field.value === null || field.value === undefined ? '' : String(field.value)} disabled={draftEditorLocked} aria-required={field.required} aria-invalid={Boolean(fieldError)} onChange={(event) => {
+                        const nextValue = field.inputType === 'number'
+                          ? event.target.value === '' ? null : Number(event.target.value)
+                          : event.target.value === '' ? null : event.target.value;
+                        updateDraftField(field.path, nextValue);
+                      }} />
+                      {fieldError ? <span role="alert" className="mt-1 block text-xs text-error">{fieldError.msg ?? 'Check this value.'}</span> : null}
+                    </label>;
+                  })}
+                  {!draftFields.length ? <p className="text-sm text-secondary sm:col-span-2">No profile fields are currently marked as missing or returned with editable values.</p> : null}
+                </div>
+                <p className="mt-2 text-xs text-secondary">Enter your profile details below. These values are saved to your private onboarding draft; verification review is a separate step.</p>
+                {draftConflict ? <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                  <p>{draftConflict.message} The latest saved draft is version {draftConflict.latest.version}. Review it before continuing.</p>
+                  <details className="mt-2"><summary className="cursor-pointer font-semibold">Review latest saved profile values</summary><dl className="mt-2 grid gap-2 rounded bg-white p-3 text-xs sm:grid-cols-2">{onboardingDraftFields(draftConflict.latest.values).map((field) => <div key={field.path}><dt className="font-semibold">{field.label}</dt><dd className="break-words">{onboardingDraftFieldDisplayValue(field.value)}</dd></div>)}{!onboardingDraftFields(draftConflict.latest.values).length ? <p>No profile values were returned.</p> : null}</dl></details>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button type="button" variant="secondary" onClick={useLatestDraft}>Use latest saved draft</Button>
+                    <Button type="button" variant="secondary" onClick={keepDraftEditsAfterReview}>Keep my edits after review</Button>
+                  </div>
+                  {draftConflictReviewed ? <p role="status" className="mt-2">Latest server values reviewed. Save your edits to continue.</p> : null}
+                </div> : null}
+                {draftSaveError || saveDraftStepUp.error ? <p role="alert" className="mt-2 text-sm text-error">{draftSaveError ?? saveDraftStepUp.error}</p> : null}
+                {draftSaveFieldErrors.length ? <ul role="alert" className="mt-2 list-disc pl-5 text-sm text-error">{draftSaveFieldErrors.map((item, index) => <li key={`${item.path ?? 'field'}-${index}`}>{item.path ? `${item.path}: ` : ''}{item.msg ?? 'Invalid value.'}</li>)}</ul> : null}
+                <Button type="button" variant="secondary" className="mt-3" disabled={!draftValuesDirty || !parsedDraftValues.values || draftSavePending || saveDraftStepUp.busy || Boolean(saveDraftStepUp.challenge) || Boolean(draftConflict && !draftConflictReviewed)} onClick={() => void beginDraftSave()}>
+                  {draftSavePending || saveDraftStepUp.busy ? 'Preparing secure save…' : 'Save draft with authenticator'}
+                </Button>
+              </div> : null}
               {declaredPersonPaths.map((path) => <div key={path} className="mt-3 grid gap-3 rounded-lg bg-white p-3 sm:grid-cols-2">
                 <p className="break-all text-sm font-semibold sm:col-span-2">Declared person: <code>{path}</code></p>
-                <label className="text-xs font-bold">Identity route<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={personRoutes[path]?.route ?? ''} onChange={(event) => setPersonRoutes((current) => ({ ...current, [path]: { route: event.target.value as 'nigerian' | 'international' | '', country: current[path]?.country ?? '' } }))}><option value="">Choose route</option><option value="nigerian">Nigerian</option><option value="international">International</option></select></label>
-                <label className="text-xs font-bold">Country code<input className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal uppercase" maxLength={2} value={personRoutes[path]?.country ?? ''} onChange={(event) => setPersonRoutes((current) => ({ ...current, [path]: { route: current[path]?.route ?? '', country: event.target.value.toUpperCase() } }))} placeholder="NG" /></label>
+                <label className="text-xs font-bold">Identity route<select disabled={protectedCaseSubmissionLocked} className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={personRoutes[path]?.route ?? ''} onChange={(event) => setPersonRoutes((current) => ({ ...current, [path]: { route: event.target.value as 'nigerian' | 'international' | '', country: current[path]?.country ?? '' } }))}><option value="">Choose route</option><option value="nigerian">Nigerian</option><option value="international">International</option></select></label>
+                <label className="text-xs font-bold">Country code<input disabled={protectedCaseSubmissionLocked} className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal uppercase" maxLength={2} value={personRoutes[path]?.country ?? ''} onChange={(event) => setPersonRoutes((current) => ({ ...current, [path]: { route: current[path]?.route ?? '', country: event.target.value.toUpperCase() } }))} placeholder="NG" /></label>
               </div>)}
               {onboardingDraft?.structure === 'individual' ? <div className="mt-3 grid gap-3 rounded-lg bg-white p-3 sm:grid-cols-2">
-                <label className="text-xs font-bold">Individual identity route<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={identityRoute} onChange={(event) => { setIdentityRoute(event.target.value as 'nigerian' | 'international' | ''); setIdentityEvidence({}); }}><option value="">Choose configured route</option>{(['nigerian', 'international'] as const).filter((route) => Object.prototype.hasOwnProperty.call(contract?.individualRoutes ?? {}, route)).map((route) => <option key={route} value={route}>{route === 'nigerian' ? 'Nigerian' : 'International'}</option>)}</select></label>
-                <label className="text-xs font-bold">Identity country<input className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal uppercase" maxLength={2} value={identityCountry} onChange={(event) => setIdentityCountry(event.target.value.toUpperCase())} placeholder="NG" /></label>
-                {(identityRoute ? contract?.individualRoutes[identityRoute] ?? [] : []).map((purpose) => <label key={purpose} className="text-xs font-bold">Evidence for {purpose.replaceAll('_', ' ')}<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={identityEvidence[purpose] ?? ''} onChange={(event) => setIdentityEvidence((current) => ({ ...current, [purpose]: event.target.value }))}><option value="">Choose available private evidence</option>{evidence.filter((item) => item.purpose === purpose && isProfileEvidenceAvailable(item.state)).map((item) => <option key={item.id} value={item.id}>{item.documentKind.replaceAll('_', ' ')} · v{item.version} · {item.id}</option>)}</select></label>)}
+                <label className="text-xs font-bold">Individual identity route<select disabled={protectedCaseSubmissionLocked} className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={identityRoute} onChange={(event) => { setIdentityRoute(event.target.value as 'nigerian' | 'international' | ''); setIdentityEvidence({}); }}><option value="">Choose configured route</option>{(['nigerian', 'international'] as const).filter((route) => Object.prototype.hasOwnProperty.call(contract?.individualRoutes ?? {}, route)).map((route) => <option key={route} value={route}>{route === 'nigerian' ? 'Nigerian' : 'International'}</option>)}</select></label>
+                <label className="text-xs font-bold">Identity country<input disabled={protectedCaseSubmissionLocked} className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal uppercase" maxLength={2} value={identityCountry} onChange={(event) => setIdentityCountry(event.target.value.toUpperCase())} placeholder="NG" /></label>
+                {(identityRoute ? contract?.individualRoutes[identityRoute] ?? [] : []).map((purpose) => {
+                  const purposeEvidence = evidence.filter((item) => item.purpose === purpose);
+                  const availablePurposeEvidence = purposeEvidence.filter((item) => isProfileEvidenceAvailable(item.state));
+
+                  if (availablePurposeEvidence.length) {
+                    return <label key={purpose} className="text-xs font-bold">Evidence for {purpose.replaceAll('_', ' ')}<select disabled={protectedCaseSubmissionLocked} className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={identityEvidence[purpose] ?? ''} onChange={(event) => setIdentityEvidence((current) => ({ ...current, [purpose]: event.target.value }))}><option value="">Choose available private evidence</option>{availablePurposeEvidence.map((item) => <option key={item.id} value={item.id}>{item.documentKind.replaceAll('_', ' ')} · v{item.version} · {item.id}</option>)}</select></label>;
+                  }
+
+                  const purposeLabel = purpose.replaceAll('_', ' ');
+                  const latestState = purposeEvidence[0]?.state;
+                  const unavailableMessage = sectionLoading.evidence
+                    ? `Checking available ${purposeLabel} evidence…`
+                    : sectionErrors.evidence
+                      ? `Could not confirm ${purposeLabel} evidence. Retry the private evidence list before continuing.`
+                      : latestState
+                        ? `Your ${purposeLabel} evidence is ${formatStatus(latestState).toLowerCase()}, so it cannot be selected yet.`
+                      : evidenceCursor
+                        ? `No available ${purposeLabel} evidence appears in the loaded records. Check older evidence or upload it to continue.`
+                        : `No available ${purposeLabel} evidence has been uploaded. Upload it to continue.`;
+
+                  return <div key={purpose} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" role="status">
+                    <p className="font-semibold">{purposeLabel.replace(/\b\w/g, (letter) => letter.toUpperCase())} evidence required</p>
+                    <p className="mt-1">{unavailableMessage}</p>
+                    {sectionErrors.evidence ? <Button type="button" variant="secondary" className="mt-2" disabled={sectionLoading.evidence} onClick={() => void retrySection('evidence')}>Retry private evidence</Button> : null}
+                    {!sectionErrors.evidence && evidenceCursor ? <Button type="button" variant="secondary" className="mt-2" disabled={busy || sectionLoading.evidence} onClick={() => void loadMoreEvidence()}>Load older evidence</Button> : null}
+                    {!sectionLoading.evidence && !sectionErrors.evidence && !latestState ? <a className="mt-2 inline-flex font-semibold underline" href="#kyc-evidence-upload">Upload {purposeLabel} evidence</a> : null}
+                    {latestState ? <a className="mt-2 inline-flex font-semibold underline" href="#kyc-case-list">View evidence status</a> : null}
+                  </div>;
+                })}
                 {contract?.policies.acceptedIdentity?.state !== 'configured' ? <p role="status" className="text-sm text-amber-900 sm:col-span-2">Identity verification policy is {formatStatus(contract?.policies.acceptedIdentity?.state)}. The server will not accept identity evidence until its policy is configured.</p> : null}
               </div> : null}
               {caseSubmissionError || createCaseStepUp.error ? <p role="alert" className="mt-3 text-sm text-error">{caseSubmissionError ?? createCaseStepUp.error}</p> : null}
-              <Button type="button" className="mt-3" disabled={!onboardingDraft || busy || createCaseStepUp.busy || Boolean(createCaseStepUp.challenge) || (onboardingDraft.structure === 'individual' && contract?.policies.acceptedIdentity?.state !== 'configured')} onClick={() => void beginCaseSubmission()}>{createCaseStepUp.busy ? 'Preparing secure submission…' : 'Submit current draft with authenticator'}</Button>
+              <Button type="button" className="mt-3" disabled={!onboardingDraft || busy || draftValuesDirty || missingDraftFields.length > 0 || draftSavePending || saveDraftStepUp.busy || Boolean(saveDraftStepUp.challenge) || Boolean(draftConflict && !draftConflictReviewed) || createCaseStepUp.busy || Boolean(createCaseStepUp.challenge) || (onboardingDraft.structure === 'individual' && contract?.policies.acceptedIdentity?.state !== 'configured')} onClick={() => void beginCaseSubmission()}>{createCaseStepUp.busy ? 'Preparing secure submission…' : 'Submit saved draft for verification'}</Button>
             </div>
           </div>
         </section> : null}
         {profileDataCurrent && selectedEvidence ? <section className="rounded-2xl border border-outline-variant/10 bg-white p-6"><div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Evidence detail</h2><p className="mt-1 text-sm text-secondary">{selectedEvidence.id} · {selectedEvidence.mimeType} · Version {selectedEvidence.version}</p></div><Button type="button" variant="secondary" onClick={() => setSelectedEvidence(null)}>Close details</Button></div><p className="mt-3 text-sm">Purpose {selectedEvidence.purpose} · Subject {selectedEvidence.subject} · State {formatStatus(selectedEvidence.state)}{selectedEvidence.contentValidatedAt ? ` · Content validated ${formatDate(selectedEvidence.contentValidatedAt)}` : ''}{selectedEvidence.previousEvidenceId ? ` · Previous evidence ${selectedEvidence.previousEvidenceId}` : ''}</p><p className="mt-2 text-xs text-secondary">Content validation checks supported file format, structure, size and content hash. It does not detect malware or approve identity, KYC or title.</p></section> : null}
         {profileDataCurrent && selectedCase ? <section className="rounded-2xl border border-outline-variant/10 bg-white p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Case detail and history</h2><p className="mt-1 text-sm text-secondary">{selectedCase.kind} · {selectedCase.state} · Version {selectedCase.version}</p></div><Button type="button" variant="secondary" onClick={() => setSelectedCase(null)}>Close case</Button></div><p className="mt-3 text-sm">Rejection codes: {selectedCase.rejectionCodes.length ? selectedCase.rejectionCodes.join(', ') : 'None returned.'}</p><div className="mt-4 space-y-2">{history?.events.map((event) => <div key={event.id} className="rounded-lg bg-surface-container-low p-3 text-sm"><strong>{event.action}</strong><span className="ml-2 text-xs text-secondary">Version {event.version} · {formatDate(event.at)}</span></div>)}{!history?.events.length ? <p className="text-sm text-secondary">No case history events returned.</p> : null}</div>{history?.nextCursor ? <Button type="button" variant="secondary" disabled={busy} className="mt-3" onClick={async () => { const requestedProfileId = profileId; setBusy(true); try { const page = await verificationCaseService.holderHistory(selectedCase.id, history.nextCursor ?? undefined); if (currentProfileIdRef.current === requestedProfileId) setHistory((current) => current ? { events: [...current.events, ...page.events], nextCursor: page.nextCursor } : page); } catch (raw) { if (currentProfileIdRef.current === requestedProfileId) setError(readErrorMessage(raw, 'Verification case history')); } finally { if (currentProfileIdRef.current === requestedProfileId) setBusy(false); } }}>Load more history</Button> : null}{['submitted', 'under_review'].includes(selectedCase.state) ? <Button type="button" variant="secondary" className="mt-4" disabled={busy || withdrawStepUp.busy || Boolean(withdrawStepUp.challenge)} onClick={() => void beginWithdraw()}>Withdraw case</Button> : null}</section> : null}
-        {profileDataCurrent && filePreview ? <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 p-4" role="presentation"><section role="dialog" aria-modal="true" aria-label="Private evidence viewer" className="flex h-[90vh] w-full max-w-5xl flex-col rounded-xl bg-white p-4"><div className="flex items-center justify-between"><h2 className="font-bold">Authorized private evidence · {filePreview.id}</h2><Button type="button" variant="secondary" onClick={() => { URL.revokeObjectURL(filePreview.url); setFilePreview(null); }}>Close viewer</Button></div><div className="mt-3 min-h-0 flex-1">{filePreview.mimeType.startsWith('image/') ? <img src={filePreview.url} alt="Private profile evidence" className="mx-auto h-full max-w-full object-contain" /> : <iframe title="Private evidence document" src={filePreview.url} sandbox="" className="h-full w-full rounded border" />}</div></section></div> : null}
+        {profileDataCurrent && filePreview ? <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 p-4" role="presentation"><section role="dialog" aria-modal="true" aria-label="Private evidence viewer" className="flex h-[90vh] w-full max-w-5xl flex-col rounded-xl bg-white p-4"><div className="flex items-center justify-between"><h2 className="font-bold">Authorized private evidence · {filePreview.id}</h2><Button type="button" variant="secondary" onClick={() => { URL.revokeObjectURL(filePreview.url); setFilePreview(null); }}>Close viewer</Button></div><div className="mt-3 min-h-0 flex-1"><AuthorizedFilePreview url={filePreview.url} mimeType={filePreview.mimeType} alt="Private profile evidence" /></div></section></div> : null}
         <StepUpDialog challenge={profileDataCurrent ? withdrawStepUp.challenge : null} busy={withdrawStepUp.busy} error={withdrawStepUp.error} onCancel={withdrawStepUp.cancel} onSubmit={completeWithdraw} />
         <StepUpDialog challenge={profileDataCurrent ? createCaseStepUp.challenge : null} busy={createCaseStepUp.busy} error={createCaseStepUp.error || caseSubmissionError} onCancel={() => { createCaseStepUp.cancel(); setCaseSubmissionError(null); }} onSubmit={completeCaseSubmission} />
+        <StepUpDialog challenge={profileDataCurrent ? saveDraftStepUp.challenge : null} busy={saveDraftStepUp.busy} error={saveDraftStepUp.error || draftSaveError} onCancel={() => { saveDraftStepUp.cancel(); setDraftSavePending(false); setDraftSaveError(null); }} onSubmit={completeDraftSave} />
         <StepUpDialog challenge={profileDataCurrent ? evidenceStepUp.challenge : null} busy={evidenceStepUp.busy} error={evidenceStepUp.error} onCancel={() => { evidenceStepUp.cancel(); setPendingEvidenceAction(null); }} onSubmit={completeEvidenceAction} />
         <StepUpDialog challenge={profileDataCurrent && pendingUpload && pendingUpload.profileId === profileId ? pendingUpload.challenge : null} busy={uploadBusy} error={uploadError} onCancel={() => { setPendingUpload(null); setUploadError(null); }} onSubmit={completeEvidenceUpload} />
       </main>

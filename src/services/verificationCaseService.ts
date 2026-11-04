@@ -78,12 +78,19 @@ export interface VerificationCaseHistoryPage {
   nextCursor: string | null;
 }
 
+export const verificationDecisionSources = [
+  'original_document',
+  'official_registry',
+  'approved_provider',
+] as const;
+
+export type VerificationDecisionSource = (typeof verificationDecisionSources)[number];
+
 export interface VerificationCaseCheck {
   field: string;
-  source: 'original_document' | 'official_registry' | 'approved_provider';
+  source: VerificationDecisionSource;
   reference: string;
   expiresAt?: string;
-  nonExpiring?: true;
   applicability?: 'required' | 'not_applicable';
   jurisdictionStateId?: string;
   issuerName?: string;

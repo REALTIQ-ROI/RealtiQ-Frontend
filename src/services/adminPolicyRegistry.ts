@@ -33,9 +33,10 @@ export interface AdminPolicyField {
 export interface AdminPolicyDefinition {
   label: string;
   category: string;
-  department: string;
+  department?: string;
   fields: readonly AdminPolicyField[];
   note?: string;
+  unconfiguredNote?: string;
 }
 
 const s = (key: string, label: string, options: Partial<AdminPolicyField> = {}): AdminPolicyField => ({ key, label, type: 'string', ...options });
@@ -52,16 +53,6 @@ const numItem = (min: number, max: number, options: Partial<AdminPolicyField> = 
 const enumItem = (options: readonly string[]): AdminPolicyField => e('_item', 'Value', options);
 const retrySeconds = (max: number, help?: string, lengthFrom?: string, itemMaxFrom?: string) => arr('retrySeconds', 'Retry delays (seconds)', numItem(1, max, { itemMaxFrom }), 0, 100, { help, lengthFrom });
 const sourceOptions = ['original_document', 'official_registry', 'approved_provider'] as const;
-const nonExpiringPurposeOptions = [
-  'selfie', 'bvn', 'nin', 'additional_government_id', 'proof_of_address', 'passport',
-  'residence_national_id', 'overseas_address_proof', 'company_registration', 'tin',
-  'registered_address', 'cooperative_registration', 'authority', 'purchase_resolution',
-  'scuml', 'state_registration', 'professional_membership', 'professional_nba',
-  'professional_coren', 'professional_surcon', 'professional_esvarbon', 'professional_arcon',
-  'professional_corbon', 'professional_toprec', 'professional_qsrbn', 'professional_citn',
-  'professional_laboratory_accreditation', 'professional_indemnity_insurance',
-  'proxy_inspector_identity_document', 'proxy_inspector_selfie', 'proxy_inspector_professional_credential',
-] as const;
 const keyPattern = '^[a-z][a-z0-9_]{0,79}$';
 const objectArray = (key: string, label: string, fields: readonly AdminPolicyField[], minItems: number, maxItems: number, help?: string) => arr(key, label, obj('_item', 'Entry', fields), minItems, maxItems, { help });
 
@@ -103,14 +94,19 @@ const definitions = {
   },
   company_verification: {
     label: 'Identity verification policy', category: 'Verification, trust, and credentials', department: 'compliance_data_protection',
-    fields: [
-      s('legalPolicyReference', 'Legal policy reference', { minLength: 1, maxLength: 300 }),
-      arr('manualSources', 'Manual review sources', enumItem(sourceOptions), 1),
-      objectArray('internationalIds', 'International ID definitions', [s('country', 'Country code', { pattern: '^[A-Z]{2}$' }), s('key', 'Identifier key', { pattern: '^[a-z][a-z0-9_]{0,79}$' }), s('label', 'Label', { minLength: 1, maxLength: 120 })], 0, 1000),
-      arr('nonExpiringPurposes', 'Non-expiring evidence purposes', enumItem(nonExpiringPurposeOptions), 0, undefined, { help: 'Select only purposes authorized by the responsible Compliance/Legal policy owner.' }),
-      e('corporateBuyerScuml', 'Corporate buyer SCUML policy', ['required', 'case_review']), n('reminderDays', 'Reminder interval (days)', 1, 365),
-    ],
-    note: 'This policy defines verification rules; it does not verify a user, approve a company, create evidence, or supply a licensed gazetteer. External data and protected evidence can remain operational dependencies.',
+    fields: [objectArray('internationalIds', 'International ID definitions', [
+      s('country', 'Country code', { pattern: '^[A-Z]{2}$', patternMessage: 'Use an uppercase two-letter country code.' }),
+      s('key', 'Identifier key', { pattern: keyPattern, patternMessage: 'Use a lowercase identifier beginning with a letter; letters, digits, and underscores are allowed.' }),
+      s('label', 'Label', { minLength: 1, maxLength: 120 }),
+    ], 0, 1000)],
+    note: 'Only international identity document definitions are editable here. An empty list is valid; server-defined Nigerian requirements remain available while international routes stay unavailable until their accepted documents are configured.',
+    unconfiguredNote: 'This policy is unconfigured. Verification operations that require it remain unavailable; an empty international ID list can be configured without inventing document choices.',
+  },
+  verification_expiry_reminders: {
+    label: 'Verification expiry reminders', category: 'Verification, trust, and credentials',
+    fields: [n('reminderDays', 'Reminder lead time (days)', 1, 365)],
+    note: 'Enter the approved reminder lead time explicitly. No default or recommended value is supplied.',
+    unconfiguredNote: 'Expiry reminders are deferred while this optional policy is unconfigured. This does not block KYC submission, review, or expiry evaluation.',
   },
   verification_case_review: {
     label: 'Verification case review', category: 'Verification, trust, and credentials', department: 'trust_safety',

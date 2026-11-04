@@ -1,6 +1,10 @@
 import api from '../lib/axios';
 import { adminPolicyKeys, type AdminPolicyKey } from './adminPolicyRegistry';
 
+// Policy cards are loaded independently. Bound stalled reads so a single
+// unresponsive policy route cannot leave its card spinning indefinitely.
+const POLICY_READ_TIMEOUT_MS = 20_000;
+
 export { adminPolicyKeys };
 export type { AdminPolicyKey };
 
@@ -62,25 +66,9 @@ export interface PrepareAdminPolicyRevisionInput {
   expectedRevision: number;
 }
 
-export type CompanyManualSource = 'original_document' | 'official_registry' | 'approved_provider';
-
-export interface ApprovedCompanyVerificationPolicy {
-  key: 'company_verification';
-  state: string;
-  revision: number;
-  value: AdminPolicyJsonValue | null;
-  approvedAt?: string;
-}
-
-const allowedManualSources = new Set<CompanyManualSource>([
-  'original_document',
-  'official_registry',
-  'approved_provider',
-]);
-
 export const adminPolicyService = {
   async getPolicy(key: AdminPolicyKey): Promise<{ policy: AdminPolicySnapshot }> {
-    const { data } = await api.get<{ policy: AdminPolicySnapshot }>(`/admin/policies/${key}`);
+    const { data } = await api.get<{ policy: AdminPolicySnapshot }>(`/admin/policies/${key}`, { timeout: POLICY_READ_TIMEOUT_MS });
     return data;
   },
 
@@ -124,18 +112,4 @@ export const adminPolicyService = {
     return data.revision;
   },
 
-  async getCompanyVerificationManualSources(): Promise<{ revision: number; sources: CompanyManualSource[] }> {
-    const { data } = await api.get<{ policy: ApprovedCompanyVerificationPolicy }>('/admin/policies/company_verification');
-    const policy = data.policy;
-    if (policy.state !== 'approved' || !Number.isInteger(policy.revision) || policy.revision < 0) {
-      throw new Error('The company verification policy is not currently approved.');
-    }
-    const configured = typeof policy.value === 'object' && policy.value !== null && !Array.isArray(policy.value)
-      ? (policy.value as Record<string, AdminPolicyJsonValue>).manualSources
-      : undefined;
-    if (!Array.isArray(configured)) throw new Error('The approved company verification policy does not expose manualSources.');
-    const sources = configured.filter((value): value is CompanyManualSource => typeof value === 'string' && allowedManualSources.has(value as CompanyManualSource));
-    if (sources.length !== configured.length || !sources.length) throw new Error('The approved company verification policy contains no usable manual review sources.');
-    return { revision: policy.revision, sources };
-  },
 };

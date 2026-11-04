@@ -9,9 +9,9 @@ import {
 } from './adminPolicyForm';
 
 describe('admin policy schemas and form serialization', () => {
-  it('defines editable schemas for all 30 registered backend policy keys', () => {
-    expect(adminPolicyKeys).toHaveLength(30);
-    expect(adminPolicyRegistry).toHaveLength(30);
+  it('defines editable schemas for all 31 registered backend policy keys', () => {
+    expect(adminPolicyKeys).toHaveLength(31);
+    expect(adminPolicyRegistry).toHaveLength(31);
     for (const key of adminPolicyKeys) {
       expect(getAdminPolicyMetadata(key).fields.length, `${key} fields`).toBeGreaterThan(0);
     }
@@ -67,32 +67,22 @@ describe('admin policy schemas and form serialization', () => {
     });
   });
 
-  it('defines neutral editable schemas for the evidence and identity verification policies', () => {
+  it('defines neutral editable schemas for evidence and current identity-verification policies', () => {
     const evidence = getAdminPolicyMetadata('private_evidence');
     const identity = getAdminPolicyMetadata('company_verification');
+    const reminders = getAdminPolicyMetadata('verification_expiry_reminders');
     expect(evidence.label).toBe('Evidence upload policy');
     expect(evidence.department).toBe('technical');
     expect(identity.label).toBe('Identity verification policy');
     expect(identity.department).toBe('compliance_data_protection');
     expect(evidence.fields.map((field) => field.key)).toEqual(['maxBytes']);
     expect(createPolicyDraft(evidence.fields, null)).toEqual({ maxBytes: '' });
-    expect(createPolicyDraft(identity.fields, null)).toEqual({
-      legalPolicyReference: '', manualSources: [], internationalIds: [], nonExpiringPurposes: [],
-      corporateBuyerScuml: '', reminderDays: '',
-    });
-    const purposeField = identity.fields.find((field) => field.key === 'nonExpiringPurposes');
-    expect(purposeField?.item?.options).toEqual([
-      'selfie', 'bvn', 'nin', 'additional_government_id', 'proof_of_address', 'passport',
-      'residence_national_id', 'overseas_address_proof', 'company_registration', 'tin',
-      'registered_address', 'cooperative_registration', 'authority', 'purchase_resolution',
-      'scuml', 'state_registration', 'professional_membership', 'professional_nba',
-      'professional_coren', 'professional_surcon', 'professional_esvarbon', 'professional_arcon',
-      'professional_corbon', 'professional_toprec', 'professional_qsrbn', 'professional_citn',
-      'professional_laboratory_accreditation', 'professional_indemnity_insurance',
-      'proxy_inspector_identity_document', 'proxy_inspector_selfie', 'proxy_inspector_professional_credential',
-    ]);
+    expect(identity.fields.map((field) => field.key)).toEqual(['internationalIds']);
+    expect(createPolicyDraft(identity.fields, null)).toEqual({ internationalIds: [] });
+    expect(reminders.fields.map((field) => field.key)).toEqual(['reminderDays']);
+    expect(createPolicyDraft(reminders.fields, null)).toEqual({ reminderDays: '' });
     expect(serializePolicyDraft('private_evidence', evidence.fields, createPolicyDraft(evidence.fields, null)).value).toBeNull();
-    expect(serializePolicyDraft('company_verification', identity.fields, createPolicyDraft(identity.fields, null)).value).toBeNull();
+    expect(serializePolicyDraft('company_verification', identity.fields, createPolicyDraft(identity.fields, null))).toEqual({ value: { internationalIds: [] }, errors: [] });
   });
 
   it('loads and serializes only the current private evidence upload-limit field', () => {
@@ -106,38 +96,29 @@ describe('admin policy schemas and form serialization', () => {
     expect(findPolicySchemaDrift(fields, { maxBytes: 10485760, futureSetting: 'ignored' })).toContain('value.futureSetting');
   });
 
-  it('converts the company verification policy to the exact typed DTO and rejects unsupported or duplicate values', () => {
+  it('converts company verification to the exact internationalIds DTO and validates entries', () => {
     const fields = getAdminPolicyMetadata('company_verification').fields;
-    const value = {
-      legalPolicyReference: 'COMPLIANCE-POLICY-2026-04',
-      manualSources: ['original_document', 'official_registry'],
-      internationalIds: [{ country: 'US', key: 'national_id_card', label: 'National identity card' }],
-      nonExpiringPurposes: ['nin', 'proxy_inspector_selfie'],
-      corporateBuyerScuml: 'case_review',
-      reminderDays: 30,
-    };
+    const value = { internationalIds: [{ country: 'GB', key: 'residence_card', label: 'Residence card' }] };
     const draft = createPolicyDraft(fields, value);
     expect(serializePolicyDraft('company_verification', fields, draft)).toEqual({ value, errors: [] });
     expect(serializePolicyDraft('company_verification', fields, {
       ...draft,
-      manualSources: [],
       internationalIds: [
-        { country: 'US', key: 'national_id_card', label: 'National identity card' },
-        { country: 'US', key: 'national_id_card', label: 'Duplicate key' },
+        { country: 'GB', key: 'residence_card', label: 'Residence card' },
+        { country: 'GB', key: 'residence_card', label: 'Duplicate key' },
       ],
-      nonExpiringPurposes: ['made_up_purpose'],
     }).errors).toEqual(expect.arrayContaining([
-      'value.manualSources: add at least 1 item.',
       'internationalIds: country and key pairs must be unique.',
-      'value.nonExpiringPurposes[0]: choose a supported value.',
     ]));
     expect(serializePolicyDraft('company_verification', fields, {
       ...draft,
-      internationalIds: [{ country: 'us', key: '9_bad', label: 'Bad country and key' }],
+      internationalIds: [{ country: 'gb', key: '9_bad', label: 'Bad country and key' }],
     }).errors).toEqual(expect.arrayContaining([
       'value.internationalIds[0].country: value has an invalid format.',
       'value.internationalIds[0].key: value has an invalid format.',
     ]));
+    expect(findPolicySchemaDrift(fields, { internationalIds: [], manualSources: ['legacy-only'] })).toContain('value.manualSources');
+    expect(serializePolicyDraft('verification_expiry_reminders', getAdminPolicyMetadata('verification_expiry_reminders').fields, { reminderDays: '366' }).errors).toContain('value.reminderDays: enter a value from 1 to 365.');
   });
 
   it('preserves booleans, numeric values, explicit nulls, and nested array objects', () => {

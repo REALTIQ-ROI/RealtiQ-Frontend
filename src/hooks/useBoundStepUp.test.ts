@@ -74,7 +74,7 @@ describe('useBoundStepUp', () => {
     const execute = vi.fn(async () => 'submitted');
     const { result } = renderHook(() => useBoundStepUp<string>());
     await act(async () => { await result.current.begin({ method: 'POST', path: '/api/cart/checkout/initialize', body: {}, label: 'Checkout', execute }); });
-    await act(async () => { expect(await result.current.complete('111111')).toEqual({ ok: false, error: 'That authenticator code was not accepted. Enter the current code and try again.' }); });
+    await act(async () => { expect(await result.current.complete('111111')).toEqual({ ok: false, error: 'That authenticator code was not accepted. Enter the current code and try again.', code: 'AUTH_FACTOR_CODE_INVALID' }); });
     expect(execute).not.toHaveBeenCalled();
     expect(result.current.challenge?.challengeId).toBe('challenge-1');
     expect(result.current.error).toContain('authenticator code was not accepted');

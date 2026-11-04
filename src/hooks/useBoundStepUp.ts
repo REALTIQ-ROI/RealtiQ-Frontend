@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { ApiRequestError, retryAfterDelayMs } from '../lib/axios';
+import { ApiRequestError, retryAfterDelayMs, type ApiFieldError } from '../lib/axios';
 import { stepUpService } from '../services/stepUpService';
 
 export interface BoundStepUpChallenge {
@@ -128,7 +128,7 @@ export const useBoundStepUp = <T,>() => {
     }
   }, [activeProfile?.id, publishError, token]);
 
-  const complete = useCallback(async (code: string): Promise<{ ok: true; value: T } | { ok: false; error?: string }> => {
+  const complete = useCallback(async (code: string): Promise<{ ok: true; value: T } | { ok: false; error?: string; code?: string; fieldErrors?: ApiFieldError[] }> => {
     const action = actionRef.current;
     const current = challenge;
     if (!action || !current || busyRef.current) return { ok: false, error: error ?? undefined };
@@ -179,7 +179,12 @@ export const useBoundStepUp = <T,>() => {
         setChallenge(null);
       }
       publishError(message, codeValue ?? null);
-      return { ok: false, error: message };
+      return {
+        ok: false,
+        error: message,
+        ...(codeValue ? { code: codeValue } : {}),
+        ...(raw instanceof ApiRequestError && raw.fieldErrors ? { fieldErrors: raw.fieldErrors } : {}),
+      };
     } finally {
       busyRef.current = false;
       setBusy(false);

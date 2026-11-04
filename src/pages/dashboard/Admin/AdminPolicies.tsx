@@ -63,6 +63,13 @@ const makeRequestVersions = () => Object.fromEntries(adminPolicyKeys.map((key) =
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const policyValueForDisplay = (key: AdminPolicyKey, value: AdminPolicyJsonValue | null): AdminPolicyJsonValue | null => {
+  if (key !== 'company_verification' || !isObject(value)) return value;
+  return Object.prototype.hasOwnProperty.call(value, 'internationalIds')
+    ? { internationalIds: value.internationalIds as AdminPolicyJsonValue }
+    : {};
+};
+
 const safeDate = (value?: string | null) => {
   if (!value) return 'Not recorded';
   const parsed = new Date(value);
@@ -272,7 +279,7 @@ const PolicyEditor = ({
         <p className="text-xs font-bold uppercase tracking-widest text-secondary">{metadata.category}</p>
         <h2 id={`${policyKey}-heading`} className="mt-1 text-xl font-black">{metadata.label}</h2>
         <p className="mt-1 break-all font-mono text-xs text-secondary">{policyKey}</p>
-        <p className="mt-1 text-xs text-secondary">Policy department: <span className="font-mono">{metadata.department}</span> · Backend authorization is authoritative.</p>
+        <p className="mt-1 text-xs text-secondary">{metadata.department ? <>Policy department: <span className="font-mono">{metadata.department}</span> · </> : null}Backend authorization is authoritative.</p>
       </div>
       <span className="rounded-full bg-surface-container-low px-3 py-1 text-xs font-bold capitalize">{policy.state}</span>
     </div>
@@ -285,8 +292,8 @@ const PolicyEditor = ({
         <p className="text-sm">Approved revision: <strong>{policy.revision}</strong></p>
         {policy.approvedAt ? <p className="text-sm">Approved/effective: {safeDate(policy.approvedAt)}</p> : null}
         {policy.state === 'unconfigured'
-          ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">No approved value is configured. No default values are supplied here.</p>
-          : <div className="max-h-80 overflow-auto rounded-lg bg-surface-container-low p-4 text-sm" aria-label={`${metadata.label} current values`}><PolicyValueDisplay value={policy.value} /></div>}
+          ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{metadata.unconfiguredNote ?? 'No approved value is configured. No default values are supplied here.'}</p>
+          : <div className="max-h-80 overflow-auto rounded-lg bg-surface-container-low p-4 text-sm" aria-label={`${metadata.label} current values`}><PolicyValueDisplay value={policyValueForDisplay(policyKey, policy.value)} /></div>}
         {currentHasSecret ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Sensitive fields are redacted. Editing is disabled to avoid resubmitting redacted values.</p> : null}
         <p className="text-xs text-secondary">A configured Console policy does not by itself confirm that external providers, credentials, datasets, or runtime services are available. Feature operations remain subject to backend readiness.</p>
       </div>
@@ -325,7 +332,7 @@ const PolicyEditor = ({
               <span className="text-xs text-secondary">Submitted {safeDate(revision.createdAt)}</span>
             </div>
             <p className="mt-2 text-sm"><strong>Reason:</strong> {revision.reason}</p>
-            <details className="mt-2"><summary className="cursor-pointer text-sm font-semibold">View submitted policy values</summary><div className="mt-2 max-h-60 overflow-auto rounded-lg bg-surface-container-low p-3 text-sm"><PolicyValueDisplay value={revision.value} /></div></details>
+            <details className="mt-2"><summary className="cursor-pointer text-sm font-semibold">View submitted policy values</summary><div className="mt-2 max-h-60 overflow-auto rounded-lg bg-surface-container-low p-3 text-sm"><PolicyValueDisplay value={policyValueForDisplay(policyKey, revision.value)} /></div></details>
             {revision.approvedAt ? <p className="mt-2 text-xs text-secondary">Approved/effective {safeDate(revision.approvedAt)}</p> : null}
             {revision.rejectedAt ? <p className="mt-2 text-xs text-secondary">Rejected {safeDate(revision.rejectedAt)}</p> : null}
             {isPending && currentPersonPrepared ? <p className="mt-3 text-sm text-secondary">Prepared by your account; a separate authorized decision maker must use the server decision workflow.</p> : null}
@@ -355,7 +362,7 @@ const PolicyIndex = ({ panels, onSelect, onRefresh }: PolicyIndexProps) => <div 
         const policy = panel.policy;
         return <li key={key} className="rounded-xl border border-outline-variant/15 bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between gap-2">
-            <div><h3 className="font-bold">{metadata.label}</h3><p className="mt-1 break-all font-mono text-xs text-secondary">{key}</p><p className="mt-1 text-xs text-secondary">Department: <span className="font-mono">{metadata.department}</span></p></div>
+            <div><h3 className="font-bold">{metadata.label}</h3><p className="mt-1 break-all font-mono text-xs text-secondary">{key}</p>{metadata.department ? <p className="mt-1 text-xs text-secondary">Department: <span className="font-mono">{metadata.department}</span></p> : <p className="mt-1 text-xs text-secondary">Department assignment is checked by the backend.</p>}</div>
             {policy ? <span className="rounded-full bg-surface-container-low px-2 py-1 text-xs font-semibold capitalize">{policy.state}</span> : null}
           </div>
           {panel.loading && !policy ? <p className="mt-3 text-sm text-secondary">Loading current policy…</p> : null}
@@ -363,7 +370,7 @@ const PolicyIndex = ({ panels, onSelect, onRefresh }: PolicyIndexProps) => <div 
           {policy ? <>
             <p className="mt-3 text-sm">Approved revision: <strong>{policy.revision}</strong></p>
             {policy.approvedAt ? <p className="mt-1 text-xs text-secondary">Effective {safeDate(policy.approvedAt)}</p> : null}
-            <div className="mt-2 line-clamp-4 break-words text-xs text-secondary">{policy.state === 'unconfigured' ? 'No approved policy value is configured.' : policy.value === null ? 'No value returned.' : <PolicyValueDisplay value={policy.value} />}</div>
+            <div className="mt-2 line-clamp-4 break-words text-xs text-secondary">{policy.state === 'unconfigured' ? (metadata.unconfiguredNote ?? 'No approved policy value is configured.') : policy.value === null ? 'No value returned.' : <PolicyValueDisplay value={policyValueForDisplay(key, policy.value)} />}</div>
             <p className="mt-2 text-xs text-secondary">Revision access is checked by the backend for the selected staff profile.</p>
           </> : null}
           <Button type="button" variant="secondary" className="mt-4 w-full" disabled={!policy} onClick={() => onSelect(key)}>View and edit policy</Button>

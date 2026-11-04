@@ -67,7 +67,7 @@ describe('AdminPolicies', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
-  it('lists all 30 registered policies grouped by category and loads current state from the API', async () => {
+  it('lists all 31 registered policies grouped by category and loads current state from the API', async () => {
     render(<AdminPolicies />);
     expect(await screen.findByRole('heading', { name: 'Identity and profiles' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Notifications and delivery' })).toBeInTheDocument();
@@ -76,10 +76,10 @@ describe('AdminPolicies', () => {
     expect(screen.getByRole('heading', { name: 'Search and discovery' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Plans and payouts' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Listings and data' })).toBeInTheDocument();
-    await waitFor(() => expect(mocks.getPolicy).toHaveBeenCalledTimes(30));
+    await waitFor(() => expect(mocks.getPolicy).toHaveBeenCalledTimes(31));
     for (const item of adminPolicyRegistry) expect(screen.getByText(item.key)).toBeInTheDocument();
-    expect(adminPolicyRegistry).toHaveLength(30);
-    expect(screen.getAllByText('unconfigured')).toHaveLength(30);
+    expect(adminPolicyRegistry).toHaveLength(31);
+    expect(screen.getAllByText('unconfigured')).toHaveLength(31);
   }, 15000);
 
   it('renders named, blank schema fields for an unconfigured policy without supplying guessed defaults', async () => {
@@ -94,9 +94,9 @@ describe('AdminPolicies', () => {
     expect(mocks.getHistory).toHaveBeenCalledWith('identity_email', { limit: 25 });
   });
 
-  it('lists the evidence and identity policies once and renders their blank unconfigured forms', async () => {
+  it('shows the current company schema and separately explains deferred expiry reminders', async () => {
     render(<AdminPolicies />);
-    await waitFor(() => expect(mocks.getPolicy).toHaveBeenCalledTimes(30));
+    await waitFor(() => expect(mocks.getPolicy).toHaveBeenCalledTimes(31));
     const policyButtons = screen.getAllByRole('button', { name: /View and edit policy/ });
     expect(policyButtons.filter((button) => button.closest('li')?.textContent?.includes('private_evidence'))).toHaveLength(1);
     expect(policyButtons.filter((button) => button.closest('li')?.textContent?.includes('company_verification'))).toHaveLength(1);
@@ -112,14 +112,37 @@ describe('AdminPolicies', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Back to policy index' }));
     await openPolicy('company_verification', 'Identity verification policy');
     const identityEditor = screen.getByRole('region', { name: 'Identity verification policy' });
-    expect(await within(identityEditor).findByText('No approved value is configured. No default values are supplied here.')).toBeInTheDocument();
-    expect(within(identityEditor).getByLabelText('Legal policy reference')).toHaveValue('');
-    expect(within(identityEditor).getByLabelText('Corporate buyer SCUML policy')).toHaveValue('');
-    await userEvent.click(within(identityEditor).getByLabelText('Add Non-expiring evidence purposes item'));
-    const purposes = within(identityEditor).getByLabelText('Non-expiring evidence purposes item 1');
-    expect(within(identityEditor).getByRole('option', { name: 'nin' })).toBeInTheDocument();
-    expect(within(identityEditor).getByRole('option', { name: 'proxy inspector professional credential' })).toBeInTheDocument();
-    expect(purposes).toHaveValue('');
+    expect(await within(identityEditor).findByText(/This policy is unconfigured/)).toBeInTheDocument();
+    expect(within(identityEditor).queryByLabelText('Legal policy reference')).not.toBeInTheDocument();
+    expect(within(identityEditor).queryByLabelText('Manual review sources item 1')).not.toBeInTheDocument();
+    expect(within(identityEditor).queryByLabelText('Non-expiring evidence purposes item 1')).not.toBeInTheDocument();
+    expect(within(identityEditor).queryByLabelText('Corporate buyer SCUML policy')).not.toBeInTheDocument();
+    expect(within(identityEditor).queryByLabelText('Reminder interval (days)')).not.toBeInTheDocument();
+    await userEvent.click(within(identityEditor).getByLabelText('Add International ID definitions item'));
+    expect(within(identityEditor).getByLabelText('International ID definitions item 1 Country code')).toHaveValue('');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back to policy index' }));
+    await openPolicy('verification_expiry_reminders', 'Verification expiry reminders');
+    const reminderEditor = screen.getByRole('region', { name: 'Verification expiry reminders' });
+    expect(await within(reminderEditor).findByText(/Expiry reminders are deferred/)).toBeInTheDocument();
+    expect(within(reminderEditor).getByLabelText('Reminder lead time (days)')).toHaveValue(null);
+  });
+
+  it('replaces a stalled-policy error with a retryable state instead of leaving the card loading', async () => {
+    let expiryRequest = 0;
+    mocks.getPolicy.mockImplementation(async (key: string) => {
+      if (key === 'verification_expiry_reminders' && expiryRequest++ === 0) {
+        throw new ApiRequestError('The request timed out. Check the latest server status before retrying; the request may have been processed.');
+      }
+      return currentPolicy(key);
+    });
+    render(<AdminPolicies />);
+    const card = screen.getByText('verification_expiry_reminders').closest('li');
+    expect(card).not.toBeNull();
+    expect(await within(card as HTMLElement).findByRole('alert')).toHaveTextContent('The request timed out.');
+    expect(within(card as HTMLElement).queryByText('Loading current policy…')).not.toBeInTheDocument();
+    await userEvent.click(within(card as HTMLElement).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(within(card as HTMLElement).getByText('Approved revision:').parentElement).toHaveTextContent('0'));
   });
 
   it('uses the configured evidence upload limit and submits only its supported value', async () => {
@@ -156,27 +179,46 @@ describe('AdminPolicies', () => {
   });
 
   it('loads configured identity verification values without replacing them with examples', async () => {
-    const value = {
-      legalPolicyReference: 'COMPLIANCE-POLICY-2026-04',
-      manualSources: ['official_registry'],
-      internationalIds: [{ country: 'US', key: 'national_id_card', label: 'National identity card' }],
-      nonExpiringPurposes: ['proxy_inspector_selfie'],
-      corporateBuyerScuml: 'required',
-      reminderDays: 45,
-    };
+    const value = { internationalIds: [{ country: 'GB', key: 'residence_card', label: 'Residence card' }] };
+    mocks.getHistory.mockImplementation(async (key: string) => key === 'company_verification'
+      ? { revisions: [{ id: 'legacy-company-revision', key, basedOnRevision: 1, value: { internationalIds: [], legalPolicyReference: 'LEGACY-POLICY-REFERENCE', manualSources: ['legacy-source'], reminderDays: 365 }, reason: 'Old schema', state: 'rejected', preparedBy: 'staff-1', preparedProfile: 'profile-1', approvedBy: null, approvedAt: null, rejectedAt: '2026-10-30T12:00:00.000Z', createdAt: '2026-10-30T12:00:00.000Z' }], nextCursor: null }
+      : { revisions: [], nextCursor: null });
     mocks.getPolicy.mockImplementation(async (key: string) => key === 'company_verification'
       ? currentPolicy(key, 8, 'configured', value)
       : currentPolicy(key));
     render(<AdminPolicies />);
     await openPolicy('company_verification', 'Identity verification policy');
     const editor = screen.getByRole('region', { name: 'Identity verification policy' });
-    expect(await within(editor).findByLabelText('Legal policy reference')).toHaveValue('COMPLIANCE-POLICY-2026-04');
-    expect(within(editor).getByLabelText('Manual review sources item 1')).toHaveValue('official_registry');
-    expect(within(editor).getByLabelText('International ID definitions item 1 Country code')).toHaveValue('US');
-    expect(within(editor).getByLabelText('International ID definitions item 1 Identifier key')).toHaveValue('national_id_card');
-    expect(within(editor).getByLabelText('Non-expiring evidence purposes item 1')).toHaveValue('proxy_inspector_selfie');
-    expect(within(editor).getByLabelText('Corporate buyer SCUML policy')).toHaveValue('required');
-    expect(within(editor).getByLabelText('Reminder interval (days)')).toHaveValue(45);
+    expect(await within(editor).findByLabelText('International ID definitions item 1 Country code')).toHaveValue('GB');
+    expect(within(editor).getByLabelText('International ID definitions item 1 Identifier key')).toHaveValue('residence_card');
+    expect(within(editor).getByLabelText('International ID definitions item 1 Label')).toHaveValue('Residence card');
+    expect(within(editor).queryByLabelText('Legal policy reference')).not.toBeInTheDocument();
+    expect(within(editor).queryByLabelText('Manual review sources item 1')).not.toBeInTheDocument();
+    expect(within(editor).queryByText('LEGACY-POLICY-REFERENCE')).not.toBeInTheDocument();
+    expect(within(editor).queryByText('legacy-source')).not.toBeInTheDocument();
+  });
+
+  it('submits an empty international ID list with the exact company policy revision body', async () => {
+    const revision = { id: 'company-revision-1', key: 'company_verification', basedOnRevision: 0, value: { internationalIds: [] }, reason: 'Keep international routes unavailable pending approval', state: 'approved', preparedBy: 'admin-current', preparedProfile: 'staff-profile', approvedBy: 'admin-current', approvedAt: '2026-11-01T12:00:00.000Z', createdAt: '2026-11-01T12:00:00.000Z' };
+    mocks.prepareRevision.mockResolvedValue(revision);
+    mocks.complete.mockImplementation(async () => {
+      const action = mocks.begin.mock.calls.at(-1)?.[0];
+      return { ok: true, value: await action.execute('company-policy-challenge', action.body) };
+    });
+    render(<AdminPolicies />);
+    await openPolicy('company_verification', 'Identity verification policy');
+    const editor = screen.getByRole('region', { name: 'Identity verification policy' });
+    await within(editor).findByRole('button', { name: 'Submit policy revision' });
+    await userEvent.type(within(editor).getByLabelText('Reason'), 'Keep international routes unavailable pending approval');
+    await userEvent.click(within(editor).getByRole('button', { name: 'Submit policy revision' }));
+
+    const expectedBody = { expectedRevision: 0, reason: 'Keep international routes unavailable pending approval', value: { internationalIds: [] } };
+    await waitFor(() => expect(mocks.begin).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'POST', path: '/api/admin/policies/company_verification/revisions', body: expectedBody,
+    })));
+    await userEvent.click(screen.getByRole('button', { name: 'Complete mock step-up' }));
+    await waitFor(() => expect(mocks.prepareRevision).toHaveBeenCalledWith('company_verification', expectedBody, 'company-policy-challenge'));
+    expect(await within(editor).findByRole('status')).toHaveTextContent('The server reports its state as “approved”.');
   });
 
   it('binds the exact structured revision body to step-up and displays the server returned state', async () => {
