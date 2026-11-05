@@ -10,6 +10,8 @@ import LoadingState from '../../../components/ui/LoadingState';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { useAsync } from '../../../hooks/useAsync';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import { userService } from '../../../services/userService';
 import type { User, UserRole } from '../../../types';
 import { isUserVerified } from '../../../utils/userVerification';
@@ -31,6 +33,9 @@ const getInitials = (name: string) =>
     .toUpperCase();
 
 const ManageUsers = () => {
+  const { adminAccess } = useAuth();
+  const canManageAccounts = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'accounts.manage'));
+  const canDeleteAccounts = Boolean(adminAccess?.isExecutive && canManageAccounts);
   const { data, loading, error, execute } = useAsync(() => userService.fetchUsers(), true);
   const stepUp = useBoundStepUp<unknown>();
   const [query, setQuery] = useState('');
@@ -67,6 +72,7 @@ const ManageUsers = () => {
 
   const submitEdit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!canManageAccounts) { setEditError('The current staff assignment only allows viewing accounts.'); return; }
     if (!editingUser) return;
     const nextName = editName.trim();
     const nextPhone = editPhone.trim();
@@ -122,6 +128,7 @@ const ManageUsers = () => {
   };
 
   const deleteUser = async (user: User) => {
+    if (!canDeleteAccounts) { toast.error('Only an authorized Executive can change an account to deleted status.'); return; }
     const result = await Swal.fire({
       title: 'Change this account to deleted status?',
       text: 'The backend handles this as an account-deletion state transition, not a hard delete.',
@@ -279,10 +286,10 @@ const ManageUsers = () => {
                           <Link className="text-primary font-bold text-sm self-center hover:underline" to={`/dashboard/admin/users/${user._id}`}>
                             View
                           </Link>
-                          <Button variant="secondary" onClick={() => openEdit(user)}>Edit</Button>
-                          <Button className="bg-red-50 text-red-700 hover:bg-red-100" variant="secondary" onClick={() => void deleteUser(user)}>
+                          {canManageAccounts ? <Button variant="secondary" onClick={() => openEdit(user)}>Edit</Button> : null}
+                          {canDeleteAccounts ? <Button className="bg-red-50 text-red-700 hover:bg-red-100" variant="secondary" onClick={() => void deleteUser(user)}>
                             Delete
-                          </Button>
+                          </Button> : null}
                         </div>
                       </td>
                     </tr>
@@ -303,7 +310,7 @@ const ManageUsers = () => {
           </div>
         </section>
 
-        {editingUser ? (
+      {editingUser && canManageAccounts ? (
           <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
             <form className="bg-white rounded-xl p-6 w-full max-w-md space-y-4" onSubmit={(event) => void submitEdit(event)}>
               <div>

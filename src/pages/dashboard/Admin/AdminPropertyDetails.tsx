@@ -8,19 +8,26 @@ import TitleDocumentManagement from '../../../components/title/TitleDocumentMana
 import PaymentTypeBadges from '../../../components/property/PaymentTypeBadges';
 import StructuredFactsPanel from '../../../components/property/StructuredFactsPanel';
 import { useProperties } from '../../../contexts/PropertiesContext';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import { propertyService } from '../../../services/propertyService';
 import { propertyDisplayReference, propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
 import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 
 // const sparkHeights = ['50%', '66%', '100%', '75%', '66%', '80%', '83%'];
 
 const AdminPropertyDetails = () => {
+  const { adminAccess } = useAuth();
+  const canManageFeaturedPlacement = hasAdminCapability(adminAccess, 'marketing.manage');
+  const canReadTitleVerification = hasAdminCapability(adminAccess, 'title_verification.read');
   const { properties, refreshProperties } = useProperties();
   const location = useLocation();
   const navigate = useNavigate();
   const { id } = useParams();
-  const [adminNote, setAdminNote] = useState('');
   const [updatingFeatured, setUpdatingFeatured] = useState(false);
+  const featuredStepUp = useBoundStepUp<Awaited<ReturnType<typeof propertyService.toggleFeatured>>>();
 
   const propertyId = id ?? (location.state as { propertyId?: string } | null)?.propertyId;
   const property = propertyId
@@ -48,17 +55,31 @@ const AdminPropertyDetails = () => {
     .join('') || 'NA';
 
   const toggleFeatured = async () => {
-    if (!propertyReference || updatingFeatured) return;
+    if (!canManageFeaturedPlacement || !propertyReference || updatingFeatured || featuredStepUp.busy || featuredStepUp.challenge) return;
     setUpdatingFeatured(true);
-    try {
-      await propertyService.toggleFeatured(propertyReference, !property.featured);
-      await refreshProperties();
-    } finally {
+    const body = { featured: !property.featured };
+    const started = await featuredStepUp.begin({
+      method: 'PATCH',
+      path: `/api/properties/${encodeURIComponent(propertyReference)}/featured`,
+      body,
+      label: `${body.featured ? 'Feature' : 'Unfeature'} ${property.title}`,
+      execute: (challengeId, exactBody) => propertyService.toggleFeatured(propertyReference, exactBody.featured, challengeId),
+    });
+    if (!started) {
       setUpdatingFeatured(false);
     }
   };
 
+  const completeFeaturedChange = async (code: string): Promise<boolean> => {
+    const result = await featuredStepUp.complete(code);
+    if (!result.ok) return false;
+    await refreshProperties();
+    setUpdatingFeatured(false);
+    return true;
+  };
+
   return (
+    <>
     <AdminLayout>
       <div className="min-h-screen px-4 pb-12 pt-6 sm:px-8 lg:px-12 lg:pb-20 lg:pt-8">
         {/* Header Actions */}
@@ -81,7 +102,7 @@ const AdminPropertyDetails = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center bg-surface-container-low p-1 rounded-lg">
+            {canManageFeaturedPlacement ? <div className="flex items-center bg-surface-container-low p-1 rounded-lg">
               <button
                 onClick={() => void toggleFeatured()}
                 disabled={!propertyReference || updatingFeatured}
@@ -105,7 +126,7 @@ const AdminPropertyDetails = () => {
                   </>
                 )}
               </button>
-            </div>
+            </div> : null}
             <button
               onClick={() => void navigate('/dashboard/admin/manage-properties')}
               className="bg-primary text-on-primary px-6 py-3 rounded-md font-bold text-sm tracking-tight flex items-center gap-2"
@@ -113,21 +134,18 @@ const AdminPropertyDetails = () => {
               <span className="material-symbols-outlined text-sm">arrow_back</span>
               Back to Listings
             </button>
-            <button
+            {canReadTitleVerification ? <button
               onClick={() => void navigate('/dashboard/admin/title-verifications')}
               className="bg-surface-container-high text-on-surface px-6 py-3 rounded-md font-bold text-sm tracking-tight flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-sm">verified</span>
               Title Review
-            </button>
-            <button className="p-3 bg-surface-container-low text-secondary rounded-md hover:bg-surface-container-high transition-colors">
-              <span className="material-symbols-outlined">more_vert</span>
-            </button>
+            </button> : null}
           </div>
         </div>
 
         {/* Bento Grid */}
-        <div className={'mb-8'}><StructuredFactsPanel facts={property.structuredFacts} titleLink={'/dashboard/admin/title-verifications'} /></div>
+        <div className={'mb-8'}><StructuredFactsPanel facts={property.structuredFacts} titleLink={canReadTitleVerification ? '/dashboard/admin/title-verifications' : undefined} /></div>
         <div className="grid grid-cols-12 gap-8">
           {/* Gallery & Description – Left */}
           <div className="col-span-12 lg:col-span-8 space-y-8">
@@ -204,38 +222,6 @@ const AdminPropertyDetails = () => {
               </div>
             </div>
 
-            {/* Admin Notes */}
-            <div className="bg-surface-container-low p-8 rounded-xl">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold tracking-tight flex items-center gap-2 font-headline">
-                  <span className="material-symbols-outlined text-secondary">edit_note</span>
-                  Administrative Notes
-                </h3>
-                <span className="text-[10px] uppercase tracking-widest text-secondary font-bold">Internal Only</span>
-              </div>
-              <textarea
-                className="w-full h-32 bg-surface-container-lowest border-none rounded-lg p-4 text-sm focus:ring-2 focus:ring-surface-tint/20 placeholder:text-secondary/50 mb-4 resize-none"
-                placeholder="Add notes about property access, seller requirements, or internal updates..."
-                value={adminNote}
-                onChange={(e) => setAdminNote(e.target.value)}
-              />
-              {adminNote && (
-                <div className="space-y-4">
-                  <div className="flex gap-4 p-4 bg-white/50 rounded-lg">
-                    <div className="w-8 h-8 rounded-full bg-secondary-fixed flex items-center justify-center shrink-0">
-                      <span className="text-[10px] font-bold text-on-secondary-fixed">AD</span>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-bold text-primary">Admin</span>
-                        <span className="text-[10px] text-secondary">just now</span>
-                      </div>
-                      <p className="text-sm text-secondary">{adminNote}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Sidebar – Right */}
@@ -258,67 +244,6 @@ const AdminPropertyDetails = () => {
               </div>
             </div>
 
-            {/* Analytics Card */}
-            <div className="bg-surface-container-lowest p-8 rounded-xl" style={{ boxShadow: '0 20px 40px rgba(25,28,30,0.04)' }}>
-              <h3 className="text-lg font-bold mb-6 tracking-tight font-headline">Market Performance</h3>
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-secondary-container rounded-lg">
-                      <span className="material-symbols-outlined text-on-secondary-fixed">visibility</span>
-                    </div>
-                    <div>
-                      <span className="block text-xs text-secondary">Total Views</span>
-                      <span className="font-bold text-lg">—</span>
-                    </div>
-                  </div>
-                  <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded">Active</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-tertiary-fixed rounded-lg">
-                      <span className="material-symbols-outlined text-on-tertiary-fixed">mail</span>
-                    </div>
-                    <div>
-                      <span className="block text-xs text-secondary">Inquiries</span>
-                      <span className="font-bold text-lg">—</span>
-                    </div>
-                  </div>
-                  <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded">Live</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary-fixed rounded-lg">
-                      <span className="material-symbols-outlined text-on-primary-fixed">calendar_month</span>
-                    </div>
-                    <div>
-                      <span className="block text-xs text-secondary">Listed</span>
-                      <span className="font-bold text-base">
-                        {property.createdAt ? new Date(property.createdAt).toLocaleDateString() : '—'}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="text-xs font-bold text-on-primary-fixed-variant bg-surface-container px-2 py-1 rounded">
-                    {property.status === 'available' ? 'Active' : 'Closed'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Sparkline */}
-              {/* <div className="mt-8 pt-8 border-t border-surface-container-high/50">
-                <span className="text-[10px] uppercase tracking-widest text-secondary font-bold mb-4 block">7-Day Traffic</span>
-                <div className="flex items-end gap-1.5 h-16">
-                  {sparkHeights.map((h, i) => (
-                    <div
-                      key={i}
-                      className={`flex-1 rounded-t ${i === 2 || i === 3 || i === 6 ? 'bg-primary' : 'bg-surface-container-high'}`}
-                      style={{ height: h }}
-                    />
-                  ))}
-                </div>
-              </div> */}
-            </div>
-
             {/* Owner Contact Card */}
             <div className="bg-surface-container-low p-6 rounded-xl">
               <h3 className="text-sm font-bold mb-4 tracking-tight uppercase text-secondary">Property Owner</h3>
@@ -335,16 +260,6 @@ const AdminPropertyDetails = () => {
                   </span>
                   {owner?.phone ? <span className="mt-1 block text-xs text-secondary">{owner.phone}</span> : null}
                 </div>
-              </div>
-              <div className="space-y-3">
-                <button className="w-full py-2 bg-white rounded-lg text-sm font-semibold border border-outline-variant/20 hover:bg-surface-container-high transition-colors flex items-center justify-center gap-2">
-                  <span className="material-symbols-outlined text-sm">call</span>
-                  Contact Owner
-                </button>
-                <button className="w-full py-2 bg-white rounded-lg text-sm font-semibold border border-outline-variant/20 hover:bg-surface-container-high transition-colors flex items-center justify-center gap-2">
-                  <span className="material-symbols-outlined text-sm">mail</span>
-                  Message Portal
-                </button>
               </div>
             </div>
 
@@ -366,9 +281,11 @@ const AdminPropertyDetails = () => {
             )}
           </div>
         </div>
-        <TitleDocumentManagement propertyId={propertyReference} sold={property.status === 'sold'} />
+        {hasAdminCapability(adminAccess, 'title_verification.manage') ? <TitleDocumentManagement propertyId={propertyReference} sold={property.status === 'sold'} /> : null}
       </div>
     </AdminLayout>
+    <StepUpDialog challenge={featuredStepUp.challenge} busy={featuredStepUp.busy} error={featuredStepUp.error} onCancel={() => { featuredStepUp.cancel(); setUpdatingFeatured(false); }} onSubmit={completeFeaturedChange} />
+    </>
   );
 };
 

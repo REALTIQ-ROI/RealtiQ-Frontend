@@ -4,6 +4,8 @@ import AdminLayout from "../../../components/layout/AdminLayout";
 import ErrorState from "../../../components/ui/ErrorState";
 import LoadingState from "../../../components/ui/LoadingState";
 import { useBoundStepUp } from "../../../hooks/useBoundStepUp";
+import { useAuth } from "../../../contexts/AuthContext";
+import { hasAdminCapability } from "../../../services/adminAccessService";
 import { trustService } from "../../../services/trustService";
 import type {
   AppealStatus,
@@ -25,6 +27,8 @@ interface ResolutionDraft {
 }
 
 const TrustAppeals = () => {
+  const { adminAccess } = useAuth();
+  const canManageTrust = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'trust.manage'));
   const [appeals, setAppeals] = useState<TrustAppeal[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [status, setStatus] = useState<AppealStatus | "">("open");
@@ -56,7 +60,7 @@ const TrustAppeals = () => {
 
   const prepareResolution = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!resolutionDraft || !resolutionDraft.appeal._id || resolutionBusy || resolveStepUp.busy || resolveStepUp.challenge) return;
+    if (!canManageTrust || !resolutionDraft || !resolutionDraft.appeal._id || resolutionBusy || resolveStepUp.busy || resolveStepUp.challenge) return;
     const reviewAt = resolutionDraft.reviewAt ? new Date(resolutionDraft.reviewAt) : null;
     const expiresAt = resolutionDraft.expiresAt ? new Date(resolutionDraft.expiresAt) : null;
     if ((reviewAt && !Number.isFinite(reviewAt.getTime())) || (expiresAt && !Number.isFinite(expiresAt.getTime()))) { setResolutionMessage("Enter valid review and expiry dates."); return; }
@@ -183,7 +187,7 @@ const TrustAppeals = () => {
                   </td>
                   <td className={"p-4"}>
                     <div className={"flex flex-col gap-2"}>
-                      {appeal.status === "open" ? (
+                      {canManageTrust && appeal.status === "open" ? (
                         <button
                           type="button"
                           disabled={!appeal._id || resolveStepUp.busy || Boolean(resolveStepUp.challenge)}
@@ -206,7 +210,7 @@ const TrustAppeals = () => {
                     </div>
                   </td>
                 </tr>
-              {resolutionDraft?.appeal.publicReference === appeal.publicReference ? <tr key="resolution-form" className="border-t bg-surface-container-low"><td colSpan={5} className="p-4"><form onSubmit={(event) => void prepareResolution(event)} className="grid gap-3 rounded-lg bg-white p-4 sm:grid-cols-2">
+              {canManageTrust && resolutionDraft?.appeal.publicReference === appeal.publicReference ? <tr key="resolution-form" className="border-t bg-surface-container-low"><td colSpan={5} className="p-4"><form onSubmit={(event) => void prepareResolution(event)} className="grid gap-3 rounded-lg bg-white p-4 sm:grid-cols-2">
                 <div className="sm:col-span-2"><h3 className="font-bold">Resolve {appeal.publicReference}</h3><p className="mt-1 text-xs text-secondary">The current policy and independent-review rule are rechecked by the server. Stale decisions require a fresh review.</p></div>
                 <label className="text-sm font-semibold">Decision<select className="mt-1 block w-full rounded border p-2" value={resolutionDraft.action} onChange={(event) => setResolutionDraft({ ...resolutionDraft, action: event.target.value as Exclude<AppealStatus, "open"> })}><option value="upheld">Uphold</option><option value="adjusted">Adjust</option><option value="dismissed">Dismiss</option></select></label>
                 <label className="text-sm font-semibold">Reason<textarea className="mt-1 block w-full rounded border p-2" value={resolutionDraft.reason} maxLength={2000} onChange={(event) => setResolutionDraft({ ...resolutionDraft, reason: event.target.value })} required rows={2} /></label>

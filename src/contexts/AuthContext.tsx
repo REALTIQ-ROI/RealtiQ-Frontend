@@ -1,8 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { authService, isLoginSecondFactorChallenge, type LoginSecondFactorChallenge, type RegisterResponse } from '../services/authService';
 import { userService } from '../services/userService';
 import { profileService, type AccountProfileSummary } from '../services/profileService';
+import { adminAccessService, type AdminAccessProjection } from '../services/adminAccessService';
 import type { LoginPayload, RegisterPayload, User } from '../types';
 
 interface AuthContextValue {
@@ -13,6 +14,11 @@ interface AuthContextValue {
   profiles: AccountProfileSummary[];
   activeProfile: AccountProfileSummary | null;
   profileError: string | null;
+  adminAccess: AdminAccessProjection | null;
+  adminAccessNotAssigned: boolean;
+  adminAccessLoading: boolean;
+  adminAccessError: string | null;
+  refreshAdminAccess: (profileId?: string) => Promise<AdminAccessProjection | null>;
   refreshProfiles: () => Promise<void>;
   switchProfile: (id: string) => Promise<void>;
   login: (payload: LoginPayload) => Promise<User | null>;
@@ -43,7 +49,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profiles, setProfiles] = useState<AccountProfileSummary[]>([]);
   const [activeProfile, setActiveProfile] = useState<AccountProfileSummary | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [adminAccess, setAdminAccess] = useState<AdminAccessProjection | null>(null);
+  const [adminAccessNotAssigned, setAdminAccessNotAssigned] = useState(false);
+  const [adminAccessLoading, setAdminAccessLoading] = useState(false);
+  const [adminAccessError, setAdminAccessError] = useState<string | null>(null);
   const [loginChallenge, setLoginChallenge] = useState<LoginSecondFactorChallenge | null>(null);
+  const accessRequestVersion = useRef(0);
+  const latestSession = useRef({ userId: user?._id ?? null, role: user?.role ?? null, token, profileId: activeProfile?.id ?? null });
+  latestSession.current = { userId: user?._id ?? null, role: user?.role ?? null, token, profileId: activeProfile?.id ?? null };
 
   const clearSession = useCallback(() => {
     window.dispatchEvent(new Event('realtiq:session-changed'));
@@ -55,31 +68,90 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setProfiles([]);
     setActiveProfile(null);
     setProfileError(null);
+    setAdminAccess(null);
+    setAdminAccessNotAssigned(false);
+    setAdminAccessError(null);
+    setAdminAccessLoading(false);
+    accessRequestVersion.current += 1;
     setLoginChallenge(null);
     setIsLoading(false);
   }, []);
 
-  const persistSession = (nextUser: User, nextToken: string) => {
+  const persistSession = (nextUser: User, nextToken: string, nextAdminAccess?: AdminAccessProjection) => {
     window.dispatchEvent(new Event('realtiq:session-changed'));
     localStorage.removeItem('activeProfileId');
+    if (nextUser.role === 'admin' && nextAdminAccess?.profileId) localStorage.setItem('activeProfileId', nextAdminAccess.profileId);
     localStorage.setItem('token', nextToken);
     localStorage.setItem('user', JSON.stringify(nextUser));
     setUser(nextUser);
     setToken(nextToken);
+    setAdminAccess(nextUser.role === 'admin' ? nextAdminAccess ?? null : null);
+    setAdminAccessNotAssigned(Boolean(nextUser.role === 'admin' && nextAdminAccess && !nextAdminAccess.staffDepartments.length && !nextAdminAccess.capabilities.length));
+    setAdminAccessError(null);
+    setAdminAccessLoading(false);
+    accessRequestVersion.current += 1;
     setProfiles([]);
     setActiveProfile(null);
     setLoginChallenge(null);
   };
 
+  const refreshAdminAccess = useCallback(async (requestedProfileId?: string): Promise<AdminAccessProjection | null> => {
+    const session = latestSession.current;
+    if (!session.userId || session.role !== 'admin' || !session.token) {
+      setAdminAccess(null);
+      setAdminAccessNotAssigned(false);
+      setAdminAccessError(null);
+      setAdminAccessLoading(false);
+      return null;
+    }
+    const profileId = requestedProfileId ?? session.profileId ?? localStorage.getItem('activeProfileId');
+    if (!profileId) {
+      setAdminAccess(null);
+      setAdminAccessError('Select a current staff profile before opening the Admin Console.');
+      return null;
+    }
+    const requestVersion = ++accessRequestVersion.current;
+    // Remove the old projection while the server checks the current profile.
+    // A permission failure must not leave stale department actions enabled.
+    setAdminAccess(null);
+    setAdminAccessLoading(true);
+    setAdminAccessError(null);
+    try {
+      const nextAccess = await adminAccessService.get(profileId);
+      const stillCurrent = requestVersion === accessRequestVersion.current &&
+        latestSession.current.userId === session.userId && latestSession.current.token === session.token &&
+        localStorage.getItem('token') === session.token && localStorage.getItem('activeProfileId') === profileId;
+      if (!stillCurrent) return null;
+      if (nextAccess.accountId !== session.userId || nextAccess.profileId !== profileId) {
+        throw new Error('The server access projection does not match the current account and staff profile. Sign in again or select an authorized staff profile.');
+      }
+      setAdminAccess(nextAccess);
+      setAdminAccessNotAssigned(!nextAccess.staffDepartments.length && !nextAccess.capabilities.length);
+      setAdminAccessError(null);
+      return nextAccess;
+    } catch (raw) {
+      if (requestVersion === accessRequestVersion.current && localStorage.getItem('activeProfileId') === profileId) {
+        setAdminAccess(null);
+        setAdminAccessError(raw instanceof Error ? raw.message : 'Current Admin Console access could not be verified. Sign in again or contact an Executive administrator.');
+      }
+      throw raw;
+    } finally {
+      if (requestVersion === accessRequestVersion.current) setAdminAccessLoading(false);
+    }
+  }, []);
+
   const refreshProfiles = useCallback(async () => {
-    await authService.account();
+    if (user?.role !== 'admin') await authService.account();
     const result = await profileService.list();
     const selectedId = localStorage.getItem('activeProfileId');
-    const selected = result.profiles.find((profile) => profile.id === selectedId) ?? result.profiles[0];
+    const selected = user?.role === 'admin'
+      ? result.profiles.find((profile) => profile.id === selectedId && profile.kind === 'staff')
+      : result.profiles.find((profile) => profile.id === selectedId) ?? result.profiles[0];
     if (!selected) {
       setProfiles([]);
       setActiveProfile(null);
-      setProfileError('No authorized profile is available for this account.');
+      setAdminAccess(null);
+      setProfileError(user?.role === 'admin' ? 'No active staff profile is available for this account. Contact an authorized Executive administrator.' : 'No authorized profile is available for this account.');
       return;
     }
     const current = await profileService.current(selected.id);
@@ -87,24 +159,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setProfiles(result.profiles);
     setActiveProfile(current.profile);
     setProfileError(null);
-  }, []);
+    if (user?.role === 'admin') await refreshAdminAccess(selected.id);
+  }, [refreshAdminAccess, user?.role]);
 
   const switchProfile = useCallback(async (id: string) => {
-    await authService.account();
+    if (user?.role === 'admin') {
+      const selectedStaffProfile = localStorage.getItem('activeProfileId');
+      if (id !== selectedStaffProfile) throw new Error('Admin staff-profile switching is disabled. Continue with the current assigned staff profile.');
+    }
+    if (user?.role !== 'admin') await authService.account();
     const result = await profileService.list();
     const selected = result.profiles.find((profile) => profile.id === id);
     if (!selected) throw new Error('This profile is no longer available to this account. Refresh your profile list and try again.');
+    if (user?.role === 'admin' && selected.kind !== 'staff') throw new Error('The Admin Console must use an authorized staff profile.');
     const current = await profileService.current(id);
     window.dispatchEvent(new Event('realtiq:session-changed'));
     localStorage.setItem('activeProfileId', id);
     setProfiles(result.profiles);
     setActiveProfile(current.profile);
     setProfileError(null);
-  }, []);
+    if (user?.role === 'admin') await refreshAdminAccess(id);
+  }, [refreshAdminAccess, user?.role]);
 
   const updateUser = useCallback((nextUser: User) => {
     const previous = parseUser(localStorage.getItem('user'));
-    if (previous?._id !== nextUser._id || previous?.role !== nextUser.role) window.dispatchEvent(new Event('realtiq:session-changed'));
+    if (previous?._id !== nextUser._id || previous?.role !== nextUser.role) {
+      window.dispatchEvent(new Event('realtiq:session-changed'));
+      setAdminAccess(null);
+      setAdminAccessError(null);
+      accessRequestVersion.current += 1;
+    }
     localStorage.setItem('user', JSON.stringify(nextUser));
     setUser(nextUser);
   }, []);
@@ -131,7 +215,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsLoading(false);
         return null;
       }
-      persistSession(response.user, response.token);
+      persistSession(response.user, response.token, response.adminAccess);
       return response.user;
     } catch (error) {
       setIsLoading(false);
@@ -150,7 +234,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     try {
       const response = await authService.completeLoginSecondFactor(challenge.challengeId, code);
-      persistSession(response.user, response.token);
+      persistSession(response.user, response.token, response.adminAccess);
       return response.user;
     } catch (error) {
       setIsLoading(false);
@@ -191,6 +275,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [clearSession]);
 
   useEffect(() => {
+    const refreshAfterPermissionError = () => {
+      if (latestSession.current.role === 'admin') void refreshAdminAccess().catch(() => undefined);
+    };
+    window.addEventListener('realtiq:admin-access-refresh', refreshAfterPermissionError);
+    return () => window.removeEventListener('realtiq:admin-access-refresh', refreshAfterPermissionError);
+  }, [refreshAdminAccess]);
+
+  useEffect(() => {
     if (!token || !userId) return;
     let current = true;
     queueMicrotask(() => {
@@ -214,6 +306,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       profiles,
       activeProfile,
       profileError,
+      adminAccess,
+      adminAccessNotAssigned,
+      adminAccessLoading,
+      adminAccessError,
+      refreshAdminAccess,
       refreshProfiles,
       switchProfile,
       login,
@@ -225,7 +322,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       refreshUser,
       logout,
     }),
-    [user, token, isLoading, profiles, activeProfile, profileError, refreshProfiles, switchProfile, login, loginChallenge, completeLoginSecondFactor, cancelLoginChallenge, register, updateUser, refreshUser, logout],
+    [user, token, isLoading, profiles, activeProfile, profileError, adminAccess, adminAccessNotAssigned, adminAccessLoading, adminAccessError, refreshAdminAccess, refreshProfiles, switchProfile, login, loginChallenge, completeLoginSecondFactor, cancelLoginChallenge, register, updateUser, refreshUser, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

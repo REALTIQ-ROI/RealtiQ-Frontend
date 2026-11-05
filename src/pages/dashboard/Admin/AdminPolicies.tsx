@@ -8,6 +8,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../../lib/axios';
 import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import {
   adminPolicyService,
   type AdminPolicyJsonValue,
@@ -141,6 +142,8 @@ interface PolicyEditorProps {
   policyKey: AdminPolicyKey;
   panel: PolicyPanelState;
   currentIdentityId: string | null;
+  canManage: boolean;
+  canApprove: boolean;
   protectedBusy: boolean;
   onPrepare: (key: AdminPolicyKey, value: AdminPolicyValue, reason: string) => Promise<void>;
   onDecision: (key: AdminPolicyKey, revision: AdminPolicyRevision, decision: 'approved' | 'rejected') => Promise<void>;
@@ -152,7 +155,7 @@ interface PolicyEditorProps {
 }
 
 const PolicyEditor = ({
-  policyKey, panel, currentIdentityId, protectedBusy, onPrepare, onDecision, onLoadMore,
+  policyKey, panel, currentIdentityId, canManage, canApprove, protectedBusy, onPrepare, onDecision, onLoadMore,
   onRetry, onAcknowledgeReview, onDirtyChange, onRegisterCommit,
 }: PolicyEditorProps) => {
   const metadata = getAdminPolicyMetadata(policyKey);
@@ -298,7 +301,7 @@ const PolicyEditor = ({
         <p className="text-xs text-secondary">A configured Console policy does not by itself confirm that external providers, credentials, datasets, or runtime services are available. Feature operations remain subject to backend readiness.</p>
       </div>
 
-      <form className="space-y-3" noValidate onSubmit={(event) => void submitRevision(event)}>
+      {canManage ? <form className="space-y-3" noValidate onSubmit={(event) => void submitRevision(event)}>
         <div>
           <h3 className="font-bold">Edit policy values</h3>
           <p className="mt-1 text-xs text-secondary">This draft is separate from active values. Backend authorization and validation remain authoritative. Protected submissions require authenticator step-up.</p>
@@ -313,7 +316,7 @@ const PolicyEditor = ({
         {panel.notice ? <div role="status" className="rounded-lg bg-surface-container-low p-3 text-sm"><p>{panel.notice}</p>{panel.notice.toLowerCase().includes('authenticator') ? <Link className="mt-2 inline-block font-bold text-primary underline" to="/dashboard/admin/settings">Open account security settings</Link> : null}</div> : null}
         {panel.writeDenied ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">The backend denied policy write access for this selected staff profile. Policy changes are disabled.</p> : null}
         <Button type={panel.writeDenied ? 'button' : 'submit'} loading={protectedBusy} disabled={panel.writeDenied || protectedBusy || panel.loading || panel.needsReview || !schemaAvailable}>{panel.writeDenied ? 'Policy editing unavailable' : 'Submit policy revision'}</Button>
-      </form>
+      </form> : <div className="space-y-3 rounded-xl border border-outline-variant/15 bg-surface-container-low p-4"><h3 className="font-bold">Read-only policy access</h3><p className="text-sm text-secondary">The current staff access projection permits viewing this policy but does not include policy revision authority.</p></div>}
     </div>
 
     <div className="mt-7 border-t border-outline-variant/10 pt-5">
@@ -337,7 +340,7 @@ const PolicyEditor = ({
             {revision.rejectedAt ? <p className="mt-2 text-xs text-secondary">Rejected {safeDate(revision.rejectedAt)}</p> : null}
             {isPending && currentPersonPrepared ? <p className="mt-3 text-sm text-secondary">Prepared by your account; a separate authorized decision maker must use the server decision workflow.</p> : null}
             {isPending && !currentIdentityId ? <p className="mt-3 text-sm text-secondary">Decision controls are hidden because the signed-in identity could not be confirmed.</p> : null}
-            {canPresentDecision ? <div className="mt-3"><p className="mb-2 text-xs text-secondary">The backend will verify separate decision authority when you submit.</p><div className="flex flex-wrap gap-2"><Button type="button" disabled={protectedBusy} onClick={() => requestDecision(revision, 'approved')}>Approve revision</Button><Button type="button" variant="secondary" disabled={protectedBusy} onClick={() => requestDecision(revision, 'rejected')}>Reject revision</Button></div></div> : null}
+            {canPresentDecision && canApprove && <div className="mt-3"><p className="mb-2 text-xs text-secondary">The backend remains authoritative for decision access and separation of duties.</p><div className="flex flex-wrap gap-2"><Button type="button" disabled={protectedBusy} onClick={() => requestDecision(revision, 'approved')}>Approve revision</Button><Button type="button" variant="secondary" disabled={protectedBusy} onClick={() => requestDecision(revision, 'rejected')}>Reject revision</Button></div></div>}
           </li>;
         })}
       </ol>
@@ -347,16 +350,17 @@ const PolicyEditor = ({
 };
 
 interface PolicyIndexProps {
+  policyKeys: readonly AdminPolicyKey[];
   panels: PolicyPanels;
   onSelect: (key: AdminPolicyKey) => void;
   onRefresh: (key: AdminPolicyKey) => void;
 }
 
-const PolicyIndex = ({ panels, onSelect, onRefresh }: PolicyIndexProps) => <div className="space-y-7">
-  {getAdminPolicyCategories().map((category) => <section key={category} aria-labelledby={`category-${category.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
+const PolicyIndex = ({ policyKeys, panels, onSelect, onRefresh }: PolicyIndexProps) => <div className="space-y-7">
+  {getAdminPolicyCategories().filter((category) => policyKeys.some((key) => getAdminPolicyMetadata(key).category === category)).map((category) => <section key={category} aria-labelledby={`category-${category.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
     <h2 id={`category-${category.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`} className="mb-3 text-lg font-bold">{category}</h2>
     <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {adminPolicyKeys.filter((key) => getAdminPolicyMetadata(key).category === category).map((key) => {
+      {policyKeys.filter((key) => getAdminPolicyMetadata(key).category === category).map((key) => {
         const metadata = getAdminPolicyMetadata(key);
         const panel = panels[key];
         const policy = panel.policy;
@@ -381,7 +385,18 @@ const PolicyIndex = ({ panels, onSelect, onRefresh }: PolicyIndexProps) => <div 
 </div>;
 
 const AdminPolicies = () => {
-  const { user, activeProfile, token } = useAuth();
+  const { user, activeProfile, token, adminAccess } = useAuth();
+  const canManagePolicies = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'policies.manage'));
+  const canApprovePolicies = Boolean(adminAccess && adminAccess.isExecutive && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'policies.approve'));
+  const canReadAllPolicies = Boolean(adminAccess && (
+    adminAccess.isExecutive || adminAccess.isInternalAudit ||
+    adminAccess.staffDepartments.includes('executive') || adminAccess.staffDepartments.includes('internal_audit')
+  ));
+  const accessiblePolicyKeys = adminPolicyKeys.filter((key) => {
+    if (canReadAllPolicies) return true;
+    const department = getAdminPolicyMetadata(key).department;
+    return Boolean(department && adminAccess?.staffDepartments.includes(department));
+  });
   const [panels, setPanels] = useState<PolicyPanels>(makePanels);
   const [selectedKey, setSelectedKey] = useState<AdminPolicyKey | null>(null);
   const [draftDirty, setDraftDirty] = useState(false);
@@ -435,14 +450,15 @@ const AdminPolicies = () => {
     setDraftDirty(false);
     actionRef.current = null;
     editorCommitRef.current = null;
-    for (const key of adminPolicyKeys) void refreshPolicy(key);
+    for (const key of accessiblePolicyKeys) void refreshPolicy(key);
     return () => {
-      for (const key of adminPolicyKeys) versions[key] += 1;
+      for (const key of accessiblePolicyKeys) versions[key] += 1;
       loadingKeys.clear();
     };
-  }, [activeProfile?.id, refreshPolicy, token]);
+  }, [activeProfile?.id, accessiblePolicyKeys.join('|'), refreshPolicy, token]);
 
   const selectPolicy = (key: AdminPolicyKey) => {
+    if (!accessiblePolicyKeys.includes(key)) return;
     if (draftDirty && !window.confirm('Discard unsaved policy changes and open another policy?')) return;
     setDraftDirty(false);
     setSelectedKey(key);
@@ -456,6 +472,7 @@ const AdminPolicies = () => {
   };
 
   const loadMore = async (key: AdminPolicyKey) => {
+    if (!accessiblePolicyKeys.includes(key)) return;
     const cursor = panels[key].nextCursor;
     if (!cursor || loadingMoreRef.current.has(key)) return;
     const requestVersion = requestVersions.current[key];
@@ -503,6 +520,7 @@ const AdminPolicies = () => {
   };
 
   const beginPrepare = async (key: AdminPolicyKey, value: AdminPolicyValue, reason: string) => {
+    if (!canManagePolicies || !accessiblePolicyKeys.includes(key)) return;
     const expectedRevision = panels[key].policy?.revision;
     if (!Number.isInteger(expectedRevision) || expectedRevision === undefined || expectedRevision < 0 || panels[key].needsReview) return;
     const body: PrepareAdminPolicyRevisionInput = { value, reason, expectedRevision };
@@ -523,6 +541,7 @@ const AdminPolicies = () => {
   };
 
   const beginDecision = async (key: AdminPolicyKey, revision: AdminPolicyRevision, decision: 'approved' | 'rejected') => {
+    if (!canApprovePolicies || !accessiblePolicyKeys.includes(key)) return;
     if (!currentIdentityId || revision.preparedBy === currentIdentityId) return;
     const path = `/api/admin/policies/${key}/revisions/${encodeURIComponent(revision.id)}/${decision}`;
     actionRef.current = { key, kind: decision };
@@ -590,8 +609,8 @@ const AdminPolicies = () => {
         <p className="mt-2 max-w-3xl text-sm text-secondary">Review current policy values, revision history, and submit protected changes. The backend checks staff authority, selected profile, policy schema, and revision conflicts.</p>
       </header>
       {!selectedKey ? <>
-        <p className="text-sm text-secondary">Choose a policy to review its current server state and revision history. There is no policy discovery endpoint; the index contains the supported policy keys registered for this frontend.</p>
-        <PolicyIndex panels={panels} onSelect={selectPolicy} onRefresh={(key) => void refreshPolicy(key)} />
+        <p className="text-sm text-secondary">Choose a policy assigned to your current staff department to review its server state and revision history. Executive and Internal Audit access follows the backend policy-read rules.</p>
+        {accessiblePolicyKeys.length ? <PolicyIndex policyKeys={accessiblePolicyKeys} panels={panels} onSelect={selectPolicy} onRefresh={(key) => void refreshPolicy(key)} /> : <p role="status" className="rounded-xl border border-outline-variant/20 bg-white p-5 text-sm text-secondary">No policy is assigned to this staff department in the frontend contract registry. The backend remains authoritative.</p>}
       </> : <>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Button type="button" variant="secondary" onClick={returnToIndex}>Back to policy index</Button>
@@ -602,6 +621,8 @@ const AdminPolicies = () => {
           policyKey={selectedKey}
           panel={selectedPanel!}
           currentIdentityId={currentIdentityId}
+          canManage={canManagePolicies}
+          canApprove={canApprovePolicies}
           protectedBusy={stepUp.busy || Boolean(stepUp.challenge)}
           onPrepare={beginPrepare}
           onDecision={beginDecision}

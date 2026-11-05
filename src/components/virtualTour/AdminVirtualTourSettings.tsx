@@ -5,18 +5,31 @@ import type { AdminVirtualTourSettingsResponse, PublicProviderAvailability, Virt
 import Button from '../ui/Button';
 import StepUpDialog from '../auth/StepUpDialog';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
+import { useAuth } from '../../contexts/AuthContext';
+import { hasAdminCapability } from '../../services/adminAccessService';
 
 const AdminVirtualTourSettings = () => {
+  const { adminAccess } = useAuth();
+  const canManageVirtualTours = hasAdminCapability(adminAccess, 'virtual_tours.manage');
   const [settings, setSettings] = useState<PublicProviderAvailability | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const stepUp = useBoundStepUp<AdminVirtualTourSettingsResponse>();
-  useEffect(() => { virtualTourService.getVirtualTourProviders().then(setSettings).catch((raw: unknown) => setError(raw instanceof Error ? raw.message : 'Unable to load virtual-tour settings.')); }, []);
+  useEffect(() => {
+    if (!canManageVirtualTours) return;
+    let current = true;
+    virtualTourService.getVirtualTourProviders()
+      .then((nextSettings) => { if (current) setSettings(nextSettings); })
+      .catch((raw: unknown) => { if (current) setError(raw instanceof Error ? raw.message : 'Unable to load virtual-tour settings.'); });
+    return () => { current = false; };
+  }, [canManageVirtualTours]);
+  if (!canManageVirtualTours) return null;
   if (error) return <section className="rounded-xl bg-white p-6 text-error">{error}</section>;
   if (!settings) return <section className="rounded-xl bg-white p-6">Loading virtual-tour settings...</section>;
   const defaultEnabled = settings.providers[settings.defaultProvider].enabled;
   const toggleProvider = (provider: VirtualTourProvider) => setSettings({ ...settings, providers: { ...settings.providers, [provider]: { enabled: !settings.providers[provider].enabled } } });
   const save = async () => {
+    if (!canManageVirtualTours) return;
     if (!defaultEnabled || saving || stepUp.busy || stepUp.challenge) return;
     const body = {
       enabled: settings.enabled,

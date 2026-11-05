@@ -1,22 +1,14 @@
 import AccountSecuritySettings from '../../../components/profile/AccountSecuritySettings';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import AdminVirtualTourSettings from '../../../components/virtualTour/AdminVirtualTourSettings';
-import ErrorState from '../../../components/ui/ErrorState';
-import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
-import { useAsync } from '../../../hooks/useAsync';
-import { userService } from '../../../services/userService';
 
 const formatDate = (date?: string) =>
   date ? new Date(date).toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
 
 const AdminSettings = () => {
   const { user } = useAuth();
-  const { data: profile, loading, error, execute } = useAsync(
-    () => (user?._id ? userService.fetchUserById(user._id) : Promise.reject(new Error('Missing user id'))),
-    Boolean(user?._id),
-  );
-  const account = profile ?? user;
+  const account = user;
 
   return (
     <AdminLayout>
@@ -27,7 +19,7 @@ const AdminSettings = () => {
           <p className="mt-1 text-sm text-secondary">Review your signed-in account and manage its security settings.</p>
         </div>
 
-        {loading ? <LoadingState label="Loading settings..." /> : error ? <ErrorState message={error} onRetry={() => void execute()} /> : (
+        {account ? (
           <>
             <section className="rounded-xl border border-outline-variant/10 bg-surface-container-lowest p-8">
               <h2 className="mb-5 text-lg font-bold">Account summary</h2>
@@ -42,7 +34,7 @@ const AdminSettings = () => {
             </section>
             {account ? <AccountSecuritySettings user={account} /> : null}
           </>
-        )}
+        ) : <p role="status" className="text-sm text-secondary">Account details are not available in the current session.</p>}
         <AdminVirtualTourSettings />
       </section>
     </AdminLayout>

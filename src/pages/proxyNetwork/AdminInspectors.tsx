@@ -9,6 +9,8 @@ import ActionTextModal from "../../components/proxyNetwork/ActionTextModal";
 import ErrorState from "../../components/ui/ErrorState";
 import LoadingState from "../../components/ui/LoadingState";
 import { useBoundStepUp } from "../../hooks/useBoundStepUp";
+import { useAuth } from "../../contexts/AuthContext";
+import { hasAdminCapability } from "../../services/adminAccessService";
 import { adminInspectorProfileId, formatLabel } from "../../features/proxyNetwork/config";
 import {
   getKycMediaKind,
@@ -35,6 +37,8 @@ const formatAdminMoney = (amount?: number, currency?: string) => {
 };
 
 export const AdminInspectorList = () => {
+  const { adminAccess } = useAuth();
+  const canReadProtectedVerificationDetail = hasAdminCapability(adminAccess, 'verification.read');
   const [params, setParams] = useSearchParams();
   const filters: AdminInspectorFilters = {
     verificationStatus: (params.get("verificationStatus") || undefined) as
@@ -302,7 +306,7 @@ export const AdminInspectorList = () => {
                 return (
                   <tr key={profileId ?? `missing-profile-id-${user?._id ?? user?.name ?? "unknown"}`} className="border-b">
                     <td className="p-4">
-                      {profileId ? (
+                      {profileId && canReadProtectedVerificationDetail ? (
                         <Link to={`/admin/proxy-inspectors/${encodeURIComponent(profileId)}`} className="font-bold underline">
                           {user?.name || "Inspector"}
                         </Link>
@@ -310,6 +314,7 @@ export const AdminInspectorList = () => {
                         <span className="font-bold">{user?.name || "Inspector"}</span>
                       )}
                       {!profileId ? <p role="status" className="mt-1 text-xs text-error">Profile details are unavailable because this record has no profile ID.</p> : null}
+                      {profileId && !canReadProtectedVerificationDetail ? <p className="mt-1 text-xs text-secondary">Protected KYC details require verification-review access.</p> : null}
                       <p className="text-xs text-secondary">{user?.email}</p>
                     </td>
                     <td className="p-4">
@@ -370,6 +375,9 @@ export const AdminInspectorList = () => {
 
 export const AdminInspectorDetailPage = () => {
   const { profileId = "" } = useParams();
+  const { adminAccess } = useAuth();
+  const canReviewIdentity = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, "verification.review"));
+  const canManageNetwork = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, "network.manage"));
   const validProfileId = Boolean(profileId && profileId !== "undefined" && profileId !== "null");
   const resource = useProxyResource(
     (signal) => validProfileId
@@ -477,6 +485,10 @@ export const AdminInspectorDetailPage = () => {
   }
 
   const beginReview = async (body: { decision: "approve"; notes: string } | { decision: "reject"; reason: string }) => {
+    if (!canReviewIdentity) {
+      toast.error("The current staff access does not include Property Agent verification review.");
+      return false;
+    }
     const path = `/api/admin/proxy-inspectors/${encodeURIComponent(profileId)}/review`;
     setProtectedActionLabel(body.decision === "approve" ? "Approve Property Agent" : "Reject Property Agent");
     const started = await stepUp.begin({
@@ -491,6 +503,10 @@ export const AdminInspectorDetailPage = () => {
   };
 
   const beginTextMutation = async (kind: "suspend" | "reactivate", value: string) => {
+    if (!canManageNetwork) {
+      toast.error("The current staff access does not include Property Agent network management.");
+      return false;
+    }
     const suspend = kind === "suspend";
     const path = `/api/admin/proxy-inspectors/${encodeURIComponent(profileId)}/${kind}`;
     setProtectedActionLabel(suspend ? "Suspend Property Agent" : "Reactivate Property Agent");
@@ -813,8 +829,9 @@ export const AdminInspectorDetailPage = () => {
           </div>
           <aside className="h-fit rounded-2xl bg-white p-5 shadow-sm">
             <h2 className="font-black">Profile actions</h2>
-            <p className="mt-2 text-xs text-secondary">Staff decisions use a one-use authenticator challenge bound to the exact action and profile. The profile changes only after the server confirms the mutation.</p>
-            {profile.verificationStatus === "under_review" ? (
+            <p className="mt-2 text-xs text-secondary">The server checks current staff access. Protected decisions use a one-use authenticator challenge bound to the exact action and profile.</p>
+            {!canReviewIdentity && !canManageNetwork ? <p className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">This staff profile has read access to the Property Agent details, but no management action is available.</p> : null}
+            {canReviewIdentity && profile.verificationStatus === "under_review" ? (
               <div className="mt-4 space-y-3">
                 <button
                   disabled={pending || stepUp.busy || Boolean(stepUp.challenge)}
@@ -832,7 +849,7 @@ export const AdminInspectorDetailPage = () => {
                 </button>
               </div>
             ) : null}
-            {profile.verificationStatus === "approved" ? (
+            {canManageNetwork && profile.verificationStatus === "approved" ? (
               <button
                 disabled={pending || stepUp.busy || Boolean(stepUp.challenge)}
                 onClick={() =>
@@ -856,7 +873,7 @@ export const AdminInspectorDetailPage = () => {
                 Suspend
               </button>
             ) : null}
-            {profile.verificationStatus === "suspended" ? (
+            {canManageNetwork && profile.verificationStatus === "suspended" ? (
               <button
                 disabled={pending || stepUp.busy || Boolean(stepUp.challenge)}
                 onClick={() =>
@@ -879,10 +896,10 @@ export const AdminInspectorDetailPage = () => {
                 Reactivate
               </button>
             ) : null}
-            <p className="mt-4 text-xs text-secondary">
+            {(canReviewIdentity || canManageNetwork) ? <p className="mt-4 text-xs text-secondary">
               Badges and public visibility update only after RealtIQ
               confirms the action.
-            </p>
+            </p> : null}
           </aside>
         </div>
         {preview?.profileId === profileId && preview.requestVersion === documentRequestVersionRef.current ? (

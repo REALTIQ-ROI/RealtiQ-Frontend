@@ -3,6 +3,8 @@ import { LoaderCircle } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
@@ -32,13 +34,14 @@ const statusBadge = (status: ApiPayment['status']) => {
 };
 
 const AdminPaymentDetails = () => {
+  const { adminAccess } = useAuth();
+  const canManageFinance = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'finance.manage'));
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
   const [payment, setPayment] = useState<ApiPayment | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [verifying, setVerifying] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const cancelStepUp = useBoundStepUp<Awaited<ReturnType<typeof paymentService.cancelPayment>>>();
@@ -69,42 +72,6 @@ const AdminPaymentDetails = () => {
     return () => { requestSequence.current += 1; cancelPendingChallenge(); };
   }, [cancelPendingChallenge, refreshPayment]);
 
-  const handleVerify = async () => {
-    if (!payment) return;
-    const requestId = requestSequence.current;
-    const confirmed = await Swal.fire({
-      title: 'Verify Payment?',
-      text: 'This will check payment status with Paystack',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Verify',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#000000',
-      cancelButtonColor: '#6b7280',
-      reverseButtons: true,
-    });
-    if (!confirmed.isConfirmed || requestSequence.current !== requestId) return;
-
-    setVerifying(true);
-    try {
-      const result = await paymentService.verifyPayment(payment.reference);
-      if (requestSequence.current !== requestId) return;
-      if (result.verified) {
-        toast.success('Provider verification completed. Refreshing the authorized payment record.');
-        const refreshed = await paymentService.getPaymentById(payment._id || payment.reference);
-        if (requestSequence.current === requestId) setPayment(refreshed);
-      } else {
-        toast.info('The provider has not confirmed payment yet. No success or failure is assumed.');
-        const refreshed = await paymentService.getPaymentById(payment._id || payment.reference);
-        if (requestSequence.current === requestId) setPayment(refreshed);
-      }
-    } catch (err) {
-      if (requestSequence.current === requestId) toast.error(err instanceof Error ? err.message : 'Unable to verify payment');
-    } finally {
-      if (requestSequence.current === requestId) setVerifying(false);
-    }
-  };
-
   if (loading) {
     return (
       <AdminLayout>
@@ -134,12 +101,11 @@ const AdminPaymentDetails = () => {
     );
   }
 
-  const canVerify = payment.status === 'pending' || payment.status === 'failed';
-  const canCancel = payment.status === 'pending' && Boolean(payment._id);
-  const busy = verifying || cancelling || cancelStepUp.busy;
+  const canCancel = canManageFinance && payment.status === 'pending' && Boolean(payment._id);
+  const busy = cancelling || cancelStepUp.busy;
 
   const beginCancel = async () => {
-    if (!canCancel || busy || cancelStepUp.challenge) return;
+    if (!canManageFinance || !canCancel || busy || cancelStepUp.challenge) return;
     const review = await Swal.fire({
       title: 'Cancel pending payment?',
       text: 'This requires Finance authorization and a fresh authenticator check. Cancellation does not issue a refund.',
@@ -205,16 +171,6 @@ const AdminPaymentDetails = () => {
             <h1 className="text-4xl font-extrabold tracking-tighter text-primary">Transaction Details</h1>
           </div>
           <div className="flex gap-3">
-            {canVerify && (
-              <button
-                disabled={busy}
-                onClick={() => void handleVerify()}
-                className="flex items-center gap-2 bg-primary text-on-primary px-6 py-3 rounded-md font-bold text-sm hover:opacity-90 transition-all disabled:opacity-50"
-              >
-                <span className="material-symbols-outlined text-sm">verified</span>
-                {verifying ? 'Verifying…' : 'Verify Payment'}
-              </button>
-            )}
             {canCancel && (
               <button
                 disabled={busy || Boolean(cancelStepUp.challenge)}
@@ -252,7 +208,7 @@ const AdminPaymentDetails = () => {
             <span className="material-symbols-outlined text-2xl text-red-500" style={{ fontVariationSettings: "'FILL' 1" }}>cancel</span>
             <div>
               <p className="font-bold text-red-800">Payment Failed</p>
-              <p className="text-red-700 text-sm">We could not verify this payment</p>
+              <p className="text-red-700 text-sm">The current payment record has a failed status.</p>
             </div>
           </div>
         )}
@@ -261,7 +217,7 @@ const AdminPaymentDetails = () => {
             <span className="material-symbols-outlined text-2xl text-slate-500" style={{ fontVariationSettings: "'FILL' 1" }}>block</span>
             <div>
               <p className="font-bold text-slate-800">Payment Canceled</p>
-              <p className="text-slate-700 text-sm">This transaction remains visible for audit/history and can no longer be verified or canceled.</p>
+              <p className="text-slate-700 text-sm">This transaction remains visible for audit/history and can no longer be canceled.</p>
             </div>
           </div>
         )}
@@ -354,23 +310,6 @@ const AdminPaymentDetails = () => {
               </div>
             </div>
 
-            {canVerify && (
-              <div className="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant/20">
-                <h4 className="text-sm font-bold text-on-surface mb-2">Verification Required</h4>
-                <p className="text-xs text-secondary mb-4">
-                  {payment.status === 'pending'
-                    ? 'Payment is awaiting confirmation. Click to verify with Paystack.'
-                    : 'Payment failed. You can retry verification.'}
-                </p>
-                <button
-                  disabled={busy}
-                  onClick={() => void handleVerify()}
-                  className="w-full py-2.5 bg-primary text-on-primary rounded-lg text-sm font-bold hover:opacity-90 transition-all disabled:opacity-50"
-                >
-                  {verifying ? 'Verifying…' : payment.status === 'failed' ? 'Retry Verification' : 'Verify Payment'}
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>

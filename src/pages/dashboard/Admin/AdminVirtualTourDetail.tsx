@@ -3,6 +3,8 @@ import AdminLayout from '../../../components/layout/AdminLayout';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import { propertyService } from '../../../services/propertyService';
 import { virtualTourService } from '../../../services/virtualTourService';
 import type { AdminVirtualTourDetail } from '../../../types/virtualTour';
@@ -22,9 +24,9 @@ const resolveTourOwner = (detail: AdminVirtualTourDetail): OwnerSummary | null =
   ?? ownerWithName(typeof detail.property.ownerId === 'object' ? detail.property.ownerId : null)
   ?? ownerWithName(detail.project?.owner);
 
-const loadAdminVirtualTour = async (propertyId: string): Promise<AdminVirtualTourDetail> => {
+const loadAdminVirtualTour = async (propertyId: string, canReadListingReview: boolean): Promise<AdminVirtualTourDetail> => {
   const detail = await virtualTourService.getAdminVirtualTour(propertyId);
-  if (resolveTourOwner(detail)) return detail;
+  if (resolveTourOwner(detail) || !canReadListingReview) return detail;
 
   // The virtual-tour projection can omit the owner for project-linked listings.
   // Reuse the existing protected admin property-review read to resolve the
@@ -43,10 +45,13 @@ const loadAdminVirtualTour = async (propertyId: string): Promise<AdminVirtualTou
 };
 
 const AdminVirtualTourDetail = () => {
+  const { adminAccess } = useAuth();
+  const canReadListingReview = hasAdminCapability(adminAccess, 'listings.read');
   const { propertyId = '' } = useParams();
   const { data, loading, error, execute } = useAsync(
-    () => loadAdminVirtualTour(propertyId),
+    () => loadAdminVirtualTour(propertyId, canReadListingReview),
     Boolean(propertyId),
+    `${propertyId}:${canReadListingReview}`,
   );
   const owner = data ? resolveTourOwner(data) ?? ownerWithName(data.owner) : null;
 

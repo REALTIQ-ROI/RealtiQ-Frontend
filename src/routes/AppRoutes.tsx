@@ -1,6 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import Home from '../pages/public/Home';
 import AboutAndContact from '../pages/public/AboutAndContact';
@@ -56,8 +56,7 @@ import ManageInquiries from '../pages/dashboard/Admin/ManageInquiries';
 import ManageLandlords from '../pages/dashboard/Admin/ManageLandlords';
 import ManagePayments from '../pages/dashboard/Admin/ManagePayments';
 import LegalHolds from '../pages/dashboard/Admin/LegalHolds';
-// Temporarily disabled for the single general-admin model; retain for a future multi-staff workflow.
-// import StaffAccessChanges from '../pages/dashboard/Admin/StaffAccessChanges';
+import StaffAccessChanges from '../pages/dashboard/Admin/StaffAccessChanges';
 import NotificationDeliveryReconciliation from '../pages/dashboard/Admin/NotificationDeliveryReconciliation';
 import OrganizationManagement from '../pages/dashboard/OrganizationManagement';
 import ManageProperties from '../pages/dashboard/Admin/ManageProperties';
@@ -96,6 +95,8 @@ import LandlordSettings from '../pages/dashboard/Landlord/LandlordSettings';
 import LandlordVerification from '../pages/dashboard/Landlord/LandlordVerification';
 import LandlordTitleVerifications from '../pages/dashboard/Landlord/LandlordTitleVerifications';
 import ProtectedRoute from './ProtectedRoute';
+import { AdminAccessBoundary, AdminAccessRoute, AdminCapabilityRoute } from './AdminAccessRoute';
+import { useAuth } from '../contexts/AuthContext';
 import ROICalculatorPage from '../pages/dashboard/ROI/ROICalculatorPage';
 import PropertyROICalculatorPage from '../pages/dashboard/ROI/PropertyROICalculatorPage';
 import MyROIScenarios from '../pages/dashboard/ROI/MyROIScenarios';
@@ -146,14 +147,32 @@ const ScrollToTop = () => {
   return null;
 };
 
+const adminPage = (capability: string | readonly string[], page: ReactNode, allowReadOnly = false) =>
+  <AdminCapabilityRoute capability={capability} allowReadOnly={allowReadOnly}>{page}</AdminCapabilityRoute>;
+
+const PropertyAnalyticsRoute = () => {
+  const { user } = useAuth();
+  const page = <PropertyMarketAnalytics />;
+  return user?.role === 'admin'
+    ? <AdminAccessBoundary>{adminPage('analytics.read', page)}</AdminAccessBoundary>
+    : page;
+};
+
+const RoleScopedRoiV1History = () => {
+  const { user } = useAuth();
+  if (user?.role === 'admin') {
+    return <AdminAccessBoundary>{adminPage('analytics.read', <RoiV1HistoryPage />)}</AdminAccessBoundary>;
+  }
+  if (user?.role === 'landlord') return <RoiV1HistoryPage />;
+  return <Navigate to="/dashboard" replace />;
+};
+
 const AppRoutes = () => {
   return (
     <BrowserRouter>
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/asdfghjkl;mnbvcxz" element={<Suspense fallback={<div className="p-12 text-center" role="status">Opening audit reader…</div>}><AuditReader /></Suspense>} />
-
         <Route path="/properties" element={<Listings />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/map" element={<ProjectsMap />} />
@@ -219,13 +238,13 @@ const AppRoutes = () => {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/roi-v1/properties/:propertyReference/new" element={<RoiV1EstimatePage />} />
           <Route path="/dashboard/roi-v1/estimates/:estimateReference" element={<RoiV1DetailPage />} />
-          <Route path="/analytics/property-market" element={<PropertyMarketAnalytics />} />
-          <Route path="/analytics/property-market/access" element={<PropertyMarketAnalytics />} />
+          <Route path="/analytics/property-market" element={<PropertyAnalyticsRoute />} />
+          <Route path="/analytics/property-market/access" element={<PropertyAnalyticsRoute />} />
           <Route path="/analytics/property-market/payment-return" element={<ProxyPaymentReturn />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['landlord', 'admin']} />}>
-          <Route path="/dashboard/roi-v1/properties/:propertyReference/history" element={<RoiV1HistoryPage />} />
+          <Route path="/dashboard/roi-v1/properties/:propertyReference/history" element={<RoleScopedRoiV1History />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['buyer']} />}>
@@ -294,58 +313,60 @@ const AppRoutes = () => {
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
-          <Route path='/dashboard/admin/trust-appeals' element={<TrustAppeals />} />
-          <Route path='/dashboard/admin/legal-holds' element={<LegalHolds />} />
-          {/* Temporarily disabled for the single general-admin model; retain for a future multi-staff workflow.
-          <Route path='/dashboard/admin/staff-access-changes' element={<StaffAccessChanges />} />
-          */}
-          <Route path='/dashboard/admin/notification-deliveries' element={<NotificationDeliveryReconciliation />} />
-          <Route path='/dashboard/admin/message-moderation' element={<MessageModeration />} />
-          <Route path="/admin/proxy-inspectors" element={<AdminInspectorList />} />
-          <Route path="/admin/proxy-inspectors/:profileId" element={<AdminInspectorDetailPage />} />
-          <Route path="/admin/proxy-inspections" element={<AdminProxyInspections />} />
-          <Route path="/admin/proxy-inspections/:requestId" element={<AdminProxyWorkspace />} />
-          <Route path="/dashboard/admin/proxy-inspectors" element={<Navigate to="/admin/proxy-inspectors" replace />} />
-          <Route path="/dashboard/admin/proxy-inspections" element={<Navigate to="/admin/proxy-inspections" replace />} />
-          <Route path="/dashboard/admin" element={<AdminDashboard />} />
-          <Route path="/dashboard/admin/tours" element={<Tours />} />
-          <Route path="/dashboard/admin/installments" element={<Installments />} />
-          <Route path="/dashboard/admin/installments/:id" element={<Installments />} />
-          <Route path="/dashboard/admin/notifications/digest" element={<NotificationDigest />} />
-          <Route path="/dashboard/admin/manage-users" element={<ManageUsers />} />
-          <Route path="/dashboard/admin/users/:id" element={<UserDetails />} />
-          <Route path="/dashboard/admin/property-approvals" element={<PropertyApprovalReview />} />
-          <Route path="/dashboard/admin/manage-properties" element={<ManageProperties />} />
-          <Route path="/dashboard/admin/projects" element={<AdminProjects />} />
-          <Route path="/dashboard/admin/projects/:id" element={<AdminProjectDetails />} />
-          <Route path="/dashboard/admin/property-imports" element={<AdminPropertyImports />} />
-          <Route path="/dashboard/admin/property-imports/:importId" element={<AdminPropertyImports />} />
-          <Route path="/dashboard/admin/property-details" element={<AdminPropertyDetails />} />
-          <Route path="/dashboard/admin/property-details/:id" element={<AdminPropertyDetails />} />
-          <Route path="/dashboard/admin/manage-payments" element={<ManagePayments />} />
-          <Route path="/dashboard/admin/payment-details/:id" element={<AdminPaymentDetails />} />
-          <Route path="/dashboard/admin/cart-checkouts" element={<AdminCartCheckouts />} />
-          <Route path="/dashboard/admin/cart-checkouts/:checkoutId" element={<AdminCartCheckoutDetail />} />
-          <Route path="/dashboard/admin/manage-inquiries" element={<ManageInquiries />} />
-          <Route path="/dashboard/admin/inquiry-details/:id" element={<AdminInquiryDetails />} />
-          <Route path="/dashboard/admin/manage-landlords" element={<ManageLandlords />} />
-          <Route path="/dashboard/admin/landlord-details" element={<LandlordDetails />} />
-          <Route path="/dashboard/admin/landlord-details/:id" element={<LandlordDetails />} />
-          <Route path="/dashboard/admin/kyc" element={<KycManagement />} />
-          <Route path="/dashboard/admin/data-protection-execution" element={<AdminDataProtectionExecution />} />
-          <Route path="/dashboard/admin/title-verifications" element={<TitleVerificationReview />} />
-          <Route path="/admin/kyc" element={<KycManagement />} />
-          <Route path="/dashboard/admin/featured" element={<FeaturedListings />} />
-          <Route path="/dashboard/admin/roi-assumptions" element={<ROIAssumptions />} />
-          <Route path="/dashboard/admin/settings" element={<AdminSettings />} />
-          <Route path="/dashboard/admin/policies" element={<AdminPolicies />} />
-          <Route path="/dashboard/admin/virtual-tours" element={<AdminVirtualTours />} />
-          <Route path="/dashboard/admin/virtual-tours/:propertyId" element={<AdminVirtualTourDetail />} />
-          <Route path="/dashboard/admin/wallet" element={<AdminWallet />} />
-          <Route path="/dashboard/admin/escrows" element={<EscrowList />} />
-          <Route path="/dashboard/admin/escrows/:id" element={<EscrowDetails />} />
-          <Route path="/dashboard/admin/escrow-disputes" element={<AdminEscrowDisputes />} />
-          <Route path="/dashboard/admin/escrow-disputes/:disputeId" element={<AdminEscrowDisputeDetails />} />
+          <Route element={<AdminAccessRoute />}>
+            <Route path="/asdfghjkl;mnbvcxz" element={adminPage('audit.read', <Suspense fallback={<div className="p-12 text-center" role="status">Opening audit reader…</div>}><AuditReader /></Suspense>, true)} />
+            <Route path='/dashboard/admin/trust-appeals' element={adminPage('trust.read', <TrustAppeals />)} />
+            <Route path='/dashboard/admin/legal-holds' element={adminPage('legal_holds.read', <LegalHolds />)} />
+            <Route path='/dashboard/admin/staff-access-changes' element={adminPage('staff.access.manage', <StaffAccessChanges />)} />
+            <Route path='/dashboard/admin/notification-deliveries' element={adminPage('notification_delivery.read', <NotificationDeliveryReconciliation />, true)} />
+            <Route path='/dashboard/admin/message-moderation' element={adminPage('moderation.manage', <MessageModeration />)} />
+            <Route path="/admin/proxy-inspectors" element={adminPage(['network.read', 'search.proxy_inspector.read'], <AdminInspectorList />)} />
+            {/* The detail response contains private KYC identity data. A network
+                listing capability alone must not reveal the protected detail. */}
+            <Route path="/admin/proxy-inspectors/:profileId" element={adminPage('verification.read', <AdminInspectorDetailPage />)} />
+            <Route path="/admin/proxy-inspections" element={adminPage('network.read', <AdminProxyInspections />)} />
+            <Route path="/admin/proxy-inspections/:requestId" element={adminPage('network.read', <AdminProxyWorkspace />)} />
+            <Route path="/dashboard/admin/proxy-inspectors" element={adminPage(['network.read', 'search.proxy_inspector.read'], <Navigate to="/admin/proxy-inspectors" replace />)} />
+            <Route path="/dashboard/admin/proxy-inspections" element={adminPage('network.read', <Navigate to="/admin/proxy-inspections" replace />)} />
+            <Route path="/dashboard/admin" element={adminPage('dashboard.read', <AdminDashboard />, true)} />
+            <Route path="/dashboard/admin/installments" element={adminPage('search.installment.read', <Installments />)} />
+            <Route path="/dashboard/admin/installments/:id" element={adminPage('search.installment.read', <Installments />)} />
+            <Route path="/dashboard/admin/notifications/digest" element={adminPage('marketing.manage', <NotificationDigest />)} />
+            <Route path="/dashboard/admin/manage-users" element={adminPage('accounts.read', <ManageUsers />)} />
+            <Route path="/dashboard/admin/users/:id" element={adminPage('accounts.read', <UserDetails />)} />
+            <Route path="/dashboard/admin/property-approvals" element={adminPage('listings.manage', <PropertyApprovalReview />)} />
+            <Route path="/dashboard/admin/manage-properties" element={adminPage('listings.read', <ManageProperties />)} />
+            <Route path="/dashboard/admin/projects" element={adminPage('projects.read', <AdminProjects />)} />
+            <Route path="/dashboard/admin/projects/:id" element={adminPage('projects.read', <AdminProjectDetails />)} />
+            <Route path="/dashboard/admin/property-imports" element={adminPage('imports.read', <AdminPropertyImports />)} />
+            <Route path="/dashboard/admin/property-imports/:importId" element={adminPage('imports.read', <AdminPropertyImports />)} />
+            <Route path="/dashboard/admin/property-details" element={adminPage('listings.read', <AdminPropertyDetails />)} />
+            <Route path="/dashboard/admin/property-details/:id" element={adminPage('listings.read', <AdminPropertyDetails />)} />
+            <Route path="/dashboard/admin/manage-payments" element={adminPage('finance.read', <ManagePayments />)} />
+            <Route path="/dashboard/admin/payment-details/:id" element={adminPage('finance.read', <AdminPaymentDetails />)} />
+            <Route path="/dashboard/admin/cart-checkouts" element={adminPage('finance.read', <AdminCartCheckouts />)} />
+            <Route path="/dashboard/admin/cart-checkouts/:checkoutId" element={adminPage('finance.read', <AdminCartCheckoutDetail />)} />
+            <Route path="/dashboard/admin/manage-inquiries" element={adminPage('support.read', <ManageInquiries />)} />
+            <Route path="/dashboard/admin/inquiry-details/:id" element={adminPage('support.read', <AdminInquiryDetails />)} />
+            <Route path="/dashboard/admin/manage-landlords" element={adminPage('accounts.read', <ManageLandlords />)} />
+            <Route path="/dashboard/admin/landlord-details" element={adminPage('accounts.read', <LandlordDetails />)} />
+            <Route path="/dashboard/admin/landlord-details/:id" element={adminPage('accounts.read', <LandlordDetails />)} />
+            <Route path="/dashboard/admin/kyc" element={adminPage('verification.read', <KycManagement />)} />
+            <Route path="/dashboard/admin/data-protection-execution" element={adminPage('privacy.read', <AdminDataProtectionExecution />)} />
+            <Route path="/dashboard/admin/title-verifications" element={adminPage('title_verification.read', <TitleVerificationReview />)} />
+            <Route path="/admin/kyc" element={adminPage('verification.read', <KycManagement />)} />
+            <Route path="/dashboard/admin/featured" element={adminPage('marketing.manage', <FeaturedListings />)} />
+            <Route path="/dashboard/admin/roi-assumptions" element={adminPage('roi.manage', <ROIAssumptions />)} />
+            <Route path="/dashboard/admin/settings" element={adminPage('dashboard.read', <AdminSettings />)} />
+            <Route path="/dashboard/admin/policies" element={adminPage('policies.read', <AdminPolicies />, true)} />
+            <Route path="/dashboard/admin/virtual-tours" element={adminPage(['search.virtual_tour.read', 'virtual_tours.manage'], <AdminVirtualTours />)} />
+            <Route path="/dashboard/admin/virtual-tours/:propertyId" element={adminPage(['search.virtual_tour.read', 'virtual_tours.manage'], <AdminVirtualTourDetail />)} />
+            <Route path="/dashboard/admin/wallet" element={adminPage('finance.read', <AdminWallet />)} />
+            <Route path="/dashboard/admin/escrows" element={adminPage(['escrow.read', 'finance.read'], <EscrowList />)} />
+            <Route path="/dashboard/admin/escrows/:id" element={adminPage(['escrow.read', 'finance.read'], <EscrowDetails />)} />
+            <Route path="/dashboard/admin/escrow-disputes" element={adminPage('escrow.read', <AdminEscrowDisputes />)} />
+            <Route path="/dashboard/admin/escrow-disputes/:disputeId" element={adminPage('escrow.read', <AdminEscrowDisputeDetails />)} />
+          </Route>
         </Route>
 
         <Route path="*" element={<NotFound />} />

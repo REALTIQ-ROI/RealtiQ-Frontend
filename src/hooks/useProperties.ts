@@ -183,19 +183,6 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
     }
   };
 
-  const toggleFeatured = async (id: string, currentFeatured: boolean): Promise<void> => {
-    const nextFeatured = !currentFeatured;
-    setProperties((prev) => prev.map((p) => (p._id === id ? { ...p, featured: nextFeatured } : p)));
-
-    try {
-      await propertyService.toggleFeatured(id, nextFeatured);
-      toast.success(nextFeatured ? 'Property marked as featured' : 'Property removed from featured');
-    } catch (err) {
-      setProperties((prev) => prev.map((p) => (p._id === id ? { ...p, featured: currentFeatured } : p)));
-      toast.error(err instanceof Error ? err.message : 'Failed to update featured status.');
-    }
-  };
-
   const buyProperty = async (id: string): Promise<void> => {
     if (!id) throw new Error('Missing property ID.');
     throw new Error('Outright purchase requires the documented cart checkout and step-up challenge contract.');
@@ -216,7 +203,6 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
     goToPage,
     createProperty,
     updateProperty,
-    toggleFeatured,
     buyProperty,
   };
 };

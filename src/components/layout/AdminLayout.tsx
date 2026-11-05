@@ -4,48 +4,46 @@ import { useAuth } from '../../contexts/AuthContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
 import usePreservedSidebarScroll from '../../hooks/usePreservedSidebarScroll';
 import AdminGlobalSearch from '../admin/AdminGlobalSearch';
+import { canManageAdminStaff, hasAnyAdminCapability, hasAdminCapability, isAdminAccessReadOnly } from '../../services/adminAccessService';
 
 interface AdminLayoutProps {
   children: ReactNode;
 }
 
 const navLinks = [
-  { to: '/dashboard/admin', label: 'Dashboard', icon: 'dashboard', end: true },
-  { to: '/dashboard/admin/property-approvals', label: 'Listing Approval', icon: 'fact_check' },
-  { to: '/dashboard/admin/manage-properties', label: 'Manage Properties', icon: 'home_work' },
-  { to: '/dashboard/admin/featured', label: 'Featured Listings', icon: 'star' },
-  { to: '/dashboard/admin/projects', label: 'Projects', icon: 'business' },
-  { to: '/dashboard/admin/property-imports', label: 'Property Imports', icon: 'upload_file' },
-  { to: '/dashboard/admin/manage-landlords', label: 'Manage Landlords', icon: 'person_pin' },
-  { to: '/dashboard/admin/manage-users', label: 'Manage Users', icon: 'group' },
-  { to: '/dashboard/admin/kyc', label: 'KYC Review', icon: 'verified_user' },
-  { to: '/dashboard/admin/data-protection-execution', label: 'Privacy Execution', icon: 'privacy_tip' },
-  { to: '/dashboard/admin/legal-holds', label: 'Legal Holds', icon: 'gavel' },
-  // Temporarily hidden: the current general-admin model has no separate staff access to manage.
-  // { to: '/dashboard/admin/staff-access-changes', label: 'Staff Access', icon: 'admin_panel_settings' },
-  { to: '/dashboard/admin/manage-inquiries', label: 'Inquiries', icon: 'mail' },
-  { to: '/dashboard/admin/message-moderation', label: 'Message Moderation', icon: 'shield' },
-  { to: '/dashboard/notifications', label: 'Notifications', icon: 'notifications' },
-  { to: '/dashboard/admin/notifications/digest', label: 'Digest', icon: 'campaign' },
-  { to: '/dashboard/admin/notification-deliveries', label: 'Delivery Reconciliation', icon: 'outbox' },
-  { to: '/admin/proxy-inspectors', label: 'Verified Property Agents', icon: 'engineering' },
-  { to: '/admin/proxy-inspections', label: 'Property Agent Jobs', icon: 'fact_check' },
-  { to: '/dashboard/admin/virtual-tours', label: 'Virtual Tours', icon: 'view_in_ar' },
-  { to: '/dashboard/admin/tours', label: 'Tours', icon: 'tour' },
-  { to: '/dashboard/admin/title-verifications', label: 'Title Review', icon: 'verified' },
-  { to: '/dashboard/admin/trust-appeals', label: 'Trust Appeals', icon: 'balance' },
-  { to: '/dashboard/admin/manage-payments', label: 'Payments', icon: 'payments' },
-  { to: '/dashboard/admin/cart-checkouts', label: 'Cart Checkouts', icon: 'receipt_long' },
-  { to: '/dashboard/admin/wallet', label: 'Platform Ledger', icon: 'account_balance_wallet' },
-  { to: '/dashboard/admin/escrows', label: 'Escrow Management', icon: 'shield_lock' },
-  { to: '/dashboard/admin/escrow-disputes', label: 'Escrow Disputes', icon: 'gavel' },
-  { to: '/dashboard/admin/installments', label: 'Installments', icon: 'schedule' },
-  { to: '/dashboard/admin/roi-assumptions', label: 'ROI Assumptions', icon: 'monitoring' },
-  { to: '/dashboard/admin/policies', label: 'Policies', icon: 'policy' },
+  { to: '/dashboard/admin', label: 'Dashboard', icon: 'dashboard', end: true, capability: 'dashboard.read' },
+  { to: '/dashboard/admin/property-approvals', label: 'Listing Approval', icon: 'fact_check', capability: 'listings.manage' },
+  { to: '/dashboard/admin/manage-properties', label: 'Manage Properties', icon: 'home_work', capability: 'listings.read' },
+  { to: '/dashboard/admin/featured', label: 'Featured Listings', icon: 'star', capability: 'marketing.manage' },
+  { to: '/dashboard/admin/projects', label: 'Projects', icon: 'business', capability: 'projects.read' },
+  { to: '/dashboard/admin/property-imports', label: 'Property Imports', icon: 'upload_file', capability: 'imports.read' },
+  { to: '/dashboard/admin/manage-landlords', label: 'Manage Landlords', icon: 'person_pin', capability: 'accounts.read' },
+  { to: '/dashboard/admin/manage-users', label: 'Manage Users', icon: 'group', capability: 'accounts.read' },
+  { to: '/dashboard/admin/kyc', label: 'KYC Review', icon: 'verified_user', capability: 'verification.read' },
+  { to: '/dashboard/admin/data-protection-execution', label: 'Privacy Execution', icon: 'privacy_tip', capability: 'privacy.read' },
+  { to: '/dashboard/admin/legal-holds', label: 'Legal Holds', icon: 'gavel', capability: 'legal_holds.read' },
+  { to: '/dashboard/admin/staff-access-changes', label: 'Staff Access', icon: 'admin_panel_settings', capability: 'staff.access.manage' },
+  { to: '/dashboard/admin/manage-inquiries', label: 'Inquiries', icon: 'mail', capability: 'support.read' },
+  { to: '/dashboard/admin/message-moderation', label: 'Message Moderation', icon: 'shield', capability: 'moderation.manage' },
+  { to: '/dashboard/admin/notifications/digest', label: 'Digest', icon: 'campaign', capability: 'marketing.manage' },
+  { to: '/dashboard/admin/notification-deliveries', label: 'Delivery Reconciliation', icon: 'outbox', capability: 'notification_delivery.read' },
+  { to: '/admin/proxy-inspectors', label: 'Verified Property Agents', icon: 'engineering', capability: ['network.read', 'search.proxy_inspector.read'] },
+  { to: '/admin/proxy-inspections', label: 'Property Agent Jobs', icon: 'fact_check', capability: 'network.read' },
+  { to: '/dashboard/admin/virtual-tours', label: 'Virtual Tours', icon: 'view_in_ar', capability: 'virtual_tours.manage' },
+  { to: '/dashboard/admin/title-verifications', label: 'Title Review', icon: 'verified', capability: 'title_verification.read' },
+  { to: '/dashboard/admin/trust-appeals', label: 'Trust Appeals', icon: 'balance', capability: 'trust.read' },
+  { to: '/dashboard/admin/manage-payments', label: 'Payments', icon: 'payments', capability: 'finance.read' },
+  { to: '/dashboard/admin/cart-checkouts', label: 'Cart Checkouts', icon: 'receipt_long', capability: 'finance.read' },
+  { to: '/dashboard/admin/wallet', label: 'Platform Ledger', icon: 'account_balance_wallet', capability: 'finance.read' },
+  { to: '/dashboard/admin/escrows', label: 'Escrow Management', icon: 'shield_lock', capability: ['escrow.read', 'finance.read'] },
+  { to: '/dashboard/admin/escrow-disputes', label: 'Escrow Disputes', icon: 'gavel', capability: 'escrow.read' },
+  { to: '/dashboard/admin/installments', label: 'Installments', icon: 'schedule', capability: 'search.installment.read' },
+  { to: '/dashboard/admin/roi-assumptions', label: 'ROI Assumptions', icon: 'monitoring', capability: 'roi.manage' },
+  { to: '/dashboard/admin/policies', label: 'Policies', icon: 'policy', capability: 'policies.read' },
 ];
 
 const AdminLayout = ({ children }: AdminLayoutProps) => {
-  const { user, logout } = useAuth();
+  const { user, adminAccess, logout } = useAuth();
   const navigate = useNavigate();
   const hasScrolled = useHasScrolled(8);
   const sidebarRef = usePreservedSidebarScroll('admin');
@@ -74,7 +72,11 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         </div>
 
         <nav className="flex-1 space-y-1">
-          {navLinks.map((link) => (
+          {navLinks.filter((link) => link.to === '/dashboard/admin/staff-access-changes'
+            ? canManageAdminStaff(adminAccess)
+            : Array.isArray(link.capability)
+              ? hasAnyAdminCapability(adminAccess, link.capability)
+              : hasAdminCapability(adminAccess, link.capability)).map((link) => (
             <NavLink
               key={link.to}
               to={link.to}
@@ -93,13 +95,13 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         </nav>
 
         <div className="mt-auto pt-6 border-t border-slate-200 space-y-1">
-          <NavLink
+          {!isAdminAccessReadOnly(adminAccess) && hasAdminCapability(adminAccess, 'dashboard.read') ? <NavLink
             to="/dashboard/admin/settings"
             className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 transition-colors"
           >
             <span aria-hidden="true" className="material-symbols-outlined">settings</span>
             <span>Settings</span>
-          </NavLink>
+          </NavLink> : null}
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-slate-900 transition-colors"
@@ -117,24 +119,22 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         }`}
       >
         <button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-container-low lg:hidden" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><span className="material-symbols-outlined">menu</span></button>
-        <AdminGlobalSearch />
+        {adminAccess?.capabilities.some((capability) => capability.startsWith('search.')) ? <AdminGlobalSearch /> : <div className="min-w-0 flex-1" />}
 
         <div className="flex items-center gap-3 sm:gap-6 text-sm font-medium justify-end">
           <button className="hidden text-primary font-bold hover:underline sm:block" onClick={() => void navigate('/contact')}>
             Support
           </button>
           <div className="flex items-center gap-3 text-slate-500">
-            <Link to="/dashboard/admin/notifications/digest" className="hover:text-slate-900 transition-opacity duration-150">
-              <span aria-hidden="true" className="material-symbols-outlined">notifications</span>
-            </Link>
-            <Link to="/dashboard/admin/manage-inquiries" className="hover:text-slate-900 transition-opacity duration-150">
-              <span aria-hidden="true" className="material-symbols-outlined">help_outline</span>
-            </Link>
+            {hasAdminCapability(adminAccess, 'marketing.manage') ? <Link aria-label="Digest" to="/dashboard/admin/notifications/digest" className="hover:text-slate-900 transition-opacity duration-150"><span aria-hidden="true" className="material-symbols-outlined">campaign</span></Link> : null}
+            {hasAdminCapability(adminAccess, 'support.read') ? <Link aria-label="Inquiries" to="/dashboard/admin/manage-inquiries" className="hover:text-slate-900 transition-opacity duration-150"><span aria-hidden="true" className="material-symbols-outlined">help_outline</span></Link> : null}
           </div>
           <div className="flex items-center gap-3 border-l border-slate-200 pl-3 sm:pl-6">
             <div className="hidden text-right sm:block">
               <p className="text-xs font-bold text-on-surface">{user?.name ?? 'Admin'}</p>
-              <p className="text-[10px] text-secondary">Admin account</p>
+              <p className="max-w-44 truncate text-[10px] text-secondary" title={adminAccess?.departmentAssignments.map((department) => department.label).join(' · ')}>
+                {adminAccess?.departmentAssignments.map((department) => department.label).join(' · ') || 'Admin Console'}
+              </p>
             </div>
             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary text-xs font-bold">
               {initials}

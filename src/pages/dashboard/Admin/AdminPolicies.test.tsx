@@ -58,7 +58,11 @@ const openPolicy = async (key: string, label?: string) => {
 describe('AdminPolicies', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.useAuth.mockReturnValue({ user: { _id: 'admin-current', name: 'Admin', role: 'admin' }, activeProfile: { id: 'staff-profile' }, token: 'token' });
+    mocks.useAuth.mockReturnValue({
+      user: { _id: 'admin-current', name: 'Admin', role: 'admin' },
+      activeProfile: { id: 'staff-profile' }, token: 'token',
+      adminAccess: { isExecutive: true, readOnly: false, capabilities: ['policies.read', 'policies.manage', 'policies.approve'] },
+    });
     mocks.getPolicy.mockImplementation(async (key: string) => currentPolicy(key));
     mocks.getHistory.mockResolvedValue({ revisions: [], nextCursor: null });
     mocks.begin.mockResolvedValue(true);

@@ -6,8 +6,10 @@ import type { AdminEscrowDisputeDetail } from '../../../types/escrow';
 import AdminEscrowDisputeDetails from './AdminEscrowDisputeDetails';
 
 const stepUpMocks = vi.hoisted(() => ({ begin: vi.fn(), cancel: vi.fn(), complete: vi.fn(), getError: vi.fn() }));
+const accessState = vi.hoisted(() => ({ adminAccess: { readOnly: false, capabilities: ['escrow.read', 'finance.manage'] } as unknown }));
 
 vi.mock('../../../components/layout/AdminLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
+vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ adminAccess: accessState.adminAccess }) }));
 vi.mock('../../../hooks/useAsync', () => ({ useAsync: vi.fn() }));
 vi.mock('../../../hooks/useBoundStepUp', () => ({ useBoundStepUp: () => ({ ...stepUpMocks, challenge: null, busy: false, error: null }) }));
 
@@ -35,6 +37,7 @@ describe('safe finance dispute detail', () => {
   const execute = vi.fn();
   beforeEach(() => {
     vi.clearAllMocks();
+    accessState.adminAccess = { readOnly: false, capabilities: ['escrow.read', 'finance.manage'] };
     vi.mocked(useAsync).mockReturnValue({ data: detail, loading: false, error: null, execute });
     stepUpMocks.begin.mockResolvedValue(true);
   });
@@ -63,5 +66,13 @@ describe('safe finance dispute detail', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
     expect(execute).toHaveBeenCalled();
+  });
+
+  it('keeps financial dispute decisions hidden from Escrow Operations while retaining reopen', () => {
+    accessState.adminAccess = { readOnly: false, capabilities: ['escrow.read'] };
+    renderPage();
+    expect(screen.getByRole('button', { name: 'Reopen escrow' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refund buyer' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel escrow' })).not.toBeInTheDocument();
   });
 });

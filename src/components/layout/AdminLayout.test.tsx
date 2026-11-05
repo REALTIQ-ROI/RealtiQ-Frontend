@@ -13,6 +13,11 @@ describe('AdminLayout profile controls', () => {
   beforeEach(() => {
     useAuthMock.mockReturnValue({
       user: { name: 'Platform Admin', role: 'admin' },
+      adminAccess: {
+        capabilities: ['dashboard.read', 'policies.read', 'policies.manage', 'accounts.read', 'listings.read', 'finance.read', 'support.read', 'staff.access.manage'],
+        departmentAssignments: [{ id: 'executive', label: 'Executive / Super Admin', readOnly: false }],
+        isExecutive: true, readOnly: false, canManageStaff: true,
+      },
       logout: vi.fn(),
     });
   });

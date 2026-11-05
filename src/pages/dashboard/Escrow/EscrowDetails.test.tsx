@@ -9,8 +9,8 @@ import { escrowService } from '../../../services/escrowService';
 import { propertyService } from '../../../services/propertyService';
 import { useAsync } from '../../../hooks/useAsync';
 
-const state = vi.hoisted(() => ({ role: 'buyer' as UserRole }));
-vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { _id: state.role === 'buyer' ? 'b1' : state.role === 'landlord' ? 's1' : 'a1', name: 'User', email: 'u@test', role: state.role }, activeProfile: { id: 'staff-profile' } }) }));
+const state = vi.hoisted(() => ({ role: 'buyer' as UserRole, adminAccess: { readOnly: false, capabilities: ['finance.manage'] } as unknown }));
+vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { _id: state.role === 'buyer' ? 'b1' : state.role === 'landlord' ? 's1' : 'a1', name: 'User', email: 'u@test', role: state.role }, activeProfile: { id: 'staff-profile' }, adminAccess: state.adminAccess }) }));
 vi.mock('../../../components/escrow/EscrowRoleLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('../../../components/escrow/RefundChat', () => ({ default: () => <section data-testid="refund-chat">Refund conversation</section> }));
 vi.mock('../../../hooks/useAsync', () => ({ useAsync: vi.fn() }));
@@ -39,6 +39,7 @@ const renderDetails = (escrow: Escrow | null, loading = false, error: string | n
 describe('EscrowDetails role actions and resilience', () => {
   beforeEach(() => {
     state.role = 'buyer';
+    state.adminAccess = { readOnly: false, capabilities: ['finance.manage'] };
     vi.mocked(propertyService.getPropertyById).mockReset().mockResolvedValue({ media: [] } as Property);
   });
   afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -62,6 +63,14 @@ describe('EscrowDetails role actions and resilience', () => {
     state.role = 'admin'; renderDetails(makeEscrow('release_pending', true));
     expect(screen.getByRole('button', { name: 'Approve final release' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Raise dispute' })).not.toBeInTheDocument();
+  });
+  it('hides admin escrow mutations from a read-only or non-Finance department', () => {
+    state.role = 'admin';
+    state.adminAccess = { readOnly: true, capabilities: ['finance.read', 'escrow.read'] };
+    renderDetails(makeEscrow('release_pending', true));
+    expect(screen.queryByRole('button', { name: 'Approve final release' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Request release' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel escrow' })).not.toBeInTheDocument();
   });
   it('allows the related seller to open the dispute form but hides it for terminal escrows', () => {
     state.role = 'landlord';

@@ -1,9 +1,11 @@
 import api, { ApiRequestError, type AuthlessRequestConfig } from '../lib/axios';
 import type { User, LoginPayload, RegisterPayload } from '../types';
+import { parseAdminAccessProjection, type AdminAccessProjection } from './adminAccessService';
 
 export interface AuthenticatedLoginResponse {
   user: User;
   token: string;
+  adminAccess?: AdminAccessProjection;
 }
 
 export interface LoginSecondFactorChallenge {
@@ -30,7 +32,15 @@ const parseAuthenticatedLoginResponse = (value: unknown): AuthenticatedLoginResp
   if (!isRecord(value) || !isRecord(value.user) || typeof value.token !== 'string' || !value.token) {
     throw new Error('The sign-in response was incomplete. Please try signing in again.');
   }
-  return value as unknown as AuthenticatedLoginResponse;
+  const user = value.user as unknown as User;
+  if (user.role === 'admin') {
+    return {
+      user,
+      token: value.token,
+      adminAccess: parseAdminAccessProjection(value.adminAccess),
+    };
+  }
+  return { user, token: value.token };
 };
 
 export const parseLoginResponse = (value: unknown, status: number): LoginResponse => {

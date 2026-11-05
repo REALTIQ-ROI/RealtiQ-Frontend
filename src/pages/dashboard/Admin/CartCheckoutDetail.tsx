@@ -6,6 +6,8 @@ import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { useAsync } from '../../../hooks/useAsync';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import { cartService } from '../../../services/cartService';
 import type { CartCheckoutDetail } from '../../../types';
 import { cartItemTypeLabel, checkoutStatusClasses, checkoutStatusLabel, formatNgn } from '../../../utils/cartFormatters';
@@ -18,6 +20,8 @@ const canRetry = (detail: Awaited<ReturnType<typeof cartService.adminGetCartChec
 };
 
 const AdminCartCheckoutDetail = () => {
+  const { adminAccess } = useAuth();
+  const canManageFinance = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'finance.manage'));
   const { checkoutId = '' } = useParams();
   const { data, loading, error, execute } = useAsync(() => cartService.adminGetCartCheckout(checkoutId), Boolean(checkoutId));
   const retryStepUp = useBoundStepUp<CartCheckoutDetail>();
@@ -25,7 +29,7 @@ const AdminCartCheckoutDetail = () => {
   const [retryMessage, setRetryMessage] = useState('');
 
   const beginRetry = async () => {
-    if (!data || !canRetry(data) || retrying || retryStepUp.busy || retryStepUp.challenge) return;
+    if (!canManageFinance || !data || !canRetry(data) || retrying || retryStepUp.busy || retryStepUp.challenge) return;
     if (!window.confirm('Retry eligible allocations for this already paid checkout? This does not start another payment.')) return;
     const body = {};
     setRetryMessage('');
@@ -72,13 +76,13 @@ const AdminCartCheckoutDetail = () => {
                   <span className={`h-fit rounded-full px-3 py-1 text-xs font-bold ${checkoutStatusClasses(data.checkout.status)}`}>
                     {checkoutStatusLabel(data.checkout.status)}
                   </span>
-                  {canRetry(data) ? (
+                  {canManageFinance && canRetry(data) ? (
                     <button type="button" disabled={retrying || retryStepUp.busy || Boolean(retryStepUp.challenge)} onClick={() => void beginRetry()} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">Retry eligible allocations with authenticator</button>
                   ) : null}
                 </div>
               </div>
             </section>
-            {canRetry(data) ? <p role="note" className="text-sm text-secondary">Retry is available only while the payment is server-reported paid and eligible allocation rows remain. The retry does not charge the buyer again.</p> : null}
+            {canManageFinance && canRetry(data) ? <p role="note" className="text-sm text-secondary">Retry is available only while the payment is server-reported paid and eligible allocation rows remain. The retry does not charge the buyer again.</p> : null}
             {retryMessage ? <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">{retryMessage}</p> : null}
             {retryStepUp.error && !retryStepUp.challenge ? <p role="alert" className="rounded-lg bg-error-container p-3 text-sm text-on-error-container">{retryStepUp.error}</p> : null}
             <section className="rounded-xl border border-outline-variant/10 bg-white">

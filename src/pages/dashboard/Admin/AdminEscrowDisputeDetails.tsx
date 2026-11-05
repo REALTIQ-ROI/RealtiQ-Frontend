@@ -8,10 +8,15 @@ import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import { escrowService } from '../../../services/escrowService';
 
 const AdminEscrowDisputeDetails = () => {
   const { disputeId = '' } = useParams();
+  const { adminAccess } = useAuth();
+  const canResolveEscrow = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'escrow.read'));
+  const canManageFinance = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'finance.manage'));
   const { data, loading, error, execute } = useAsync(
     () => escrowService.getAdminDispute(disputeId), Boolean(disputeId), disputeId,
   );
@@ -29,10 +34,12 @@ const AdminEscrowDisputeDetails = () => {
     { action: 'release_seller' as const, label: 'Release seller', available: availableActions.releaseSeller },
     { action: 'cancel_escrow' as const, label: 'Cancel escrow', available: availableActions.cancelEscrow },
   ] as const;
+  const canPerformAction = (action: typeof actions[number]['action']) =>
+    canResolveEscrow && (action === 'reopen' || canManageFinance);
 
   const beginDecision = async (action: typeof actions[number]['action'], label: string) => {
     const decisionReason = reason.trim();
-    if (!decisionReason || stepUp.busy || stepUp.challenge) return;
+    if (!canPerformAction(action) || !decisionReason || stepUp.busy || stepUp.challenge) return;
     setNotice(null);
     const body = { action, reason: decisionReason };
     const started = await stepUp.begin({
@@ -97,10 +104,11 @@ const AdminEscrowDisputeDetails = () => {
         <h2 className="text-xl font-bold">Server-available actions</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{actions.map(({ action, label, available }) => <div key={action} className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-4 text-sm"><strong>{label}</strong><p className="mt-1 text-secondary">{available ? 'Available for an authorized server-side recheck' : 'Unavailable in the current state'}</p></div>)}</div>
         <div className="mt-5 max-w-2xl space-y-3">
+          {!actions.some(({ action, available }) => available && canPerformAction(action)) ? <p role="status" className="rounded-lg bg-surface-container-low p-3 text-sm text-secondary">No dispute actions are available for this staff assignment.</p> : null}
           <label htmlFor="escrow-decision-reason" className="block text-sm font-bold">Decision reason</label>
           <textarea id="escrow-decision-reason" value={reason} onChange={(event) => setReason(event.target.value)} disabled={Boolean(stepUp.challenge) || stepUp.busy} rows={3} required className="w-full rounded-lg border border-outline-variant/30 p-3 text-sm disabled:bg-surface-container-low" placeholder="Enter the reason required for this finance decision." />
           <div className="flex flex-wrap gap-2">
-            {actions.filter((item) => item.available).map(({ action, label }) => <button key={action} type="button" disabled={!reason.trim() || stepUp.busy || Boolean(stepUp.challenge)} onClick={() => void beginDecision(action, label)} className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50">{stepUp.busy ? 'Preparing secure decision...' : label}</button>)}
+            {actions.filter((item) => item.available && canPerformAction(item.action)).map(({ action, label }) => <button key={action} type="button" disabled={!reason.trim() || stepUp.busy || Boolean(stepUp.challenge)} onClick={() => void beginDecision(action, label)} className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50">{stepUp.busy ? 'Preparing secure decision...' : label}</button>)}
           </div>
         </div>
         {notice || stepUp.error ? <p role="status" className="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">{notice ?? stepUp.error}</p> : null}

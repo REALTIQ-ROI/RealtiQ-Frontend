@@ -4,11 +4,13 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { adminService } from '../../../services/adminService';
+import { useAuth } from '../../../contexts/AuthContext';
 import type { Property } from '../../../types';
 import AdminDashboard from './AdminDashboard';
 
 vi.mock('../../../components/layout/AdminLayout', () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }));
 vi.mock('../../../contexts/PropertiesContext', () => ({ useProperties: vi.fn() }));
+vi.mock('../../../contexts/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../../services/adminService', () => ({ adminService: { fetchAdminStats: vi.fn() } }));
 
 describe('AdminDashboard', () => {
@@ -28,6 +30,10 @@ describe('AdminDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useProperties).mockReturnValue({ properties: [featuredProperty] } as unknown as ReturnType<typeof useProperties>);
+    vi.mocked(useAuth).mockReturnValue({
+      activeProfile: { id: 'staff-profile' },
+      adminAccess: { capabilities: ['analytics.read', 'accounts.read', 'listings.read', 'finance.read', 'support.read', 'network.read'] },
+    } as unknown as ReturnType<typeof useAuth>);
     vi.mocked(adminService.fetchAdminStats).mockResolvedValue({
       totalUsers: 14,
       totalProperties: 8,

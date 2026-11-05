@@ -464,10 +464,11 @@ export const propertyService = {
     return { ...data, property: normalizeProperty(data.property) };
   },
 
-  async toggleFeatured(id: string, featured: boolean): Promise<{ _id: string; featured: boolean }> {
-    const { data } = await api.patch<{ _id: string; featured: boolean }>(`/properties/${id}/featured`, {
+  async toggleFeatured(id: string, featured: boolean, challengeId: string): Promise<{ _id: string; featured: boolean }> {
+    if (!challengeId) throw new Error('A fresh authenticator challenge is required to change featured placement.');
+    const { data } = await api.patch<{ _id: string; featured: boolean }>(`/properties/${encodeURIComponent(id)}/featured`, {
       featured,
-    });
+    }, { headers: { 'X-Step-Up-Challenge': challengeId } });
     return data;
   },
 

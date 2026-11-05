@@ -6,6 +6,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import { ApiRequestError } from '../../../lib/axios';
 import {
   legalHoldService,
@@ -33,7 +34,8 @@ const lookupErrorMessage = (raw: unknown) => {
 };
 
 const LegalHolds = () => {
-  const { activeProfile } = useAuth();
+  const { activeProfile, adminAccess } = useAuth();
+  const canManageLegalHolds = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'legal_holds.manage'));
   const activeProfileId = activeProfile?.id ?? null;
   const [holds, setHolds] = useState<LegalHold[]>([]);
   const [holdCursor, setHoldCursor] = useState<string | null>(null);
@@ -238,6 +240,7 @@ const LegalHolds = () => {
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
+    if (!canManageLegalHolds) return;
     if (!selectedSubject || submitting || createStepUp.busy || createStepUp.challenge || subjectsLoading || subjectsLoadingMore || search.trim() !== debouncedSearch) return;
     const body: LegalHoldCreateInput = {
       subjectKind: selectedSubject.subjectKind,
@@ -270,7 +273,7 @@ const LegalHolds = () => {
   };
 
   const beginRelease = async () => {
-    if (!selectedHold || selectedHold.state !== 'active') return;
+    if (!canManageLegalHolds || !selectedHold || selectedHold.state !== 'active') return;
     const body = { expectedVersion: selectedHold.version, reasonCode: releaseReason };
     await releaseStepUp.begin({
       method: 'POST', path: `/api/admin/legal-holds/${encodeURIComponent(selectedHold.id)}/release`, body,
@@ -293,7 +296,7 @@ const LegalHolds = () => {
   return <AdminLayout><main className="mx-auto max-w-7xl space-y-6 p-6 lg:p-8">
     <header><p className="text-xs font-bold uppercase tracking-widest text-secondary">Compliance and data protection</p><h1 className="mt-2 text-3xl font-extrabold text-primary">Legal holds</h1><p className="mt-2 max-w-3xl text-sm text-secondary">Holds apply only to the selected record and block eligible deletion work. They do not grant access to protected records. Release requires an independent authorized reviewer.</p></header>
     {error ? <ErrorState message={error} onRetry={() => void load()} /> : null}
-    <section className="rounded-2xl border border-outline-variant/10 bg-white p-5">
+    {canManageLegalHolds ? <section className="rounded-2xl border border-outline-variant/10 bg-white p-5">
       <h2 className="text-lg font-bold">Create record-scoped hold</h2>
       <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={(event) => void create(event)}>
         <label className="text-xs font-bold">Category<select value={category} onChange={(event) => changeCategory(event.target.value as LegalHoldCategory | '')} disabled={categoriesLoading || Boolean(categoriesError)} className="mt-1 w-full rounded-lg border p-2 text-sm font-normal"><option value="">Select a category</option>{categories.map((option) => <option key={option.category} value={option.category}>{option.label}</option>)}</select></label>
@@ -318,14 +321,14 @@ const LegalHolds = () => {
         <label className="text-xs font-bold">Expires at (optional)<input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm font-normal" /></label>
         <div className="md:col-span-2"><Button type="submit" disabled={!lookupReady || submitting || createStepUp.busy || Boolean(createStepUp.challenge)}>Prepare hold with authenticator</Button>{createStepUp.error ? <p role="alert" className="mt-2 text-sm text-error">{createStepUp.error}</p> : null}</div>
       </form>
-    </section>
+    </section> : null}
     <section className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.8fr)]">
       <div className="rounded-2xl border border-outline-variant/10 bg-white p-5"><div className="flex flex-wrap items-end gap-3"><label className="text-xs font-bold">State<select value={state} onChange={(event) => setState(event.target.value as 'active' | 'released' | '')} className="mt-1 rounded-lg border p-2 text-sm font-normal"><option value="active">Active</option><option value="released">Released</option><option value="">All</option></select></label><label className="text-xs font-bold">Subject kind<select value={holdSubjectKind} onChange={(event) => setHoldSubjectKind(event.target.value as LegalHoldSubjectKind | '')} className="mt-1 rounded-lg border p-2 text-sm font-normal"><option value="">All subjects</option>{allKinds.map((kind) => <option key={kind.subjectKind} value={kind.subjectKind}>{kind.label}</option>)}</select></label><Button type="button" variant="secondary" disabled={loading} onClick={() => void load()}>Refresh</Button></div>
         {loading ? <LoadingState label="Loading legal holds…" /> : null}
         <div className="mt-4 space-y-2">{holds.map((hold) => <button type="button" key={hold.id} onClick={() => void legalHoldService.get(hold.id).then(setSelectedHold).catch((raw: unknown) => setError(raw instanceof Error ? raw.message : 'Unable to load this hold.'))} className={`w-full rounded-lg border p-3 text-left ${selectedHold?.id === hold.id ? 'border-primary bg-primary/5' : 'border-outline-variant/20'}`}><span className="flex justify-between gap-2"><strong>{hold.subjectKind.replaceAll('_', ' ')} · {hold.subjectId}</strong><span className="text-xs uppercase">{hold.state}</span></span><span className="mt-1 block text-xs text-secondary">{hold.category} · {hold.reasonCode} · v{hold.version} · {new Date(hold.createdAt).toLocaleString()}</span></button>)}{!loading && !holds.length ? <p className="rounded-lg border border-dashed p-4 text-sm text-secondary">No legal holds match these filters.</p> : null}</div>
         {holdCursor ? <Button type="button" variant="secondary" className="mt-4" disabled={loading} onClick={() => void load(holdCursor)}>Load more</Button> : null}
       </div>
-      <div className="rounded-2xl border border-outline-variant/10 bg-white p-5">{selectedHold ? <><h2 className="text-lg font-bold">Hold detail</h2><dl className="mt-3 space-y-2 text-sm">{Object.entries({ id: selectedHold.id, subjectKind: selectedHold.subjectKind, subjectId: selectedHold.subjectId, category: selectedHold.category, reasonCode: selectedHold.reasonCode, state: selectedHold.state, issuer: selectedHold.issuer, version: selectedHold.version, createdAt: selectedHold.createdAt, reviewAt: selectedHold.reviewAt ?? 'Not set', expiresAt: selectedHold.expiresAt ?? 'Not set', releaseReasonCode: selectedHold.releaseReasonCode ?? 'Not released', releasedAt: selectedHold.releasedAt ?? 'Not released' }).map(([key, value]) => <div key={key} className="flex justify-between gap-4 border-b pb-2"><dt className="text-secondary">{key}</dt><dd className="break-all text-right font-semibold">{value}</dd></div>)}</dl>{selectedHold.state === 'active' ? <div className="mt-4"><label className="text-xs font-bold">Release reason<select value={releaseReason} onChange={(event) => setReleaseReason(event.target.value as LegalHoldReleaseReason)} className="mt-1 w-full rounded-lg border p-2 text-sm font-normal">{releaseReasons.map((reason) => <option key={reason} value={reason}>{reason.replaceAll('_', ' ')}</option>)}</select></label><p className="mt-2 text-xs text-secondary">The issuer cannot release their own hold. The server enforces independent Compliance authorization.</p><Button type="button" className="mt-3" disabled={releaseStepUp.busy || Boolean(releaseStepUp.challenge)} onClick={() => void beginRelease()}>Release with authenticator</Button>{releaseStepUp.error ? <p role="alert" className="mt-2 text-sm text-error">{releaseStepUp.error}</p> : null}</div> : null}</> : <p className="text-sm text-secondary">Select a hold to review its authoritative state.</p>}</div>
+      <div className="rounded-2xl border border-outline-variant/10 bg-white p-5">{selectedHold ? <><h2 className="text-lg font-bold">Hold detail</h2><dl className="mt-3 space-y-2 text-sm">{Object.entries({ id: selectedHold.id, subjectKind: selectedHold.subjectKind, subjectId: selectedHold.subjectId, category: selectedHold.category, reasonCode: selectedHold.reasonCode, state: selectedHold.state, issuer: selectedHold.issuer, version: selectedHold.version, createdAt: selectedHold.createdAt, reviewAt: selectedHold.reviewAt ?? 'Not set', expiresAt: selectedHold.expiresAt ?? 'Not set', releaseReasonCode: selectedHold.releaseReasonCode ?? 'Not released', releasedAt: selectedHold.releasedAt ?? 'Not released' }).map(([key, value]) => <div key={key} className="flex justify-between gap-4 border-b pb-2"><dt className="text-secondary">{key}</dt><dd className="break-all text-right font-semibold">{value}</dd></div>)}</dl>{canManageLegalHolds && selectedHold.state === 'active' ? <div className="mt-4"><label className="text-xs font-bold">Release reason<select value={releaseReason} onChange={(event) => setReleaseReason(event.target.value as LegalHoldReleaseReason)} className="mt-1 w-full rounded-lg border p-2 text-sm font-normal">{releaseReasons.map((reason) => <option key={reason} value={reason}>{reason.replaceAll('_', ' ')}</option>)}</select></label><p className="mt-2 text-xs text-secondary">The issuer cannot release their own hold. The server enforces independent Compliance authorization.</p><Button type="button" className="mt-3" disabled={releaseStepUp.busy || Boolean(releaseStepUp.challenge)} onClick={() => void beginRelease()}>Release with authenticator</Button>{releaseStepUp.error ? <p role="alert" className="mt-2 text-sm text-error">{releaseStepUp.error}</p> : null}</div> : null}</> : <p className="text-sm text-secondary">Select a hold to review its authoritative state.</p>}</div>
     </section>
     <StepUpDialog challenge={createStepUp.challenge} busy={submitting || createStepUp.busy} error={createStepUp.error} onCancel={createStepUp.cancel} onSubmit={finishCreate} />
     <StepUpDialog challenge={releaseStepUp.challenge} busy={releaseStepUp.busy} error={releaseStepUp.error} onCancel={releaseStepUp.cancel} onSubmit={finishRelease} />

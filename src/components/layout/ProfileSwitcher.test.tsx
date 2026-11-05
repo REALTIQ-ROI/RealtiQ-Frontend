@@ -64,7 +64,7 @@ describe('ProfileSwitcher navigation UI', () => {
     expect(screen.queryByRole('option', { name: /active|not_submitted/i })).not.toBeInTheDocument();
   });
 
-  it('does not allow admin accounts to create profiles and keeps profile switching available', () => {
+  it('does not expose profile creation or switching to admin accounts', () => {
     const activeProfile = profile('profile-1', 'Platform Admin', 'staff');
     useAuthMock.mockReturnValue({
       user: { role: 'admin' },
@@ -76,7 +76,7 @@ describe('ProfileSwitcher navigation UI', () => {
 
     render(<ProfileSwitcher />);
 
-    expect(screen.getByLabelText('Active profile')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Active profile')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Create profile' })).not.toBeInTheDocument();
     expect(screen.queryByText('Profile type')).not.toBeInTheDocument();
   });

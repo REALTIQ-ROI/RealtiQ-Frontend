@@ -4,6 +4,10 @@ import AdminLayout from '../../../components/layout/AdminLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
 import MapListLayout from '../../../components/property/map/MapListLayout';
 import { useProperties } from '../../../contexts/PropertiesContext';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { propertyService } from '../../../services/propertyService';
 import type { Property } from '../../../types';
 import { propertyDisplayReference, propertyRouteReference } from '../../../types';
@@ -52,6 +56,8 @@ const ownerDisplay = (property: Property) => {
 };
 
 const ManageProperties = () => {
+  const { adminAccess } = useAuth();
+  const canManageMarketing = hasAdminCapability(adminAccess, 'marketing.manage');
   const { properties, refreshProperties } = useProperties();
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
@@ -64,6 +70,7 @@ const ManageProperties = () => {
   const [maxProgress, setMaxProgress] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const featuredStepUp = useBoundStepUp<Awaited<ReturnType<typeof propertyService.toggleFeatured>>>();
 
   const filtered = [...properties]
     .filter((p) => {
@@ -95,15 +102,29 @@ const ManageProperties = () => {
   };
 
   const handleFeature = async (property: Property) => {
+    if (!canManageMarketing) return;
     const reference = propertyRouteReference(property);
-    if (!reference || updatingId) return;
+    if (!reference || updatingId || featuredStepUp.busy || featuredStepUp.challenge) return;
     setUpdatingId(reference);
-    try {
-      await propertyService.toggleFeatured(reference, !property.featured);
-      await refreshProperties();
-    } finally {
+    const body = { featured: !property.featured };
+    const started = await featuredStepUp.begin({
+      method: 'PATCH',
+      path: `/api/properties/${encodeURIComponent(reference)}/featured`,
+      body,
+      label: `${body.featured ? 'Feature' : 'Unfeature'} ${property.title}`,
+      execute: (challengeId, exactBody) => propertyService.toggleFeatured(reference, exactBody.featured, challengeId),
+    });
+    if (!started) {
       setUpdatingId(null);
     }
+  };
+
+  const completeFeatureChange = async (code: string): Promise<boolean> => {
+    const result = await featuredStepUp.complete(code);
+    if (!result.ok) return false;
+    await refreshProperties();
+    setUpdatingId(null);
+    return true;
   };
 
   const filters: { label: string; value: FilterType }[] = [
@@ -113,6 +134,7 @@ const ManageProperties = () => {
   ];
 
   return (
+    <>
     <AdminLayout>
       <section className="pt-8 pb-12 px-8 max-w-7xl mx-auto">
         {/* Page Header */}
@@ -203,7 +225,7 @@ const ManageProperties = () => {
             const reference = propertyRouteReference(property);
             return reference ? `/dashboard/admin/property-details/${reference}` : '';
           }}
-          actions={(property) => (
+          actions={(property) => canManageMarketing ? (
             <>
               <button
                 type="button"
@@ -220,7 +242,7 @@ const ManageProperties = () => {
                 ) : property.featured ? 'Unfeature' : 'Feature'}
               </button>
             </>
-          )}
+          ) : null}
         >
         {(visibleProperties) => {
           const totalPages = Math.max(1, Math.ceil(visibleProperties.length / ITEMS_PER_PAGE));
@@ -290,13 +312,13 @@ const ManageProperties = () => {
                       <td className="px-6 py-5">{statusBadge(property.status)}</td>
                       <td className="px-6 py-5 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button
+                          {canManageMarketing ? <button
                             className="p-2 text-secondary hover:text-primary hover:bg-slate-100 rounded-lg transition-all"
                             title="View Details"
                             onClick={() => handleViewDetails(property)}
                           >
                             <span className="material-symbols-outlined text-lg">visibility</span>
-                          </button>
+                          </button> : null}
                           <button
                             className={`p-2 rounded-lg transition-all ${
                               property.featured
@@ -418,6 +440,14 @@ const ManageProperties = () => {
         </div> */}
       </section>
     </AdminLayout>
+    <StepUpDialog
+      challenge={featuredStepUp.challenge}
+      busy={featuredStepUp.busy}
+      error={featuredStepUp.error}
+      onCancel={() => { featuredStepUp.cancel(); setUpdatingId(null); }}
+      onSubmit={completeFeatureChange}
+    />
+    </>
   );
 };
 

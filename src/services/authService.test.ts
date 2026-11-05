@@ -59,6 +59,18 @@ describe('authService account security endpoints', () => {
     await expect(authService.login({ email: 'buyer@example.test', password: 'ExamplePass123!' })).rejects.toThrow('challenge response was incomplete');
   });
 
+  it('requires the server-issued staff access projection on a successful admin login without contact-verification gating', async () => {
+    const access = {
+      accountId: 'admin-1', role: 'admin', profileId: 'staff-profile', staffDepartments: [],
+      departmentAssignments: [], effectiveDepartments: [], capabilities: [], accessMode: 'unassigned',
+      isExecutive: false, isInternalAudit: false, readOnly: false, canManageStaff: false, assignableDepartments: [],
+    };
+    vi.mocked(api.post).mockResolvedValueOnce({ data: {
+      user: { _id: 'admin-1', role: 'admin', emailVerified: false, phoneVerified: false }, token: 'admin-token', adminAccess: access,
+    }, status: 200 } as never);
+    await expect(authService.login({ email: 'admin@example.test', password: 'password', role: 'admin' })).resolves.toMatchObject({ adminAccess: access });
+  });
+
   it('sends only the documented email and password fields to the login endpoint', async () => {
     vi.mocked(api.post).mockResolvedValueOnce({
       data: { user: { _id: 'user-1', role: 'buyer' }, token: 'Bearer jwt' },

@@ -11,8 +11,10 @@ const stepUpMocks = vi.hoisted(() => ({
   complete: vi.fn(),
   reload: vi.fn(),
 }));
+const accessState = vi.hoisted(() => ({ adminAccess: { readOnly: false, capabilities: ['verification.read', 'verification.review', 'network.read', 'network.manage'] } as unknown }));
 
 vi.mock('../../components/layout/AdminLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
+vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ adminAccess: accessState.adminAccess, user: { _id: 'admin-1', name: 'Executive', role: 'admin' } }) }));
 vi.mock('../../components/proxyNetwork/AdminKycMediaViewer', () => ({
   default: ({ title, url, onClose }: { title: string; url: string; onClose: () => void }) => <div data-testid="private-preview"><span>{title}</span><span>{url}</span><button type="button" onClick={onClose}>Close secure preview</button></div>,
 }));
@@ -143,6 +145,7 @@ describe('admin Property Agent detail projection and protected decisions', () =>
   beforeEach(() => {
     vi.clearAllMocks();
     stepUpMocks.action = null;
+    accessState.adminAccess = { readOnly: false, capabilities: ['verification.read', 'verification.review', 'network.read', 'network.manage'] };
     vi.mocked(proxyNetworkService.getAdminInspector).mockResolvedValue(detailResponse as never);
   });
 
@@ -177,6 +180,16 @@ describe('admin Property Agent detail projection and protected decisions', () =>
     await screen.findByText('Email: ada@example.test · Phone: +2348000000000');
     await user.click(screen.getByRole('button', { name: 'Reveal ID' }));
     expect(screen.getByText('123456789012')).toBeInTheDocument();
+  });
+
+  it('keeps a read-only Property Agent detail view free of review and network mutation controls', async () => {
+    accessState.adminAccess = { readOnly: true, capabilities: ['verification.read'] };
+    renderDetail();
+    await screen.findByText('Email: ada@example.test · Phone: +2348000000000');
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Suspend' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reactivate' })).not.toBeInTheDocument();
   });
 
   it('fetches only explicitly protected document routes through the authenticated service and revokes the temporary URL', async () => {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "../../contexts/AuthContext";
+import { hasAdminCapability } from "../../services/adminAccessService";
 import { useCart } from "../../contexts/CartContext";
 import StepUpDialog from "../auth/StepUpDialog";
 import { useBoundStepUp } from "../../hooks/useBoundStepUp";
@@ -1340,7 +1341,8 @@ const ProxyWorkspace = ({
   reload: () => Promise<unknown>;
   payoutVerified?: boolean;
 }) => {
-  const { user } = useAuth();
+  const { user, adminAccess } = useAuth();
+  const canManageAdminNetwork = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, "network.manage"));
   const { addItem, refreshCart } = useCart();
   const stepUp = useBoundStepUp<unknown>();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -1350,21 +1352,42 @@ const ProxyWorkspace = ({
   const [schedule, setSchedule] = useState("");
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
   const [initializedPayment, setInitializedPayment] =
-    useState<PaymentInitializationResponse | null>(() => readSavedPayment(requestId));
+    useState<PaymentInitializationResponse | null>(() => role === "admin" ? null : readSavedPayment(requestId));
   const [reportDraftVersion, setReportDraftVersion] = useState(0);
+  useEffect(() => {
+    setInitializedPayment(role === "admin" ? null : readSavedPayment(requestId));
+  }, [requestId, role]);
+  useEffect(() => {
+    const clearProfilePaymentContext = () => {
+      sessionStorage.removeItem("realtiq.proxyPaymentContext");
+      setInitializedPayment(null);
+    };
+    window.addEventListener("realtiq:session-changed", clearProfilePaymentContext);
+    return () => window.removeEventListener("realtiq:session-changed", clearProfilePaymentContext);
+  }, []);
   const actions = useMemo(
     () =>
-      selectProxyActions(
+      (() => {
+        const projected = selectProxyActions(
         detail,
         role,
         user?._id,
         payoutVerified || !!detail.payoutAccount?.verifiedAt,
-      ),
-    [detail, role, user?._id, payoutVerified],
+        );
+        if (role !== "admin") return projected;
+        return {
+          ...projected,
+          message: canManageAdminNetwork && projected.message,
+          releasePayment: canManageAdminNetwork && projected.releasePayment,
+          resolveDispute: canManageAdminNetwork && projected.resolveDispute,
+        };
+      })(),
+    [detail, role, user?._id, payoutVerified, canManageAdminNetwork],
   );
   const pending = pendingAction !== null;
   const isPending = (actionName: PendingAction) => pendingAction === actionName;
   const mutate = async (actionName: PendingAction, fn: () => Promise<unknown>, success: string) => {
+    if (role === "admin" && !canManageAdminNetwork) return false;
     if (pendingAction) return false;
     setPendingAction(actionName);
     setMissing([]);
@@ -1411,6 +1434,7 @@ const ProxyWorkspace = ({
     successMessage: string,
     options: { refreshAfterSuccess?: boolean; onSuccess?: (value: unknown) => void | Promise<void> } = {},
   ) => {
+    if (role === "admin" && !canManageAdminNetwork) return;
     if (pendingAction) return;
     setPendingAction(actionName);
     setMissing([]);
@@ -1470,6 +1494,7 @@ const ProxyWorkspace = ({
     }
   }, [pendingAction, protectedPending, stepUp.busy, stepUp.challenge]);
   const initializePayment = async () => {
+    if (role === "admin") return;
     await beginProtectedAction(
       "initializePayment",
       "POST",
@@ -1492,7 +1517,7 @@ const ProxyWorkspace = ({
     );
   };
   const refreshPaymentStatus = async (reference: string) => {
-    if (pendingAction) return;
+    if (role === "admin" || pendingAction) return;
     setPendingAction("refreshStatus");
     try {
       const result = await proxyNetworkService.verifyPayment(reference);
@@ -1762,7 +1787,7 @@ const ProxyWorkspace = ({
                 </button>
               ) : null}
             </div>
-            {initializedPayment ? (
+            {role !== "admin" && initializedPayment ? (
               <div className="mt-4 rounded-xl border border-primary/20 p-4">
                 <p className="font-bold">Payment reference: {initializedPayment.reference}</p>
                 {initializedPricing ? <BuyerPricingBreakdown pricing={initializedPricing} /> : null}

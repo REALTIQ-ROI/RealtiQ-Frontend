@@ -141,6 +141,13 @@ export const normalizeApiError = (error: AxiosError<unknown>): Error => {
 
   const payload = asObject(response.data);
   const code = typeof payload?.code === 'string' ? payload.code : undefined;
+  const requestPath = typeof error.config?.url === 'string' ? error.config.url.split('?')[0] : '';
+  if (
+    status === 403 && (code?.startsWith('PERMISSION_') || code === 'AUTH_PROFILE_FORBIDDEN') &&
+    !requestPath.endsWith('/admin/access') && typeof window !== 'undefined'
+  ) {
+    window.dispatchEvent(new Event('realtiq:admin-access-refresh'));
+  }
   const fieldErrors = normalizeFieldErrors(payload?.errors);
   const responseMessage = typeof payload?.message === 'string' ? payload.message.trim() : '';
   const fieldMessage = fieldErrors?.map((item) => item.msg).filter((item): item is string => Boolean(item?.trim())).join(' ');

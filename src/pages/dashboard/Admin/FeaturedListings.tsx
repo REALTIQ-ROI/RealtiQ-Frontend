@@ -1,12 +1,16 @@
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import AdminLayout from '../../../components/layout/AdminLayout';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
 import MediaPreview from '../../../components/property/MediaPreview';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { adminService } from '../../../services/adminService';
 import { propertyService } from '../../../services/propertyService';
 
@@ -18,9 +22,12 @@ const formatNGN = (value: number) =>
   }).format(value);
 
 const FeaturedListings = () => {
+  const { adminAccess } = useAuth();
+  const canReadAnalytics = hasAdminCapability(adminAccess, 'analytics.read');
   const { properties, loading, error, refreshProperties } = useProperties();
-  const { data: stats, loading: statsLoading, error: statsError, execute: refreshStats } = useAsync(() => adminService.fetchAdminStats(), true);
+  const { data: stats, loading: statsLoading, error: statsError, execute: refreshStats } = useAsync(() => adminService.fetchAdminStats(), canReadAnalytics);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const stepUp = useBoundStepUp<Awaited<ReturnType<typeof propertyService.toggleFeatured>>>();
   const candidates = properties
     .filter((property) => property.status === 'available')
     .map((property, index) => ({ property, index }))
@@ -32,20 +39,32 @@ const FeaturedListings = () => {
   const featured = candidates.filter((property) => property.featured);
 
   const toggleFeatured = async (id: string, featuredState: boolean) => {
-    if (updatingId) return;
+    if (!hasAdminCapability(adminAccess, 'marketing.manage') || updatingId || stepUp.busy || stepUp.challenge) return;
     setUpdatingId(id);
-    try {
-      await propertyService.toggleFeatured(id, !featuredState);
-      await refreshProperties();
-      toast.success(featuredState ? 'Listing removed from featured.' : 'Listing marked as featured.');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Unable to update featured listing.');
-    } finally {
+    const body = { featured: !featuredState };
+    const started = await stepUp.begin({
+      method: 'PATCH',
+      path: `/api/properties/${encodeURIComponent(id)}/featured`,
+      body,
+      label: `${body.featured ? 'Feature' : 'Unfeature'} this listing`,
+      execute: (challengeId, exactBody) => propertyService.toggleFeatured(id, exactBody.featured, challengeId),
+    });
+    if (!started) {
       setUpdatingId(null);
     }
   };
 
+  const completeFeaturedChange = async (code: string): Promise<boolean> => {
+    const result = await stepUp.complete(code);
+    if (!result.ok) return false;
+    await refreshProperties();
+    toast.success(result.value.featured ? 'Listing marked as featured.' : 'Listing removed from featured.');
+    setUpdatingId(null);
+    return true;
+  };
+
   return (
+    <>
     <AdminLayout>
       <div className="min-h-screen">
         <div className="p-8 max-w-7xl mx-auto space-y-10">
@@ -83,13 +102,13 @@ const FeaturedListings = () => {
               <h3 className="text-3xl font-extrabold">{statsLoading || statsError ? '—' : stats?.soldProperties ?? '—'}</h3>
             </div>
           </section>
-          {statsError ? <div role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Admin totals are unavailable. <button type="button" className="font-bold underline" onClick={() => void refreshStats()}>Retry totals</button></div> : null}
+          {canReadAnalytics && statsError ? <div role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Admin totals are unavailable. <button type="button" className="font-bold underline" onClick={() => void refreshStats()}>Retry totals</button></div> : null}
 
           <section className="bg-surface-container-low rounded-xl overflow-hidden">
             <div className="p-6 bg-surface-container-lowest flex items-center justify-between gap-4">
               <div>
                 <h3 className="font-headline text-xl font-bold">Featured Candidates</h3>
-                <p className="text-sm text-secondary">Toggle listings that should appear as featured.</p>
+                <p className="text-sm text-secondary">Toggle listings that should appear as featured using an authenticator-confirmed change.</p>
               </div>
               <button
                 onClick={() => { void refreshProperties(); void refreshStats(); }}
@@ -176,6 +195,8 @@ const FeaturedListings = () => {
         </div>
       </div>
     </AdminLayout>
+    <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy} error={stepUp.error} onCancel={() => { stepUp.cancel(); setUpdatingId(null); }} onSubmit={completeFeaturedChange} />
+    </>
   );
 };
 

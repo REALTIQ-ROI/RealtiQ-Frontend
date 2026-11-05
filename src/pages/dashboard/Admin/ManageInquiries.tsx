@@ -6,6 +6,8 @@ import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import { inquiryService } from '../../../services/inquiryService';
 import { resolveInquiryProperty } from '../../../types';
 
@@ -17,12 +19,15 @@ const formatDate = (date: string) =>
   });
 
 const ManageInquiries = () => {
+  const { adminAccess } = useAuth();
+  const canManageSupport = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'support.manage'));
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const { data, loading, error, execute } = useAsync(() => inquiryService.getInquiries(), true);
   const inquiries = data ?? [];
   const openCount = inquiries.filter((inquiry) => inquiry.status === 'open').length;
 
   const toggleStatus = async (id: string, status: 'open' | 'closed') => {
+    if (!canManageSupport) return;
     if (updatingId) return;
     setUpdatingId(id);
     try {
@@ -125,7 +130,7 @@ const ManageInquiries = () => {
                           <Link to={`/dashboard/admin/inquiry-details/${inquiry._id}`} className="self-center text-primary font-bold text-sm hover:underline">
                             View
                           </Link>
-                          <Button
+                          {canManageSupport ? <Button
                             variant="secondary"
                             loading={updatingId === inquiry._id}
                             loadingLabel={inquiry.status === 'open' ? 'Closing...' : 'Reopening...'}
@@ -133,7 +138,7 @@ const ManageInquiries = () => {
                             onClick={() => void toggleStatus(inquiry._id, inquiry.status)}
                           >
                             {inquiry.status === 'open' ? 'Close' : 'Reopen'}
-                          </Button>
+                          </Button> : <span className="self-center text-xs text-secondary">Read only</span>}
                         </div>
                       </td>
                     </tr>

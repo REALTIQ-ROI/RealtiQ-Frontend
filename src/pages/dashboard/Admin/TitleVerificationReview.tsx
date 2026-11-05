@@ -10,6 +10,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import RegistryAuditDetails from '../../../components/title/RegistryAuditDetails';
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
 import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../../lib/axios';
 import { documentService } from '../../../services/documentService';
@@ -27,7 +28,8 @@ const propertyName = (verification: TitleVerification) => {
 };
 
 const TitleVerificationReview = () => {
-  const { token } = useAuth();
+  const { token, adminAccess } = useAuth();
+  const canManageTitleVerification = hasAdminCapability(adminAccess, 'title_verification.manage');
   const [status, setStatus] = useState<TitleVerificationStatus | 'all'>('pending');
   const [documentType, setDocumentType] = useState<TitleDocumentType | 'all'>('all');
   const [riskSeverity, setRiskSeverity] = useState('all');
@@ -94,6 +96,7 @@ const TitleVerificationReview = () => {
   };
 
   const review = async (decision: 'approve' | 'reject') => {
+    if (!canManageTitleVerification) return;
     if (!selected) return;
     const result = await Swal.fire<string>({
       title: decision === 'approve' ? 'Approve title verification?' : 'Reject title verification?',
@@ -130,6 +133,7 @@ const TitleVerificationReview = () => {
   };
 
   const revoke = async () => {
+    if (!canManageTitleVerification) return;
     if (!selected) return;
     const result = await Swal.fire<string>({
       title: 'Revoke title verification?',
@@ -164,6 +168,7 @@ const TitleVerificationReview = () => {
   };
 
   const requestExternalAnchor = async () => {
+    if (!canManageTitleVerification) return;
     if (!selected?.publicVerificationId) return;
     setPendingAction('external-anchor');
     const verificationId = selected.verificationId;
@@ -187,6 +192,7 @@ const TitleVerificationReview = () => {
   };
 
   const retryExternalAnchor = async () => {
+    if (!canManageTitleVerification) return;
     if (!selected || (selected.externalAnchor?.status ?? selected.externalAnchorStatus) !== 'failed') return;
     const verificationId = selected.verificationId;
     setPendingAction('retry-anchor');
@@ -341,7 +347,7 @@ const TitleVerificationReview = () => {
                     <ul className="mt-2 space-y-1">{selected.riskFlags.map((flag: TitleRiskFlag, index) => <li key={flag._id ?? `${flag.type}-${index}`}>{riskFlagText(flag)}</li>)}</ul>
                   </div>
                 ) : null}
-                <div className="flex flex-wrap gap-2">
+                {canManageTitleVerification ? <div className="flex flex-wrap gap-2">
                   {['pending', 'under_review'].includes(selected.status) ? (
                     <Button disabled={stepUp.busy || Boolean(stepUp.challenge) || pendingAction === 'approve'} aria-busy={pendingAction === 'approve'} onClick={() => void review('approve')}>
                       {pendingAction === 'approve' ? <><LoaderCircle className="mr-2 inline-block h-4 w-4 animate-spin align-middle" aria-hidden="true" />Approving...</> : 'Approve'}
@@ -370,8 +376,8 @@ const TitleVerificationReview = () => {
                       return null;
                     })()
                   ) : null}
-                </div>
-                <p className="text-xs text-secondary">These staff actions use the current-profile TOTP challenge and send the exact request through the shared bound step-up flow. Department authority, reviewer independence and provider configuration remain server-checked.</p>
+                </div> : <p role="status" className="rounded-lg bg-surface-container-low p-3 text-sm text-secondary">This staff profile has read-only access to title-verification records.</p>}
+                {canManageTitleVerification ? <p className="text-xs text-secondary">These staff actions use the current-profile TOTP challenge and send the exact request through the shared bound step-up flow. Department authority, reviewer independence and provider configuration remain server-checked.</p> : null}
                 <RegistryAuditDetails publicVerificationId={selected.publicVerificationId} />
                 <div>
                   <h3 className="font-bold">Audit Logs</h3>

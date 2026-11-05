@@ -12,6 +12,8 @@ vi.mock('../services/authService', () => ({
   authService: { account: vi.fn(), login: vi.fn(), completeLoginSecondFactor: vi.fn(), register: vi.fn(), logout: vi.fn() },
 }));
 vi.mock('../services/profileService', () => ({ profileService: { list: vi.fn(), current: vi.fn() } }));
+const adminAccessMock = vi.hoisted(() => ({ get: vi.fn() }));
+vi.mock('../services/adminAccessService', () => ({ adminAccessService: { get: adminAccessMock.get } }));
 vi.mock('../services/userService', () => ({ userService: { fetchUserById: vi.fn() } }));
 
 const account: User = { _id: 'identity-1', name: 'Alex User', email: 'alex@example.test', role: 'buyer' };
@@ -121,6 +123,31 @@ describe('AuthProvider account and profile lifecycle', () => {
     expect(localStorage.getItem('token')).toBe('verified-session-token');
     expect(JSON.parse(localStorage.getItem('user') ?? 'null')).toEqual(account);
     expect(result.current.loginChallenge).toBeNull();
+  });
+
+  it('keeps unverified admin login available and selects the server-issued staff profile before access refresh', async () => {
+    const admin: User = { _id: 'admin-1', name: 'Admin Example', email: 'admin@example.test', role: 'admin', emailVerified: false };
+    const staffProfile: AccountProfileSummary = { id: 'staff-profile', kind: 'staff', structure: 'individual', name: 'Staff', status: 'active', version: 1, permissions: [] };
+    const access = {
+      accountId: 'admin-1', role: 'admin', profileId: 'staff-profile', staffDepartments: ['finance'],
+      departmentAssignments: [{ id: 'finance', label: 'Finance', readOnly: false }], effectiveDepartments: ['finance'],
+      capabilities: ['dashboard.read', 'finance.read'], accessMode: 'departmental', isExecutive: false,
+      isInternalAudit: false, readOnly: false, canManageStaff: false, assignableDepartments: [],
+    };
+    vi.mocked(authService.login).mockResolvedValueOnce({ user: admin, token: 'admin-token', adminAccess: access } as never);
+    vi.mocked(profileService.list).mockResolvedValueOnce({ profiles: [staffProfile], nextCursor: null });
+    vi.mocked(profileService.current).mockResolvedValueOnce({ profile: staffProfile });
+    adminAccessMock.get.mockResolvedValueOnce(access);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => { await result.current.login({ email: admin.email, password: 'password' }); });
+    await waitFor(() => expect(result.current.adminAccess?.profileId).toBe('staff-profile'));
+
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.activeProfile?.id).toBe('staff-profile');
+    expect(localStorage.getItem('activeProfileId')).toBe('staff-profile');
+    expect(authService.account).not.toHaveBeenCalled();
+    expect(adminAccessMock.get).toHaveBeenCalledWith('staff-profile');
   });
 
   it('preserves the exact unverified-email HTTP error without creating or persisting a session', async () => {

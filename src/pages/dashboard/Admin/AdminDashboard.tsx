@@ -7,6 +7,8 @@ import { useProperties } from '../../../contexts/PropertiesContext';
 // import { inquiryService } from '../../../services/inquiryService';
 import { adminService } from '../../../services/adminService';
 import type { AdminStats, Property } from '../../../types';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability, hasAnyAdminCapability } from '../../../services/adminAccessService';
 
 // const barHeights = [30, 45, 40, 65, 50, 35, 60, 85, 45, 55, 70, 40, 30, 50, 95, 45, 60, 35, 75, 55];
 
@@ -26,8 +28,8 @@ const formatNGN = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-const StatCard = ({ title, value, icon, to }: { title: string; value: string | number; icon: string; to: string }) => (
-  <Link to={to} aria-label={`Open ${title}`} className="block rounded-xl bg-surface-container-lowest p-6 transition-all hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+const StatCard = ({ title, value, icon, to, canNavigate = true }: { title: string; value: string | number; icon: string; to: string; canNavigate?: boolean }) => {
+  const content = <>
     <div className="flex items-start justify-between">
       <div className="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-fixed">
         <span className="material-symbols-outlined text-2xl">{icon}</span>
@@ -37,8 +39,11 @@ const StatCard = ({ title, value, icon, to }: { title: string; value: string | n
       <p className="text-secondary text-sm font-medium">{title}</p>
       <h3 className="text-3xl font-extrabold tracking-tight mt-1 font-headline">{value}</h3>
     </div>
-  </Link>
-);
+  </>;
+  return canNavigate
+    ? <Link to={to} aria-label={`Open ${title}`} className="block rounded-xl bg-surface-container-lowest p-6 transition-all hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">{content}</Link>
+    : <div className="rounded-xl bg-surface-container-lowest p-6">{content}</div>;
+};
 
 const OptionalStatCard = ({
   title,
@@ -46,15 +51,17 @@ const OptionalStatCard = ({
   icon,
   to,
   currency = false,
+  canNavigate = true,
 }: {
   title: string;
   value: unknown;
   icon: string;
   to: string;
   currency?: boolean;
+  canNavigate?: boolean;
 }) => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
-  return <StatCard title={title} value={currency ? formatNGN(value) : value.toLocaleString()} icon={icon} to={to} />;
+  return <StatCard title={title} value={currency ? formatNGN(value) : value.toLocaleString()} icon={icon} to={to} canNavigate={canNavigate} />;
 };
 
 const StatSkeleton = () => (
@@ -113,9 +120,16 @@ const PropertyCard = ({ property }: { property: Property }) => {
 
 const AdminDashboard = () => {
   const { properties } = useProperties();
+  const { adminAccess, activeProfile } = useAuth();
+  const canReadAnalytics = hasAdminCapability(adminAccess, 'analytics.read');
+  const canReadListings = hasAdminCapability(adminAccess, 'listings.read');
+  const canReadAccounts = hasAdminCapability(adminAccess, 'accounts.read');
+  const canReadInquiries = hasAdminCapability(adminAccess, 'support.read');
+  const canReadFinance = hasAdminCapability(adminAccess, 'finance.read');
   const { data: statsData, loading: statsLoading, error: statsError, execute: refreshStats } = useAsync(
     () => adminService.fetchAdminStats(),
-    true,
+    canReadAnalytics,
+    `${activeProfile?.id ?? ''}:${canReadAnalytics}`,
   );
   const stats = statsData ?? emptyStats;
 
@@ -133,19 +147,19 @@ const AdminDashboard = () => {
             </h2>
           </div>
           <div className="flex items-center gap-3">
-            <button
+            {canReadAnalytics ? <button
               className="bg-primary text-on-primary px-6 py-2 rounded-lg font-bold flex items-center gap-2 hover:opacity-90 transition-all"
               onClick={() => void refreshStats()}
               type="button"
             >
               <span className="material-symbols-outlined text-lg">refresh</span>
               <span>Refresh Stats</span>
-            </button>
+            </button> : null}
           </div>
         </section>
 
         {/* Metrics Grid */}
-        {statsError ? (
+        {!canReadAnalytics ? <section role="status" className="rounded-xl bg-surface-container-lowest p-6 text-sm text-secondary">Your dashboard is ready. Department-scoped operational pages are listed in the side navigation.</section> : statsError ? (
           <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20">
             <ErrorState message="Unable to load dashboard stats" onRetry={() => void refreshStats()} />
           </div>
@@ -155,30 +169,30 @@ const AdminDashboard = () => {
               Array.from({ length: 6 }, (_, index) => <StatSkeleton key={index} />)
             ) : (
               <>
-                <StatCard title="Total Users" value={stats.totalUsers.toLocaleString()} icon="group" to="/dashboard/admin/manage-users" />
-                <StatCard title="Total Properties" value={stats.totalProperties.toLocaleString()} icon="home_work" to="/dashboard/admin/manage-properties" />
-                <StatCard title="Active Listings" value={stats.activeListings.toLocaleString()} icon="real_estate_agent" to="/dashboard/admin/manage-properties" />
-                <StatCard title="Sold Properties" value={stats.soldProperties.toLocaleString()} icon="verified" to="/dashboard/admin/manage-properties" />
-                <StatCard title="Total Inquiries" value={stats.totalInquiries.toLocaleString()} icon="mail" to="/dashboard/admin/manage-inquiries" />
-                <StatCard title="Total Revenue" value={formatNGN(stats.totalRevenue)} icon="payments" to="/dashboard/admin/wallet" />
-                <OptionalStatCard title="Verified Property Agents" value={stats.totalProxyInspectors} icon="engineering" to="/admin/proxy-inspectors" />
-                <OptionalStatCard title="Pending Inspector Approvals" value={stats.pendingProxyInspectorApprovals} icon="pending_actions" to="/admin/proxy-inspectors" />
-                <OptionalStatCard title="Approved Inspectors" value={stats.approvedProxyInspectors} icon="verified" to="/admin/proxy-inspectors" />
-                <OptionalStatCard title="Suspended Inspectors" value={stats.suspendedProxyInspectors} icon="person_off" to="/admin/proxy-inspectors" />
-                <OptionalStatCard title="Property Agent Requests" value={stats.totalProxyInspectionRequests} icon="fact_check" to="/admin/proxy-inspections" />
-                <OptionalStatCard title="Active Property Agent Jobs" value={stats.activeProxyInspectionJobs} icon="construction" to="/admin/proxy-inspections" />
-                <OptionalStatCard title="Completed Property Agent Jobs" value={stats.completedProxyInspectionJobs} icon="task_alt" to="/admin/proxy-inspections" />
-                <OptionalStatCard title="Disputed Property Agent Jobs" value={stats.disputedProxyInspectionJobs} icon="gavel" to="/admin/proxy-inspections" />
-                <OptionalStatCard title="Property Agent Gross Volume" value={stats.proxyInspectionGrossVolume} icon="account_balance" to="/admin/proxy-inspections" currency />
-                <OptionalStatCard title="Property Agent Network Revenue" value={stats.proxyInspectionRevenue} icon="paid" to="/dashboard/admin/wallet" currency />
-                <OptionalStatCard title="Inspector Payout Total" value={stats.proxyInspectorPayoutTotal} icon="payments" to="/dashboard/admin/wallet" currency />
+                <StatCard title="Total Users" value={stats.totalUsers.toLocaleString()} icon="group" to="/dashboard/admin/manage-users" canNavigate={canReadAccounts} />
+                <StatCard title="Total Properties" value={stats.totalProperties.toLocaleString()} icon="home_work" to="/dashboard/admin/manage-properties" canNavigate={canReadListings} />
+                <StatCard title="Active Listings" value={stats.activeListings.toLocaleString()} icon="real_estate_agent" to="/dashboard/admin/manage-properties" canNavigate={canReadListings} />
+                <StatCard title="Sold Properties" value={stats.soldProperties.toLocaleString()} icon="verified" to="/dashboard/admin/manage-properties" canNavigate={canReadListings} />
+                <StatCard title="Total Inquiries" value={stats.totalInquiries.toLocaleString()} icon="mail" to="/dashboard/admin/manage-inquiries" canNavigate={canReadInquiries} />
+                <StatCard title="Total Revenue" value={formatNGN(stats.totalRevenue)} icon="payments" to="/dashboard/admin/wallet" canNavigate={canReadFinance} />
+                <OptionalStatCard title="Verified Property Agents" value={stats.totalProxyInspectors} icon="engineering" to="/admin/proxy-inspectors" canNavigate={hasAnyAdminCapability(adminAccess, ['network.read', 'search.proxy_inspector.read'])} />
+                <OptionalStatCard title="Pending Inspector Approvals" value={stats.pendingProxyInspectorApprovals} icon="pending_actions" to="/admin/proxy-inspectors" canNavigate={hasAnyAdminCapability(adminAccess, ['network.read', 'search.proxy_inspector.read'])} />
+                <OptionalStatCard title="Approved Inspectors" value={stats.approvedProxyInspectors} icon="verified" to="/admin/proxy-inspectors" canNavigate={hasAnyAdminCapability(adminAccess, ['network.read', 'search.proxy_inspector.read'])} />
+                <OptionalStatCard title="Suspended Inspectors" value={stats.suspendedProxyInspectors} icon="person_off" to="/admin/proxy-inspectors" canNavigate={hasAnyAdminCapability(adminAccess, ['network.read', 'search.proxy_inspector.read'])} />
+                <OptionalStatCard title="Property Agent Requests" value={stats.totalProxyInspectionRequests} icon="fact_check" to="/admin/proxy-inspections" canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
+                <OptionalStatCard title="Active Property Agent Jobs" value={stats.activeProxyInspectionJobs} icon="construction" to="/admin/proxy-inspections" canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
+                <OptionalStatCard title="Completed Property Agent Jobs" value={stats.completedProxyInspectionJobs} icon="task_alt" to="/admin/proxy-inspections" canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
+                <OptionalStatCard title="Disputed Property Agent Jobs" value={stats.disputedProxyInspectionJobs} icon="gavel" to="/admin/proxy-inspections" canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
+                <OptionalStatCard title="Property Agent Gross Volume" value={stats.proxyInspectionGrossVolume} icon="account_balance" to="/admin/proxy-inspections" currency canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
+                <OptionalStatCard title="Property Agent Network Revenue" value={stats.proxyInspectionRevenue} icon="paid" to="/dashboard/admin/wallet" currency canNavigate={canReadFinance} />
+                <OptionalStatCard title="Inspector Payout Total" value={stats.proxyInspectorPayoutTotal} icon="payments" to="/dashboard/admin/wallet" currency canNavigate={canReadFinance} />
               </>
             )}
           </section>
         )}
 
         {/* Featured Properties */}
-        <section className="space-y-6 pb-12">
+        {canReadListings ? <section className="space-y-6 pb-12">
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-extrabold tracking-tight font-headline">Featured Listings in Loaded Catalogue</h3>
           </div>
@@ -192,7 +206,7 @@ const AdminDashboard = () => {
           ) : (
             <p className="text-secondary text-sm">No featured properties in the loaded catalogue.</p>
           )}
-        </section>
+        </section> : null}
       </div>
     </AdminLayout>
   );

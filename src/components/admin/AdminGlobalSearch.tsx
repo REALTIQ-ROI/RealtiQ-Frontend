@@ -8,6 +8,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "../../contexts/AuthContext";
+import { hasAdminCapability } from "../../services/adminAccessService";
 import { ApiRequestError } from "../../lib/axios";
 import { adminSearchService } from "../../services/adminSearchService";
 import type {
@@ -26,6 +27,21 @@ import {
 import { adminSearchCache } from "../../features/adminSearch/cache";
 
 const LIMIT = 20;
+const searchCapability: Record<Exclude<AdminSearchType, ''>, string> = {
+  user: 'search.user.read',
+  landlord: 'search.landlord.read',
+  property: 'search.property.read',
+  project: 'search.project.read',
+  inquiry: 'search.inquiry.read',
+  payment: 'search.payment.read',
+  cart_checkout: 'search.cart_checkout.read',
+  escrow: 'search.escrow.read',
+  installment: 'search.installment.read',
+  title_verification: 'search.title_verification.read',
+  proxy_inspector: 'search.proxy_inspector.read',
+  proxy_inspection: 'search.proxy_inspection.read',
+  virtual_tour: 'search.virtual_tour.read',
+};
 const dateTime = (value: string) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
@@ -57,7 +73,7 @@ const errorMessage = (error: unknown) => {
 };
 
 const AdminGlobalSearch = () => {
-  const { user } = useAuth();
+  const { user, adminAccess, activeProfile } = useAuth();
   const navigate = useNavigate();
   const [input, setInput] = useState("");
   const [type, setType] = useState<"" | AdminSearchType>("");
@@ -77,6 +93,10 @@ const AdminGlobalSearch = () => {
   const controllerRef = useRef<AbortController | null>(null);
   const restoringFocusRef = useRef(false);
   const normalized = useMemo(() => normalizeAdminSearchQuery(input), [input]);
+  const allowedTypes = useMemo(() => ADMIN_SEARCH_TYPES.filter((item) => item.value === ''
+    ? Boolean(adminAccess?.isExecutive && !adminAccess.readOnly)
+    : hasAdminCapability(adminAccess, searchCapability[item.value])), [adminAccess]);
+  const accessKey = `${activeProfile?.id ?? ''}|${adminAccess?.capabilities.join(',') ?? ''}|${adminAccess?.readOnly ?? ''}`;
   const invalid = hasControls(normalized) || queryLength(normalized) > 100;
   const valid = queryLength(normalized) >= 2 && !invalid;
 
@@ -89,9 +109,19 @@ const AdminGlobalSearch = () => {
     }
   }, [user?._id, user?.role]);
 
+  useEffect(() => {
+    if (type && !allowedTypes.some((item) => item.value === type)) setType(allowedTypes[0]?.value ?? '');
+    if (!allowedTypes.some((item) => item.value === type)) {
+      adminSearchCache.clear();
+      setResults([]);
+      setPagination(null);
+    }
+  }, [accessKey, allowedTypes, type]);
+
   const request = async (page: number, append: boolean) => {
-    if (!user || user.role !== "admin" || !valid) return;
-    const key = `${user._id}|${normalized}|${type}|${page}|${LIMIT}`;
+    const typeAllowed = allowedTypes.some((item) => item.value === type);
+    if (!user || user.role !== "admin" || !valid || !typeAllowed || !activeProfile?.id) return;
+    const key = `${user._id}|${activeProfile.id}|${normalized}|${type}|${page}|${LIMIT}`;
     const cached = adminSearchCache.get(key);
     if (cached) {
       setResults((old) =>
@@ -116,11 +146,13 @@ const AdminGlobalSearch = () => {
         controller.signal,
       );
       if (controller.signal.aborted || id !== requestRef.current) return;
-      adminSearchCache.set(key, response);
+      const permittedResults = response.results.filter((result) => allowedTypes.some((item) => item.value === result.type));
+      const scopedResponse = { ...response, results: permittedResults };
+      adminSearchCache.set(key, scopedResponse);
       setResults((old) =>
         append
-          ? dedupeAdminResults([...old, ...response.results])
-          : response.results,
+          ? dedupeAdminResults([...old, ...permittedResults])
+          : permittedResults,
       );
       setPagination(response.pagination);
       setActive(-1);
@@ -160,10 +192,10 @@ const AdminGlobalSearch = () => {
       controllerRef.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [normalized, type, open, user?._id, user?.role]);
+  }, [normalized, type, open, user?._id, user?.role, activeProfile?.id, accessKey]);
   useEffect(() => () => controllerRef.current?.abort(), []);
 
-  if (user?.role !== "admin") return null;
+  if (user?.role !== "admin" || !allowedTypes.length || !activeProfile?.id) return null;
   const close = () => {
     restoringFocusRef.current = true;
     setOpen(false);
@@ -281,7 +313,7 @@ const AdminGlobalSearch = () => {
                 }
                 className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white p-2 text-sm"
               >
-                {ADMIN_SEARCH_TYPES.map((item) => (
+                {allowedTypes.map((item) => (
                   <option key={item.value || "all"} value={item.value}>
                     {item.label}
                   </option>

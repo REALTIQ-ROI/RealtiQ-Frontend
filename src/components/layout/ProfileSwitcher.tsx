@@ -31,8 +31,9 @@ const ProfileSwitcher = ({ allowCreate = true }: ProfileSwitcherProps) => {
   const [createdProfileId, setCreatedProfileId] = useState<string | null>(null);
   const operationKeyRef = useRef('');
   const operationPayloadRef = useRef('');
+  if (user?.role === 'admin') return null;
   if (!activeProfile) return null;
-  const canCreateProfile = allowCreate && user !== null && user.role !== 'admin' && activeProfile.kind !== 'staff';
+  const canCreateProfile = allowCreate && user !== null && activeProfile.kind !== 'staff';
 
   const selectCreatedProfile = async (profileId: string) => {
     setSwitching(true);

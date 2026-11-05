@@ -30,6 +30,14 @@ const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
     return <Navigate to="/dashboard" replace />;
   }
 
+  // Admin role alone does not grant access to end-user workspaces. Admin Console
+  // pages have explicit capability gates; only the role router and explicitly
+  // capability-gated analytics entry may remain in the generic route group.
+  if (!allowedRoles && user?.role === 'admin' && location.pathname !== '/dashboard' &&
+    location.pathname !== '/analytics/property-market' && location.pathname !== '/analytics/property-market/access') {
+    return <Navigate to="/dashboard/admin" replace />;
+  }
+
   return <Outlet />;
 };
 

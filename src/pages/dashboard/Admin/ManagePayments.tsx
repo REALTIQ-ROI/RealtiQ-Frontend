@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
@@ -36,10 +38,12 @@ const statusBadge = (status: ApiPayment['status']) => {
 };
 
 const ManagePayments = () => {
+  const { adminAccess } = useAuth();
+  const canReadFinance = hasAdminCapability(adminAccess, 'finance.read');
+  const canManageFinance = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'finance.manage'));
   const navigate = useNavigate();
   const { data, loading, error, execute } = useAsync(() => paymentService.getPayments(), true);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
-  const [verifying, setVerifying] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const exportStepUp = useBoundStepUp<Blob>();
   const cancelStepUp = useBoundStepUp<Awaited<ReturnType<typeof paymentService.cancelPayment>>>();
@@ -51,39 +55,8 @@ const ManagePayments = () => {
   const pendingCount = payments.filter((p) => p.status === 'pending').length;
   const canceledCount = payments.filter((p) => p.status === 'canceled').length;
 
-  const handleVerify = async (payment: ApiPayment) => {
-    const confirmed = await Swal.fire({
-      title: 'Verify Payment?',
-      text: 'This will check payment status with Paystack',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Verify',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#000000',
-      cancelButtonColor: '#6b7280',
-      reverseButtons: true,
-    });
-    if (!confirmed.isConfirmed) return;
-
-    setVerifying(payment._id);
-    try {
-      const result = await paymentService.verifyPayment(payment.reference);
-      if (result.verified) {
-        toast.success('Payment verified successfully');
-        void execute();
-      } else {
-        toast.info('The provider has not confirmed this payment yet. No success or failure is assumed.');
-        void execute();
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Unable to verify payment');
-    } finally {
-      setVerifying(null);
-    }
-  };
-
   const beginExport = async () => {
-    if (exporting || exportStepUp.busy || exportStepUp.challenge) return;
+    if (!canReadFinance || exporting || exportStepUp.busy || exportStepUp.challenge) return;
     const body = { limit: 2000 };
     await exportStepUp.begin({
       method: 'POST', path: '/api/payments/export.csv', body,
@@ -111,7 +84,7 @@ const ManagePayments = () => {
   };
 
   const beginCancelPayment = async (payment: ApiPayment) => {
-    if (payment.status !== 'pending' || cancelling || cancelStepUp.busy || cancelStepUp.challenge) return;
+    if (!canManageFinance || payment.status !== 'pending' || cancelling || cancelStepUp.busy || cancelStepUp.challenge) return;
     const review = await Swal.fire({
       title: 'Cancel pending payment?',
       text: 'This action requires Finance authorization and a fresh authenticator check. Cancellation does not issue a refund.',
@@ -156,7 +129,7 @@ const ManagePayments = () => {
                 Comprehensive overview of platform liquidity and individual asset performance.
               </p>
               <p className="mt-3 text-sm text-secondary">Payment cancellation requires the current Finance staff profile and a bound authenticator challenge. It cancels only a pending attempt and does not issue a refund.</p>
-              <button type="button" className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-50" disabled={exporting || exportStepUp.busy || Boolean(exportStepUp.challenge)} onClick={() => void beginExport()}>{exporting || exportStepUp.busy ? 'Preparing protected export…' : 'Export payments CSV'}</button>
+              {canReadFinance ? <button type="button" className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-50" disabled={exporting || exportStepUp.busy || Boolean(exportStepUp.challenge)} onClick={() => void beginExport()}>{exporting || exportStepUp.busy ? 'Preparing protected export…' : 'Export payments CSV'}</button> : null}
               {exportStepUp.error && !exportStepUp.challenge ? <p role="alert" className="mt-2 text-sm text-error">{exportStepUp.error}</p> : null}
             </div>
             <div className="lg:col-span-5">
@@ -230,9 +203,7 @@ const ManagePayments = () => {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((payment) => {
-                    const isBusy = verifying === payment._id;
-                    return (
+                  filtered.map((payment) => (
                       <tr key={payment._id} className="hover:bg-surface-container-lowest transition-colors group">
                         <td className="px-6 py-5">
                           <span className="text-xs font-mono text-slate-500">{payment.reference}</span>
@@ -274,41 +245,27 @@ const ManagePayments = () => {
                                 >
                                   Details
                                 </button>
-                                <button
-                                  disabled={isBusy}
-                                  onClick={() => void handleVerify(payment)}
-                                  aria-busy={verifying === payment._id || undefined}
-                                  className="inline-flex items-center gap-1 whitespace-nowrap px-3 py-1.5 text-xs font-bold bg-primary text-on-primary rounded-lg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
-                                >
-                                  {verifying === payment._id ? (
-                                    <>
-                                      <span className="material-symbols-outlined animate-spin text-sm" aria-hidden="true">progress_activity</span>
-                                      Verifying...
-                                    </>
-                                  ) : 'Verify'}
-                                </button>
-                                {payment.status === 'pending' ? <button
-                                  disabled={Boolean(isBusy || cancelling || cancelStepUp.busy || cancelStepUp.challenge)}
+                                {payment.status === 'pending' && canManageFinance ? <button
+                                  disabled={Boolean(loading || cancelling || cancelStepUp.busy || cancelStepUp.challenge)}
                                   onClick={() => void beginCancelPayment(payment)}
                                   className="inline-flex items-center gap-1 whitespace-nowrap px-3 py-1.5 text-xs font-bold border border-rose-200 text-rose-700 rounded-lg hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 transition-all"
                                 >
                                   {cancelling === payment._id ? 'Awaiting authorization…' : 'Cancel payment'}
                                 </button> : null}
                                 <button
-                                  disabled={isBusy}
+                                  disabled={loading}
                                   onClick={() => void execute()}
                                   className="p-1.5 text-secondary hover:text-primary hover:bg-surface-container rounded-lg transition-all disabled:opacity-50"
                                   title="Refresh"
                                 >
-                                  <span className={`material-symbols-outlined text-sm ${isBusy ? 'animate-spin' : ''}`}>refresh</span>
+                                  <span className={`material-symbols-outlined text-sm ${loading ? 'animate-spin' : ''}`}>refresh</span>
                                 </button>
                               </>
                             )}
                           </div>
                         </td>
                       </tr>
-                    );
-                  })
+                  ))
                 )}
               </tbody>
             </table>

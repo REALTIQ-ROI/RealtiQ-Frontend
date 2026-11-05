@@ -5,6 +5,8 @@ import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
+import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import { inquiryService } from '../../../services/inquiryService';
 import { resolveInquiryProperty } from '../../../types';
 
@@ -18,6 +20,8 @@ const formatDate = (date: string) =>
   });
 
 const AdminInquiryDetails = () => {
+  const { adminAccess } = useAuth();
+  const canManageSupport = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'support.manage'));
   const { id } = useParams();
   const { data: inquiry, loading, error, execute } = useAsync(
     () => (id ? inquiryService.getInquiryById(id) : Promise.reject(new Error('Missing inquiry id'))),
@@ -26,7 +30,7 @@ const AdminInquiryDetails = () => {
   const property = inquiry ? resolveInquiryProperty(inquiry.property) : null;
 
   const toggleStatus = async () => {
-    if (!inquiry) return;
+    if (!inquiry || !canManageSupport) return;
     try {
       await inquiryService.updateInquiryStatus(inquiry._id, inquiry.status === 'open' ? 'closed' : 'open');
       toast.success(inquiry.status === 'open' ? 'Inquiry closed.' : 'Inquiry reopened.');
@@ -88,11 +92,11 @@ const AdminInquiryDetails = () => {
               <p className="text-on-surface-variant leading-relaxed whitespace-pre-wrap">{inquiry.message}</p>
             </div>
 
-            <div className="flex justify-end">
+            {canManageSupport ? <div className="flex justify-end">
               <Button onClick={() => void toggleStatus()}>
                 {inquiry.status === 'open' ? 'Mark Closed' : 'Reopen Inquiry'}
               </Button>
-            </div>
+            </div> : <p className="text-right text-sm text-secondary">Your current staff assignment can view this inquiry but cannot change its status.</p>}
           </section>
         )}
       </div>

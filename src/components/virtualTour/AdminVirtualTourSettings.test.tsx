@@ -17,6 +17,10 @@ vi.mock('../../hooks/useBoundStepUp', () => ({ useBoundStepUp: () => ({
 }) }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ adminAccess: {
+  capabilities: ['virtual_tours.manage'],
+  readOnly: false,
+} }) }));
 vi.mock('../../services/virtualTourService', () => ({ virtualTourService: {
   getVirtualTourProviders: vi.fn(),
   updateAdminVirtualTourSettings: vi.fn(),

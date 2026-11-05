@@ -22,6 +22,7 @@ import MediaPreview from '../../../components/property/MediaPreview';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../../lib/axios';
 import { useAsync } from '../../../hooks/useAsync';
@@ -114,7 +115,8 @@ const EscrowDetails = () => {
   const id = ['undefined', 'null', ':id'].includes(normalizedRouteId.toLowerCase())
     ? ''
     : normalizedRouteId;
-  const { user, activeProfile } = useAuth();
+  const { user, activeProfile, adminAccess } = useAuth();
+  const canAdminManageFinance = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'finance.manage'));
   const {
     data: escrow,
     loading,
@@ -295,6 +297,10 @@ const EscrowDetails = () => {
 
   const action = async (type: Action) => {
     if (!displayedEscrow) return;
+    if (user?.role === 'admin' && !canAdminManageFinance) {
+      toast.error('The current staff access does not include escrow financial operations.');
+      return;
+    }
     const settings: readonly [string, boolean, string] =
       type === 'cancel'
           ? ['Cancel this escrow?', true, 'Cancel escrow']
@@ -321,6 +327,10 @@ const EscrowDetails = () => {
 
   const satisfy = async (ruleId: string) => {
     if (!displayedEscrow) return;
+    if (user?.role === 'admin' && !canAdminManageFinance) {
+      toast.error('The current staff access does not include escrow financial operations.');
+      return;
+    }
     const result = await notePrompt(
       'Mark milestone as satisfied?',
       false,
@@ -443,9 +453,12 @@ const EscrowDetails = () => {
 
   const refundEscrow = refundStatuses.includes(displayedEscrow.status);
   const availableActions = escrowActions(user?.role ?? 'buyer', displayedEscrow);
-  const actions = hasMalformedRules
-    ? { ...availableActions, requestRelease: false, approveRelease: false }
+  const capabilityActions = user?.role === 'admin' && !canAdminManageFinance
+    ? { ...availableActions, requestRelease: false, approveRelease: false, cancel: false }
     : availableActions;
+  const actions = hasMalformedRules
+    ? { ...capabilityActions, requestRelease: false, approveRelease: false }
+    : capabilityActions;
   const soldCancellation =
     displayedEscrow.status === 'cancelled' &&
     (displayedEscrow.logs ?? []).some((log) =>
@@ -623,7 +636,7 @@ const EscrowDetails = () => {
                   className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800"
                 >
                   Refund processing was unsuccessful.{' '}
-                  {user?.role === 'admin' &&
+                  {canAdminManageFinance && user?.role === 'admin' &&
                   displayedEscrow.refundFailureReason
                     ? displayedEscrow.refundFailureReason
                     : 'An administrator will review and retry it.'}
@@ -725,7 +738,8 @@ const EscrowDetails = () => {
                       : null;
                   const canCurrentUserSatisfy = Boolean(
                     user &&
-                    canSatisfyRule(user.role, displayedEscrow, rule),
+                    canSatisfyRule(user.role, displayedEscrow, rule) &&
+                    (user.role !== 'admin' || canAdminManageFinance),
                   );
                   return (
                     <article
@@ -785,11 +799,11 @@ const EscrowDetails = () => {
             </section>
           )}
 
-          {refundEscrow && user && ['buyer', 'admin'].includes(user.role) ? (
+          {refundEscrow && user && (user.role === 'buyer' || (user.role === 'admin' && canAdminManageFinance)) ? (
             <RefundChat escrow={displayedEscrow} onChanged={execute} />
           ) : null}
           <BuyerRefundAccountForm escrow={displayedEscrow} onChanged={execute} />
-          {user?.role === 'admin' && refundEscrow ? (
+          {user?.role === 'admin' && canAdminManageFinance && refundEscrow ? (
             <RefundAdminPanel escrow={displayedEscrow} onChanged={execute} />
           ) : null}
 
@@ -873,7 +887,7 @@ const EscrowDetails = () => {
             ) : null}
             {refundEscrow &&
             user &&
-            ['buyer', 'admin'].includes(user.role) ? (
+            (user.role === 'buyer' || (user.role === 'admin' && canAdminManageFinance)) ? (
               <a
                 href="#refund-chat"
                 className="block rounded-lg bg-primary px-4 py-3 text-center font-bold text-on-primary"

@@ -5,8 +5,10 @@ import AdminLayout from '../../../components/layout/AdminLayout';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
+import { useAuth } from '../../../contexts/AuthContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import { projectService } from '../../../services/projectService';
 import type { ProjectDetail, ProjectStatus } from '../../../types';
 import { formatPriceRange, labelize } from '../../../utils/projectFormatters';
@@ -15,6 +17,9 @@ const statuses: ProjectStatus[] = ['draft', 'upcoming', 'ongoing', 'completed', 
 type ProjectModerationBody = { status: ProjectStatus } | { featured: boolean };
 
 const AdminProjects = () => {
+  const { adminAccess } = useAuth();
+  const canManageProjects = hasAdminCapability(adminAccess, 'projects.manage');
+  const canManageMarketing = hasAdminCapability(adminAccess, 'marketing.manage');
   const [status, setStatus] = useState('');
   const currentStatus = useRef(status);
   currentStatus.current = status;
@@ -56,6 +61,7 @@ const AdminProjects = () => {
   };
 
   const beginModerationChange = async (projectId: string, body: ProjectModerationBody) => {
+    if ('status' in body ? !canManageProjects : !canManageMarketing) return;
     setMutationError(null);
     const isStatusChange = 'status' in body;
     const path = isStatusChange
@@ -127,7 +133,7 @@ const AdminProjects = () => {
                         <Link to={`/dashboard/admin/projects/${project._id}`} className="rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold text-primary">
                           View
                         </Link>
-                        <select
+                        {canManageProjects ? <select
                           value={project.status}
                           disabled={stepUp.busy || Boolean(stepUp.challenge)}
                           aria-label={`Set status for ${project.name}`}
@@ -135,15 +141,15 @@ const AdminProjects = () => {
                           className="rounded-lg bg-surface-container-low px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {statuses.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
-                        </select>
-                        <button
+                        </select> : null}
+                        {canManageMarketing ? <button
                           type="button"
                           disabled
                           title="Publication is available in the authorized owner project controls."
                           className="inline-flex items-center gap-1 rounded-lg bg-surface-container-low px-3 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           Owner publication controls
-                        </button>
+                        </button> : null}
                         <button
                           type="button"
                           disabled={stepUp.busy || Boolean(stepUp.challenge)}
