@@ -228,6 +228,7 @@ const AppRoutes = () => {
         <Route path="/properties/:propertyId/roi" element={<PropertyROICalculatorPage />} />
 
         <Route element={<ProtectedRoute />}>
+          <Route path="/dashboard/verification" element={<LandlordVerification />} />
           <Route path='/messages' element={<Messages />} />
           <Route path='/messages/:conversationId' element={<Messages />} />
           <Route path='/dashboard/personalisation' element={<Personalisation />} />

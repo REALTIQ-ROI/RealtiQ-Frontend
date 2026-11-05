@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const links = [
-  ['/proxy/tasks', 'Tasks'], ['/proxy-inspector/onboarding', 'Verification'],
+  ['/proxy/tasks', 'Tasks'], ['/proxy-inspector/onboarding', 'Agent setup'], ['/dashboard/verification', 'Profile KYC'],
   ['/proxy-inspector/payout-account', 'Payout account'], ['/account/security', 'Account security'], ['/proxy-inspectors', 'Public directory'],
 ] as const;
 const ProxyInspectorLayout = ({ children, title }: { children: ReactNode; title: string }) => {

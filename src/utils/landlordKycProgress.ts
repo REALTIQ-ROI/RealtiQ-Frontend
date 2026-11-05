@@ -23,6 +23,7 @@ interface LandlordKycProgressInput {
   cases: readonly Pick<VerificationCase, 'id' | 'state' | 'submittedAt'>[];
   availableEvidenceCount: number;
   hasOnboardingDraft: boolean;
+  intakeMissingCount?: number;
 }
 
 const submittedCaseStates = new Set(['submitted', 'under_review', 'approved', 'rejected', 'withdrawn', 'superseded', 'expired']);
@@ -40,12 +41,13 @@ export const buildLandlordKycProgress = ({
   cases,
   availableEvidenceCount,
   hasOnboardingDraft,
+  intakeMissingCount = 0,
 }: LandlordKycProgressInput): LandlordKycProgress => {
   const latestCase = latestSubmittedCase(cases);
   const caseState = latestCase?.state?.toLowerCase() ?? '';
   const approved = verificationStatus?.toLowerCase() === 'approved' || caseState === 'approved';
   const caseSubmitted = Boolean(latestCase && submittedCaseStates.has(caseState));
-  const profileStepComplete = hasOnboardingDraft || caseSubmitted || approved;
+  const profileStepComplete = (hasOnboardingDraft && intakeMissingCount === 0) || caseSubmitted || approved;
   const evidenceStepComplete = caseSubmitted || approved || (profileStepComplete && availableEvidenceCount > 0);
   const submissionStepComplete = caseSubmitted || approved;
 
@@ -56,8 +58,10 @@ export const buildLandlordKycProgress = ({
       state: profileStepComplete ? 'complete' : 'current',
       detail: caseSubmitted
         ? 'The server accepted the profile draft for KYC review.'
-        : hasOnboardingDraft
-          ? 'The current profile setup draft is loaded. The server checks required details when you submit the case.'
+        : hasOnboardingDraft && intakeMissingCount === 0
+          ? 'The required profile details returned by the server are complete.'
+          : hasOnboardingDraft
+            ? `Complete the ${intakeMissingCount} required profile detail${intakeMissingCount === 1 ? '' : 's'} before adding evidence.`
           : 'Load and review the current profile setup draft before moving to evidence.',
     },
     {
@@ -126,6 +130,9 @@ export const buildLandlordKycProgress = ({
   } else if (!hasOnboardingDraft) {
     summary = 'The onboarding draft is unavailable, so KYC readiness cannot be assessed yet.';
     nextAction = 'Refresh this page to reload the current profile draft before submitting KYC.';
+  } else if (intakeMissingCount > 0) {
+    summary = `The profile draft still has ${intakeMissingCount} required detail${intakeMissingCount === 1 ? '' : 's'} to complete.`;
+    nextAction = 'Complete and save the required profile details before moving to evidence.';
   } else {
     summary = availableEvidenceCount > 0
       ? `KYC has not been submitted. Profile review is complete and ${availableEvidenceCount} available evidence file${availableEvidenceCount === 1 ? ' is' : 's are'} ready to review.`

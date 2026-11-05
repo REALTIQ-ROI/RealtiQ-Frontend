@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
+import AdminLayout from '../../../components/layout/AdminLayout';
+import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import LandlordKycProgressTracker from '../../../components/verification/LandlordKycProgressTracker';
 import AuthorizedFilePreview from '../../../components/verification/AuthorizedFilePreview';
@@ -10,6 +12,7 @@ import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ApiRequestError, type ApiFieldError } from '../../../lib/axios';
+import { hasAdminCapability } from '../../../services/adminAccessService';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import type { BoundStepUpChallenge } from '../../../hooks/useBoundStepUp';
 import { stepUpService } from '../../../services/stepUpService';
@@ -19,6 +22,7 @@ import { buildBoundEvidenceFormData, buildEvidenceStepUpBody, isProfileEvidenceA
 import { buildLandlordKycProgress } from '../../../utils/landlordKycProgress';
 import { declaredVerificationPersonPaths, validateVerificationPersonRoutes } from '../../../utils/verificationCaseSubmission';
 import { onboardingDraftFieldDisplayValue, onboardingDraftFields, updateOnboardingDraftField } from '../../../utils/onboardingDraftFields';
+import { isStaffKycProfile, isSupportedApplicantKycProfile } from '../../../utils/supportedKycProfile';
 
 const formatStatus = (value?: string) => value ? value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Not submitted';
 const formatDate = (date?: string | null) => date ? new Date(date).toLocaleString('en-NG') : 'Not recorded';
@@ -49,9 +53,10 @@ const readErrorMessage = (raw: unknown, section: string) => {
   }
   return raw instanceof Error ? raw.message : `Unable to load ${section.toLowerCase()}.`;
 };
+const isContactVerificationRequired = (code?: string) => code === 'AUTH_CONTACT_VERIFICATION_REQUIRED';
 
 const LandlordVerification = () => {
-  const { activeProfile, token } = useAuth();
+  const { activeProfile, adminAccess, token, user } = useAuth();
   const [profile, setProfile] = useState<AccountProfileSummary | null>(null);
   const [onboardingDraft, setOnboardingDraft] = useState<ProfileOnboardingDraft | null>(null);
   const [draftValuesText, setDraftValuesText] = useState('');
@@ -87,25 +92,112 @@ const LandlordVerification = () => {
   const [identityCountry, setIdentityCountry] = useState('');
   const [identityEvidence, setIdentityEvidence] = useState<Record<string, string>>({});
   const [caseSubmissionError, setCaseSubmissionError] = useState<string | null>(null);
+  const [contactVerificationRequired, setContactVerificationRequired] = useState(false);
   const caseOperationKeyRef = useRef<{ signature: string; key: string } | null>(null);
   const [pendingUpload, setPendingUpload] = useState<{ challenge: BoundStepUpChallenge; file: File; metadata: BoundEvidenceMetadata; digest: string; profileId: string; token: string } | null>(null);
   const [pendingEvidenceAction, setPendingEvidenceAction] = useState<{ id: string; action: 'retry' | 'delete' } | null>(null);
   const operationKeyRef = useRef<{ signature: string; key: string } | null>(null);
   const withdrawStepUp = useBoundStepUp<VerificationCase>();
+  const cancelWithdrawStepUp = withdrawStepUp.cancel;
   const createCaseStepUp = useBoundStepUp<VerificationCase>();
   const cancelCreateCaseStepUp = createCaseStepUp.cancel;
   const saveDraftStepUp = useBoundStepUp<ProfileOnboardingDraft>();
   const cancelSaveDraftStepUp = saveDraftStepUp.cancel;
   const evidenceStepUp = useBoundStepUp<ProfileEvidence>();
+  const cancelEvidenceStepUp = evidenceStepUp.cancel;
   const profileId = activeProfile?.id;
-  const previousProfileId = useRef(profileId);
+  const profileScope = `${profileId ?? ''}:${token ?? ''}`;
+  const previousProfileScope = useRef(profileScope);
   const currentProfileIdRef = useRef(profileId);
+  const currentProfileScopeRef = useRef(profileScope);
+  const activeProfileRef = useRef(activeProfile);
   const loadRequestRef = useRef(0);
   const sectionRequestRef = useRef<VerificationSectionState<number>>({ draft: 0, evidence: 0, cases: 0, contract: 0 });
   currentProfileIdRef.current = profileId;
+  currentProfileScopeRef.current = profileScope;
+  activeProfileRef.current = activeProfile;
+
+  const clearSensitiveKycState = useCallback((message?: string) => {
+    loadRequestRef.current += 1;
+    sectionRequestRef.current = {
+      draft: sectionRequestRef.current.draft + 1,
+      evidence: sectionRequestRef.current.evidence + 1,
+      cases: sectionRequestRef.current.cases + 1,
+      contract: sectionRequestRef.current.contract + 1,
+    };
+    setFilePreview((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
+    setProfile(null);
+    setOnboardingDraft(null);
+    setDraftValuesText('');
+    setDraftSavePending(false);
+    setDraftSaveError(null);
+    setDraftSaveFieldErrors([]);
+    setDraftConflict(null);
+    setDraftConflictReviewed(false);
+    setLoadedProfileId(null);
+    setContract(null);
+    setEvidence([]);
+    setEvidenceCursor(null);
+    setCases([]);
+    setCaseCursor(null);
+    setSelectedEvidence(null);
+    setSelectedCase(null);
+    setHistory(null);
+    setPendingUpload(null);
+    setPendingEvidenceAction(null);
+    setUploadFile(null);
+    setUploadPurpose('');
+    setUploadSubject('');
+    setUploadDocumentKind('');
+    setUploadPreviousEvidenceId('');
+    setUploadError(null);
+    setUploadBusy(false);
+    setBusy(false);
+    setLoading(false);
+    setSectionLoading({ draft: false, evidence: false, cases: false, contract: false });
+    setSectionErrors({ draft: null, evidence: null, cases: null, contract: null });
+    setCaseSubmissionError(null);
+    setPersonRoutes({});
+    setIdentityRoute('');
+    setIdentityCountry('');
+    setIdentityEvidence({});
+    setContactVerificationRequired(false);
+    operationKeyRef.current = null;
+    caseOperationKeyRef.current = null;
+    cancelWithdrawStepUp();
+    cancelCreateCaseStepUp();
+    cancelSaveDraftStepUp();
+    cancelEvidenceStepUp();
+    if (message) setError(message);
+  }, [cancelCreateCaseStepUp, cancelEvidenceStepUp, cancelSaveDraftStepUp, cancelWithdrawStepUp]);
+
+  const handleKycAuthorizationError = useCallback((raw: unknown, section: VerificationSection, label?: string) => {
+    if (raw instanceof ApiRequestError && (raw.status === 401 || raw.status === 403)) {
+      clearSensitiveKycState(`${raw.message} Verification information was cleared. Confirm the selected profile and access, then refresh.`);
+      return true;
+    }
+    const sectionLabel = label ?? ({ draft: 'Profile setup draft', evidence: 'Private evidence', cases: 'Verification cases', contract: 'Evidence requirements' }[section]);
+    setSectionErrors((current) => ({ ...current, [section]: readErrorMessage(raw, sectionLabel) }));
+    return false;
+  }, [clearSensitiveKycState]);
+
+  const handleKycMutationGate = useCallback((code?: string) => {
+    if (isContactVerificationRequired(code)) {
+      setContactVerificationRequired(true);
+      return false;
+    }
+    if (['AUTH_REQUIRED', 'AUTH_SESSION_REVOKED', 'AUTH_PROFILE_FORBIDDEN', 'PERMISSION_REQUIRED', 'PERMISSION_PROFILE_REQUIRED', 'PERMISSION_PROFILE_FORBIDDEN'].includes(code ?? '')) {
+      clearSensitiveKycState('Your session or selected-profile access is no longer valid. Verification information was cleared; sign in again or select an authorized profile.');
+      return true;
+    }
+    return false;
+  }, [clearSensitiveKycState]);
 
   useEffect(() => {
-    if (previousProfileId.current !== profileId) {
+    if (previousProfileScope.current !== profileScope) {
       loadRequestRef.current += 1;
       sectionRequestRef.current = {
         draft: sectionRequestRef.current.draft + 1,
@@ -133,7 +225,10 @@ const LandlordVerification = () => {
       setSelectedEvidence(null);
       setSelectedCase(null);
       setHistory(null);
-      setFilePreview(null);
+      setFilePreview((current) => {
+        if (current) URL.revokeObjectURL(current.url);
+        return null;
+      });
       setBusy(false);
       setLoading(false);
       setUploadPreviousEvidenceId('');
@@ -141,6 +236,11 @@ const LandlordVerification = () => {
       setSectionLoading({ draft: false, evidence: false, cases: false, contract: false });
       setSectionErrors({ draft: null, evidence: null, cases: null, contract: null });
       setCaseSubmissionError(null);
+      setContactVerificationRequired(false);
+      setUploadFile(null);
+      setUploadPurpose('');
+      setUploadSubject('');
+      setUploadDocumentKind('');
       setPersonRoutes({});
       setIdentityRoute('');
       setIdentityCountry('');
@@ -148,10 +248,12 @@ const LandlordVerification = () => {
       caseOperationKeyRef.current = null;
       cancelCreateCaseStepUp();
       cancelSaveDraftStepUp();
-      setUploadError('The active profile changed. Pending verification data and security challenges were cleared; the selected file remains available for a new challenge.');
-      previousProfileId.current = profileId;
+      cancelWithdrawStepUp();
+      cancelEvidenceStepUp();
+      setUploadError('The active profile or session changed. Verification data and security challenges were cleared. Select a file again for this profile.');
+      previousProfileScope.current = profileScope;
     }
-  }, [profileId, cancelCreateCaseStepUp, cancelSaveDraftStepUp]);
+  }, [profileScope, profileId, cancelCreateCaseStepUp, cancelEvidenceStepUp, cancelSaveDraftStepUp, cancelWithdrawStepUp]);
 
   useEffect(() => {
     if (!contract) return;
@@ -162,15 +264,51 @@ const LandlordVerification = () => {
   const load = useCallback(async () => {
     const requestId = ++loadRequestRef.current;
     const requestedProfileId = profileId;
+    const requestedProfileScope = profileScope;
+    const requestedProfile = activeProfileRef.current;
     if (!requestedProfileId) {
-      setProfile(null); setLoadedProfileId(null); setContract(null); setEvidence([]); setCases([]); setLoading(false);
+      clearSensitiveKycState();
       setSectionLoading({ draft: false, evidence: false, cases: false, contract: false });
       setSectionErrors({ draft: null, evidence: null, cases: null, contract: null });
       setError('Select an authorized profile to view verification.');
       return;
     }
 
-    const isCurrentRequest = () => requestId === loadRequestRef.current && currentProfileIdRef.current === requestedProfileId;
+    if (requestedProfile && !isSupportedApplicantKycProfile(requestedProfile.kind, requestedProfile.structure)) {
+      cancelCreateCaseStepUp();
+      cancelSaveDraftStepUp();
+      cancelWithdrawStepUp();
+      cancelEvidenceStepUp();
+      operationKeyRef.current = null;
+      caseOperationKeyRef.current = null;
+      setProfile(requestedProfile);
+      setOnboardingDraft(null);
+      setDraftValuesText('');
+      setContract(null);
+      setEvidence([]);
+      setEvidenceCursor(null);
+      setCases([]);
+      setCaseCursor(null);
+      setSelectedEvidence(null);
+      setSelectedCase(null);
+      setHistory(null);
+      setPendingUpload(null);
+      setPendingEvidenceAction(null);
+      setUploadFile(null);
+      setContactVerificationRequired(false);
+      setFilePreview((current) => {
+        if (current) URL.revokeObjectURL(current.url);
+        return null;
+      });
+      setLoadedProfileId(requestedProfileId);
+      setLoading(false);
+      setError(null);
+      setSectionLoading({ draft: false, evidence: false, cases: false, contract: false });
+      setSectionErrors({ draft: null, evidence: null, cases: null, contract: null });
+      return;
+    }
+
+    const isCurrentRequest = () => requestId === loadRequestRef.current && currentProfileIdRef.current === requestedProfileId && currentProfileScopeRef.current === requestedProfileScope;
     const sectionGenerations = { ...sectionRequestRef.current };
     const isSectionRequestCurrent = (section: VerificationSection) => isCurrentRequest() && sectionRequestRef.current[section] === sectionGenerations[section];
     const markSectionLoading = (section: VerificationSection, value: boolean) => {
@@ -194,11 +332,17 @@ const LandlordVerification = () => {
           setError('The active profile changed while verification data was loading. Refresh this page.');
           return;
         }
+        if (requestedProfile && (current.profile.kind !== requestedProfile.kind || current.profile.structure !== requestedProfile.structure)) {
+          clearSensitiveKycState('The server profile type does not match the selected profile. Verification data was cleared; refresh your profile list before continuing.');
+          return;
+        }
         setProfile(current.profile);
         setLoadedProfileId(requestedProfileId);
       })
       .catch((raw: unknown) => {
-        if (isCurrentRequest()) setError(readErrorMessage(raw, 'Profile details'));
+        if (!isCurrentRequest()) return;
+        if (raw instanceof ApiRequestError && (raw.status === 401 || raw.status === 403)) clearSensitiveKycState(`${raw.message} Verification information was cleared. Confirm the selected profile and access, then refresh.`);
+        else setError(readErrorMessage(raw, 'Profile details'));
       })
       .finally(() => {
         if (isCurrentRequest()) setLoading(false);
@@ -211,6 +355,10 @@ const LandlordVerification = () => {
           setSectionError('draft', 'The onboarding draft belongs to a different profile. Select the correct profile and refresh.');
           return;
         }
+        if (requestedProfile && (draft.kind !== requestedProfile.kind || draft.structure !== requestedProfile.structure)) {
+          setSectionError('draft', 'The onboarding draft type does not match the selected profile. Refresh before editing or submitting.');
+          return;
+        }
         setOnboardingDraft(draft);
         setDraftValuesText(serializeDraftValues(draft.values));
         setDraftConflict(null);
@@ -220,7 +368,9 @@ const LandlordVerification = () => {
         setLoadedProfileId(requestedProfileId);
         setSectionError('draft', null);
       })
-      .catch((raw: unknown) => setSectionError('draft', readErrorMessage(raw, 'Profile setup draft')))
+      .catch((raw: unknown) => {
+        if (isCurrentRequest()) handleKycAuthorizationError(raw, 'draft');
+      })
       .finally(() => markSectionLoading('draft', false));
 
     const evidenceRequest = verificationCaseService.listEvidence({ limit: 25 })
@@ -231,7 +381,9 @@ const LandlordVerification = () => {
         setLoadedProfileId(requestedProfileId);
         setSectionError('evidence', null);
       })
-      .catch((raw: unknown) => setSectionError('evidence', readErrorMessage(raw, 'Private evidence')))
+      .catch((raw: unknown) => {
+        if (isCurrentRequest()) handleKycAuthorizationError(raw, 'evidence');
+      })
       .finally(() => markSectionLoading('evidence', false));
 
     const casesRequest = verificationCaseService.listHolderCases({ limit: 25 })
@@ -242,7 +394,9 @@ const LandlordVerification = () => {
         setLoadedProfileId(requestedProfileId);
         setSectionError('cases', null);
       })
-      .catch((raw: unknown) => setSectionError('cases', readErrorMessage(raw, 'Verification cases')))
+      .catch((raw: unknown) => {
+        if (isCurrentRequest()) handleKycAuthorizationError(raw, 'cases');
+      })
       .finally(() => markSectionLoading('cases', false));
 
     const contractRequest = verificationCaseService.getEvidenceContract()
@@ -252,11 +406,13 @@ const LandlordVerification = () => {
         setLoadedProfileId(requestedProfileId);
         setSectionError('contract', null);
       })
-      .catch((raw: unknown) => setSectionError('contract', readErrorMessage(raw, 'Evidence requirements')))
+      .catch((raw: unknown) => {
+        if (isCurrentRequest()) handleKycAuthorizationError(raw, 'contract');
+      })
       .finally(() => markSectionLoading('contract', false));
 
     void Promise.allSettled([profileRequest, draftRequest, evidenceRequest, casesRequest, contractRequest]);
-  }, [profileId]);
+  }, [cancelCreateCaseStepUp, cancelEvidenceStepUp, cancelSaveDraftStepUp, cancelWithdrawStepUp, clearSensitiveKycState, handleKycAuthorizationError, profileId, profileScope]);
 
   const retrySection = useCallback(async (section: VerificationSection) => {
     const requestedProfileId = profileId;
@@ -292,11 +448,11 @@ const LandlordVerification = () => {
       }
       setLoadedProfileId(requestedProfileId);
     } catch (raw) {
-      if (isCurrentRequest()) setSectionErrors((current) => ({ ...current, [section]: readErrorMessage(raw, section === 'draft' ? 'Profile setup draft' : section === 'evidence' ? 'Private evidence' : section === 'cases' ? 'Verification cases' : 'Evidence requirements') }));
+      if (isCurrentRequest()) handleKycAuthorizationError(raw, section);
     } finally {
       if (isCurrentRequest()) setSectionLoading((current) => ({ ...current, [section]: false }));
     }
-  }, [profileId]);
+  }, [handleKycAuthorizationError, profileId]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => () => { if (filePreview) URL.revokeObjectURL(filePreview.url); }, [filePreview]);
@@ -307,6 +463,7 @@ const LandlordVerification = () => {
     cases,
     availableEvidenceCount,
     hasOnboardingDraft: Boolean(onboardingDraft),
+    intakeMissingCount: draftMissingFields(onboardingDraft?.readiness).length,
   }), [availableEvidenceCount, cases, onboardingDraft, profile?.verification?.status]);
   const profileDataCurrent = Boolean(profileId && loadedProfileId === profileId);
   const pendingEvidenceIds = useMemo(() => evidence.filter((item) => isProfileEvidenceProcessing(item.state)).map((item) => item.id).join(','), [evidence]);
@@ -340,7 +497,7 @@ const LandlordVerification = () => {
     setBusy(true);
     setSectionErrors((current) => ({ ...current, evidence: null }));
     try { const page = await verificationCaseService.listEvidence({ limit: 25, before: evidenceCursor }); if (currentProfileIdRef.current !== requestedProfileId) return; setEvidence((current) => [...current, ...page.evidence]); setEvidenceCursor(page.nextCursor); }
-    catch (raw) { if (currentProfileIdRef.current === requestedProfileId) setSectionErrors((current) => ({ ...current, evidence: readErrorMessage(raw, 'More private evidence') })); }
+    catch (raw) { if (currentProfileIdRef.current === requestedProfileId) handleKycAuthorizationError(raw, 'evidence', 'More private evidence'); }
     finally { if (currentProfileIdRef.current === requestedProfileId) setBusy(false); }
   };
 
@@ -350,7 +507,7 @@ const LandlordVerification = () => {
     setBusy(true);
     setSectionErrors((current) => ({ ...current, cases: null }));
     try { const page = await verificationCaseService.listHolderCases({ limit: 25, before: caseCursor }); if (currentProfileIdRef.current !== requestedProfileId) return; setCases((current) => [...current, ...page.cases]); setCaseCursor(page.nextCursor); }
-    catch (raw) { if (currentProfileIdRef.current === requestedProfileId) setSectionErrors((current) => ({ ...current, cases: readErrorMessage(raw, 'More verification cases') })); }
+    catch (raw) { if (currentProfileIdRef.current === requestedProfileId) handleKycAuthorizationError(raw, 'cases', 'More verification cases'); }
     finally { if (currentProfileIdRef.current === requestedProfileId) setBusy(false); }
   };
 
@@ -365,7 +522,12 @@ const LandlordVerification = () => {
       const blob = await verificationCaseService.getEvidenceContent(item.id);
       if (currentProfileIdRef.current !== requestedProfileId) return;
       setFilePreview({ url: URL.createObjectURL(blob), mimeType: detail.mimeType, id: detail.id });
-    } catch (raw) { if (currentProfileIdRef.current === requestedProfileId) setError(readErrorMessage(raw, 'Private evidence file')); }
+    } catch (raw) {
+      if (currentProfileIdRef.current === requestedProfileId) {
+        if (raw instanceof ApiRequestError && (raw.status === 401 || raw.status === 403)) handleKycAuthorizationError(raw, 'evidence', 'Private evidence file');
+        else setError(readErrorMessage(raw, 'Private evidence file'));
+      }
+    }
     finally { if (currentProfileIdRef.current === requestedProfileId) setBusy(false); }
   };
 
@@ -380,7 +542,12 @@ const LandlordVerification = () => {
       if (currentProfileIdRef.current !== requestedProfileId) return;
       setSelectedCase(detail);
       setHistory(events);
-    } catch (raw) { if (currentProfileIdRef.current === requestedProfileId) setError(readErrorMessage(raw, 'Verification case details')); }
+    } catch (raw) {
+      if (currentProfileIdRef.current === requestedProfileId) {
+        if (raw instanceof ApiRequestError && (raw.status === 401 || raw.status === 403)) handleKycAuthorizationError(raw, 'cases', 'Verification case details');
+        else setError(readErrorMessage(raw, 'Verification case details'));
+      }
+    }
     finally { if (currentProfileIdRef.current === requestedProfileId) setBusy(false); }
   };
 
@@ -408,6 +575,7 @@ const LandlordVerification = () => {
     const action = pendingEvidenceAction?.action;
     const result = await evidenceStepUp.complete(code);
     if (!result.ok) {
+      if (handleKycMutationGate(result.code)) return false;
       if (!evidenceStepUp.challenge) {
         setPendingEvidenceAction(null);
         toast.error(result.error ?? 'The evidence operation could not be completed. Refresh the evidence list before trying again.');
@@ -439,6 +607,7 @@ const LandlordVerification = () => {
     const requestedProfileId = profileId;
     const result = await withdrawStepUp.complete(code);
     if (!result.ok) {
+      if (handleKycMutationGate(result.code)) return false;
       if (!withdrawStepUp.challenge) toast.error(result.error ?? 'The verification case could not be withdrawn. Refresh its status before trying again.');
       return false;
     }
@@ -506,6 +675,11 @@ const LandlordVerification = () => {
     } catch (raw) {
       if (currentProfileIdRef.current !== pending.profileId) return false;
       const codeValue = raw instanceof ApiRequestError ? raw.code : undefined;
+      if (handleKycMutationGate(codeValue)) return false;
+      if (raw instanceof ApiRequestError && (raw.status === 401 || raw.status === 403) && codeValue !== 'AUTH_CONTACT_VERIFICATION_REQUIRED') {
+        clearSensitiveKycState(`${raw.message} Verification information was cleared. Confirm the selected profile and access, then refresh.`);
+        return false;
+      }
       if (codeValue === 'AUTH_FACTOR_CODE_INVALID' || codeValue === 'AUTH_FACTOR_RATE_LIMITED') {
         setUploadError(raw instanceof Error ? raw.message : 'Authenticator verification was not accepted.');
       } else {
@@ -618,6 +792,7 @@ const LandlordVerification = () => {
     if (!requestedProfileId) return false;
     const result = await saveDraftStepUp.complete(code);
     if (!result.ok) {
+      if (handleKycMutationGate(result.code)) return false;
       setDraftSaveError(result.error ?? 'The draft could not be saved. Your edits are still here.');
       setDraftSaveFieldErrors(result.fieldErrors ?? []);
       if (stepUpCodeCanRetryWithSameChallenge(result.code)) return false;
@@ -721,6 +896,7 @@ const LandlordVerification = () => {
     }
     const result = await createCaseStepUp.complete(code);
     if (!result.ok) {
+      if (handleKycMutationGate(result.code)) return false;
       if (!stepUpCodeCanRetryWithSameChallenge(result.code)) {
         setCaseSubmissionError(result.error ?? 'The verification submission could not be confirmed. Review the latest case and draft status before retrying.');
         if (currentProfileIdRef.current === requestedProfileId) {
@@ -742,17 +918,49 @@ const LandlordVerification = () => {
     return true;
   };
 
-  return (
-    <LandlordPortalLayout active="verification" title="Profile Verification">
-      <main className="mx-auto max-w-6xl space-y-8 p-8 lg:p-12">
+  const selectedProfileKind = profile?.kind ?? activeProfile?.kind;
+  const selectedProfileStructure = profile?.structure ?? activeProfile?.structure;
+  const supportedApplicantProfile = Boolean(selectedProfileKind && selectedProfileStructure && isSupportedApplicantKycProfile(selectedProfileKind, selectedProfileStructure));
+  const isStaffProfile = isStaffKycProfile(selectedProfileKind ?? '');
+  const canOpenStaffReview = Boolean(
+    adminAccess?.profileId === profileId &&
+    hasAdminCapability(adminAccess, 'verification.read'),
+  );
+  const settingsPath = user?.role === 'landlord'
+    ? '/dashboard/landlord/settings'
+    : user?.role === 'proxy_inspector'
+      ? '/account/security'
+      : '/dashboard/buyer/profile-settings';
+
+  if (profileDataCurrent && profile && !supportedApplicantProfile) {
+    const unsupportedContent = <main className="mx-auto max-w-4xl space-y-6 p-6 sm:p-8 lg:p-12">
+      <header><p className="text-xs font-bold uppercase tracking-[0.2em] text-secondary">Profile compliance</p><h1 className="mt-2 text-3xl font-extrabold tracking-tight text-primary">KYC &amp; verification</h1></header>
+      <section className="rounded-2xl border border-outline-variant/10 bg-white p-6">
+        <p className="text-xs font-bold uppercase tracking-widest text-secondary">Selected profile</p>
+        <h2 className="mt-2 text-2xl font-extrabold">{profile.name}</h2>
+        <p className="mt-2 text-sm text-secondary">{formatStatus(profile.kind)} · {formatStatus(profile.structure)}</p>
+        {isStaffProfile ? <>
+          <p className="mt-5 text-sm">Staff profiles do not submit applicant KYC. Authorized reviewers use the Admin Console review queue.</p>
+          {canOpenStaffReview ? <Link className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary" to="/dashboard/admin/kyc">Open KYC review</Link> : <p role="status" className="mt-4 text-sm text-secondary">This staff profile has no current KYC review capability.</p>}
+        </> : <p role="status" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-950">An applicant KYC form is not available for this profile type. Use a profile type and structure supported by the verification service; no applicant data was requested or submitted.</p>}
+      </section>
+    </main>;
+    if (isStaffProfile && user?.role === 'admin') return <AdminLayout>{unsupportedContent}</AdminLayout>;
+    if (profile.kind === 'owner') return <LandlordPortalLayout active="verification" title="KYC & Verification">{unsupportedContent}</LandlordPortalLayout>;
+    return <BuyerPortalLayout pageTitle="KYC & Verification" pageSubtitle="KYC applies to the selected profile type." pageEyebrow={`${formatStatus(profile.kind)} · ${formatStatus(profile.structure)}`}>{unsupportedContent}</BuyerPortalLayout>;
+  }
+
+  const pageContent = (
+      <main className="mx-auto max-w-6xl space-y-8 p-6 sm:p-8 lg:p-12">
         <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-secondary">Profile compliance</p>
-            <h1 className="text-4xl font-extrabold tracking-tight text-primary">Verification</h1>
-            <p className="mt-2 max-w-2xl text-sm text-secondary">Evidence and case records are private to the current selected profile. Review status, history and authorized evidence from here.</p>
+            <h1 className="text-3xl font-extrabold tracking-tight text-primary sm:text-4xl">KYC &amp; verification</h1>
+            <p className="mt-2 max-w-2xl text-sm text-secondary">This flow applies to the selected {formatStatus(selectedProfileKind)} · {formatStatus(selectedProfileStructure)} profile. Save your details, add required private evidence, submit for review, and track the decision here.</p>
           </div>
-          <div className="flex gap-2"><Button type="button" variant="secondary" disabled={loading || draftValuesDirty || draftSavePending} onClick={() => void load()}>Refresh</Button><Link to="/dashboard/landlord/settings" className="inline-flex items-center rounded-lg bg-surface-container-high px-4 py-2 text-sm font-semibold">Back to Settings</Link></div>
+          <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" disabled={loading || draftValuesDirty || draftSavePending} onClick={() => void load()}>Refresh</Button><Link to={settingsPath} className="inline-flex items-center rounded-lg bg-surface-container-high px-4 py-2 text-sm font-semibold">Account settings</Link></div>
         </header>
+        {contactVerificationRequired ? <section role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><h2 className="font-bold">Verify your email and phone to continue</h2><p className="mt-1">The server requires both contact methods to be verified before this KYC action can proceed. No KYC change was completed.</p><Link className="mt-3 inline-flex font-semibold underline" to={settingsPath}>Open account security settings</Link></section> : null}
         {loading ? <LoadingState label="Loading profile verification..." /> : null}
         {error ? <ErrorState message={error} onRetry={() => void load()} /> : null}
         {!profileDataCurrent && profileId && !loading && !error ? <LoadingState label="Refreshing data for the selected profile..." /> : null}
@@ -895,8 +1103,10 @@ const LandlordVerification = () => {
         <StepUpDialog challenge={profileDataCurrent ? evidenceStepUp.challenge : null} busy={evidenceStepUp.busy} error={evidenceStepUp.error} onCancel={() => { evidenceStepUp.cancel(); setPendingEvidenceAction(null); }} onSubmit={completeEvidenceAction} />
         <StepUpDialog challenge={profileDataCurrent && pendingUpload && pendingUpload.profileId === profileId ? pendingUpload.challenge : null} busy={uploadBusy} error={uploadError} onCancel={() => { setPendingUpload(null); setUploadError(null); }} onSubmit={completeEvidenceUpload} />
       </main>
-    </LandlordPortalLayout>
   );
+  if ((profile?.kind ?? activeProfile?.kind) === 'owner') return <LandlordPortalLayout active="verification" title="KYC & Verification">{pageContent}</LandlordPortalLayout>;
+  if (isStaffProfile && user?.role === 'admin') return <AdminLayout>{pageContent}</AdminLayout>;
+  return <BuyerPortalLayout pageTitle="KYC & Verification" pageSubtitle="Complete and track verification for your selected RealtiQ profile." pageEyebrow={`${formatStatus(selectedProfileKind)} · ${formatStatus(selectedProfileStructure)}`}>{pageContent}</BuyerPortalLayout>;
 };
 
 export default LandlordVerification;

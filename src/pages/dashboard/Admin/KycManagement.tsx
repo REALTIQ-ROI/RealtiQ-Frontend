@@ -6,6 +6,7 @@ import StepUpDialog from '../../../components/auth/StepUpDialog';
 import AuthorizedFilePreview from '../../../components/verification/AuthorizedFilePreview';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { useAuth } from '../../../contexts/AuthContext';
+import { ApiRequestError } from '../../../lib/axios';
 import { hasAdminCapability } from '../../../services/adminAccessService';
 import { verificationCaseService, type VerificationCaseCheck, type VerificationCaseDecision, type VerificationCaseDetail, type VerificationCaseHistoryPage, type VerificationCasePage } from '../../../services/verificationCaseService';
 import { buildVerificationDecisionCheck, isEvidenceDecisionCheck, isScumlDecisionCheck, verificationSourcesForCheck } from '../../../services/verificationDecisionForm';
@@ -13,6 +14,12 @@ import { buildVerificationDecisionCheck, isEvidenceDecisionCheck, isScumlDecisio
 const states = ['submitted', 'under_review', 'approved', 'rejected', 'withdrawn', 'superseded', 'expired'];
 type DataRecord = Record<string, unknown>;
 type CaseEvidence = { id: string; purpose: string };
+
+const removedApplicantOnlyCheckFields = new Set([
+  'countryOfResidence',
+  'applicant.identity_route',
+  'applicant.country_of_residence',
+]);
 
 const asRecord = (value: unknown): DataRecord | null => value !== null && typeof value === 'object' && !Array.isArray(value)
   ? value as DataRecord
@@ -29,12 +36,12 @@ const humanize = (value: string): string => value
 
 const humanizeCheck = (field: string): string => {
   const normalized = field.replace(/^applicant\./, '').replace(/^evidence\./, '');
-  const exact: Record<string, string> = {
+  const applicantLabels: Record<string, string> = {
     countryOfResidence: 'Submitted country of residence',
     'applicant.identity_route': 'Identity verification route',
     'applicant.country_of_residence': 'Applicant profile country of residence',
   };
-  if (exact[field]) return exact[field];
+  if (applicantLabels[field]) return applicantLabels[field];
   const known: Record<string, string> = {
     countryOfResidence: 'Submitted country of residence',
     country_of_residence: 'Country of residence',
@@ -91,6 +98,18 @@ const requiredCheckField = (check: unknown): string | null => {
   return null;
 };
 
+const requiredCheckFields = (checks: unknown[] | undefined): string[] => (checks ?? [])
+  .map(requiredCheckField)
+  .filter((field): field is string => Boolean(field));
+
+const hasRemovedApplicantOnlyChecks = (checks: unknown[] | undefined): boolean =>
+  requiredCheckFields(checks).some((field) => removedApplicantOnlyCheckFields.has(field));
+
+const hasMalformedRequiredChecks = (checks: unknown[] | undefined): boolean => {
+  const fields = requiredCheckFields(checks);
+  return fields.length !== (checks?.length ?? 0) || new Set(fields).size !== fields.length;
+};
+
 /** Extract only evidence references explicitly included in the authorized case snapshot. */
 const collectCaseEvidence = (snapshot: unknown, requiredChecks: unknown[] = []): CaseEvidence[] => {
   const byId = new Map<string, CaseEvidence>();
@@ -132,8 +151,11 @@ const formatBlocker = (value: unknown): string => {
 };
 
 const ManageKyc = () => {
-  const { adminAccess } = useAuth();
-  const canReview = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'verification.review'));
+  const { activeProfile, adminAccess, refreshAdminAccess } = useAuth();
+  const profileId = activeProfile?.id;
+  const accessMatchesProfile = Boolean(profileId && adminAccess?.profileId === profileId);
+  const canRead = Boolean(accessMatchesProfile && hasAdminCapability(adminAccess, 'verification.read'));
+  const canReview = Boolean(accessMatchesProfile && adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'verification.review'));
   const [state, setState] = useState('submitted');
   const [queue, setQueue] = useState<VerificationCasePage | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -147,22 +169,70 @@ const ManageKyc = () => {
   const [reasonCode, setReasonCode] = useState<'DOCUMENT_UNREADABLE'>('DOCUMENT_UNREADABLE');
   const [checkInputs, setCheckInputs] = useState<Record<string, Partial<VerificationCaseCheck>>>({});
   const stepUp = useBoundStepUp<VerificationCaseDetail>();
+  const cancelStepUp = stepUp.cancel;
+  const profileIdRef = useRef(profileId);
+  const previousProfileId = useRef(profileId);
+  const queueRequest = useRef(0);
+  const detailRequest = useRef(0);
+  profileIdRef.current = profileId;
+
+  const clearReviewData = useCallback((message?: string) => {
+    queueRequest.current += 1;
+    detailRequest.current += 1;
+    setQueue(null);
+    setSelectedId(null);
+    setDetail(null);
+    setHistory(null);
+    setCheckInputs({});
+    setOpeningEvidenceId(null);
+    setQueueLoading(false);
+    setDetailLoading(false);
+    setFilePreview((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
+    cancelStepUp();
+    if (message) setError(message);
+  }, [cancelStepUp]);
+
+  useEffect(() => {
+    if (previousProfileId.current === profileId) return;
+    previousProfileId.current = profileId;
+    clearReviewData();
+  }, [clearReviewData, profileId]);
 
   const loadQueue = useCallback(async (cursor?: string) => {
+    const requestedProfileId = profileId;
+    if (!requestedProfileId || !canRead || adminAccess?.profileId !== requestedProfileId) {
+      clearReviewData('Select a staff profile with current verification-read access before loading cases.');
+      return;
+    }
+    const requestId = ++queueRequest.current;
     setQueueLoading(true);
     setError(null);
     try {
       const page = await verificationCaseService.staffQueue({ limit: 25, state, ...(cursor ? { cursor } : {}) });
+      if (requestId !== queueRequest.current || profileIdRef.current !== requestedProfileId || adminAccess?.profileId !== requestedProfileId) return;
       setQueue((current) => cursor && current ? { ...page, cases: [...current.cases, ...page.cases] } : page);
     } catch (raw) {
+      if (requestId !== queueRequest.current || profileIdRef.current !== requestedProfileId) return;
+      if (raw instanceof ApiRequestError && (raw.status === 401 || raw.status === 403)) {
+        clearReviewData(`${raw.message} Case details and protected previews were cleared. Current staff access is being refreshed.`);
+        try { await refreshAdminAccess(requestedProfileId); } catch { /* The access context clears stale privileges on failure. */ }
+        return;
+      }
       setError(raw instanceof Error ? raw.message : 'Unable to load the Trust & Safety verification queue.');
     } finally {
-      setQueueLoading(false);
+      if (requestId === queueRequest.current && profileIdRef.current === requestedProfileId) setQueueLoading(false);
     }
-  }, [state]);
+  }, [adminAccess?.profileId, canRead, clearReviewData, profileId, refreshAdminAccess, state]);
 
-  const detailRequest = useRef(0);
   const loadCase = useCallback(async (id: string) => {
+    const requestedProfileId = profileId;
+    if (!requestedProfileId || !canRead || adminAccess?.profileId !== requestedProfileId) {
+      clearReviewData('The current staff profile no longer has access to verification cases.');
+      return;
+    }
     const requestId = ++detailRequest.current;
     setSelectedId(id);
     setDetail(null);
@@ -174,19 +244,32 @@ const ManageKyc = () => {
     setDetailLoading(true);
     setError(null);
     try {
-      const [current, events] = await Promise.all([verificationCaseService.staffCase(id), verificationCaseService.staffHistory(id)]);
-      if (requestId !== detailRequest.current) return;
+      let current = await verificationCaseService.staffCase(id);
+      const events = await verificationCaseService.staffHistory(id);
+      const initiallyHadRemovedChecks = hasRemovedApplicantOnlyChecks(current.requiredChecks);
+      if (initiallyHadRemovedChecks) current = await verificationCaseService.staffCase(id);
+      if (requestId !== detailRequest.current || profileIdRef.current !== requestedProfileId || adminAccess?.profileId !== requestedProfileId) return;
       setDetail(current);
       setHistory(events);
-      const fields = (current.requiredChecks ?? []).map(requiredCheckField).filter((field): field is string => Boolean(field));
+      const fields = requiredCheckFields(current.requiredChecks).filter((field) => !removedApplicantOnlyCheckFields.has(field));
       setCheckInputs(Object.fromEntries(fields.map((field) => [field, { field }])));
+      if (hasRemovedApplicantOnlyChecks(current.requiredChecks)) {
+        setError('The refreshed case detail still contains applicant-only checks that are no longer valid in the staff review contract. They were omitted from the checklist and approval is blocked. Refresh later or contact support.');
+      } else if (initiallyHadRemovedChecks) {
+        setError('The case was refreshed because its first detail response contained applicant-only checks. Review the current server-provided document checklist before deciding.');
+      }
     } catch (raw) {
-      if (requestId !== detailRequest.current) return;
+      if (requestId !== detailRequest.current || profileIdRef.current !== requestedProfileId) return;
+      if (raw instanceof ApiRequestError && (raw.status === 401 || raw.status === 403)) {
+        clearReviewData(`${raw.message} Case details and protected previews were cleared. Current staff access is being refreshed.`);
+        try { await refreshAdminAccess(requestedProfileId); } catch { /* The access context clears stale privileges on failure. */ }
+        return;
+      }
       setError(raw instanceof Error ? raw.message : 'Unable to load this verification case.');
     } finally {
-      if (requestId === detailRequest.current) setDetailLoading(false);
+      if (requestId === detailRequest.current && profileIdRef.current === requestedProfileId) setDetailLoading(false);
     }
-  }, []);
+  }, [adminAccess?.profileId, canRead, clearReviewData, profileId, refreshAdminAccess]);
   const evidence = useMemo(() => collectCaseEvidence(detail?.snapshot, detail?.requiredChecks), [detail?.snapshot, detail?.requiredChecks]);
   const applicant = asRecord(asRecord(detail?.snapshot)?.applicant);
   const snapshotValues = asRecord(asRecord(detail?.snapshot)?.values);
@@ -195,10 +278,11 @@ const ManageKyc = () => {
   const applicantName = asText(applicant?.name) ?? 'Applicant';
   const currentStep = detail?.state === 'submitted' ? 1 : detail?.state === 'under_review' ? 2 : ['approved', 'rejected'].includes(detail?.state ?? '') ? 3 : -1;
   const applicantFields = snapshotEntries(snapshotValues);
-  const fields = (detail?.requiredChecks ?? []).map(requiredCheckField).filter((field): field is string => Boolean(field));
+  const fields = requiredCheckFields(detail?.requiredChecks).filter((field) => !removedApplicantOnlyCheckFields.has(field));
   const documentFields = fields.filter(isEvidenceDecisionCheck);
   const applicantCheckFields = fields.filter((field) => !isEvidenceDecisionCheck(field));
-  const malformedCheckList = Boolean(detail?.requiredChecks?.length && fields.length !== detail.requiredChecks.length);
+  const malformedCheckList = hasMalformedRequiredChecks(detail?.requiredChecks)
+    || hasRemovedApplicantOnlyChecks(detail?.requiredChecks);
   const checkLabel = (field: string): string => {
     if (!isEvidenceDecisionCheck(field)) return humanizeCheck(field);
     const evidenceId = field.slice('evidence.'.length);
@@ -219,18 +303,56 @@ const ManageKyc = () => {
     stepUp.busy || stepUp.challenge ? 'Finish or cancel the current authenticator confirmation first.' : null,
   ].filter((reason): reason is string => Boolean(reason));
 
-  useEffect(() => { void loadQueue(); }, [loadQueue]);
+  useEffect(() => { if (canRead) void loadQueue(); }, [canRead, loadQueue]);
+  useEffect(() => {
+    if (!canRead && (queue || detail || filePreview)) clearReviewData('Current staff access to this KYC review data is unavailable. Private case details were cleared.');
+  }, [canRead, clearReviewData, detail, filePreview, queue]);
   useEffect(() => () => { if (filePreview) URL.revokeObjectURL(filePreview.url); }, [filePreview]);
 
   const runProtected = async (kind: 'claim' | 'reject' | 'approve') => {
     if (!canReview || !detail) return;
-    const path = `/api/admin/verification-cases/${encodeURIComponent(detail.id)}/${kind === 'claim' ? 'claim' : 'decision'}`;
+    let decisionDetail = detail;
+    if (kind === 'approve') {
+      const requestedProfileId = profileId;
+      try {
+        const latest = await verificationCaseService.staffCase(detail.id);
+        if (!requestedProfileId || profileIdRef.current !== requestedProfileId || adminAccess?.profileId !== requestedProfileId) return;
+        if (hasRemovedApplicantOnlyChecks(latest.requiredChecks)) {
+          await loadCase(detail.id);
+          setError('A refreshed case-detail response still contained applicant-only checks that are no longer valid in the staff review contract. The case was reloaded; review the current server-provided checklist before trying again.');
+          return;
+        }
+        const latestFields = requiredCheckFields(latest.requiredChecks);
+        const sameRequiredChecks = JSON.stringify(latest.requiredChecks ?? []) === JSON.stringify(detail.requiredChecks ?? []);
+        if (latest.version !== detail.version
+          || latest.state !== detail.state
+          || !sameRequiredChecks) {
+          setDetail(latest);
+          setCheckInputs((current) => Object.fromEntries(latestFields.map((field) => [field, current[field] ?? { field }])));
+          setError('This case changed since it was loaded. The latest case details and review checklist are shown; review them before approving.');
+          return;
+        }
+        decisionDetail = latest;
+        setDetail(latest);
+      } catch (raw) {
+        if (raw instanceof ApiRequestError && (raw.status === 401 || raw.status === 403)) {
+          clearReviewData(`${raw.message} Case details and protected previews were cleared. Current staff access is being refreshed.`);
+          if (profileId) {
+            try { await refreshAdminAccess(profileId); } catch { /* The access context clears stale privileges on failure. */ }
+          }
+          return;
+        }
+        setError(raw instanceof Error ? raw.message : 'Unable to refresh the latest case detail. No approval was submitted.');
+        return;
+      }
+    }
+    const path = `/api/admin/verification-cases/${encodeURIComponent(decisionDetail.id)}/${kind === 'claim' ? 'claim' : 'decision'}`;
     let body: { expectedVersion: number } | VerificationCaseDecision;
-    if (kind === 'claim') body = { expectedVersion: detail.version };
-    else if (kind === 'reject') body = { expectedVersion: detail.version, decision: 'rejected', reasonCodes: [reasonCode] };
+    if (kind === 'claim') body = { expectedVersion: decisionDetail.version };
+    else if (kind === 'reject') body = { expectedVersion: decisionDetail.version, decision: 'rejected', reasonCodes: [reasonCode] };
     else {
       if (!fields.length || malformedCheckList) { setError('The server did not return a complete review checklist. Refresh this case before deciding.'); return; }
-      if (detail.approvalBlockers?.length) { setError('The server reports approval blockers. Resolve them and refresh this case before deciding.'); return; }
+      if (decisionDetail.approvalBlockers?.length) { setError('The server reports approval blockers. Resolve them and refresh this case before deciding.'); return; }
       const checks: VerificationCaseCheck[] = [];
       for (const field of fields) {
         const input = checkInputs[field] ?? {};
@@ -238,7 +360,7 @@ const ManageKyc = () => {
         if (!result.check) { setError(result.error ?? `Complete the required review details for ${humanizeCheck(field)}.`); return; }
         checks.push(result.check);
       }
-      body = { expectedVersion: detail.version, decision: 'approved', checks };
+      body = { expectedVersion: decisionDetail.version, decision: 'approved', checks };
     }
     await stepUp.begin({
       method: 'POST', path, body,
@@ -246,10 +368,10 @@ const ManageKyc = () => {
       execute: async (challengeId, exactBody) => {
         try {
           return kind === 'claim'
-            ? await verificationCaseService.claimCase(detail.id, exactBody as { expectedVersion: number }, challengeId)
-            : await verificationCaseService.decideCase(detail.id, exactBody as VerificationCaseDecision, challengeId);
+            ? await verificationCaseService.claimCase(decisionDetail.id, exactBody as { expectedVersion: number }, challengeId)
+            : await verificationCaseService.decideCase(decisionDetail.id, exactBody as VerificationCaseDecision, challengeId);
         } catch (raw) {
-          if (raw && typeof raw === 'object' && 'status' in raw && (raw as { status?: number }).status === 409) await loadCase(detail.id);
+          if (raw && typeof raw === 'object' && 'status' in raw && (raw as { status?: number }).status === 409) await loadCase(decisionDetail.id);
           throw raw;
         }
       },
@@ -257,8 +379,15 @@ const ManageKyc = () => {
   };
 
   const completeProtected = async (code: string) => {
+    const requestedProfileId = profileId;
     const result = await stepUp.complete(code);
+    if (!requestedProfileId || profileIdRef.current !== requestedProfileId) return false;
     if (!result.ok) {
+      if (['AUTH_REQUIRED', 'AUTH_SESSION_REVOKED', 'PERMISSION_REQUIRED', 'PERMISSION_DEPARTMENT_REQUIRED', 'PERMISSION_READ_ONLY', 'PERMISSION_STAFF_ROUTE_UNMAPPED'].includes(result.code ?? '')) {
+        clearReviewData(result.error ?? 'Staff authority changed. The case review data has been cleared.');
+        try { await refreshAdminAccess(requestedProfileId); } catch { /* The access context clears stale privileges on failure. */ }
+        return false;
+      }
       const errorCode = stepUp.errorCode ?? result.error?.match(/\(([A-Z][A-Z0-9_]+)\)$/)?.[1];
       if (errorCode === 'REVIEW_VERIFICATION_EXPIRY_REQUIRED') {
         setError('The backend requires an expiry date for this evidence. Enter the future expiry shown on the document and retry. No non-expiring exception is currently configured.');
@@ -267,6 +396,7 @@ const ManageKyc = () => {
       } else if (result.error) setError(result.error);
       return false;
     }
+    if (adminAccess?.profileId !== requestedProfileId) return false;
     setDetail(result.value);
     await loadQueue();
     await loadCase(result.value.id);
@@ -274,21 +404,47 @@ const ManageKyc = () => {
   };
 
   const openEvidence = async (item: CaseEvidence) => {
-    if (!selectedId || openingEvidenceId) return;
+    if (!selectedId || openingEvidenceId || !canRead || !profileId || adminAccess?.profileId !== profileId) return;
     const caseId = selectedId;
+    const requestedProfileId = profileId;
     const requestId = detailRequest.current;
     setOpeningEvidenceId(item.id);
     setError(null);
     try {
       const blob = await verificationCaseService.staffEvidenceContent(caseId, item.id);
-      if (requestId !== detailRequest.current) return;
+      if (requestId !== detailRequest.current || profileIdRef.current !== requestedProfileId) return;
       const mimeType = blob.type || 'application/octet-stream';
       setFilePreview({ url: URL.createObjectURL(blob), mimeType, title: evidencePurposeLabel(item.purpose) });
     } catch (raw) {
-      if (requestId !== detailRequest.current) return;
+      if (requestId !== detailRequest.current || profileIdRef.current !== requestedProfileId) return;
+      if (raw instanceof ApiRequestError && (raw.status === 401 || raw.status === 403)) {
+        clearReviewData(`${raw.message} Case details and protected previews were cleared. Current staff access is being refreshed.`);
+        try { await refreshAdminAccess(requestedProfileId); } catch { /* The access context clears stale privileges on failure. */ }
+        return;
+      }
       setError(raw instanceof Error ? raw.message : 'The current staff profile cannot view this case evidence.');
     } finally {
-      setOpeningEvidenceId(null);
+      if (profileIdRef.current === requestedProfileId) setOpeningEvidenceId(null);
+    }
+  };
+
+  const loadMoreHistory = async () => {
+    if (!detail || !history?.nextCursor || !profileId || !canRead || adminAccess?.profileId !== profileId) return;
+    const requestedProfileId = profileId;
+    const requestId = detailRequest.current;
+    const caseId = detail.id;
+    try {
+      const page = await verificationCaseService.staffHistory(caseId, history.nextCursor);
+      if (requestId !== detailRequest.current || profileIdRef.current !== requestedProfileId || selectedId !== caseId) return;
+      setHistory((current) => current ? { events: [...current.events, ...page.events], nextCursor: page.nextCursor } : page);
+    } catch (raw) {
+      if (requestId !== detailRequest.current || profileIdRef.current !== requestedProfileId) return;
+      if (raw instanceof ApiRequestError && (raw.status === 401 || raw.status === 403)) {
+        clearReviewData(`${raw.message} Case details and protected previews were cleared. Current staff access is being refreshed.`);
+        try { await refreshAdminAccess(requestedProfileId); } catch { /* The access context clears stale privileges on failure. */ }
+        return;
+      }
+      setError(raw instanceof Error ? raw.message : 'Unable to load more case history.');
     }
   };
 
@@ -389,7 +545,7 @@ const ManageKyc = () => {
                 </section>
               </div>
 
-              <section className="rounded-3xl border border-outline-variant/15 bg-white p-5 shadow-sm md:p-6">
+              {detail.state === 'under_review' ? <section className="rounded-3xl border border-outline-variant/15 bg-white p-5 shadow-sm md:p-6">
                 <div><p className="text-xs font-bold uppercase tracking-wide text-indigo-700">Reviewer checklist</p><h3 className="mt-1 text-lg font-extrabold text-primary">Review submitted documents</h3><p className="mt-1 max-w-3xl text-sm leading-5 text-secondary">The document checklist is built from the evidence submitted for this case. Applicant and case-level checks returned by the server are listed separately below.</p></div>
                 {malformedCheckList ? <p role="status" className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">The case returned a check the screen cannot identify. Refresh the case; approval remains disabled until the full server checklist is available.</p> : null}
                 {detail.approvalBlockers?.length ? <div role="status" className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4"><h4 className="font-bold text-amber-950">Approval cannot proceed yet</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900">{detail.approvalBlockers.map((blocker, index) => <li key={`${formatBlocker(blocker)}-${index}`}>{formatBlocker(blocker)}</li>)}</ul><p className="mt-2 text-xs text-amber-900">These requirements came from the backend. Resolve them and refresh before making a decision.</p></div> : null}
@@ -401,19 +557,27 @@ const ManageKyc = () => {
                 {!fields.length && !malformedCheckList ? <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-secondary">No approval checks were returned. Refresh the case before taking a decision.</p> : null}
                 <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-outline-variant/10 pt-4">
                   {canReview ? <Button type="button" disabled={approvalDisabledReasons.length > 0} onClick={() => void runProtected('approve')}>Approve KYC with authenticator</Button> : null}
-                  {canReview && detail.state === 'submitted' ? <Button type="button" variant="secondary" disabled={stepUp.busy || Boolean(stepUp.challenge)} onClick={() => void runProtected('claim')}>Claim case to begin review with authenticator</Button> : null}
                   {approvalDisabledReasons.length ? <ul role="status" className="space-y-1 text-xs text-secondary">{approvalDisabledReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul> : <p role="status" className="text-xs text-secondary">All required checks are filled. Approval will still be revalidated by the backend.</p>}
                 </div>
-              </section>
+              </section> : detail.state === 'submitted' ? <section className="rounded-3xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm md:p-6">
+                <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">Claim required</p>
+                <h3 className="mt-1 text-lg font-extrabold text-primary">Start the review before completing checks</h3>
+                <p className="mt-2 max-w-3xl text-sm leading-5 text-secondary">The server has not assigned this case to a reviewer yet. Claim it with your authenticator first; the reviewer checklist will appear after the server confirms the case is under review.</p>
+                {canReview ? <Button type="button" className="mt-4" disabled={stepUp.busy || Boolean(stepUp.challenge)} onClick={() => void runProtected('claim')}>Claim case to begin review with authenticator</Button> : <p role="status" className="mt-4 text-sm text-secondary">This staff profile can read cases but cannot claim or review them.</p>}
+              </section> : <section role="status" className="rounded-3xl border border-outline-variant/15 bg-slate-50 p-5 shadow-sm md:p-6">
+                <p className="text-xs font-bold uppercase tracking-wide text-secondary">Review checklist unavailable</p>
+                <h3 className="mt-1 text-lg font-extrabold text-primary">This case is {humanize(detail.state).toLowerCase()}</h3>
+                <p className="mt-2 text-sm leading-5 text-secondary">Reviewer checks and decision controls are shown only while the server reports the case is under review.</p>
+              </section>}
 
-              {canReview ? <section className="rounded-3xl border border-outline-variant/15 bg-white p-5 shadow-sm md:p-6">
+              {canReview && detail.state === 'under_review' ? <section className="rounded-3xl border border-outline-variant/15 bg-white p-5 shadow-sm md:p-6">
                 <div><p className="text-xs font-bold uppercase tracking-wide text-indigo-700">Case decision</p><h3 className="mt-1 text-lg font-extrabold text-primary">Reject this case</h3><p className="mt-1 text-sm text-secondary">Protected actions require an authenticator confirmation. The server checks your current authority and case assignment.</p></div>
                 <div className="mt-4 flex flex-wrap items-end gap-3"><label className="text-sm font-semibold text-primary">Rejection reason<select aria-label="Rejection reason" value={reasonCode} onChange={(event) => setReasonCode(event.target.value as 'DOCUMENT_UNREADABLE')} className="mt-1 block rounded-xl border border-outline-variant/20 bg-white px-3 py-2.5 text-sm font-normal"><option value="DOCUMENT_UNREADABLE">Document is unreadable</option></select></label><Button type="button" variant="secondary" disabled={detail.state !== 'under_review' || stepUp.busy || Boolean(stepUp.challenge)} onClick={() => void runProtected('reject')}>Reject with authenticator</Button></div>
               </section> : null}
 
               <section className="rounded-3xl border border-outline-variant/15 bg-white p-5 shadow-sm md:p-6"><div><p className="text-xs font-bold uppercase tracking-wide text-indigo-700">Audit trail</p><h3 className="mt-1 text-lg font-extrabold text-primary">Case history</h3></div>
                 <ol className="mt-4 space-y-3">{history?.events.map((event) => <li key={event.id} className="flex gap-3"><span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-indigo-500" aria-hidden="true" /><div className="min-w-0 flex-1 rounded-xl bg-slate-50 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-bold text-primary">{humanize(event.action)}</p><time className="text-xs text-secondary">{readableDate(event.at)}</time></div><p className="mt-1 text-xs text-secondary">Case version {event.version}</p></div></li>)}{!history?.events.length ? <li className="text-sm text-secondary">No history events have been returned.</li> : null}</ol>
-                {history?.nextCursor ? <Button type="button" variant="secondary" className="mt-3" onClick={async () => { if (!detail) return; try { const page = await verificationCaseService.staffHistory(detail.id, history.nextCursor ?? undefined); setHistory((current) => current ? { events: [...current.events, ...page.events], nextCursor: page.nextCursor } : page); } catch (raw) { setError(raw instanceof Error ? raw.message : 'Unable to load more case history.'); } }}>Load more history</Button> : null}
+                {history?.nextCursor ? <Button type="button" variant="secondary" className="mt-3" onClick={() => void loadMoreHistory()}>Load more history</Button> : null}
               </section>
             </> : null}
           </section>

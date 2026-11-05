@@ -8,6 +8,10 @@ import LandlordVerification from './LandlordVerification';
 
 const mocks = vi.hoisted(() => ({
   profileId: 'profile-1',
+  profileKind: 'owner',
+  profileStructure: 'individual',
+  accountRole: 'landlord',
+  adminCapabilities: [] as string[],
   current: vi.fn(),
   onboarding: vi.fn(),
   updateOnboarding: vi.fn(),
@@ -46,8 +50,15 @@ vi.mock('../../../services/stepUpService', () => ({ stepUpService: {
   verify: mocks.stepUpVerify,
 } }));
 
-vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ activeProfile: { id: mocks.profileId }, token: 'session-1' }) }));
+vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({
+  activeProfile: { id: mocks.profileId, kind: mocks.profileKind, structure: mocks.profileStructure, name: 'Example profile', status: 'active', version: 1, permissions: {} },
+  token: 'session-1',
+  user: { role: mocks.accountRole },
+  adminAccess: { profileId: mocks.profileId, capabilities: mocks.adminCapabilities, readOnly: false, isInternalAudit: false, staffDepartments: [] },
+}) }));
 vi.mock('../../../components/layout/LandlordPortalLayout', () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
+vi.mock('../../../components/layout/BuyerPortalLayout', () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
+vi.mock('../../../components/layout/AdminLayout', () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock('../../../components/auth/StepUpDialog', () => ({ default: ({ challenge, onSubmit }: { challenge: { label: string } | null; onSubmit: (code: string) => void }) => challenge
   ? <div role="dialog" aria-label={challenge.label}><p>{challenge.label}</p><button type="button" onClick={() => onSubmit('123456')}>Verify and continue</button></div>
   : null }));
@@ -73,9 +84,13 @@ describe('landlord profile verification loading', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.profileId = 'profile-1';
+    mocks.profileKind = 'owner';
+    mocks.profileStructure = 'individual';
+    mocks.accountRole = 'landlord';
+    mocks.adminCapabilities = [];
     localStorage.setItem('activeProfileId', 'profile-1');
     localStorage.setItem('token', 'session-1');
-    mocks.current.mockResolvedValue({ profile });
+    mocks.current.mockImplementation((id: string) => Promise.resolve({ profile: { ...profile, id, kind: mocks.profileKind, structure: mocks.profileStructure } }));
     mocks.onboarding.mockResolvedValue(draft);
     mocks.evidence.mockResolvedValue({ evidence: [], nextCursor: null });
     mocks.cases.mockResolvedValue({ cases: [], nextCursor: null });
@@ -137,6 +152,36 @@ describe('landlord profile verification loading', () => {
     expect(screen.getByText('Saved · version 8')).toBeInTheDocument();
   });
 
+  it('does not call applicant KYC endpoints for an unsupported selected profile', async () => {
+    mocks.profileKind = 'developer';
+    mocks.profileStructure = 'individual';
+    mocks.current.mockClear();
+
+    render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/applicant kyc form is not available for this profile type/i);
+    expect(mocks.current).not.toHaveBeenCalled();
+    expect(mocks.onboarding).not.toHaveBeenCalled();
+    expect(mocks.evidence).not.toHaveBeenCalled();
+    expect(mocks.cases).not.toHaveBeenCalled();
+    expect(mocks.contract).not.toHaveBeenCalled();
+  });
+
+  it('routes a staff profile to the authorized reviewer experience without loading applicant data', async () => {
+    mocks.profileKind = 'staff';
+    mocks.profileStructure = 'individual';
+    mocks.accountRole = 'admin';
+    mocks.adminCapabilities = ['verification.read'];
+    mocks.current.mockClear();
+
+    render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+
+    expect(await screen.findByRole('link', { name: 'Open KYC review' })).toHaveAttribute('href', '/dashboard/admin/kyc');
+    expect(mocks.current).not.toHaveBeenCalled();
+    expect(mocks.onboarding).not.toHaveBeenCalled();
+    expect(mocks.evidence).not.toHaveBeenCalled();
+  });
+
   it('shows an evidence selector only for route purposes with available uploaded evidence', async () => {
     mocks.contract.mockResolvedValue({
       ...contract,
@@ -193,7 +238,10 @@ describe('landlord profile verification loading', () => {
   });
 
   it('saves edits with PATCH-bound step-up, blocks submission while saving, then submits the returned version with a separate POST challenge', async () => {
-    const initialDraft = { ...draft, structure: 'company', version: 3, values: { companyName: 'Original Ltd' } };
+    mocks.profileKind = 'buyer';
+    mocks.profileStructure = 'company';
+    mocks.current.mockResolvedValue({ profile: { ...profile, kind: 'buyer', structure: 'company' } });
+    const initialDraft = { ...draft, kind: 'buyer', structure: 'company', version: 3, values: { companyName: 'Original Ltd' } };
     const savedDraft = { ...initialDraft, version: 4, values: { companyName: 'Updated Ltd' }, updatedAt: '2026-11-01T01:00:00.000Z' };
     const createdCase = { id: 'case-new', profileId: 'profile-1', kind: 'kyc', structure: 'company', draftVersion: 4, state: 'submitted', version: 1, rejectionCodes: [], submittedAt: null, reviewedAt: null, expiresAt: null };
     mocks.onboarding.mockReset().mockResolvedValueOnce(initialDraft).mockResolvedValue(savedDraft);
@@ -258,7 +306,10 @@ describe('landlord profile verification loading', () => {
   });
 
   it('refreshes the draft after a submission version conflict without retrying the case POST', async () => {
-    const initialDraft = { ...draft, structure: 'company', version: 3, values: { companyName: 'Current Ltd' } };
+    mocks.profileKind = 'buyer';
+    mocks.profileStructure = 'company';
+    mocks.current.mockResolvedValue({ profile: { ...profile, kind: 'buyer', structure: 'company' } });
+    const initialDraft = { ...draft, kind: 'buyer', structure: 'company', version: 3, values: { companyName: 'Current Ltd' } };
     const latestDraft = { ...initialDraft, version: 4, values: { companyName: 'Updated elsewhere Ltd' } };
     mocks.onboarding.mockReset().mockResolvedValueOnce(initialDraft).mockResolvedValueOnce(latestDraft);
     mocks.createHolderCase.mockRejectedValueOnce(new ApiRequestError('Reload the private draft before submitting.', { status: 409, code: 'CONFLICT_ONBOARDING_VERSION' }));

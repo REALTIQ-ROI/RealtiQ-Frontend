@@ -28,6 +28,15 @@ describe('buildLandlordKycProgress', () => {
     expect(progress.steps[2].detail).toContain('opens after profile review and private evidence');
   });
 
+  it('does not advance to evidence until all server-required profile details are complete', () => {
+    const progress = buildLandlordKycProgress(input({ availableEvidenceCount: 4, intakeMissingCount: 2 }));
+
+    expect(progress.percent).toBe(0);
+    expect(progress.steps.map(({ state }) => state)).toEqual(['current', 'upcoming', 'upcoming', 'upcoming']);
+    expect(progress.steps[0].detail).toContain('Complete the 2 required profile details');
+    expect(progress.nextAction).toContain('before moving to evidence');
+  });
+
   it('does not advance past profile review when the onboarding draft is unavailable', () => {
     const progress = buildLandlordKycProgress(input({ hasOnboardingDraft: false, availableEvidenceCount: 2 }));
 

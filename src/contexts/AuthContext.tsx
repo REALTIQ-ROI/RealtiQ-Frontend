@@ -140,8 +140,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  const updateUser = useCallback((nextUser: User) => {
+    const previous = parseUser(localStorage.getItem('user'));
+    if (previous?._id !== nextUser._id || previous?.role !== nextUser.role) {
+      window.dispatchEvent(new Event('realtiq:session-changed'));
+      setAdminAccess(null);
+      setAdminAccessError(null);
+      accessRequestVersion.current += 1;
+    }
+    localStorage.setItem('user', JSON.stringify(nextUser));
+    setUser(nextUser);
+  }, []);
+
+  const userId = user?._id;
+
+  const refreshUser = useCallback(async (): Promise<User | null> => {
+    if (!userId || !token) return null;
+    const sessionToken = token;
+    const refreshed = await userService.fetchUserById(userId);
+    if (!refreshed || refreshed._id !== userId) return null;
+    if (
+      latestSession.current.userId !== userId || latestSession.current.token !== sessionToken ||
+      localStorage.getItem('token') !== sessionToken
+    ) return null;
+    updateUser(refreshed);
+    return refreshed;
+  }, [token, updateUser, userId]);
+
   const refreshProfiles = useCallback(async () => {
-    if (user?.role !== 'admin') await authService.account();
+    if (user?.role !== 'admin') {
+      await authService.account();
+      await refreshUser();
+    }
     const result = await profileService.list();
     const selectedId = localStorage.getItem('activeProfileId');
     const selected = user?.role === 'admin'
@@ -160,14 +190,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setActiveProfile(current.profile);
     setProfileError(null);
     if (user?.role === 'admin') await refreshAdminAccess(selected.id);
-  }, [refreshAdminAccess, user?.role]);
+  }, [refreshAdminAccess, refreshUser, user?.role]);
 
   const switchProfile = useCallback(async (id: string) => {
     if (user?.role === 'admin') {
       const selectedStaffProfile = localStorage.getItem('activeProfileId');
       if (id !== selectedStaffProfile) throw new Error('Admin staff-profile switching is disabled. Continue with the current assigned staff profile.');
     }
-    if (user?.role !== 'admin') await authService.account();
+    if (user?.role !== 'admin') {
+      await authService.account();
+      await refreshUser();
+    }
     const result = await profileService.list();
     const selected = result.profiles.find((profile) => profile.id === id);
     if (!selected) throw new Error('This profile is no longer available to this account. Refresh your profile list and try again.');
@@ -179,31 +212,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setActiveProfile(current.profile);
     setProfileError(null);
     if (user?.role === 'admin') await refreshAdminAccess(id);
-  }, [refreshAdminAccess, user?.role]);
-
-  const updateUser = useCallback((nextUser: User) => {
-    const previous = parseUser(localStorage.getItem('user'));
-    if (previous?._id !== nextUser._id || previous?.role !== nextUser.role) {
-      window.dispatchEvent(new Event('realtiq:session-changed'));
-      setAdminAccess(null);
-      setAdminAccessError(null);
-      accessRequestVersion.current += 1;
-    }
-    localStorage.setItem('user', JSON.stringify(nextUser));
-    setUser(nextUser);
-  }, []);
-
-  const userId = user?._id;
-
-  const refreshUser = useCallback(async (): Promise<User | null> => {
-    if (!userId) {
-      return null;
-    }
-
-    const refreshed = await userService.fetchUserById(userId);
-    updateUser(refreshed);
-    return refreshed;
-  }, [updateUser, userId]);
+  }, [refreshAdminAccess, refreshUser, user?.role]);
 
   const login = useCallback(async (payload: LoginPayload): Promise<User | null> => {
     setLoginChallenge(null);

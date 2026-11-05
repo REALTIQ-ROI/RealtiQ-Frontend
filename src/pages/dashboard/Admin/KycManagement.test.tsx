@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ManageKyc from './KycManagement';
 
 const mocks = vi.hoisted(() => ({
+  profileId: 'staff-profile-1',
+  refreshAdminAccess: vi.fn(),
   staffQueue: vi.fn(),
   staffCase: vi.fn(),
   staffHistory: vi.fn(),
@@ -18,6 +20,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../components/layout/AdminLayout', () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
+vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({
+  activeProfile: { id: mocks.profileId, kind: 'staff', structure: 'individual' },
+  adminAccess: { profileId: mocks.profileId, capabilities: ['verification.read', 'verification.review'], readOnly: false, isInternalAudit: false, staffDepartments: ['trust_safety'] },
+  refreshAdminAccess: mocks.refreshAdminAccess,
+}) }));
 vi.mock('../../../hooks/useBoundStepUp', () => ({ useBoundStepUp: () => ({
   begin: mocks.begin,
   complete: mocks.complete,
@@ -70,10 +77,15 @@ const chooseCase = async () => {
 describe('ManageKyc current decision contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.profileId = 'staff-profile-1';
+    mocks.refreshAdminAccess.mockResolvedValue({ profileId: mocks.profileId, capabilities: ['verification.read', 'verification.review'] });
+    mocks.profileId = 'staff-profile-1';
+    mocks.refreshAdminAccess.mockResolvedValue({ profileId: mocks.profileId, capabilities: ['verification.read', 'verification.review'] });
     mocks.staffQueue.mockResolvedValue({ cases: [queueCase], nextCursor: null });
     mocks.staffCase.mockResolvedValue(detail);
     mocks.staffHistory.mockResolvedValue({ events: [], nextCursor: null });
     mocks.staffEvidenceContent.mockResolvedValue(new Blob(['protected evidence'], { type: 'application/pdf' }));
+    mocks.claimCase.mockResolvedValue({ ...detail, state: 'under_review', version: 5 });
     mocks.begin.mockResolvedValue(true);
     mocks.stepUpErrorCode.mockReturnValue(null);
     mocks.decideCase.mockResolvedValue({ ...detail, state: 'approved', version: 5 });
@@ -160,41 +172,75 @@ describe('ManageKyc current decision contract', () => {
     expect(screen.getByText('The content was retrieved through the authorized case evidence route.')).toBeInTheDocument();
   });
 
-  it('counts submitted document checks separately from additional server-required applicant checks', async () => {
-    const evidence = [
-      { purpose: 'nin', evidenceId: 'evidence-nin' },
-      { purpose: 'bvn', evidenceId: 'evidence-bvn' },
-      { purpose: 'additional_government_id', evidenceId: 'evidence-id' },
-      { purpose: 'proof_of_address', evidenceId: 'evidence-address' },
-    ];
-    mocks.staffCase.mockResolvedValue({
+  it('refreshes obsolete applicant-only checks and uses only the latest requiredChecks for approval', async () => {
+    const staleDetail = {
       ...detail,
-      snapshot: { ...detail.snapshot, identity: { route: 'nigerian', country: 'NG', evidence } },
       requiredChecks: [
         'countryOfResidence',
         'applicant.identity_route',
         'applicant.country_of_residence',
-        ...evidence.map((item) => `evidence.${item.evidenceId}`),
+        'evidence.nin-evidence-1',
+      ],
+    };
+    const latestDetail = { ...detail, requiredChecks: ['evidence.nin-evidence-1'] };
+    mocks.staffCase.mockResolvedValueOnce(staleDetail).mockResolvedValueOnce(latestDetail).mockResolvedValue(latestDetail);
+    render(<ManageKyc />);
+    await chooseCase();
+
+    expect(screen.getByRole('heading', { name: 'Document checks' })).toBeInTheDocument();
+    expect(screen.getByText('1 document')).toBeInTheDocument();
+    expect(mocks.staffCase).toHaveBeenCalledTimes(2);
+    expect(screen.queryByLabelText('Decision source for countryOfResidence')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Decision source for applicant.identity_route')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Decision source for applicant.country_of_residence')).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText('Decision source for evidence.nin-evidence-1'), 'original_document');
+    await userEvent.type(screen.getByLabelText(/Private supporting reference/), 'nin-evidence-reference');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Approve KYC with authenticator' }));
+    const expectedBody = {
+      expectedVersion: 4,
+      decision: 'approved',
+      checks: [{ field: 'evidence.nin-evidence-1', source: 'original_document', reference: 'nin-evidence-reference' }],
+    };
+    await waitFor(() => expect(mocks.begin).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'POST', path: '/api/admin/verification-cases/case-1/decision', body: expectedBody,
+    })));
+    await userEvent.click(screen.getByRole('button', { name: 'Complete decision step-up' }));
+    await waitFor(() => expect(mocks.decideCase).toHaveBeenCalledWith('case-1', expectedBody, 'decision-challenge'));
+  });
+
+  it('blocks approval and reports a contract mismatch if refreshed detail still returns removed applicant-only checks', async () => {
+    mocks.staffCase.mockResolvedValue({
+      ...detail,
+      requiredChecks: [
+        'countryOfResidence',
+        'applicant.identity_route',
+        'applicant.country_of_residence',
+        'evidence.nin-evidence-1',
       ],
     });
     render(<ManageKyc />);
     await chooseCase();
 
-    expect(screen.getByRole('heading', { name: 'Document checks' })).toBeInTheDocument();
-    expect(screen.getByText('4 documents')).toBeInTheDocument();
-    const additionalChecks = screen.getByText(/Additional applicant and case checks/);
-    expect(additionalChecks).toHaveTextContent('3');
-    await userEvent.click(additionalChecks);
-    expect(screen.getByLabelText('Decision source for countryOfResidence')).toBeVisible();
+    expect(mocks.staffCase).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('alert')).toHaveTextContent(/still contains applicant-only checks/);
+    expect(screen.queryByLabelText('Decision source for countryOfResidence')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Decision source for applicant.identity_route')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Decision source for applicant.country_of_residence')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve KYC with authenticator' })).toBeDisabled();
+    expect(mocks.begin).not.toHaveBeenCalled();
   });
 
-  it('explains that submitted cases must be claimed before approval and offers the claim action', async () => {
-    mocks.staffCase.mockResolvedValue({ ...detail, state: 'submitted' });
+  it('shows the reviewer checklist only after a successful claim is confirmed by case detail', async () => {
+    const submitted = { ...detail, state: 'submitted' };
+    const claimed = { ...detail, state: 'under_review', version: 5 };
+    mocks.staffCase.mockResolvedValueOnce(submitted).mockResolvedValue(claimed);
     render(<ManageKyc />);
     await chooseCase();
 
-    expect(screen.getByRole('button', { name: 'Approve KYC with authenticator' })).toBeDisabled();
-    expect(screen.getByText(/Claim this case with your authenticator first/)).toBeInTheDocument();
+    expect(screen.queryByText('Reviewer checklist')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve KYC with authenticator' })).not.toBeInTheDocument();
+    expect(screen.getByText('Start the review before completing checks')).toBeInTheDocument();
     const claimButton = screen.getByRole('button', { name: 'Claim case to begin review with authenticator' });
     expect(claimButton).toBeEnabled();
     await userEvent.click(claimButton);
@@ -204,6 +250,11 @@ describe('ManageKyc current decision contract', () => {
       path: '/api/admin/verification-cases/case-1/claim',
       body: { expectedVersion: 4 },
     }));
+    await userEvent.click(screen.getByRole('button', { name: 'Complete decision step-up' }));
+
+    expect(mocks.claimCase).toHaveBeenCalledWith('case-1', { expectedVersion: 4 }, 'decision-challenge');
+    expect(await screen.findByRole('heading', { name: 'Review submitted documents' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve KYC with authenticator' })).toBeDisabled();
   });
 
   it('explains when a document expiry entered by the reviewer is no longer in the future', async () => {
@@ -216,5 +267,21 @@ describe('ManageKyc current decision contract', () => {
 
     expect(screen.getByRole('button', { name: 'Approve KYC with authenticator' })).toBeDisabled();
     expect(screen.getByRole('status')).toHaveTextContent('Enter a future expiry date from the document for National identity number (NIN).');
+  });
+
+  it('clears private case details and ignores a late response after the active staff profile changes', async () => {
+    let resolveDetail: ((value: typeof detail) => void) | undefined;
+    mocks.staffCase.mockImplementationOnce(() => new Promise((resolve) => { resolveDetail = resolve; }));
+    const view = render(<ManageKyc />);
+    const caseButton = await screen.findByRole('button', { name: /case-1/ });
+    await userEvent.click(caseButton);
+    await waitFor(() => expect(mocks.staffCase).toHaveBeenCalledWith('case-1'));
+
+    mocks.profileId = 'staff-profile-2';
+    view.rerender(<ManageKyc />);
+    expect(await screen.findByRole('heading', { name: 'Select a verification case' })).toBeInTheDocument();
+
+    resolveDetail?.(detail);
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Applicant information' })).not.toBeInTheDocument());
   });
 });
