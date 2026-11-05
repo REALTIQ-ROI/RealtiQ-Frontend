@@ -15,6 +15,16 @@ export interface LoginSecondFactorChallenge {
   method: 'totp';
 }
 
+export interface CompleteStaffInvitationPayload {
+  email: string;
+  temporaryPassword: string;
+  newPassword: string;
+}
+
+export const isInitialStaffPasswordChangeRequired = (error: unknown): error is ApiRequestError =>
+  error instanceof ApiRequestError && error.status === 428 &&
+  error.code === 'AUTH_INITIAL_PASSWORD_CHANGE_REQUIRED' && error.passwordChangeRequired === true;
+
 export type LoginResponse = AuthenticatedLoginResponse | LoginSecondFactorChallenge;
 
 export const EMAIL_UNVERIFIED_LOGIN_MESSAGE = 'Please verify your email address before logging in. Check your inbox for the verification link.';
@@ -159,6 +169,14 @@ export const authService = {
     const { data, status } = await api.post<unknown>('/auth/login/second-factor', { challengeId, code });
     if (status !== 200) throw new Error('The authenticator response used an unsupported status. Please try signing in again.');
     return parseAuthenticatedLoginResponse(data);
+  },
+
+  async completeStaffInvitation(body: CompleteStaffInvitationPayload): Promise<{ passwordUpdated: true; loginRequired: true }> {
+    const { data, status } = await api.post<unknown>('/auth/staff-invitations/complete', body, { skipAuth: true } as AuthlessRequestConfig);
+    if (status !== 200 || !isRecord(data) || data.passwordUpdated !== true || data.loginRequired !== true) {
+      throw new Error('The password setup response could not be confirmed. Contact an Executive if the invitation is no longer valid.');
+    }
+    return { passwordUpdated: true, loginRequired: true };
   },
 
   async register(payload: RegisterPayload): Promise<RegisterResponse> {

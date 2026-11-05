@@ -99,6 +99,13 @@ describe('authService account security endpoints', () => {
     await expect(authService.completeLoginSecondFactor('challenge-1', '123456')).rejects.toThrow('unsupported status');
   });
 
+  it('completes an invited staff password change without bearer or selected-profile context', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { passwordUpdated: true, loginRequired: true }, status: 200 } as never);
+    const body = { email: 'ada@example.test', temporaryPassword: '483920175', newPassword: 'SecureAdminPass9' };
+    await expect(authService.completeStaffInvitation(body)).resolves.toEqual({ passwordUpdated: true, loginRequired: true });
+    expect(api.post).toHaveBeenCalledWith('/auth/staff-invitations/complete', body, { skipAuth: true });
+  });
+
   it('returns the documented safe phone verification history rows', async () => {
     const response = { events: [{ id: 'event-1', challengeId: 'challenge-1', action: 'sent', attempt: 1, at: '2026-10-25T12:00:00.000Z' }], nextCursor: null };
     vi.mocked(api.get).mockResolvedValueOnce({ data: response } as never);

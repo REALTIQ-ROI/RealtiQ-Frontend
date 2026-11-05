@@ -28,6 +28,7 @@ export class ApiRequestError extends Error {
   existingRequestId?: string;
   invalidItems?: unknown;
   fieldErrors?: ApiFieldError[];
+  passwordChangeRequired?: boolean;
   publicationReadiness?: { projectBlockers?: Array<{ field: string; code: string }>; units?: Array<{ unitId: string; blockers: Array<{ field: string; code: string }> }> };
 
   constructor(message: string, details?: {
@@ -50,6 +51,7 @@ export class ApiRequestError extends Error {
     existingRequestId?: string;
     invalidItems?: unknown;
     fieldErrors?: ApiFieldError[];
+    passwordChangeRequired?: boolean;
     publicationReadiness?: ApiRequestError['publicationReadiness'];
   }) {
     super(message);
@@ -180,6 +182,7 @@ export const normalizeApiError = (error: AxiosError<unknown>): Error => {
     existingRequestId: typeof payload?.existingRequestId === 'string' ? payload.existingRequestId : undefined,
     invalidItems: payload?.invalidItems,
     fieldErrors,
+    passwordChangeRequired: typeof payload?.passwordChangeRequired === 'boolean' ? payload.passwordChangeRequired : undefined,
     publicationReadiness: payload?.publicationReadiness as ApiRequestError['publicationReadiness'],
   });
 };

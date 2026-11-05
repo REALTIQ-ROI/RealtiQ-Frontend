@@ -83,6 +83,20 @@ describe('API error normalization', () => {
     expect(explicit.message).toBe('The project version is stale.');
   });
 
+  it('preserves the documented invited-staff first-login password-change gate', () => {
+    const normalized = normalizeApiError(responseError(428, {
+      code: 'AUTH_INITIAL_PASSWORD_CHANGE_REQUIRED',
+      message: 'Set a new password to activate your Admin staff sign-in.',
+      passwordChangeRequired: true,
+    }));
+    expect(normalized).toMatchObject({
+      status: 428,
+      code: 'AUTH_INITIAL_PASSWORD_CHANGE_REQUIRED',
+      passwordChangeRequired: true,
+      message: 'Set a new password to activate your Admin staff sign-in.',
+    });
+  });
+
   it('preserves a duplicate proxy request reference from a conflict response', () => {
     const normalized = normalizeApiError(responseError(409, {
       code: 'CONFLICT_PROXY_INSPECTION_DUPLICATE',

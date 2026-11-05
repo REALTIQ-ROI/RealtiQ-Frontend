@@ -14,10 +14,26 @@ describe('staff access API contracts', () => {
     expect(() => parseStaffAccessChanges([change])).toThrow(/unsupported response/);
   });
 
-  it('uses the documented staff directory route and cursor parameters', async () => {
+  it('uses the documented Admin staff directory route, cursor and unassigned filter', async () => {
     vi.mocked(api.get).mockResolvedValueOnce({ data: { staff: [], nextCursor: 'cursor-1' } } as never);
-    await expect(staffAccessChangeService.listStaff({ q: 'Ada', limit: 25, after: 'cursor-0' })).resolves.toEqual({ staff: [], nextCursor: 'cursor-1' });
-    expect(api.get).toHaveBeenCalledWith('/admin/staff', { params: { limit: 25, q: 'Ada', after: 'cursor-0' } });
+    await expect(staffAccessChangeService.listStaff({ q: 'Ada', limit: 25, after: 'cursor-0', includeUnassigned: true })).resolves.toEqual({ staff: [], nextCursor: 'cursor-1' });
+    expect(api.get).toHaveBeenCalledWith('/admin/staff', { params: { limit: 25, q: 'Ada', after: 'cursor-0', includeUnassigned: true } });
+  });
+
+  it('creates Admin staff with the exact request body and bound challenge header', async () => {
+    const staff = { identityId: 'identity-2', name: 'Ada Example', email: 'ada@example.test', role: 'admin', firstLoginRequired: true, invitation: { id: 'invite-1', status: 'queued', expiresAt: '2026-11-06T12:00:00.000Z' } };
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { staff }, status: 201 } as never);
+    await expect(staffAccessChangeService.createStaff({ name: 'Ada Example', email: 'ada@example.test', departments: ['finance', 'escrow_operations'] }, 'challenge-create')).resolves.toMatchObject({
+      identityId: 'identity-2', role: 'admin', firstLoginRequired: true, invitation: { status: 'queued' },
+    });
+    expect(api.post).toHaveBeenCalledWith('/admin/staff', { name: 'Ada Example', email: 'ada@example.test', departments: ['finance', 'escrow_operations'] }, { headers: { 'X-Step-Up-Challenge': 'challenge-create' } });
+  });
+
+  it('resends an invitation using the exact identity route, empty body, and bound challenge', async () => {
+    const staff = { identityId: 'identity/2', role: 'admin', firstLoginRequired: true, invitation: { id: 'invite-2', status: 'queued' } };
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { staff }, status: 202 } as never);
+    await expect(staffAccessChangeService.resendInvitation('identity/2', 'challenge-resend')).resolves.toMatchObject({ identityId: 'identity/2', invitation: { status: 'queued' } });
+    expect(api.post).toHaveBeenCalledWith('/admin/staff/identity%2F2/resend-invitation', {}, { headers: { 'X-Step-Up-Challenge': 'challenge-resend' } });
   });
 
   it('sends exact step-up headers and parses the change envelope for prepare and decision', async () => {

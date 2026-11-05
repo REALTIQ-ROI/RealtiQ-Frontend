@@ -25,8 +25,22 @@ export interface AdminStaffRecord {
   /** Display-only server values. This list never grants frontend capabilities. */
   departments?: string[];
   authVersion?: number;
+  firstLoginRequired?: boolean;
+  invitation?: StaffInvitationSummary | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+}
+
+export interface StaffInvitationSummary {
+  id?: string | null;
+  status?: string | null;
+  expiresAt?: string | null;
+  errorCode?: string | null;
+}
+
+export interface CreatedAdminStaff extends AdminStaffRecord {
+  firstLoginRequired: boolean;
+  invitation?: StaffInvitationSummary | null;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -37,6 +51,17 @@ const optionalString = (value: unknown): string | null | undefined =>
 
 const optionalBoolean = (value: unknown): boolean | null | undefined =>
   value === null || typeof value === 'boolean' ? value : undefined;
+
+const parseInvitation = (value: unknown): StaffInvitationSummary | null | undefined => {
+  if (value === null) return null;
+  if (!isRecord(value)) return undefined;
+  return {
+    id: optionalString(value.id),
+    status: optionalString(value.status),
+    expiresAt: optionalString(value.expiresAt),
+    errorCode: optionalString(value.errorCode),
+  };
+};
 
 const parseAdminStaffRecord = (value: unknown): AdminStaffRecord => {
   if (!isRecord(value) || typeof value.identityId !== 'string' || !value.identityId.trim()) {
@@ -56,6 +81,8 @@ const parseAdminStaffRecord = (value: unknown): AdminStaffRecord => {
       ? value.departments
       : undefined,
     authVersion: Number.isInteger(value.authVersion) ? value.authVersion as number : undefined,
+    firstLoginRequired: optionalBoolean(value.firstLoginRequired) ?? undefined,
+    invitation: parseInvitation(value.invitation),
     createdAt: optionalString(value.createdAt),
     updatedAt: optionalString(value.updatedAt),
   };
@@ -90,8 +117,8 @@ export const staffAccessChangeService = {
     const response = (await api.get<unknown>('/admin/staff-access-changes')).data;
     return parseStaffAccessChanges(response);
   },
-  async listStaff(options: { q?: string; limit?: number; after?: string } = {}): Promise<{ staff: AdminStaffRecord[]; nextCursor: string | null }> {
-    const { data } = await api.get<unknown>('/admin/staff', { params: { limit: options.limit ?? 25, ...(options.q ? { q: options.q } : {}), ...(options.after ? { after: options.after } : {}) } });
+  async listStaff(options: { q?: string; limit?: number; after?: string; includeUnassigned?: boolean } = {}): Promise<{ staff: AdminStaffRecord[]; nextCursor: string | null }> {
+    const { data } = await api.get<unknown>('/admin/staff', { params: { limit: options.limit ?? 25, ...(options.q ? { q: options.q } : {}), ...(options.after ? { after: options.after } : {}), ...(options.includeUnassigned ? { includeUnassigned: true } : {}) } });
     if (!isRecord(data) || !Array.isArray(data.staff) || !(data.nextCursor === null || typeof data.nextCursor === 'string')) {
       throw new Error('The staff directory returned an unsupported response. Refresh the directory or contact support.');
     }
@@ -99,6 +126,21 @@ export const staffAccessChangeService = {
       staff: data.staff.map(parseAdminStaffRecord),
       nextCursor: data.nextCursor,
     };
+  },
+  async createStaff(body: { name: string; email: string; departments: StaffDepartment[] }, challengeId: string): Promise<CreatedAdminStaff> {
+    const { data, status } = await api.post<unknown>('/admin/staff', body, { headers: { 'X-Step-Up-Challenge': challengeId } });
+    if (status !== 201 || !isRecord(data) || !isRecord(data.staff) || data.staff.role !== 'admin') throw new Error('The server did not confirm the Admin staff account. Refresh the directory before trying again.');
+    const staff = parseAdminStaffRecord(data.staff);
+    if (typeof data.staff.firstLoginRequired !== 'boolean') throw new Error('The server response did not confirm the staff activation state. Refresh the directory before proceeding.');
+    return { ...staff, firstLoginRequired: data.staff.firstLoginRequired };
+  },
+  async resendInvitation(identityId: string, challengeId: string): Promise<CreatedAdminStaff> {
+    const path = `/admin/staff/${encodeURIComponent(identityId)}/resend-invitation`;
+    const { data, status } = await api.post<unknown>(path, {}, { headers: { 'X-Step-Up-Challenge': challengeId } });
+    if (status !== 202 || !isRecord(data) || !isRecord(data.staff) || data.staff.role !== 'admin' || data.staff.identityId !== identityId) throw new Error('The server did not confirm the replacement invitation. Refresh the directory before trying again.');
+    const staff = parseAdminStaffRecord(data.staff);
+    if (typeof data.staff.firstLoginRequired !== 'boolean') throw new Error('The server response did not confirm the staff activation state. Refresh the directory before proceeding.');
+    return { ...staff, firstLoginRequired: data.staff.firstLoginRequired };
   },
   async prepare(body: { targetIdentityId: string; departments: StaffDepartment[] }, challengeId: string) {
     const { data } = await api.post<unknown>('/admin/staff-access-changes', body, { headers: { 'X-Step-Up-Challenge': challengeId } });

@@ -185,6 +185,26 @@ describe('AuthProvider account and profile lifecycle', () => {
     expect(localStorage.getItem('user')).toBeNull();
   });
 
+  it('does not persist a session when an invited Admin must set a permanent password first', async () => {
+    const invitationGate = new ApiRequestError('Set a new password to activate your Admin staff sign-in.', {
+      status: 428,
+      code: 'AUTH_INITIAL_PASSWORD_CHANGE_REQUIRED',
+      passwordChangeRequired: true,
+    });
+    vi.mocked(authService.login).mockRejectedValueOnce(invitationGate);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await act(async () => {
+      await expect(result.current.login({ email: 'ada@example.test', password: '483920175', role: 'admin' })).rejects.toBe(invitationGate);
+    });
+
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.loginChallenge).toBeNull();
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(localStorage.getItem('user')).toBeNull();
+    expect(sessionStorage.length).toBe(0);
+  });
+
   it('does not submit an expired login challenge', async () => {
     vi.mocked(authService.login).mockResolvedValueOnce({
       code: 'AUTH_SECOND_FACTOR_REQUIRED',
