@@ -84,7 +84,7 @@ describe('PropertiesProvider pagination', () => {
 
   it('keeps landlord loading on the owner endpoint and its 20-item pages', async () => {
     useAuthMock.mockReturnValue({
-      user: { _id: 'user-1', role: 'landlord' },
+      user: { _id: 'user-1', role: 'owner' },
       token: 'session-1',
       activeProfile: { id: 'profile-1' },
     });

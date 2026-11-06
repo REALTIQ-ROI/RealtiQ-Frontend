@@ -15,7 +15,7 @@ const teamMembers = [
   {
     name: 'Fatima Aliyu',
     role: 'Director of Client Relations',
-    bio: 'Fatima brings a decade of high-net-worth client management experience, ensuring every buyer and landlord receives a bespoke, white-glove service.',
+    bio: 'Fatima brings a decade of high-net-worth client management experience, ensuring every buyer and owner receives a bespoke, white-glove service.',
   },
 ];
 
@@ -47,7 +47,7 @@ const milestones = [
   { year: '2020', event: 'Launched our proprietary property vetting framework, reviewed by leading architects and legal experts.' },
   { year: '2022', event: 'Expanded to cover Abuja and Port Harcourt markets; surpassed ₦100B in total property listings.' },
   { year: '2024', event: 'Introduced the RealtIQ Digital Deed — a blockchain-anchored title verification system.' },
-  { year: '2026', event: 'Over 500 successful transactions, 200+ verified landlords, and Nigeria\'s most trusted premium property platform.' },
+  { year: '2026', event: 'Over 500 successful transactions, 200+ verified owners, and Nigeria\'s most trusted premium property platform.' },
 ];
 
 const About = () => {
@@ -72,7 +72,7 @@ const About = () => {
           {[
             { value: '500+', label: 'Successful Transactions' },
             { value: '₦100B+', label: 'In Property Value' },
-            { value: '200+', label: 'Verified Landlords' },
+            { value: '200+', label: 'Verified Owners' },
             { value: '7', label: 'Years of Excellence' },
           ].map((stat) => (
             <div key={stat.label}>

@@ -26,7 +26,7 @@ const ValuationPage = () => {
   const purpose: AvmPurpose =
     user?.role === 'admin'
       ? 'admin_review'
-      : user?.role === 'landlord'
+      : user?.role === 'owner'
         ? 'seller_research'
         : 'buyer_research';
   const eligible = useMemo(
@@ -84,7 +84,7 @@ const ValuationPage = () => {
       );
       setValuation(result);
       retryKey.current = null;
-      if (user?.role === 'admin' || user?.role === 'landlord') {
+      if (user?.role === 'admin' || user?.role === 'owner') {
         const next = await avmService.history(propertyReference);
         setHistory(next.valuations);
         setPagination(next.pagination);

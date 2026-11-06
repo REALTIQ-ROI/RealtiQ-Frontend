@@ -5,7 +5,7 @@ import { useAuth } from "../../contexts/AuthContext";
 const dashboardPath = (role?: string) =>
   role === "admin"
     ? "/dashboard/admin"
-    : role === "landlord"
+    : role === "owner"
       ? "/dashboard/landlord"
       : role === "proxy_inspector"
         ? "/proxy/tasks"

@@ -1,4 +1,4 @@
-﻿import { Navigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Dashboard = () => {
@@ -12,7 +12,7 @@ const Dashboard = () => {
     return <Navigate to="/dashboard/admin" replace />;
   }
 
-  if (user.role === 'landlord') {
+  if (user.role === 'owner') {
     return <Navigate to="/dashboard/landlord" replace />;
   }
 

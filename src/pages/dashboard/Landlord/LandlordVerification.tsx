@@ -926,7 +926,7 @@ const LandlordVerification = () => {
     adminAccess?.profileId === profileId &&
     hasAdminCapability(adminAccess, 'verification.read'),
   );
-  const settingsPath = user?.role === 'landlord'
+  const settingsPath = user?.role === 'owner'
     ? '/dashboard/landlord/settings'
     : user?.role === 'proxy_inspector'
       ? '/account/security'

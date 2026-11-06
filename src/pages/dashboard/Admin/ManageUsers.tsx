@@ -14,7 +14,6 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { hasAdminCapability } from '../../../services/adminAccessService';
 import { userService } from '../../../services/userService';
 import type { User, UserRole } from '../../../types';
-import { isUserVerified } from '../../../utils/userVerification';
 
 const ITEMS_PER_PAGE = 10;
 const phoneRegex = /^\+[1-9]\d{1,14}$/;
@@ -192,12 +191,12 @@ const ManageUsers = () => {
             <h3 className="font-headline text-3xl font-bold">{users.filter((user) => user.role === 'buyer').length}</h3>
           </div>
           <div className="bg-surface-container-lowest p-6 rounded-xl">
-            <p className="text-secondary text-xs font-semibold uppercase tracking-wider mb-1">Landlords</p>
-            <h3 className="font-headline text-3xl font-bold">{users.filter((user) => user.role === 'landlord').length}</h3>
+            <p className="text-secondary text-xs font-semibold uppercase tracking-wider mb-1">Owners</p>
+            <h3 className="font-headline text-3xl font-bold">{users.filter((user) => user.role === 'owner').length}</h3>
           </div>
           <div className="bg-primary-container p-6 rounded-xl">
-            <p className="text-on-primary-container text-xs font-semibold uppercase tracking-wider mb-1">Verified</p>
-            <h3 className="font-headline text-3xl font-bold text-white">{users.filter(isUserVerified).length}</h3>
+            <p className="text-on-primary-container text-xs font-semibold uppercase tracking-wider mb-1">Owners verified</p>
+            <h3 className="font-headline text-3xl font-bold text-white">{users.filter((user) => user.role === 'owner' && user.ownerVerified === true).length}</h3>
           </div>
         </section>
 
@@ -223,7 +222,7 @@ const ManageUsers = () => {
               >
                 <option value="all">All Roles</option>
                 <option value="buyer">Buyer</option>
-                <option value="landlord">Landlord</option>
+                <option value="owner">Owner</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
@@ -249,7 +248,9 @@ const ManageUsers = () => {
                     <th className="px-8 py-5 text-xs font-bold text-secondary uppercase tracking-widest">Name</th>
                     <th className="px-8 py-5 text-xs font-bold text-secondary uppercase tracking-widest">Email</th>
                     <th className="px-8 py-5 text-xs font-bold text-secondary uppercase tracking-widest">Role</th>
-                    <th className="px-8 py-5 text-xs font-bold text-secondary uppercase tracking-widest">Verified</th>
+                    <th className="px-8 py-5 text-xs font-bold text-secondary uppercase tracking-widest">Account status</th>
+                    <th className="px-8 py-5 text-xs font-bold text-secondary uppercase tracking-widest">Email verification</th>
+                    <th className="px-8 py-5 text-xs font-bold text-secondary uppercase tracking-widest">Owner verification</th>
                     <th className="px-8 py-5 text-xs font-bold text-secondary uppercase tracking-widest">Created</th>
                     <th className="px-8 py-5 text-xs font-bold text-secondary uppercase tracking-widest text-right">Actions</th>
                   </tr>
@@ -272,14 +273,9 @@ const ManageUsers = () => {
                       <td className="px-8 py-5">
                         <span className="bg-surface-container-high px-3 py-1 rounded-full text-xs font-bold capitalize">{user.role}</span>
                       </td>
-                      <td className="px-8 py-5">
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                          isUserVerified(user) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                        }`}>
-                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                          {isUserVerified(user) ? 'Verified' : 'Unverified'}
-                        </span>
-                      </td>
+                      <td className="px-8 py-5 text-sm capitalize">{user.accountStatus ?? 'Not returned'}</td>
+                      <td className="px-8 py-5 text-sm">{user.emailVerified === true ? 'Verified' : user.emailVerified === false ? 'Unverified' : 'Not returned'}</td>
+                      <td className="px-8 py-5 text-sm">{user.role === 'owner' ? user.ownerVerified === true ? 'Verified' : user.ownerVerified === false ? 'Unverified' : 'Not returned' : '—'}</td>
                       <td className="px-8 py-5 text-sm text-on-surface-variant">{formatDate(user.createdAt)}</td>
                       <td className="px-8 py-5 text-right">
                         <div className="flex justify-end gap-2">

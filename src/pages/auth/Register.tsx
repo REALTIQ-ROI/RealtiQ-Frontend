@@ -6,11 +6,11 @@ import type { UserRole } from '../../types';
 import { clearMarketAccessIntent, marketAuthPath, useMarketAccessIntent } from '../../hooks/useMarketAccessIntent';
 import { normalizeVerificationEmail } from '../../lib/emailVerification';
 
-type RegisterRole = Extract<UserRole, 'buyer' | 'landlord'>;
+type RegisterRole = Extract<UserRole, 'buyer' | 'owner'>;
 
 const ROLES: { value: RegisterRole; label: string; description: string }[] = [
   { value: 'buyer', label: 'Buyer', description: 'Browse and purchase properties' },
-  { value: 'landlord', label: 'Landlord', description: 'List and manage your properties' },
+  { value: 'owner', label: 'Owner', description: 'List and manage your properties' },
 ];
 
 const validatePassword = (pwd: string): string | null => {

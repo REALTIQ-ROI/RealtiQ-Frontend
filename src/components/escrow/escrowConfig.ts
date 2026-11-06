@@ -29,18 +29,18 @@ export const RULE_LABELS: Record<EscrowRuleType, string> = {
 export const RULE_TYPES = Object.entries(RULE_LABELS).map(([value, label]) => ({ value: value as EscrowRuleType, label }));
 export const RULE_ACTOR_GUIDANCE: Record<EscrowRuleType, string> = {
   buyer_confirmation_required: 'Completed by the buyer.',
-  seller_confirmation_required: 'Completed by the landlord.',
+  seller_confirmation_required: 'Completed by the seller.',
   admin_approval_required: 'Completed by a RealtIQ administrator.',
   inspection_completed: 'Confirmed by the buyer after inspection.',
   document_verified: 'Completed by a RealtIQ administrator.',
   title_document_uploaded: 'Completed by a RealtIQ administrator.',
-  physical_handover_completed: 'Confirmed by the landlord.',
+  physical_handover_completed: 'Confirmed by the seller.',
   release_after_days: 'Completed by a RealtIQ administrator after the waiting period.',
   custom_manual_condition: 'Completed by a RealtIQ administrator.',
 };
 const permissions: Record<UserRole, EscrowRuleType[]> = {
   buyer: ['buyer_confirmation_required', 'inspection_completed'],
-  landlord: ['seller_confirmation_required', 'physical_handover_completed'],
+  owner: ['seller_confirmation_required', 'physical_handover_completed'],
   proxy_inspector: [],
   admin: ['admin_approval_required', 'document_verified', 'title_document_uploaded', 'custom_manual_condition', 'release_after_days'],
 };
@@ -58,8 +58,8 @@ export const escrowActions = (role: UserRole, escrow: Escrow) => {
   const progress = requiredProgress(escrow);
   return {
     initializePayment: role === 'buyer' && escrow.status === 'pending_payment',
-    dispute: (role === 'buyer' || role === 'landlord') && ['locked', 'release_pending'].includes(escrow.status),
-    requestRelease: (role === 'landlord' || role === 'admin') && ['locked', 'release_pending'].includes(escrow.status) && progress.allComplete,
+    dispute: (role === 'buyer' || role === 'owner') && ['locked', 'release_pending'].includes(escrow.status),
+    requestRelease: (role === 'owner' || role === 'admin') && ['locked', 'release_pending'].includes(escrow.status) && progress.allComplete,
     approveRelease: role === 'admin' && escrow.status === 'release_pending' && progress.allComplete,
     cancel: (role === 'buyer' && escrow.status === 'pending_payment') || (role === 'admin' && escrow.status === 'locked'),
   };

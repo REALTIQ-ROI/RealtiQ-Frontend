@@ -1,5 +1,5 @@
 export type AdminSearchType =
-  | 'user' | 'landlord' | 'property' | 'project' | 'inquiry'
+  | 'user' | 'owner' | 'property' | 'project' | 'inquiry'
   | 'payment' | 'cart_checkout' | 'escrow' | 'installment'
   | 'title_verification' | 'proxy_inspector' | 'proxy_inspection' | 'virtual_tour';
 

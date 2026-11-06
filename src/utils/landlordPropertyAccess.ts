@@ -1,4 +1,4 @@
 import type { User } from '../types';
 
-export const isVerifiedLandlord = (user: Pick<User, 'role' | 'landlordVerified'> | null | undefined): boolean =>
-  user?.role === 'landlord' && user.landlordVerified === true;
+export const isVerifiedOwner = (user: Pick<User, 'role' | 'ownerVerified'> | null | undefined): boolean =>
+  user?.role === 'owner' && user.ownerVerified === true;

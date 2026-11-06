@@ -7,14 +7,14 @@ const evidenceState = (component?: TrustComponent): EvidenceState => {
   return (component.count ?? 0) > 0 || (component.score ?? 0) > 0 ? 'recorded' : 'not_started';
 };
 
-const TrustProgressChecklist = ({ trust, role }: { trust: TrustDecision; role: 'buyer' | 'landlord' }) => {
+const TrustProgressChecklist = ({ trust, role }: { trust: TrustDecision; role: 'buyer' | 'owner' }) => {
   const components = trust.components ?? {};
   const items: ChecklistItem[] = [
     { key: 'identity', title: 'Verify your identity', description: 'Complete the account verification steps available in your settings.', component: components.identity, state: evidenceState(components.identity) },
     { key: 'transactions', title: 'Build verified transaction history', description: role === 'buyer' ? 'Complete purchases through RealtIQ so eligible activity can be counted.' : 'Complete property transactions through RealtIQ so eligible activity can be counted.', component: components.transactions, state: evidenceState(components.transactions) },
     { key: 'ratings', title: 'Build a positive rating history', description: 'Complete genuine platform activity and encourage counterparties to leave honest feedback.', component: components.ratings, state: evidenceState(components.ratings) },
     { key: 'responsiveness', title: 'Respond consistently', description: 'Reply promptly to legitimate enquiries and transaction requests when this evidence becomes available.', component: components.responsiveness, state: evidenceState(components.responsiveness) },
-    ...(role === 'landlord' ? [{ key: 'titleQuality', title: 'Strengthen title evidence', description: 'Use RealtIQ title verification for eligible property documents. RealtIQ reviews submitted evidence before verification.', component: components.titleQuality, state: evidenceState(components.titleQuality) }] : []),
+    ...(role === 'owner' ? [{ key: 'titleQuality', title: 'Strengthen title evidence', description: 'Use RealtIQ title verification for eligible property documents. RealtIQ reviews submitted evidence before verification.', component: components.titleQuality, state: evidenceState(components.titleQuality) }] : []),
   ];
   const recorded = items.filter((item) => item.state === 'recorded').length;
   const percentage = Math.round((recorded / items.length) * 100);

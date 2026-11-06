@@ -16,7 +16,7 @@ const formatDate = (date?: string) =>
       })
     : 'N/A';
 
-const displayName = (name?: string | null) => name?.trim() || 'Unnamed landlord';
+const displayName = (name?: string | null) => name?.trim() || 'Unnamed owner';
 
 const initials = (name: string) =>
   name
@@ -29,7 +29,7 @@ const initials = (name: string) =>
 const LandlordDetails = () => {
   const { id } = useParams();
   const { data: user, loading, error, execute } = useAsync(
-    () => (id ? userService.fetchLandlordById(id) : Promise.reject(new Error('Missing user id'))),
+    () => (id ? userService.fetchOwnerById(id) : Promise.reject(new Error('Missing user id'))),
     Boolean(id),
   );
 
@@ -41,11 +41,11 @@ const LandlordDetails = () => {
             <nav className="flex items-center gap-2 text-secondary text-sm mb-3 tracking-wide">
               <span>Admin</span>
               <span className="material-symbols-outlined text-sm">chevron_right</span>
-              <Link className="hover:text-primary" to="/dashboard/admin/manage-landlords">Landlords</Link>
+              <Link className="hover:text-primary" to="/dashboard/admin/manage-owners">Owners</Link>
               <span className="material-symbols-outlined text-sm">chevron_right</span>
               <span className="text-on-background font-medium">{user ? displayName(user.name) : 'Profile'}</span>
             </nav>
-            <h1 className="flex flex-wrap items-center gap-3 font-headline text-5xl font-extrabold tracking-tighter">{user ? displayName(user.name) : 'Landlord Profile'}{user?.role === 'landlord' ? <SellerTrustBadge badge={user?.trustBadge as import('../../../types/phase45').TrustBadge} /> : null}</h1>
+            <h1 className="flex flex-wrap items-center gap-3 font-headline text-5xl font-extrabold tracking-tighter">{user ? displayName(user.name) : 'Owner Profile'}{user?.role === 'owner' ? <SellerTrustBadge badge={user?.trustBadge as import('../../../types/phase45').TrustBadge} /> : null}</h1>
             <p className="text-secondary mt-2 text-lg">User profile and account details</p>
           </div>
         </div>
@@ -66,7 +66,7 @@ const LandlordDetails = () => {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-bold text-xl">{displayName(user.name)}</h3>
-                    {user.role === 'landlord' ? <SellerTrustBadge badge={user.trustBadge as import('../../../types/phase45').TrustBadge} compact /> : null}
+                    {user.role === 'owner' ? <SellerTrustBadge badge={user.trustBadge as import('../../../types/phase45').TrustBadge} compact /> : null}
                     {isUserVerified(user) ? (
                       <span className="material-symbols-outlined text-blue-500 text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
                         verified
@@ -115,7 +115,7 @@ const LandlordDetails = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-primary-container text-on-primary-container p-8 rounded-xl">
                   <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-60 mb-2">Role</p>
-                  <h2 className="text-3xl font-extrabold text-white capitalize">{user.role}</h2>
+                  <h2 className="text-3xl font-extrabold text-white">{user.role === 'owner' ? 'Owner' : user.role}</h2>
                 </div>
                 <div className="bg-surface-container-lowest p-8 rounded-xl">
                   <p className="text-[10px] font-bold text-secondary uppercase tracking-[0.2em] mb-2">Properties</p>
@@ -131,7 +131,10 @@ const LandlordDetails = () => {
                 <h3 className="text-xl font-bold mb-6">Account Summary</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <p><strong>User ID:</strong> {user._id}</p>
-                  <p><strong>Verification:</strong> {isUserVerified(user) ? 'Verified' : 'Unverified'}</p>
+                  <p><strong>Account status:</strong> {user.accountStatus ?? 'Not returned'}</p>
+                  <p><strong>Email verification:</strong> {user.emailVerified === true ? 'Verified' : user.emailVerified === false ? 'Unverified' : 'Not returned'}</p>
+                  {user.role === 'owner' ? <p><strong>Owner verification:</strong> {user.ownerVerified === true ? 'Verified' : user.ownerVerified === false ? 'Unverified' : 'Not returned'}</p> : <p><strong>Verification:</strong> {isUserVerified(user) ? 'Verified' : 'Unverified'}</p>}
+                  {user.role === 'owner' ? <p><strong>Trust badge:</strong> {user.trustBadge ?? 'none'}</p> : null}
                   <p><strong>Email:</strong> {user.email || 'No email on file'}</p>
                   <p><strong>Phone:</strong> {user.phone || 'No phone on file'}</p>
                 </div>

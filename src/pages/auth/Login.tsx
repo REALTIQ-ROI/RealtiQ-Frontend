@@ -9,17 +9,17 @@ import EmailVerificationResend from '../../components/auth/EmailVerificationRese
 import { normalizeVerificationEmail } from '../../lib/emailVerification';
 import { isEmailUnverifiedLoginError } from '../../services/authService';
 
-type Role = Extract<UserRole, 'buyer' | 'landlord' | 'proxy_inspector'>;
+type Role = Extract<UserRole, 'buyer' | 'owner' | 'proxy_inspector'>;
 
 const ROLES: { value: Role; label: string }[] = [
   { value: 'buyer', label: 'Buyer' },
-  { value: 'landlord', label: 'Landlord' },
+  { value: 'owner', label: 'Owner' },
   { value: 'proxy_inspector', label: 'Verified Property Agent' },
 ];
 
 const DASHBOARD_PATHS: Record<Role, string> = {
   buyer: '/dashboard/buyer',
-  landlord: '/dashboard/landlord',
+  owner: '/dashboard/landlord',
   proxy_inspector: '/proxy/tasks',
 };
 

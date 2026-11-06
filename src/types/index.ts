@@ -1,4 +1,4 @@
-﻿export type UserRole = 'buyer' | 'landlord' | 'proxy_inspector' | 'admin';
+export type UserRole = 'buyer' | 'owner' | 'proxy_inspector' | 'admin';
 export * from './virtualTour';
 export * from './phase2';
 export type { StructuredPropertyFacts } from './phase45';
@@ -206,7 +206,7 @@ export interface ProjectOwnerSummary {
   id?: string;
   _id?: string;
   name?: string;
-  landlordVerified?: boolean;
+  ownerVerified?: boolean;
   ratingAverage?: number;
   trustBadge?: import('./phase45').TrustBadge;
 }
@@ -364,7 +364,7 @@ export interface PropertyOwner {
   email?: string;
   phone?: string;
   selfieUrl?: string;
-  landlordVerified?: boolean;
+  ownerVerified?: boolean;
   ratingAverage?: number;
   trustBadge?: import('./phase45').TrustBadge;
 }
@@ -481,7 +481,9 @@ export interface User {
   role: UserRole;
   phone?: string;
   emailVerified?: boolean;
-  landlordVerified?: boolean;
+  phoneVerified?: boolean;
+  accountStatus?: string;
+  ownerVerified?: boolean;
   trustBadge?: import('./phase45').TrustBadge;
   favourites?: string[];
   ratingAverage?: number;

@@ -261,7 +261,7 @@ const CreateEscrow = () => {
           <h2 className='text-xl font-bold'>Escrow is unavailable</h2>
           <p className='mt-2 text-sm text-secondary'>
             {!escrowOffered
-              ? 'The landlord has not offered escrow for this property.'
+              ? 'The owner has not offered escrow for this property.'
               : 'Only available, approved properties owned by another user can be purchased through escrow.'}
           </p>
           <Link

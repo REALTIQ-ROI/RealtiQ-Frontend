@@ -8,7 +8,7 @@ import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
 import { paymentService } from '../../../services/paymentService';
 import { propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
-import { isVerifiedLandlord } from '../../../utils/landlordPropertyAccess';
+import { isVerifiedOwner } from '../../../utils/landlordPropertyAccess';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-NG', {
@@ -27,7 +27,7 @@ const formatRelativeDate = (date?: string) => {
 
 const LandlordDashboard = () => {
   const { user } = useAuth();
-  const canAddProperty = isVerifiedLandlord(user);
+  const canAddProperty = isVerifiedOwner(user);
   const { properties } = useProperties();
   const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
   const { data: payments } = useAsync(() => paymentService.getPayments(), true);
@@ -68,7 +68,7 @@ const LandlordDashboard = () => {
   return (
     <LandlordPortalLayout
       active="overview"
-      title="Landlord Dashboard"
+      title="Seller Portal"
       topLeft={
         <div className="relative w-full max-w-md">
           <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
@@ -87,7 +87,7 @@ const LandlordDashboard = () => {
           <div>
             <p className="text-[0.65rem] uppercase tracking-[0.2em] font-bold text-secondary mb-2">Portfolio Overview</p>
             <h2 className="text-4xl font-extrabold text-primary tracking-tighter">
-              Welcome back, {user?.name?.split(' ')[0] ?? 'Landlord'}.
+              Welcome back, {user?.name?.split(' ')[0] ?? 'Owner'}.
             </h2>
             <p className="text-secondary mt-2 font-medium max-w-2xl">
               Review live portfolio data, inquiry flow, and payments captured for your listings.
@@ -214,7 +214,7 @@ const LandlordDashboard = () => {
               <p className="text-sm text-on-surface leading-relaxed">
                 {myProperties.length > 0
                   ? `${soldProperties.length} of your listings are sold and ${openInquiries} inquiries remain open.`
-                  : 'No landlord portfolio data is currently linked to your account.'}
+                  : 'No property portfolio data is currently linked to your account.'}
               </p>
             </div>
           </div>

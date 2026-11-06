@@ -103,7 +103,7 @@ describe('installment helpers', () => {
 
   it('gates condition satisfaction by role', () => {
     expect(canRoleSatisfyCondition('buyer', { type: 'buyer_confirmation', satisfied: false })).toBe(true);
-    expect(canRoleSatisfyCondition('landlord', { type: 'handover', satisfied: false })).toBe(true);
+    expect(canRoleSatisfyCondition('owner', { type: 'handover', satisfied: false })).toBe(true);
     expect(canRoleSatisfyCondition('admin', { type: 'document_verified', satisfied: false })).toBe(true);
     expect(canRoleSatisfyCondition('buyer', { type: 'document_verified', satisfied: false })).toBe(false);
   });

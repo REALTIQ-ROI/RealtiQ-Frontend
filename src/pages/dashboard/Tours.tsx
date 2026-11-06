@@ -317,7 +317,7 @@ const Tours = () => {
     </div>
   );
 
-  if (user?.role === 'landlord') {
+  if (user?.role === 'owner') {
     return (
       <LandlordPortalLayout active="tours" title="Tours" topLeft={searchInput}>
         {body}

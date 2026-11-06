@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   profileId: 'profile-1',
   profileKind: 'owner',
   profileStructure: 'individual',
-  accountRole: 'landlord',
+  accountRole: 'owner',
   adminCapabilities: [] as string[],
   current: vi.fn(),
   onboarding: vi.fn(),
@@ -86,7 +86,7 @@ describe('landlord profile verification loading', () => {
     mocks.profileId = 'profile-1';
     mocks.profileKind = 'owner';
     mocks.profileStructure = 'individual';
-    mocks.accountRole = 'landlord';
+    mocks.accountRole = 'owner';
     mocks.adminCapabilities = [];
     localStorage.setItem('activeProfileId', 'profile-1');
     localStorage.setItem('token', 'session-1');

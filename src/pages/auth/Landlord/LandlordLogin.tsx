@@ -7,7 +7,7 @@ import EmailVerificationResend from '../../../components/auth/EmailVerificationR
 import { normalizeVerificationEmail } from '../../../lib/emailVerification';
 import { isEmailUnverifiedLoginError } from '../../../services/authService';
 
-const LandlordLogin = () => {
+const OwnerLogin = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, logout, isLoading, loginChallenge } = useAuth();
@@ -19,7 +19,7 @@ const LandlordLogin = () => {
   const [autoResendKey, setAutoResendKey] = useState(0);
   const loginSubmissionRef = useRef(false);
   const requestedRedirect = (location.state as { redirectTo?: unknown } | null)?.redirectTo;
-  const landlordRedirect =
+  const ownerRedirect =
     typeof requestedRedirect === 'string' &&
     requestedRedirect.startsWith('/dashboard/landlord') &&
     !requestedRedirect.startsWith('//')
@@ -32,7 +32,7 @@ const LandlordLogin = () => {
     loginSubmissionRef.current = true;
     setVerificationRequired(false);
     try {
-      const user = await login({ email, password, role: 'landlord' });
+      const user = await login({ email, password, role: 'owner' });
       if (!user) return;
       finishLogin(user);
     } catch (err) {
@@ -51,14 +51,14 @@ const LandlordLogin = () => {
   };
 
   const finishLogin = (user: NonNullable<Awaited<ReturnType<typeof login>>>) => {
-      if (user.role !== 'landlord') {
+      if (user.role !== 'owner') {
         logout();
         toast.error('You are attempting to log in through the wrong portal');
         return;
       }
 
       toast.success('Login successful');
-      navigate(landlordRedirect ?? '/dashboard/landlord');
+      navigate(ownerRedirect ?? '/dashboard/landlord');
   };
 
   return (
@@ -105,7 +105,7 @@ const LandlordLogin = () => {
                 </h2>
                 <div className="h-1 w-12 bg-white/40 mb-6" />
                 <p className="text-white/70 text-sm leading-relaxed">
-                  Access your landlord workspace to manage listings, portfolio activity, and property operations.
+                  Access your Seller Portal to manage listings, portfolio activity, and property operations.
                 </p>
               </div>
             </div>
@@ -119,7 +119,7 @@ const LandlordLogin = () => {
               >
                 Welcome Back
               </h1>
-              <p className="text-secondary text-sm">Please enter your details to access your landlord dashboard.</p>
+              <p className="text-secondary text-sm">Please enter your details to access your Seller Portal.</p>
             </div>
 
             {loginChallenge ? (
@@ -130,20 +130,20 @@ const LandlordLogin = () => {
                 type="button"
                 className="flex-1 py-2 rounded-md text-xs font-bold tracking-wide transition-all duration-200 bg-white text-on-surface shadow-sm"
               >
-                Landlord
+                Owner
               </button>
             </div>
 
             <form className="space-y-5" onSubmit={(e) => void onSubmit(e)}>
               <div>
                 <label
-                  htmlFor="landlord-login-email"
+                  htmlFor="owner-login-email"
                   className="block text-on-surface text-xs font-bold uppercase tracking-wider mb-2"
                 >
                   Email Address
                 </label>
                 <input
-                  id="landlord-login-email"
+                  id="owner-login-email"
                   className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-surface-tint/20 transition-all duration-300"
                   style={{ border: '1px solid rgba(198,198,205,0.2)' }}
                   type="email"
@@ -156,14 +156,14 @@ const LandlordLogin = () => {
 
               <div>
                 <label
-                  htmlFor="landlord-login-password"
+                  htmlFor="owner-login-password"
                   className="block text-on-surface text-xs font-bold uppercase tracking-wider mb-2"
                 >
                   Password
                 </label>
                 <div className="relative">
                   <input
-                    id="landlord-login-password"
+                    id="owner-login-password"
                     className="w-full bg-surface-container-low rounded-lg px-4 py-3 text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-surface-tint/20 transition-all duration-300"
                     style={{ border: '1px solid rgba(198,198,205,0.2)' }}
                     type={showPassword ? 'text' : 'password'}
@@ -184,7 +184,7 @@ const LandlordLogin = () => {
                 </div>
                 <div className="mt-2 text-right">
                   <Link
-                    to={`/forgot-password?role=landlord&email=${encodeURIComponent(email)}`}
+                    to={`/forgot-password?role=owner&email=${encodeURIComponent(email)}`}
                     className="text-xs font-bold text-primary hover:underline uppercase tracking-wider"
                   >
                     Forgot Password?
@@ -206,15 +206,15 @@ const LandlordLogin = () => {
               </button>
             </form>
 
-            {verificationRequired ? <section className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-left" aria-labelledby="landlord-login-email-verification-title">
-              <h2 id="landlord-login-email-verification-title" className="font-bold text-amber-950">Email verification required</h2>
+            {verificationRequired ? <section className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-left" aria-labelledby="owner-login-email-verification-title">
+              <h2 id="owner-login-email-verification-title" className="font-bold text-amber-950">Email verification required</h2>
               <p className="mt-1 text-sm text-amber-900">Please verify your email before signing in. Check the resend status below for the verification request.</p>
             </section> : null}
             <EmailVerificationResend email={verificationEmail} visible={verificationRequired && !loginChallenge} autoRequestKey={verificationRequired ? autoResendKey : null} />
 
             <p className="mt-8 text-center text-secondary text-sm">
               Don&apos;t have an account?{' '}
-              <Link to="/auth/landlord/register" className="text-primary font-bold hover:underline">
+              <Link to="/auth/owner/register" className="text-primary font-bold hover:underline">
                 Create one
               </Link>
             </p>
@@ -246,4 +246,4 @@ const LandlordLogin = () => {
   );
 };
 
-export default LandlordLogin;
+export default OwnerLogin;

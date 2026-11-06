@@ -5,6 +5,7 @@ import { userService } from '../services/userService';
 import { profileService, type AccountProfileSummary } from '../services/profileService';
 import { adminAccessService, type AdminAccessProjection } from '../services/adminAccessService';
 import type { LoginPayload, RegisterPayload, User } from '../types';
+import { normalizeCachedUserDTO } from '../utils/normalizeUserDTO';
 
 interface AuthContextValue {
   user: User | null;
@@ -36,7 +37,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const parseUser = (value: string | null): User | null => {
   if (!value) return null;
   try {
-    return JSON.parse(value) as User;
+    return normalizeCachedUserDTO(JSON.parse(value) as User);
   } catch {
     return null;
   }

@@ -16,10 +16,10 @@ vi.mock('../../../components/property/PropertyForm', () => ({ default: () => <fo
 
 const mockedUseAuth = vi.mocked(useAuth);
 
-const renderAddProperty = (landlordVerified: boolean | undefined) => {
+const renderAddProperty = (ownerVerified: boolean | undefined) => {
   mockedUseAuth.mockReturnValue({
-    user: { _id: 'landlord-1', name: 'Landlord Example', email: 'landlord@example.test', role: 'landlord', landlordVerified },
-    activeProfile: { id: 'landlord-profile', name: 'Landlord Example', type: 'landlord', status: 'active' },
+    user: { _id: 'landlord-1', name: 'Landlord Example', email: 'landlord@example.test', role: 'owner', ownerVerified },
+    activeProfile: { id: 'landlord-profile', name: 'Landlord Example', type: 'owner', status: 'active' },
   } as ReturnType<typeof useAuth>);
 
   return render(<MemoryRouter><AddProperty /></MemoryRouter>);

@@ -1,4 +1,4 @@
-﻿import { Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
 import PropertyCard from '../../components/property/PropertyCard';
 import MediaPreview from '../../components/property/MediaPreview';
@@ -13,7 +13,7 @@ import { MARKET_ACCESS_PATH, marketAuthPath } from '../../hooks/useMarketAccessI
 const Home = () => {
   const { properties, loading, error, refreshProperties } = useProperties();
   const { user, isAuthenticated } = useAuth();
-  const canViewMediaMissingProperties = user?.role === 'admin' || user?.role === 'landlord';
+  const canViewMediaMissingProperties = user?.role === 'admin' || user?.role === 'owner';
   const homepageProperties = canViewMediaMissingProperties
     ? properties
     : properties.filter((property) => property.media?.some((media) =>

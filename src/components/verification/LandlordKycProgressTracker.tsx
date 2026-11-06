@@ -22,9 +22,9 @@ interface LandlordKycProgressTrackerProps {
 }
 
 const LandlordKycProgressTracker = ({ progress }: LandlordKycProgressTrackerProps) => (
-  <section aria-labelledby="landlord-kyc-progress-title" className="rounded-2xl border border-outline-variant/10 bg-white p-6 lg:p-8">
+  <section aria-labelledby="owner-kyc-progress-title" className="rounded-2xl border border-outline-variant/10 bg-white p-6 lg:p-8">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><p className="text-xs font-bold uppercase tracking-widest text-secondary">Your KYC journey</p><h2 id="landlord-kyc-progress-title" className="mt-1 text-xl font-extrabold">KYC progress</h2></div>
+      <div><p className="text-xs font-bold uppercase tracking-widest text-secondary">Your KYC journey</p><h2 id="owner-kyc-progress-title" className="mt-1 text-xl font-extrabold">KYC progress</h2></div>
       <span className={`rounded-full px-3 py-1 text-sm font-bold ${progress.approved ? 'bg-emerald-100 text-emerald-900' : 'bg-surface-container-low text-secondary'}`}>
         {progress.approved ? 'KYC approved' : `${progress.completedSteps} of 4 steps confirmed`}
       </span>

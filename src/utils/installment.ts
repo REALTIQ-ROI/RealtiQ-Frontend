@@ -114,7 +114,7 @@ export const hasUnsatisfiedRequiredConditions = (item?: InstallmentScheduleItem 
 export const canRoleSatisfyCondition = (role: UserRole | undefined, condition: InstallmentCondition): boolean => {
   if (!role || condition.satisfied) return false;
   if (role === 'buyer') return condition.type === 'buyer_confirmation';
-  if (role === 'landlord') return condition.type === 'seller_confirmation' || condition.type === 'handover';
+  if (role === 'owner') return condition.type === 'seller_confirmation' || condition.type === 'handover';
   return ['inspection_completed', 'document_verified', 'construction_stage', 'admin_approval', 'custom'].includes(
     condition.type,
   );

@@ -34,7 +34,7 @@ const LandlordSettings = () => {
         <div className="mb-10">
           <p className="text-[10px] uppercase tracking-[0.2em] text-secondary font-bold">Account Management</p>
           <h2 className="text-4xl font-extrabold tracking-tight text-primary">Settings</h2>
-          <p className="text-sm text-secondary mt-2">Review your landlord profile, verification status, and contact details.</p>
+          <p className="text-sm text-secondary mt-2">Review your owner profile, verification status, and contact details.</p>
         </div>
 
         {loading ? (
@@ -48,7 +48,7 @@ const LandlordSettings = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div>
                   <h3 className="text-lg font-bold mb-1">Profile</h3>
-                  <p className="text-sm text-secondary">View the information shown across the landlord portal.</p>
+                  <p className="text-sm text-secondary">View the information shown across the Seller Portal.</p>
                 </div>
                 <div className="md:col-span-2 space-y-6">
                   <div className="space-y-1.5">
@@ -89,10 +89,10 @@ const LandlordSettings = () => {
               <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
                 <div>
                   <h3 className="text-lg font-bold mb-1">Account Summary</h3>
-                  <p className="text-sm text-secondary">These fields come from the signed-in landlord user object.</p>
+                  <p className="text-sm text-secondary">These fields come from your signed-in account.</p>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${account?.landlordVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                  {account?.landlordVerified ? 'Landlord verified' : 'Landlord unverified'}
+                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${account?.ownerVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                  {account?.ownerVerified ? 'Owner verified' : 'Owner not verified'}
                 </span>
               </div>
               <div className="mb-5 rounded-xl border border-outline-variant/10 bg-white/70 p-4">
@@ -100,7 +100,7 @@ const LandlordSettings = () => {
                   <div>
                     <p className="text-[11px] uppercase tracking-wider text-secondary font-bold">KYC Verification</p>
                     <p className="mt-1 text-sm text-secondary">
-                      {account?.landlordVerified
+                      {account?.ownerVerified
                         ? 'Your verification is approved.'
                         : account?.kyc?.status === 'pending'
                           ? 'Your verification is under review.'
@@ -118,7 +118,7 @@ const LandlordSettings = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 text-sm">
                 <div className="rounded-xl bg-white/70 p-4 border border-outline-variant/10">
                   <p className="text-[11px] uppercase tracking-wider text-secondary font-bold">Role</p>
-                  <p className="mt-2 text-base font-semibold capitalize">{account?.role ?? 'landlord'}</p>
+                  <p className="mt-2 text-base font-semibold capitalize">{account?.role ?? 'owner'}</p>
                 </div>
                 <div className="rounded-xl bg-white/70 p-4 border border-outline-variant/10">
                   <p className="text-[11px] uppercase tracking-wider text-secondary font-bold">Email Verification</p>

@@ -30,13 +30,13 @@ describe("purchase reviews", () => {
   it("submits immutable relationship IDs with an integer rating", async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { review: { _id: "r1" } } });
     await reviewService.create({
-      landlord: "landlord-1",
+      ownerId: "owner-1",
       property: "property-1",
       transaction: "payment-1",
       rating: 5,
     });
     expect(api.post).toHaveBeenCalledWith("/reviews", {
-      landlord: "landlord-1",
+      ownerId: "owner-1",
       property: "property-1",
       transaction: "payment-1",
       rating: 5,
@@ -46,7 +46,7 @@ describe("purchase reviews", () => {
   it("rejects invalid ratings locally", async () => {
     await expect(
       reviewService.create({
-        landlord: "l",
+        ownerId: "o",
         property: "p",
         transaction: "t",
         rating: 4.5,

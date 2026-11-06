@@ -14,7 +14,7 @@ import type { ImportRowStatus, ProjectDetail, ProjectImportListItem, ProjectImpo
 import { downloadBlob, rowDataDisplayValue, rowDataValue, sanitizeImportRowPayload, validateProjectImportFile } from '../../../utils/projectImport';
 import { formatDate, labelize } from '../../../utils/projectFormatters';
 import { buildProjectImportMapping, IGNORE_IMPORT_COLUMN, parseCsvHeader, type ImportColumnMappingDraft } from '../../../utils/projectImportMapping';
-import { isVerifiedLandlord } from '../../../utils/landlordPropertyAccess';
+import { isVerifiedOwner } from '../../../utils/landlordPropertyAccess';
 
 const numericFields = new Set(['price', 'bedrooms', 'bathrooms', 'squareFeet', 'constructionProgress', 'reservationAmount', 'minimumInitialDeposit', 'installmentDurationMonths']);
 const statusOptions: Array<ImportRowStatus | 'all'> = ['all', 'valid', 'invalid', 'removed', 'imported', 'failed'];
@@ -36,7 +36,7 @@ const ProjectPropertyImports = () => {
   const { id = '', importId = '' } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const canAddProperty = isVerifiedLandlord(user);
+  const canAddProperty = isVerifiedOwner(user);
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [schema, setSchema] = useState<ProjectImportSchema | null>(null);
   const [imports, setImports] = useState<ProjectImportListItem[]>([]);
@@ -156,7 +156,7 @@ const ProjectPropertyImports = () => {
   const upload = async (file: File) => {
     if (uploading) return;
     if (!canAddProperty) {
-      toast.error('Complete landlord verification before starting a property import.');
+      toast.error('Complete owner verification before starting a property import.');
       return;
     }
     setSelectedFile(file);
@@ -256,7 +256,7 @@ const ProjectPropertyImports = () => {
   const beginProtectedImportAction = async (action: 'confirm' | 'retry') => {
     if (!session || pendingAction) return;
     if (!canAddProperty) {
-      toast.error('Complete landlord verification before importing properties.');
+      toast.error('Complete owner verification before importing properties.');
       return;
     }
     const currentImportId = sessionId(session);
@@ -391,7 +391,7 @@ const ProjectPropertyImports = () => {
               <p className="text-xs font-bold uppercase tracking-widest text-secondary">{project?.name ?? 'Project'}</p>
               <h1 className="mt-2 text-4xl font-black tracking-tight">Bulk upload properties</h1>
               <p className="mt-3 max-w-3xl text-sm text-secondary">Upload CSV/XLSX text data for this project only. No Properties are created until you confirm a valid preview.</p>
-              {!canAddProperty ? <p role="status" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">Only verified landlord accounts can add properties. New imports, confirmations and failed-row retries are unavailable until verification is complete. You can still review existing import sessions. <Link className="font-bold underline" to="/dashboard/landlord/settings/verification">Complete landlord verification</Link></p> : null}
+              {!canAddProperty ? <p role="status" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">Only verified owner accounts can add properties. New imports, confirmations and failed-row retries are unavailable until verification is complete. You can still review existing import sessions. <Link className="font-bold underline" to="/dashboard/landlord/settings/verification">Complete owner verification</Link></p> : null}
               <div className="mt-5 flex flex-wrap gap-3">
                 <label className="flex items-center gap-2 text-sm font-semibold">Template format
                   <select aria-label="Template format" value={templateFormat} onChange={(event) => setTemplateFormat(event.target.value as 'csv' | 'xlsx')} className="rounded-lg bg-surface-container-low px-3 py-2">

@@ -18,13 +18,13 @@ export default function OwnershipReviewForm({
     typeof ownership.property === "object" ? ownership.property : undefined;
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const landlord = property?.owner?.id;
-    if (pending || !landlord || !property?._id || !ownership.payment?._id)
+    const ownerId = property?.owner?._id ?? property?.owner?.id;
+    if (pending || !ownerId || !property?._id || !ownership.payment?._id)
       return;
     setPending(true);
     try {
       await reviewService.create({
-        landlord,
+        ownerId,
         property: property._id,
         transaction: ownership.payment._id,
         rating,

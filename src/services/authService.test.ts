@@ -59,6 +59,18 @@ describe('authService account security endpoints', () => {
     await expect(authService.login({ email: 'buyer@example.test', password: 'ExamplePass123!' })).rejects.toThrow('challenge response was incomplete');
   });
 
+  it('registers an owner with the canonical role and consumes owner verification fields', async () => {
+    const body = { name: 'Ada Example', email: 'ada@example.test', password: 'ExamplePass123!', role: 'owner' as const };
+    const response = {
+      message: 'Registration successful.',
+      user: { _id: 'owner-1', id: 'owner-1', name: 'Ada Example', email: 'ada@example.test', role: 'owner', ownerVerified: false },
+    };
+    vi.mocked(api.post).mockResolvedValueOnce({ data: response, status: 201 } as never);
+
+    await expect(authService.register(body)).resolves.toEqual(response);
+    expect(api.post).toHaveBeenCalledWith('/auth/register', body);
+  });
+
   it('requires the server-issued staff access projection on a successful admin login without contact-verification gating', async () => {
     const access = {
       accountId: 'admin-1', role: 'admin', profileId: 'staff-profile', staffDepartments: [],

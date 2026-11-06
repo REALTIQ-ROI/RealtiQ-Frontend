@@ -2,7 +2,7 @@ import type { AdminSearchResult, AdminSearchType } from '../../types/adminSearch
 
 export const ADMIN_SEARCH_TYPES: ReadonlyArray<{ value: '' | AdminSearchType; label: string; icon: string }> = [
   { value: '', label: 'All records', icon: 'search' }, { value: 'user', label: 'Users', icon: 'person' },
-  { value: 'landlord', label: 'Landlords', icon: 'person_pin' }, { value: 'property', label: 'Properties', icon: 'home_work' },
+  { value: 'owner', label: 'Owners', icon: 'person_pin' }, { value: 'property', label: 'Properties', icon: 'home_work' },
   { value: 'project', label: 'Projects', icon: 'business' }, { value: 'inquiry', label: 'Inquiries', icon: 'mail' },
   { value: 'payment', label: 'Payments', icon: 'payments' }, { value: 'cart_checkout', label: 'Cart checkouts', icon: 'receipt_long' },
   { value: 'escrow', label: 'Escrows', icon: 'shield_lock' }, { value: 'installment', label: 'Installments', icon: 'schedule' },
@@ -13,13 +13,13 @@ export const ADMIN_SEARCH_TYPES: ReadonlyArray<{ value: '' | AdminSearchType; la
 export const normalizeAdminSearchQuery = (value: string) => value.trim().replace(/\s+/gu, ' ');
 
 const routePatterns = [
-  /^\/dashboard\/admin(?:\/)?$/, /^\/dashboard\/admin\/users\/[^/?#]+$/, /^\/dashboard\/admin\/landlord-details\/[^/?#]+$/,
+  /^\/dashboard\/admin(?:\/)?$/, /^\/dashboard\/admin\/users\/[^/?#]+$/, /^\/dashboard\/admin\/owners\/[^/?#]+$/, /^\/dashboard\/admin\/landlord-details\/[^/?#]+$/,
   /^\/dashboard\/admin\/property-details\/[^/?#]+$/, /^\/dashboard\/admin\/projects\/[^/?#]+$/,
   /^\/dashboard\/admin\/inquiry-details\/[^/?#]+$/, /^\/dashboard\/admin\/payment-details\/[^/?#]+$/,
   /^\/dashboard\/admin\/cart-checkouts\/[^/?#]+$/, /^\/dashboard\/admin\/installments\/[^/?#]+$/,
   /^\/dashboard\/admin\/virtual-tours\/[^/?#]+$/, /^\/dashboard\/admin\/escrows\/[^/?#]+$/,
   /^\/admin\/proxy-inspectors\/[^/?#]+$/, /^\/admin\/proxy-inspections\/[^/?#]+$/,
-  /^\/dashboard\/admin\/(?:manage-users|manage-landlords|manage-properties|projects|manage-inquiries|manage-payments|cart-checkouts|escrows|installments|title-verifications|virtual-tours)$/,
+  /^\/dashboard\/admin\/(?:manage-users|manage-owners|manage-landlords|manage-properties|projects|manage-inquiries|manage-payments|cart-checkouts|escrows|installments|title-verifications|virtual-tours)$/,
   /^\/admin\/(?:proxy-inspectors|proxy-inspections)$/,
 ];
 

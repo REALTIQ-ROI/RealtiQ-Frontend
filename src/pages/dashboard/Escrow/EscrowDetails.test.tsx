@@ -9,8 +9,8 @@ import { escrowService } from '../../../services/escrowService';
 import { propertyService } from '../../../services/propertyService';
 import { useAsync } from '../../../hooks/useAsync';
 
-const state = vi.hoisted(() => ({ role: 'buyer' as UserRole, adminAccess: { readOnly: false, capabilities: ['finance.manage'] } as unknown }));
-vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { _id: state.role === 'buyer' ? 'b1' : state.role === 'landlord' ? 's1' : 'a1', name: 'User', email: 'u@test', role: state.role }, activeProfile: { id: 'staff-profile' }, adminAccess: state.adminAccess }) }));
+const state = vi.hoisted(() => ({ role: 'buyer' as UserRole, adminAccess: { readOnly: false, isInternalAudit: false, staffDepartments: ['finance'], capabilities: ['finance.manage'] } as unknown }));
+vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { _id: state.role === 'buyer' ? 'b1' : state.role === 'owner' ? 's1' : 'a1', name: 'User', email: 'u@test', role: state.role }, activeProfile: { id: 'staff-profile' }, adminAccess: state.adminAccess }) }));
 vi.mock('../../../components/escrow/EscrowRoleLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('../../../components/escrow/RefundChat', () => ({ default: () => <section data-testid="refund-chat">Refund conversation</section> }));
 vi.mock('../../../hooks/useAsync', () => ({ useAsync: vi.fn() }));
@@ -28,7 +28,7 @@ vi.mock('../../../services/propertyService', async (importOriginal) => {
 const makeEscrow = (status: Escrow['status'], satisfied = false): Escrow => ({
   _id: 'e1', amount: 50_000_000, currency: 'NGN', status, createdAt: '2026-01-01T00:00:00Z', logs: [],
   property: { _id: 'p1', title: 'Lagos Home', price: 50_000_000, location: 'Lagos', currency: 'NGN', propertyType: 'house', media: [], status: 'available' },
-  buyer: { _id: 'b1', name: 'Buyer', email: 'b@test', role: 'buyer' }, seller: { _id: 's1', name: 'Seller', email: 's@test', role: 'landlord' },
+  buyer: { _id: 'b1', name: 'Buyer', email: 'b@test', role: 'buyer' }, seller: { _id: 's1', name: 'Seller', email: 's@test', role: 'owner' },
   rules: [{ _id: 'r1', type: 'buyer_confirmation_required', description: 'Buyer confirms inspection', required: true, satisfied }],
 });
 const renderDetails = (escrow: Escrow | null, loading = false, error: string | null = null, route = '/escrows/e1') => {
@@ -39,7 +39,7 @@ const renderDetails = (escrow: Escrow | null, loading = false, error: string | n
 describe('EscrowDetails role actions and resilience', () => {
   beforeEach(() => {
     state.role = 'buyer';
-    state.adminAccess = { readOnly: false, capabilities: ['finance.manage'] };
+    state.adminAccess = { readOnly: false, isInternalAudit: false, staffDepartments: ['finance'], capabilities: ['finance.manage'] };
     vi.mocked(propertyService.getPropertyById).mockReset().mockResolvedValue({ media: [] } as Property);
   });
   afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -66,14 +66,14 @@ describe('EscrowDetails role actions and resilience', () => {
   });
   it('hides admin escrow mutations from a read-only or non-Finance department', () => {
     state.role = 'admin';
-    state.adminAccess = { readOnly: true, capabilities: ['finance.read', 'escrow.read'] };
+    state.adminAccess = { readOnly: true, isInternalAudit: false, staffDepartments: ['finance'], capabilities: ['finance.read', 'escrow.read'] };
     renderDetails(makeEscrow('release_pending', true));
     expect(screen.queryByRole('button', { name: 'Approve final release' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Request release' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancel escrow' })).not.toBeInTheDocument();
   });
   it('allows the related seller to open the dispute form but hides it for terminal escrows', () => {
-    state.role = 'landlord';
+    state.role = 'owner';
     const { unmount } = renderDetails(makeEscrow('locked'));
     expect(screen.getByRole('button', { name: 'Raise dispute' })).toBeInTheDocument();
     unmount();
@@ -87,7 +87,7 @@ describe('EscrowDetails role actions and resilience', () => {
     expect(screen.getByRole('button', { name: 'Raise dispute' })).toBeInTheDocument();
 
     unmount();
-    state.role = 'landlord';
+    state.role = 'owner';
     const sellerEscrow = makeEscrow('locked');
     sellerEscrow.seller = 's1';
     renderDetails(sellerEscrow);
@@ -96,7 +96,7 @@ describe('EscrowDetails role actions and resilience', () => {
   it('renders buyer and seller names from the detail participants projection', () => {
     const escrow = makeEscrow('locked');
     escrow.buyer = { _id: 'b1', name: 'Legacy buyer name', email: 'buyer@example.test', role: 'buyer' };
-    escrow.seller = { _id: 's1', name: 'Legacy seller name', email: 'seller@example.test', role: 'landlord' };
+    escrow.seller = { _id: 's1', name: 'Legacy seller name', email: 'seller@example.test', role: 'owner' };
     escrow.payment = {
       user: { _id: 'b1', name: 'Payment account name', email: 'buyer@example.test' },
     } as NonNullable<Escrow['payment']>;
@@ -161,7 +161,7 @@ describe('EscrowDetails role actions and resilience', () => {
     expect(propertyService.getPropertyById).toHaveBeenCalledWith('p1');
   });
   it('does not render refund conversation controls for landlords', () => {
-    state.role = 'landlord';
+    state.role = 'owner';
     const escrow = makeEscrow('refund_processing');
     escrow.refundStatus = 'processing';
     renderDetails(escrow);
@@ -287,7 +287,7 @@ describe('EscrowDetails role actions and resilience', () => {
     expect(screen.getByRole('button', { name: 'Satisfy' })).toBeInTheDocument();
   });
   it('shows exact 409 missing-rule context after a conflicting release request', async () => {
-    state.role = 'landlord';
+    state.role = 'owner';
     vi.mocked(escrowService.requestRelease).mockRejectedValueOnce(new ApiRequestError('Conditions remain', { status: 409, missingRules: [{ description: 'Verified title document' }] }));
     renderDetails(makeEscrow('locked', true));
     fireEvent.click(screen.getByRole('button', { name: 'Request release' }));

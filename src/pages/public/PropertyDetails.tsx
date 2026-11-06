@@ -1268,7 +1268,7 @@ const PropertyDetails = () => {
                   </div>
                 ) : !hasInstallmentPayment ? (
                   <div className='rounded-xl border border-dashed border-outline-variant/20 bg-surface-container-lowest p-6 text-sm text-secondary'>
-                    The landlord has not offered installment payments for this
+                    The Owner has not offered installment payments for this
                     property.
                   </div>
                 ) : property.status === 'sold' ? (
@@ -1416,7 +1416,7 @@ const PropertyDetails = () => {
               {property.status === 'available' &&
               (!property.approvalStatus ||
                 property.approvalStatus === 'approved') ? (
-                user?.role === 'landlord' ||
+                user?.role === 'owner' ||
                 user?.role === 'admin' ||
                 user?.role === 'proxy_inspector' ? null : (
                   <Button

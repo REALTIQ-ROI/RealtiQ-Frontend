@@ -82,7 +82,7 @@ export interface VerifyEmailResponse {
   message: string;
 }
 
-export type RecoveryRole = 'buyer' | 'landlord';
+export type RecoveryRole = 'buyer' | 'owner';
 
 export interface ForgotPasswordPayload {
   email: string;

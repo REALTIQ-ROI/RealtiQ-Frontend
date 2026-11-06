@@ -7,7 +7,7 @@ import { authService, type RecoveryRole } from '../../services/authService';
 
 const COOLDOWN_SECONDS = 60;
 
-const getInitialRole = (value: string | null): RecoveryRole => (value === 'landlord' ? 'landlord' : 'buyer');
+const getInitialRole = (value: string | null): RecoveryRole => (value === 'owner' || value === 'landlord' ? 'owner' : 'buyer');
 
 const ForgotPassword = () => {
   const [searchParams] = useSearchParams();
@@ -89,7 +89,7 @@ const ForgotPassword = () => {
             className="w-full bg-surface-container-low border border-outline-variant/30 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-surface-tint/20"
           >
             <option value="buyer">Buyer</option>
-            <option value="landlord">Landlord</option>
+            <option value="owner">Owner</option>
           </select>
         </div>
 
@@ -102,8 +102,8 @@ const ForgotPassword = () => {
       </form>
 
       <p className="mt-5 text-center text-sm text-secondary">
-        <Link to="/auth/landlord/login" className="font-semibold text-primary hover:underline">
-          Landlord portal
+        <Link to="/auth/owner/login" className="font-semibold text-primary hover:underline">
+          Seller Portal
         </Link>
       </p>
     </AuthLayout>

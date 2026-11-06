@@ -47,7 +47,7 @@ const UserDetails = () => {
                   {initials(user.name)}
                 </div>
                 <div>
-                  <h2 className="flex flex-wrap items-center gap-2 text-2xl font-extrabold">{user.name}{user.role === 'landlord' ? <SellerTrustBadge badge={user.trustBadge as import('../../../types/phase45').TrustBadge} compact /> : null}</h2>
+                  <h2 className="flex flex-wrap items-center gap-2 text-2xl font-extrabold">{user.name}{user.role === 'owner' ? <SellerTrustBadge badge={user.trustBadge as import('../../../types/phase45').TrustBadge} compact /> : null}</h2>
                   <p className="text-secondary">{user.email}</p>
                 </div>
               </div>

@@ -34,7 +34,7 @@ const EscrowDisputePanel = ({
   const participant = Boolean(
     user && userId && (
       (user.role === 'buyer' && buyerId === userId) ||
-      (user.role === 'landlord' && sellerId === userId)
+      (user.role === 'owner' && sellerId === userId)
     ),
   );
   const canOpen = participant && ['locked', 'release_pending'].includes(escrow.status);

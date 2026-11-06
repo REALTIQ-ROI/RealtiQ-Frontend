@@ -118,7 +118,7 @@ const TrustAccount = () => {
         {error ? (
           <ErrorState message={error} onRetry={() => void load(true)} />
         ) : null}
-        {trust ? <TrustProgressChecklist trust={trust} role={'landlord'} /> : null}
+        {trust ? <TrustProgressChecklist trust={trust} role={'owner'} /> : null}
         {trust ? (
           <>
             <section

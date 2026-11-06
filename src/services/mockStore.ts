@@ -1,4 +1,4 @@
-﻿import type { CreateInquiryPayload, Inquiry, LoginPayload, Property, PropertyFilters, RegisterPayload, User } from '../types';
+import type { CreateInquiryPayload, Inquiry, LoginPayload, Property, PropertyFilters, RegisterPayload, User } from '../types';
 import { resolveOwnerId } from '../types';
 
 export interface PaymentRecord {
@@ -38,12 +38,12 @@ const seedState = (): MockState => {
     password: 'Buyer@123',
   };
 
-  const landlord: StoredUser = {
-    _id: 'u-landlord-1',
+  const owner: StoredUser = {
+    _id: 'u-owner-1',
     name: 'Silas Thorne',
-    email: 'landlord@realtiq.com',
-    role: 'landlord',
-    password: 'Landlord@123',
+    email: 'owner@realtiq.com',
+    role: 'owner',
+    password: 'Owner@123',
   };
 
   const admin: StoredUser = {
@@ -76,7 +76,7 @@ const seedState = (): MockState => {
       status: 'available',
       featured: true,
       amenities: ['Private Cinema', 'Infinity Pool', 'Smart Home'],
-      ownerId: landlord._id,
+      ownerId: owner._id,
       createdAt: new Date().toISOString(),
     },
     {
@@ -100,7 +100,7 @@ const seedState = (): MockState => {
       status: 'sold',
       featured: false,
       amenities: ['Concierge', 'Smart Access'],
-      ownerId: landlord._id,
+      ownerId: owner._id,
       buyerId: buyer._id,
       createdAt: new Date().toISOString(),
     },
@@ -117,7 +117,7 @@ const seedState = (): MockState => {
       status: 'open',
       createdAt: new Date().toISOString(),
       userId: buyer._id,
-      ownerId: landlord._id,
+      ownerId: owner._id,
     },
   ];
 
@@ -133,7 +133,7 @@ const seedState = (): MockState => {
   ];
 
   return {
-    users: [buyer, landlord, admin],
+    users: [buyer, owner, admin],
     properties,
     inquiries,
     payments,
@@ -218,9 +218,9 @@ export const mockStore = {
     return readState().users.map(sanitizeUser);
   },
 
-  getLandlords() {
+  getOwners() {
     return readState()
-      .users.filter((item) => item.role === 'landlord')
+      .users.filter((item) => item.role === 'owner')
       .map(sanitizeUser);
   },
 

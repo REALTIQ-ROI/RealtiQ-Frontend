@@ -94,7 +94,7 @@ const detailResponse = {
       name: 'Ada Agent',
       email: 'ada@example.test',
       phone: '+2348000000000',
-      role: 'landlord',
+      role: 'owner',
       accountStatus: 'active',
       emailVerified: true,
       phoneVerified: true,

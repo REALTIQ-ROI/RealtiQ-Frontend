@@ -29,7 +29,7 @@ import { adminSearchCache } from "../../features/adminSearch/cache";
 const LIMIT = 20;
 const searchCapability: Record<Exclude<AdminSearchType, ''>, string> = {
   user: 'search.user.read',
-  landlord: 'search.landlord.read',
+  owner: 'search.landlord.read',
   property: 'search.property.read',
   project: 'search.project.read',
   inquiry: 'search.inquiry.read',

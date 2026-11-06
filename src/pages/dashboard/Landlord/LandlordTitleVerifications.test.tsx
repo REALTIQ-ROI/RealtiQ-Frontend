@@ -10,7 +10,7 @@ import { titleVerificationService } from '../../../services/titleVerificationSer
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('../../../components/layout/LandlordPortalLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { _id: 'owner1', role: 'landlord', name: 'Owner' } }),
+  useAuth: () => ({ user: { _id: 'owner1', role: 'owner', name: 'Owner' } }),
 }));
 vi.mock('../../../contexts/PropertiesContext', () => ({
   useProperties: () => ({

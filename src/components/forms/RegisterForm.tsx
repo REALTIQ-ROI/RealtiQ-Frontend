@@ -1,4 +1,4 @@
-﻿import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
@@ -55,7 +55,7 @@ const RegisterForm = ({ defaultRole = 'buyer', hideRoleSelector = false, onSucce
             onChange={(event) => setRole(event.target.value as RegisterPayload['role'])}
           >
             <option value="buyer">Buyer</option>
-            <option value="landlord">Landlord</option>
+            <option value="owner">Owner</option>
           </select>
         </div>
       ) : null}

@@ -421,7 +421,7 @@ const EscrowDetails = () => {
   if (!id) {
     const listPath = user?.role === 'admin'
       ? '/dashboard/admin/escrows'
-      : user?.role === 'landlord'
+      : user?.role === 'owner'
         ? '/dashboard/landlord/escrows'
         : '/dashboard/buyer/escrows';
     return (

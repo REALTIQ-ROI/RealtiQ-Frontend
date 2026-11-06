@@ -1,6 +1,6 @@
 import api from "../lib/axios";
 export interface CreateReviewInput {
-  landlord: string;
+  ownerId: string;
   property: string;
   transaction: string;
   rating: number;
@@ -8,7 +8,7 @@ export interface CreateReviewInput {
 }
 export interface PropertyReview {
   _id: string;
-  landlord: string;
+  ownerId: string;
   property: string;
   transaction: string;
   rating: number;

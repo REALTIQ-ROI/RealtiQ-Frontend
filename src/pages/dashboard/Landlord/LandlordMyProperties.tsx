@@ -10,7 +10,7 @@ import { useProperties } from '../../../contexts/PropertiesContext';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import type { Property } from '../../../types';
 import { propertyDisplayReference, propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
-import { isVerifiedLandlord } from '../../../utils/landlordPropertyAccess';
+import { isVerifiedOwner } from '../../../utils/landlordPropertyAccess';
 
 const statusConfig = {
   available: { label: 'Active', className: 'bg-emerald-100 text-emerald-800' },
@@ -28,7 +28,7 @@ const approvalLabel = (status?: string) => {
 
 const LandlordMyProperties = () => {
   const { user } = useAuth();
-  const canAddProperty = isVerifiedLandlord(user);
+  const canAddProperty = isVerifiedOwner(user);
   const { properties, deleteProperty } = useProperties();
   const archiveStepUp = useBoundStepUp<void>();
   const [activeFilter, setActiveFilter] = useState<'all' | 'available' | 'sold'>('all');
@@ -117,7 +117,7 @@ const LandlordMyProperties = () => {
           <div className="h-8 w-[1px] bg-slate-200" />
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold text-slate-900 text-right hidden sm:block">
-              {user?.name ?? 'Landlord'}
+              {user?.name ?? 'Owner'}
               <br />
               <span className="font-medium text-slate-500">Portfolio Manager</span>
             </span>

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
 import usePreservedSidebarScroll from '../../hooks/usePreservedSidebarScroll';
-import { isVerifiedLandlord } from '../../utils/landlordPropertyAccess';
+import { isVerifiedOwner } from '../../utils/landlordPropertyAccess';
 import ProfileSwitcher from './ProfileSwitcher';
 
 type LandlordNavKey =
@@ -55,9 +55,9 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
 
 const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: LandlordPortalLayoutProps) => {
   const { logout, user } = useAuth();
-  const canAddProperty = isVerifiedLandlord(user);
+  const canAddProperty = isVerifiedOwner(user);
   const hasScrolled = useHasScrolled(8);
-  const sidebarRef = usePreservedSidebarScroll('landlord');
+  const sidebarRef = usePreservedSidebarScroll('owner');
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -66,7 +66,7 @@ const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: La
       <aside ref={sidebarRef} className={`h-screen w-64 fixed left-0 top-0 flex flex-col bg-slate-50 border-r border-slate-200 z-50 overflow-y-auto overscroll-contain transition-transform lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6">
           <h1 className="text-xl font-black text-slate-900 tracking-tight">RealtIQ</h1>
-          <p className="text-xs text-secondary font-medium uppercase tracking-widest mt-1">Landlord Portal</p>
+          <p className="text-xs text-secondary font-medium uppercase tracking-widest mt-1">Seller Portal</p>
         </div>
 
         <nav className="flex flex-col gap-2 px-4 pb-6">
@@ -130,11 +130,11 @@ const LandlordPortalLayout = ({ active, title, topLeft, topRight, children }: La
               </>
             )}
           </div>
-          {user?.role === 'landlord' && !canAddProperty ? (
+          {user?.role === 'owner' && !canAddProperty ? (
             <div role="status" className="flex w-full flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-3">
                 <span aria-hidden="true" className="material-symbols-outlined mt-0.5 text-amber-700">info</span>
-                <p className="text-sm font-medium">Your landlord account must be verified before you can add properties. Complete KYC to submit your landlord verification.</p>
+                <p className="text-sm font-medium">Your Owner account must be verified before you can add properties. Complete KYC to submit your verification.</p>
               </div>
               <Link
                 to="/dashboard/landlord/settings/verification"

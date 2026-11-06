@@ -7,12 +7,12 @@ import AdminLayout from '../layout/AdminLayout';
 export default function PortalShell({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { pathname } = useLocation();
-  const landlordActive = pathname.startsWith('/dashboard/notifications')
+  const ownerActive = pathname.startsWith('/dashboard/notifications')
     ? 'notifications'
     : pathname.startsWith('/messages')
       ? 'messages'
       : 'overview';
   if (user?.role === 'admin') return <AdminLayout>{children}</AdminLayout>;
-  if (user?.role === 'landlord') return <LandlordPortalLayout active={landlordActive} title='Marketplace'>{children}</LandlordPortalLayout>;
+  if (user?.role === 'owner') return <LandlordPortalLayout active={ownerActive} title='Marketplace'>{children}</LandlordPortalLayout>;
   return <BuyerPortalLayout pageTitle='Marketplace'>{children}</BuyerPortalLayout>;
 }

@@ -35,7 +35,7 @@ describe('Proxy Network action selectors', () => {
     expect(selectProxyActions(state, 'buyer', 'buyer-1').initializePayment).toBe(false);
     state.request.priceLockedAt = '2026-08-01T10:00:00Z';
     expect(selectProxyActions(state, 'buyer', 'buyer-1').initializePayment).toBe(true);
-    expect(selectProxyActions(state, 'landlord', 'buyer-1').initializePayment).toBe(false);
+    expect(selectProxyActions(state, 'owner', 'buyer-1').initializePayment).toBe(false);
   });
 
   it('shows Inspector execution controls only for the assigned Inspector in valid states', () => {

@@ -11,9 +11,9 @@ vi.mock('../../hooks/usePreservedSidebarScroll', () => ({ default: () => null })
 
 const mockedUseAuth = vi.mocked(useAuth);
 
-const renderLayout = (landlordVerified?: boolean) => {
+const renderLayout = (ownerVerified?: boolean) => {
   mockedUseAuth.mockReturnValue({
-    user: { _id: 'landlord-1', name: 'Landlord Example', email: 'landlord@example.test', role: 'landlord', landlordVerified },
+    user: { _id: 'landlord-1', name: 'Landlord Example', email: 'landlord@example.test', role: 'owner', ownerVerified },
     logout: vi.fn(),
   } as ReturnType<typeof useAuth>);
 
@@ -29,7 +29,7 @@ const renderLayout = (landlordVerified?: boolean) => {
 describe('LandlordPortalLayout verification notice', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('shows a KYC notice and links to landlord verification when landlordVerified is false', () => {
+  it('shows a KYC notice and links to landlord verification when ownerVerified is false', () => {
     renderLayout(false);
 
     expect(screen.getByRole('status')).toHaveTextContent('must be verified before you can add properties');

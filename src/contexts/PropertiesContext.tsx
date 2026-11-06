@@ -97,7 +97,7 @@ export const PropertiesProvider = ({ children }: { children: ReactNode }) => {
         : 0;
       let nextProperties: Property[] = [];
 
-      if (requestedTotal > 0 && role === 'landlord') {
+      if (requestedTotal > 0 && role === 'owner') {
         const pageSize = 20;
         const first = await propertyService.getMyProperties(1, pageSize);
         const seen = new Set<string>();

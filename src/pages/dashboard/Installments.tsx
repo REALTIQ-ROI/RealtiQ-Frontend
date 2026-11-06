@@ -480,7 +480,7 @@ const InstallmentList = ({
       {filtered.map((installment) => (
         <Link
           key={installment._id}
-          to={`/dashboard/${role === 'admin' ? 'admin' : role === 'landlord' ? 'landlord' : 'buyer'}/installments/${installment._id}`}
+          to={`/dashboard/${role === 'admin' ? 'admin' : role === 'owner' ? 'owner' : 'buyer'}/installments/${installment._id}`}
           className={`block min-w-0 rounded-lg border p-3 transition hover:border-primary sm:p-4 ${selectedId === installment._id ? 'border-primary bg-surface-container-low' : 'border-outline-variant/20 bg-surface-container-lowest'}`}
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
@@ -616,7 +616,7 @@ const ScheduleTable = ({
   onSatisfy,
 }: {
   installment: Installment;
-  role?: 'buyer' | 'landlord' | 'admin';
+  role?: 'buyer' | 'owner' | 'admin';
   onSatisfy: (item: InstallmentScheduleItem, condition: InstallmentCondition) => Promise<void>;
 }) => {
   const schedule = getScheduleItems(installment);
@@ -753,7 +753,7 @@ const InstallmentDetail = ({
   onRefresh,
 }: {
   installment: Installment | null;
-  role?: 'buyer' | 'landlord' | 'admin';
+  role?: 'buyer' | 'owner' | 'admin';
   payments: InstallmentPaymentRecord[];
   penalties: InstallmentPenaltyRecord[];
   loading: boolean;
@@ -896,7 +896,7 @@ const Installments = () => {
   const [listError, setListError] = useState<string | null>(null);
   const [propertyError, setPropertyError] = useState<string | null>(null);
 
-  const routeBase = role === 'admin' ? '/dashboard/admin/installments' : role === 'landlord' ? '/dashboard/landlord/installments' : '/dashboard/buyer/installments';
+  const routeBase = role === 'admin' ? '/dashboard/admin/installments' : role === 'owner' ? '/dashboard/landlord/installments' : '/dashboard/buyer/installments';
 
   useLayoutEffect(() => {
     if (currentPropertyScope.current === propertyScopeKey) return;
@@ -1000,7 +1000,7 @@ const Installments = () => {
         <div className="min-w-0">
           <h1 className="text-2xl font-extrabold text-primary sm:text-3xl">Installments</h1>
           <p className="text-sm text-secondary">
-            {role === 'admin' ? 'All milestone-based installment plans.' : role === 'landlord' ? 'Plans on your properties.' : 'Create, track, and pay your plans.'}
+            {role === 'admin' ? 'All milestone-based installment plans.' : role === 'owner' ? 'Plans on your properties.' : 'Create, track, and pay your plans.'}
           </p>
         </div>
         <div className="flex w-full min-w-0 flex-wrap gap-3 sm:w-auto">{searchInput}</div>
@@ -1041,7 +1041,7 @@ const Installments = () => {
     </div>
   );
 
-  if (role === 'landlord') {
+  if (role === 'owner') {
     return (
       <LandlordPortalLayout active="installments" title="Installments" topLeft={searchInput}>
         {body}

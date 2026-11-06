@@ -8,9 +8,9 @@ describe('admin search behavior', () => {
   it('normalizes whitespace without changing Unicode', () => expect(normalizeAdminSearchQuery('  Ọlá   Lagos ')).toBe('Ọlá Lagos'));
   it('defines All records and every 13 contract filters', () => {
     expect(ADMIN_SEARCH_TYPES).toHaveLength(14);
-    expect(ADMIN_SEARCH_TYPES.map((item) => item.value)).toEqual(['', 'user', 'landlord', 'property', 'project', 'inquiry', 'payment', 'cart_checkout', 'escrow', 'installment', 'title_verification', 'proxy_inspector', 'proxy_inspection', 'virtual_tour']);
+    expect(ADMIN_SEARCH_TYPES.map((item) => item.value)).toEqual(['', 'user', 'owner', 'property', 'project', 'inquiry', 'payment', 'cart_checkout', 'escrow', 'installment', 'title_verification', 'proxy_inspector', 'proxy_inspection', 'virtual_tour']);
   });
-  it.each(['/dashboard/admin/users/abc', '/dashboard/admin/property-details/RTQ-PROP-1', '/admin/proxy-inspections/job-1'])('accepts an existing admin destination: %s', (route) => expect(isSafeAdminSearchRoute(route)).toBe(true));
+  it.each(['/dashboard/admin/users/abc', '/dashboard/admin/owners/owner-1', '/dashboard/admin/property-details/RTQ-PROP-1', '/admin/proxy-inspections/job-1'])('accepts an existing admin destination: %s', (route) => expect(isSafeAdminSearchRoute(route)).toBe(true));
   it.each(['https://evil.example/x', '//evil.example/x', 'javascript:alert(1)', '/dashboard/admin/not-real/1', '/dashboard/admin/users/1?q=secret', '/dashboard/admin/users\\1'])('rejects unsafe or nonexistent destinations: %s', (route) => expect(isSafeAdminSearchRoute(route)).toBe(false));
   it('deduplicates only type plus route while preserving backend order', () => {
     const first = result('user', '/dashboard/admin/users/1'); const second = result('property', '/dashboard/admin/property-details/1');

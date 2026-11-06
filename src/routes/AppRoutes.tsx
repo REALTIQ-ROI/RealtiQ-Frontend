@@ -163,7 +163,7 @@ const RoleScopedRoiV1History = () => {
   if (user?.role === 'admin') {
     return <AdminAccessBoundary>{adminPage('analytics.read', <RoiV1HistoryPage />)}</AdminAccessBoundary>;
   }
-  if (user?.role === 'landlord') return <RoiV1HistoryPage />;
+  if (user?.role === 'owner') return <RoiV1HistoryPage />;
   return <Navigate to="/dashboard" replace />;
 };
 
@@ -217,8 +217,10 @@ const AppRoutes = () => {
         <Route path="/login-to-purchase" element={<LoginToPurchase />} />
         <Route path="/register-to-purchase" element={<RegisterToPurchase />} />
         <Route path="/real/admin" element={<AdminLogin />} />
-        <Route path="/auth/landlord/login" element={<LandlordLogin />} />
-        <Route path="/auth/landlord/register" element={<LandlordRegistration />} />
+        <Route path="/auth/owner/login" element={<LandlordLogin />} />
+        <Route path="/auth/owner/register" element={<LandlordRegistration />} />
+        <Route path='/auth/landlord/login' element={<Navigate to='/auth/owner/login' replace />} />
+        <Route path='/auth/landlord/register' element={<Navigate to='/auth/owner/register' replace />} />
 
         <Route path="/properties/:id" element={<PropertyDetails />} />
         <Route path="/properties/:id/price-history" element={<PropertyPriceHistory />} />
@@ -244,7 +246,7 @@ const AppRoutes = () => {
           <Route path="/analytics/property-market/payment-return" element={<ProxyPaymentReturn />} />
         </Route>
 
-        <Route element={<ProtectedRoute allowedRoles={['landlord', 'admin']} />}>
+        <Route element={<ProtectedRoute allowedRoles={['owner', 'admin']} />}>
           <Route path="/dashboard/roi-v1/properties/:propertyReference/history" element={<RoleScopedRoiV1History />} />
         </Route>
 
@@ -283,7 +285,7 @@ const AppRoutes = () => {
           <Route path="/proxy/tasks/:requestId" element={<InspectorProxyWorkspace />} />
         </Route>
 
-        <Route element={<ProtectedRoute allowedRoles={['landlord']} />}>
+        <Route element={<ProtectedRoute allowedRoles={['owner']} />}>
           <Route path="/dashboard/landlord" element={<LandlordDashboard />} />
           <Route path="/dashboard/landlord/my-properties" element={<LandlordMyProperties />} />
           <Route path="/dashboard/landlord/projects" element={<LandlordProjects />} />
@@ -349,9 +351,11 @@ const AppRoutes = () => {
             <Route path="/dashboard/admin/cart-checkouts/:checkoutId" element={adminPage('finance.read', <AdminCartCheckoutDetail />)} />
             <Route path="/dashboard/admin/manage-inquiries" element={adminPage('support.read', <ManageInquiries />)} />
             <Route path="/dashboard/admin/inquiry-details/:id" element={adminPage('support.read', <AdminInquiryDetails />)} />
-            <Route path="/dashboard/admin/manage-landlords" element={adminPage('accounts.read', <ManageLandlords />)} />
+            <Route path="/dashboard/admin/manage-owners" element={adminPage('accounts.read', <ManageLandlords />)} />
+            <Route path='/dashboard/admin/manage-landlords' element={adminPage('accounts.read', <ManageLandlords />)} />
             <Route path="/dashboard/admin/landlord-details" element={adminPage('accounts.read', <LandlordDetails />)} />
-            <Route path="/dashboard/admin/landlord-details/:id" element={adminPage('accounts.read', <LandlordDetails />)} />
+            <Route path="/dashboard/admin/owners/:id" element={adminPage('accounts.read', <LandlordDetails />)} />
+            <Route path='/dashboard/admin/landlord-details/:id' element={adminPage('accounts.read', <LandlordDetails />)} />
             <Route path="/dashboard/admin/kyc" element={adminPage('verification.read', <KycManagement />)} />
             <Route path="/dashboard/admin/data-protection-execution" element={adminPage('privacy.read', <AdminDataProtectionExecution />)} />
             <Route path="/dashboard/admin/title-verifications" element={adminPage('title_verification.read', <TitleVerificationReview />)} />

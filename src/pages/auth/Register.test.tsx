@@ -75,4 +75,20 @@ describe('Register organization profile option', () => {
       role: 'buyer',
     }));
   });
+
+  it('submits the canonical owner role when the Owner option is selected', async () => {
+    renderForm();
+    fireEvent.click(screen.getByRole('button', { name: /Owner List and manage your properties/i }));
+    fireEvent.change(screen.getByLabelText('Full Name'), { target: { value: 'Ada Example' } });
+    fireEvent.change(screen.getByLabelText('Email Address'), { target: { value: 'ada@example.test' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'StrongPass1!' } });
+    fireEvent.click(screen.getByRole('button', { name: /start curating/i }));
+
+    await waitFor(() => expect(register).toHaveBeenCalledWith({
+      name: 'Ada Example',
+      email: 'ada@example.test',
+      password: 'StrongPass1!',
+      role: 'owner',
+    }));
+  });
 });

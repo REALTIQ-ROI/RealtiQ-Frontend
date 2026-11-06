@@ -9,11 +9,11 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import type { CreatePropertyPayload, CreatePropertyResponse } from '../../../services/propertyService';
 import type { Property } from '../../../types';
-import { isVerifiedLandlord } from '../../../utils/landlordPropertyAccess';
+import { isVerifiedOwner } from '../../../utils/landlordPropertyAccess';
 
 const AddProperty = () => {
   const { user, activeProfile } = useAuth();
-  const canAddProperty = isVerifiedLandlord(user);
+  const canAddProperty = isVerifiedOwner(user);
   const { addProperty } = useProperties();
   const navigate = useNavigate();
   const stepUp = useBoundStepUp<CreatePropertyResponse>();
@@ -29,7 +29,7 @@ const AddProperty = () => {
 
   const handleSubmit = async (payload: CreatePropertyPayload & { status?: string }) => {
     if (!canAddProperty) {
-      toast.error('Complete landlord verification before adding a property.');
+      toast.error('Complete owner verification before adding a property.');
       return undefined;
     }
 
@@ -78,9 +78,9 @@ const AddProperty = () => {
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white text-amber-700">
                 <span className="material-symbols-outlined text-3xl">verified_user</span>
               </div>
-              <h3 className="text-3xl font-extrabold tracking-tight">Landlord verification required</h3>
+              <h3 className="text-3xl font-extrabold tracking-tight">Owner verification required</h3>
               <p className="text-sm text-secondary">
-                Your landlord account must be verified before you can add a property. Complete KYC to submit your landlord verification.
+                Your Owner account must be verified before you can add a property. Complete KYC to submit your verification.
               </p>
               <div className="flex justify-center pt-2">
                 <Link

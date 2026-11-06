@@ -19,7 +19,7 @@ import { downloadBlob } from '../../../utils/download';
 import UnitGridPanel from '../../../components/project/UnitGridPanel';
 import UnitTypeManagement from '../../../components/project/UnitTypeManagement';
 import { useAuth } from '../../../contexts/AuthContext';
-import { isVerifiedLandlord } from '../../../utils/landlordPropertyAccess';
+import { isVerifiedOwner } from '../../../utils/landlordPropertyAccess';
 
 interface LandlordProjectManageData {
   project: ProjectDetail;
@@ -36,7 +36,7 @@ const loadLandlordProjectManage = async (id: string): Promise<LandlordProjectMan
 const ProjectManage = () => {
   const navigate = useNavigate();
   const { activeProfile, user } = useAuth();
-  const canAddProperty = isVerifiedLandlord(user);
+  const canAddProperty = isVerifiedOwner(user);
   const [savingTourPreference, setSavingTourPreference] = useState(false);
   const [exportingGrid, setExportingGrid] = useState(false);
   const [jobIdInput, setJobIdInput] = useState('');

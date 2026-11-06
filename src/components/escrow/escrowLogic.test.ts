@@ -22,7 +22,7 @@ describe('escrow rule validation and permissions', () => {
   });
   it('never exposes release to buyers and gates role actions by status', () => {
     expect(escrowActions('buyer', escrow('pending_payment'))).toMatchObject({ initializePayment: true, cancel: true, requestRelease: false, approveRelease: false });
-    expect(escrowActions('landlord', escrow('locked', true))).toMatchObject({ dispute: true, requestRelease: true, approveRelease: false });
+    expect(escrowActions('owner', escrow('locked', true))).toMatchObject({ dispute: true, requestRelease: true, approveRelease: false });
     expect(escrowActions('admin', escrow('release_pending', true))).toMatchObject({ approveRelease: true, requestRelease: true, dispute: false });
     expect(escrowActions('admin', escrow('disputed', true)).approveRelease).toBe(false);
     expect(escrowActions('buyer', escrow('released', true))).toMatchObject({ dispute: false, cancel: false, requestRelease: false });
@@ -30,7 +30,7 @@ describe('escrow rule validation and permissions', () => {
   it('allows only each role’s rule types while locked', () => {
     const value = escrow('locked');
     expect(canSatisfyRule('buyer', value, value.rules![0])).toBe(true);
-    expect(canSatisfyRule('landlord', value, value.rules![0])).toBe(false);
+    expect(canSatisfyRule('owner', value, value.rules![0])).toBe(false);
     value.rules![0].type = 'admin_approval_required';
     expect(canSatisfyRule('admin', value, value.rules![0])).toBe(true);
   });

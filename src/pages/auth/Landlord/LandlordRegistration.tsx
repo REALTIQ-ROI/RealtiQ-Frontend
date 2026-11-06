@@ -33,7 +33,7 @@ const LandlordRegistration = () => {
     setPasswordError(null);
 
     try {
-      await register({ name, email, password, role: 'landlord' });
+      await register({ name, email, password, role: 'owner' });
       toast.success('Registration successful. Check your inbox and spam folder for a verification email.');
       navigate('/registration-success', { state: { email: normalizeVerificationEmail(email), verificationRequestedAt: Date.now() } });
     } catch (err) {
@@ -120,7 +120,7 @@ const LandlordRegistration = () => {
                 type="button"
                 className="p-4 rounded-xl border-2 text-left transition-all duration-200 border-primary bg-primary/5"
               >
-                <div className="text-sm font-bold mb-1 text-primary">Landlord</div>
+                <div className="text-sm font-bold mb-1 text-primary">Owner</div>
                 <div className="text-xs text-secondary">List and manage your properties</div>
               </button>
             </div>
@@ -129,13 +129,13 @@ const LandlordRegistration = () => {
               <div className="space-y-2">
                 <label
                   className="block text-[11px] font-bold uppercase tracking-widest text-secondary ml-1"
-                  htmlFor="landlord-name"
+                  htmlFor="owner-name"
                 >
                   Full Name
                 </label>
                 <input
                   className="w-full bg-surface-container-low border-0 focus:ring-2 focus:ring-surface-tint/20 rounded-lg px-4 py-4 text-on-surface placeholder:text-outline/50 transition-all font-medium"
-                  id="landlord-name"
+                  id="owner-name"
                   placeholder="E.g. Julian Vossen"
                   type="text"
                   value={name}
@@ -147,13 +147,13 @@ const LandlordRegistration = () => {
               <div className="space-y-2">
                 <label
                   className="block text-[11px] font-bold uppercase tracking-widest text-secondary ml-1"
-                  htmlFor="landlord-email"
+                  htmlFor="owner-email"
                 >
                   Email Address
                 </label>
                 <input
                   className="w-full bg-surface-container-low border-0 focus:ring-2 focus:ring-surface-tint/20 rounded-lg px-4 py-4 text-on-surface placeholder:text-outline/50 transition-all font-medium"
-                  id="landlord-email"
+                  id="owner-email"
                   placeholder="julian@realtiq.com"
                   type="email"
                   value={email}
@@ -165,7 +165,7 @@ const LandlordRegistration = () => {
               <div className="space-y-2">
                 <label
                   className="block text-[11px] font-bold uppercase tracking-widest text-secondary ml-1"
-                  htmlFor="landlord-password"
+                  htmlFor="owner-password"
                 >
                   Password
                 </label>
@@ -174,7 +174,7 @@ const LandlordRegistration = () => {
                     className={`w-full bg-surface-container-low border-0 focus:ring-2 rounded-lg px-4 py-4 text-on-surface placeholder:text-outline/50 transition-all font-medium ${
                       passwordError ? 'ring-2 ring-error/30 focus:ring-error/30' : 'focus:ring-surface-tint/20'
                     }`}
-                    id="landlord-password"
+                    id="owner-password"
                     placeholder="Min. 8 chars, uppercase, number, symbol"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
@@ -214,7 +214,7 @@ const LandlordRegistration = () => {
               Already have an account?{' '}
               <Link
                 className="text-primary font-bold hover:underline underline-offset-4 ml-1"
-                to="/auth/landlord/login"
+                to="/auth/owner/login"
               >
                 Sign In
               </Link>

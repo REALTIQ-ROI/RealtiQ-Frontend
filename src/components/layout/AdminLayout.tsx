@@ -17,7 +17,7 @@ const navLinks = [
   { to: '/dashboard/admin/featured', label: 'Featured Listings', icon: 'star', capability: 'marketing.manage' },
   { to: '/dashboard/admin/projects', label: 'Projects', icon: 'business', capability: 'projects.read' },
   { to: '/dashboard/admin/property-imports', label: 'Property Imports', icon: 'upload_file', capability: 'imports.read' },
-  { to: '/dashboard/admin/manage-landlords', label: 'Manage Landlords', icon: 'person_pin', capability: 'accounts.read' },
+  { to: '/dashboard/admin/manage-owners', label: 'Manage Owners', icon: 'person_pin', capability: 'accounts.read' },
   { to: '/dashboard/admin/manage-users', label: 'Manage Users', icon: 'group', capability: 'accounts.read' },
   { to: '/dashboard/admin/kyc', label: 'KYC Review', icon: 'verified_user', capability: 'verification.read' },
   { to: '/dashboard/admin/data-protection-execution', label: 'Privacy Execution', icon: 'privacy_tip', capability: 'privacy.read' },

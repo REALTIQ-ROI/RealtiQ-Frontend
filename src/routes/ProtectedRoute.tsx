@@ -1,10 +1,10 @@
-﻿import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingState from '../components/ui/LoadingState';
 import { marketAuthPath, marketDestination } from '../hooks/useMarketAccessIntent';
 
 interface ProtectedRouteProps {
-  allowedRoles?: Array<'buyer' | 'landlord' | 'proxy_inspector' | 'admin'>;
+  allowedRoles?: Array<'buyer' | 'owner' | 'proxy_inspector' | 'admin'>;
 }
 
 const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {

@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import MediaPreview from '../../../components/property/MediaPreview';
@@ -253,7 +253,7 @@ const ManageProperties = () => {
             <thead>
               <tr className="bg-surface-container-high/50">
                 <th className="px-6 py-5 text-[11px] font-bold uppercase tracking-widest text-secondary">Property Detail</th>
-                <th className="px-6 py-5 text-[11px] font-bold uppercase tracking-widest text-secondary">Owner ID</th>
+                <th className="px-6 py-5 text-[11px] font-bold uppercase tracking-widest text-secondary">Owner</th>
                 <th className="px-6 py-5 text-[11px] font-bold uppercase tracking-widest text-secondary">Location</th>
                 <th className="px-6 py-5 text-[11px] font-bold uppercase tracking-widest text-secondary">Price</th>
                 <th className="px-6 py-5 text-[11px] font-bold uppercase tracking-widest text-secondary">Status</th>
@@ -428,7 +428,7 @@ const ManageProperties = () => {
               <span className="material-symbols-outlined text-surface-tint mb-4 text-3xl block">priority_high</span>
               <h3 className="text-xl font-bold mb-2 font-headline">System Alert</h3>
               <p className="text-secondary text-sm">
-                Review property documents that may be expiring soon. Notify relevant landlords to keep listings
+                Review property documents that may be expiring soon. Notify relevant owners to keep listings
                 compliant.
               </p>
             </div>
