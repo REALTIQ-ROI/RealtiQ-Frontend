@@ -77,7 +77,7 @@ const ProjectDetails = () => {
               <aside className="space-y-5 rounded-xl border border-outline-variant/10 bg-white p-6">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-widest text-secondary">Developer</p>
-                  <p className="mt-1 font-black">{project.developer?.name || project.owner?.name || 'Verified developer'}</p>
+                  <p className="mt-1 font-black">{project.developer?.name || project.owner?.name || 'Not provided'}</p>
                 </div>
                 <div>
                   <p className="text-xs font-bold uppercase tracking-widest text-secondary">Launch</p>
@@ -120,7 +120,7 @@ const ProjectDetails = () => {
               <div className="mb-5 flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-2xl font-black">Available unit preview</h2>
-                  <p className="text-sm text-secondary">Open a unit to use normal Property purchase, title, escrow, tour, installment, and cart flows.</p>
+                  <p className="text-sm text-secondary">Open a unit to use its purchase, title, escrow, tour and instalment options.</p>
                 </div>
                 <Link to={`/projects/${project.slug || project._id}/properties`} state={projectNavigationState} className="text-sm font-bold text-primary hover:underline">View all</Link>
               </div>

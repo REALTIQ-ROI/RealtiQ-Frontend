@@ -24,7 +24,7 @@ const ProjectsMap = () => {
   const leafletMarkersRef = useRef<L.LayerGroup | null>(null);
   const [mapResult, setMapResult] = useState<{ requestKey: string; projects: ProjectMapItem[]; total: number; error: string }>({ requestKey: '', projects: emptyProjects, total: 0, error: '' });
   const [selectedProject, setSelectedProject] = useState<{ requestKey: string; project: ProjectMapItem } | null>(null);
-  const [mapTilesError, setMapTilesError] = useState('');
+  const [mapTilesError, setMapTilesError] = useState(() => configureMapbox() ? '' : 'Mapbox is not configured for this deployment. Use list view to continue browsing projects.');
   const [refreshVersion, setRefreshVersion] = useState(0);
   const queryKey = searchParams.toString();
   const requestKey = JSON.stringify([queryKey, refreshVersion]);

@@ -87,8 +87,8 @@ const ProxyPaymentReturn = () => {
             error: true,
             reference,
             message: 'The provider has not confirmed this payment. Its outcome is unresolved, not confirmed as failed. The existing reference is preserved; do not start a replacement payment while this is unresolved.',
-            actionLabel: hasCartContext ? (isBuyer ? 'Checkout history' : 'Back to Service Cart') : hasAnalyticsContext ? 'Analytics' : requestId ? 'Open inspection workspace' : isBuyer ? 'Payment History' : 'Browse Properties',
-            actionTo,
+            actionLabel: hasCartContext ? (isBuyer ? 'Checkout history' : 'Back to Service Cart') : hasAnalyticsContext ? 'Browse Properties' : requestId ? 'Open inspection workspace' : isBuyer ? 'Payment History' : 'Browse Properties',
+            actionTo: hasAnalyticsContext ? '/properties' : actionTo,
           });
           return;
         }
@@ -145,9 +145,9 @@ const ProxyPaymentReturn = () => {
           setState({
             loading: false,
             error: true,
-            message: 'Payment was verified, but analytics access is not active yet. Use the retry button on the analytics page.',
-            actionLabel: 'Analytics',
-            actionTo: '/analytics/property-market',
+            message: 'Payment was verified, but market-analytics access was not returned as active. Keep this payment reference if you need to contact support.',
+            actionLabel: 'Browse Properties',
+            actionTo: '/properties',
           });
           return;
         }

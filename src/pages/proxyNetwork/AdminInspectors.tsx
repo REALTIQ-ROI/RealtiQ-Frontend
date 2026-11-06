@@ -138,7 +138,7 @@ export const AdminInspectorList = () => {
     <AdminLayout>
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-8">
         <h1 className="text-3xl font-black">
-          Verified Property Agent Review Queue
+          Inspection Partner Review Queue
         </h1>
         <p className="mt-2 text-secondary">
           KYC and public-profile governance for independent professionals.
@@ -308,10 +308,10 @@ export const AdminInspectorList = () => {
                     <td className="p-4">
                       {profileId && canReadProtectedVerificationDetail ? (
                         <Link to={`/admin/proxy-inspectors/${encodeURIComponent(profileId)}`} className="font-bold underline">
-                          {user?.name || "Inspector"}
+                          {user?.name || "Inspection Partner"}
                         </Link>
                       ) : (
-                        <span className="font-bold">{user?.name || "Inspector"}</span>
+                        <span className="font-bold">{user?.name || "Inspection Partner"}</span>
                       )}
                       {!profileId ? <p role="status" className="mt-1 text-xs text-error">Profile details are unavailable because this record has no profile ID.</p> : null}
                       {profileId && !canReadProtectedVerificationDetail ? <p className="mt-1 text-xs text-secondary">Protected KYC details require verification-review access.</p> : null}
@@ -338,7 +338,7 @@ export const AdminInspectorList = () => {
           </table>
           {resource.data?.inspectors.length === 0 ? (
             <p className="p-10 text-center text-secondary">
-              No inspectors match this queue.
+              No Inspection Partners match this queue.
             </p>
           ) : null}
         </div>
@@ -382,13 +382,13 @@ export const AdminInspectorDetailPage = () => {
   const resource = useProxyResource(
     (signal) => validProfileId
       ? proxyNetworkService.getAdminInspector(profileId, signal)
-      : Promise.reject(new Error("The selected Property Agent profile ID is missing. Return to the review queue and open the record again.")),
+      : Promise.reject(new Error("The selected Inspection Partner profile ID is missing. Return to the review queue and open the record again.")),
     [profileId],
   );
   const stepUp = useBoundStepUp<unknown>();
   const cancelStepUp = stepUp.cancel;
   const [pending, setPending] = useState(false);
-  const [protectedActionLabel, setProtectedActionLabel] = useState("Property Agent decision");
+  const [protectedActionLabel, setProtectedActionLabel] = useState("Inspection Partner decision");
   const [preview, setPreview] = useState<{
     profileId: string;
     requestVersion: number;
@@ -477,7 +477,7 @@ export const AdminInspectorDetailPage = () => {
     return (
       <AdminLayout>
         <main className="mx-auto max-w-6xl px-4 py-12 sm:px-8">
-          <ErrorState message="This Property Agent link does not contain a valid profile ID. Return to the review queue and reopen the record." />
+          <ErrorState message="This Inspection Partner link does not contain a valid profile ID. Return to the review queue and reopen the record." />
           <Link to="/admin/proxy-inspectors" className="font-bold underline">Return to review queue</Link>
         </main>
       </AdminLayout>
@@ -486,16 +486,16 @@ export const AdminInspectorDetailPage = () => {
 
   const beginReview = async (body: { decision: "approve"; notes: string } | { decision: "reject"; reason: string }) => {
     if (!canReviewIdentity) {
-      toast.error("The current staff access does not include Property Agent verification review.");
+      toast.error("The current staff access does not include Inspection Partner verification review.");
       return false;
     }
     const path = `/api/admin/proxy-inspectors/${encodeURIComponent(profileId)}/review`;
-    setProtectedActionLabel(body.decision === "approve" ? "Approve Property Agent" : "Reject Property Agent");
+    setProtectedActionLabel(body.decision === "approve" ? "Approve Inspection Partner" : "Reject Inspection Partner");
     const started = await stepUp.begin({
       method: "PATCH",
       path,
       body,
-      label: `${body.decision === "approve" ? "Approve" : "Reject"} Property Agent profile`,
+      label: `${body.decision === "approve" ? "Approve" : "Reject"} Inspection Partner profile`,
       execute: (challengeId, exactBody) => proxyNetworkService.reviewInspector(profileId, challengeId, exactBody),
     });
     if (!started) toast.error(stepUp.getError() ?? "Unable to start the protected review.");
@@ -504,25 +504,25 @@ export const AdminInspectorDetailPage = () => {
 
   const beginTextMutation = async (kind: "suspend" | "reactivate", value: string) => {
     if (!canManageNetwork) {
-      toast.error("The current staff access does not include Property Agent network management.");
+      toast.error("The current staff access does not include Inspection Partner network management.");
       return false;
     }
     const suspend = kind === "suspend";
     const path = `/api/admin/proxy-inspectors/${encodeURIComponent(profileId)}/${kind}`;
-    setProtectedActionLabel(suspend ? "Suspend Property Agent" : "Reactivate Property Agent");
+    setProtectedActionLabel(suspend ? "Suspend Inspection Partner" : "Reactivate Inspection Partner");
     const started = suspend
       ? await stepUp.begin({
         method: "PATCH",
         path,
         body: { reason: value },
-        label: "Suspend Property Agent profile",
+        label: "Suspend Inspection Partner profile",
         execute: (challengeId, exactBody) => proxyNetworkService.suspendInspector(profileId, challengeId, exactBody.reason),
       })
       : await stepUp.begin({
         method: "PATCH",
         path,
         body: { notes: value },
-        label: "Reactivate Property Agent profile",
+        label: "Reactivate Inspection Partner profile",
         execute: (challengeId, exactBody) => proxyNetworkService.reactivateInspector(profileId, challengeId, exactBody.notes),
       });
     if (!started) toast.error(stepUp.getError() ?? "Unable to start the protected profile action.");
@@ -555,7 +555,7 @@ export const AdminInspectorDetailPage = () => {
     return (
       <AdminLayout>
         <div className="p-12 text-center">
-          <h1 className="text-3xl font-black">Inspector not found</h1>
+          <h1 className="text-3xl font-black">Inspection Partner not found</h1>
         </div>
       </AdminLayout>
     );
@@ -580,11 +580,11 @@ export const AdminInspectorDetailPage = () => {
   ];
   const reject = () =>
     setTextAction({
-      title: "Reject Property Agent",
+      title: "Reject Inspection Partner",
       description:
         "Rejecting keeps this profile hidden from public discovery. The reason is required and should explain what the applicant must address.",
       label: "Rejection reason",
-      confirmLabel: "Reject Property Agent",
+      confirmLabel: "Reject Inspection Partner",
       requiredMessage: "Rejection reason is required.",
       tone: "danger",
       onSubmit: (reason) => {
@@ -613,7 +613,7 @@ export const AdminInspectorDetailPage = () => {
                   <img
                     src={profileImage}
                     onError={() => setProfileImageFailed(true)}
-                    alt={`${user?.name || "Property Agent"} profile`}
+                    alt={`${user?.name || "Inspection Partner"} profile`}
                     className="h-24 w-24 rounded-2xl object-cover"
                   />
                 ) : (
@@ -629,7 +629,7 @@ export const AdminInspectorDetailPage = () => {
                     {formatLabel(profile.verificationStatus)}
                   </p>
                   <h1 className="mt-2 text-3xl font-black">
-                    {profile.name || user?.name || "Property Agent"}
+                    {profile.name || user?.name || "Inspection Partner"}
                   </h1>
                   <p className="mt-2 text-secondary">
                     Email: {user?.email || "—"} · Phone: {user?.phone || "—"}
@@ -698,7 +698,7 @@ export const AdminInspectorDetailPage = () => {
               </p>
               {!kyc ? (
                 <p role="status" className="mt-3 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">
-                  The admin Property Agent detail response did not include KYC details for this profile.
+                  The admin Inspection Partner detail response did not include KYC details for this profile.
                 </p>
               ) : null}
               {documentError ? <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{documentError}</p> : null}
@@ -830,7 +830,7 @@ export const AdminInspectorDetailPage = () => {
           <aside className="h-fit rounded-2xl bg-white p-5 shadow-sm">
             <h2 className="font-black">Profile actions</h2>
             <p className="mt-2 text-xs text-secondary">The server checks current staff access. Protected decisions use a one-use authenticator challenge bound to the exact action and profile.</p>
-            {!canReviewIdentity && !canManageNetwork ? <p className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">This staff profile has read access to the Property Agent details, but no management action is available.</p> : null}
+            {!canReviewIdentity && !canManageNetwork ? <p className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">This staff profile has read access to the Inspection Partner details, but no management action is available.</p> : null}
             {canReviewIdentity && profile.verificationStatus === "under_review" ? (
               <div className="mt-4 space-y-3">
                 <button
@@ -854,11 +854,11 @@ export const AdminInspectorDetailPage = () => {
                 disabled={pending || stepUp.busy || Boolean(stepUp.challenge)}
                 onClick={() =>
                   setTextAction({
-                    title: "Suspend Property Agent",
+                    title: "Suspend Inspection Partner",
                     description:
                       "Suspending hides this profile from public discovery but keeps historical jobs intact.",
                     label: "Suspension reason",
-                    confirmLabel: "Suspend Property Agent",
+                    confirmLabel: "Suspend Inspection Partner",
                     requiredMessage: "Suspension reason is required.",
                     tone: "danger",
                     onSubmit: (reason) => {
@@ -878,11 +878,11 @@ export const AdminInspectorDetailPage = () => {
                 disabled={pending || stepUp.busy || Boolean(stepUp.challenge)}
                 onClick={() =>
                   setTextAction({
-                    title: "Reactivate Property Agent",
+                    title: "Reactivate Inspection Partner",
                     description:
-                      "Reactivation returns this profile to an approved and searchable state after RealtIQ confirms the action.",
+                      "Reactivation returns this profile to an approved and searchable state after REALTIQ confirms the action.",
                     label: "Reactivation notes",
-                    confirmLabel: "Reactivate Property Agent",
+                    confirmLabel: "Reactivate Inspection Partner",
                     requiredMessage: "Reactivation notes are required.",
                     onSubmit: (notes) => {
                       void beginTextMutation("reactivate", notes).then((started) => {
@@ -897,7 +897,7 @@ export const AdminInspectorDetailPage = () => {
               </button>
             ) : null}
             {(canReviewIdentity || canManageNetwork) ? <p className="mt-4 text-xs text-secondary">
-              Badges and public visibility update only after RealtIQ
+              Badges and public visibility update only after REALTIQ
               confirms the action.
             </p> : null}
           </aside>
@@ -907,7 +907,7 @@ export const AdminInspectorDetailPage = () => {
         ) : null}
         {approvalOpen ? (
           <AgentApprovalModal
-            agentName={user?.name || "this Property Agent"}
+            agentName={user?.name || "this Inspection Partner"}
             pending={pending || stepUp.busy || Boolean(stepUp.challenge)}
             onClose={() => setApprovalOpen(false)}
             onSubmit={approve}

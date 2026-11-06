@@ -81,7 +81,7 @@ const ProjectCard = ({ project, requirePublishedToView = false }: ProjectCardPro
         ) : null}
 
         <div className="flex items-center justify-between gap-3 border-t border-outline-variant/10 pt-4">
-          <p className="text-xs text-secondary">{project.developer?.name || 'Verified developer'}</p>
+          <p className="text-xs text-secondary">{project.developer?.name || 'Not provided'}</p>
           {canViewProject ? (
             <Link to={path} state={navigationState} className="text-sm font-bold text-primary hover:underline">View project</Link>
           ) : (

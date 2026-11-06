@@ -53,7 +53,7 @@ const AgentApprovalModal = ({ agentName, pending, onClose, onSubmit }: AgentAppr
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-emerald-700">Verification decision</p>
-            <h2 id="agent-approval-title" className="mt-2 text-2xl font-black">Approve Property Agent</h2>
+            <h2 id="agent-approval-title" className="mt-2 text-2xl font-black">Approve Inspection Partner</h2>
           </div>
           <button type="button" onClick={onClose} disabled={pending} className="rounded-full p-2 text-secondary hover:bg-surface-container-low disabled:opacity-50" aria-label="Close approval modal">
             <span className="material-symbols-outlined" aria-hidden="true">close</span>
@@ -79,7 +79,7 @@ const AgentApprovalModal = ({ agentName, pending, onClose, onSubmit }: AgentAppr
         {error ? <p id="agent-approval-error" role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p> : <span id="agent-approval-error" />}
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <button type="button" onClick={onClose} disabled={pending} className="rounded-lg bg-surface-container-high px-5 py-3 text-sm font-bold disabled:opacity-50">Cancel</button>
-          <button type="submit" disabled={pending} className="rounded-lg bg-emerald-700 px-5 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{pending ? 'Approving…' : 'Approve Property Agent'}</button>
+          <button type="submit" disabled={pending} className="rounded-lg bg-emerald-700 px-5 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{pending ? 'Approving…' : 'Approve Inspection Partner'}</button>
         </div>
       </form>
     </div>

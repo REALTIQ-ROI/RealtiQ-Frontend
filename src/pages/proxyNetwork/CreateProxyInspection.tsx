@@ -39,12 +39,12 @@ const CreateProxyInspection = () => {
         setInspectorName(publicInspectorDisplayName(profile.user));
         setInspectorLookupError('');
       })
-      .catch(() => setInspectorLookupError('The selected Property Agent could not be loaded. Choose an agent again from the directory.'));
+      .catch(() => setInspectorLookupError('The selected Inspection Partner could not be loaded. Choose one again from the directory.'));
     return () => controller.abort();
   }, [inspectorId, inspectorName]);
 
   const validate = () => {
-    if (!propertyId || !inspectorId) return 'Select a property and Property Agent.';
+    if (!propertyId || !inspectorId) return 'Select a property and Inspection Partner.';
     if (!services.length) return 'Select at least one requested service.';
     if (services.includes('custom') && !requirements.trim()) return 'Describe the custom requirement.';
     return '';
@@ -74,7 +74,7 @@ const CreateProxyInspection = () => {
       if (duplicate) {
         setDuplicateRequestId(duplicate._id);
         setReviewing(false);
-        return setError('You already have a Property Agent inspection request for this property with this Property Agent.');
+        return setError('You already have an Inspection Partner request for this property with this Inspection Partner.');
       }
     } catch (raw) {
       return setError(raw instanceof Error ? raw.message : 'Unable to check for an existing inspection request.');
@@ -108,10 +108,10 @@ const CreateProxyInspection = () => {
   };
 
   const agentDirectoryPath = `/proxy-inspectors${propertyId ? `?propertyId=${encodeURIComponent(propertyId)}` : ''}`;
-  const agentDisplayName = inspectorName || 'RealtIQ Verified Property Agent';
+  const agentDisplayName = inspectorName || 'Inspection Partner';
 
   return (
-    <BuyerPortalLayout pageTitle="Request a Property Agent Inspection" pageSubtitle="Recorded evidence and an observational condition report from an independent professional.">
+    <BuyerPortalLayout pageTitle="Request an Inspection Partner" pageSubtitle="Recorded evidence and an observational condition report from an independent Inspection Partner.">
       <form onSubmit={(event) => void submit(event)} className="mx-auto max-w-3xl space-y-6 rounded-2xl bg-white p-6 shadow-sm">
         {reviewing ? (
           <>
@@ -122,7 +122,7 @@ const CreateProxyInspection = () => {
                 <dd className="font-bold">{selectedProperty?.title || propertyId}</dd>
               </div>
               <div>
-                <dt className="text-xs font-bold text-secondary">Selected Property Agent</dt>
+                <dt className="text-xs font-bold text-secondary">Selected Inspection Partner</dt>
                 <dd className="font-bold">{agentDisplayName}</dd>
               </div>
               <div className="sm:col-span-2">
@@ -138,7 +138,7 @@ const CreateProxyInspection = () => {
                 <dd>{requirements || 'None'}</dd>
               </div>
             </dl>
-            <p className="text-sm text-secondary">The selected professional is an independent third party, not a RealtIQ employee. Payment is protected after both parties independently confirm the same price.</p>
+            <p className="text-sm text-secondary">The selected Inspection Partner is an independent third party, not a REALTIQ employee. Payment is protected after both parties independently confirm the same price.</p>
           </>
         ) : (
           <>
@@ -151,17 +151,17 @@ const CreateProxyInspection = () => {
               </select>
             </label>
             <section className="rounded-lg bg-surface-container-low p-4" aria-labelledby="selected-agent-heading">
-              <p id="selected-agent-heading" className="text-sm font-bold">Selected Property Agent</p>
+              <p id="selected-agent-heading" className="text-sm font-bold">Selected Inspection Partner</p>
               {inspectorId ? (
                 <>
-                  <p className="mt-2 text-lg font-black">{inspectorName || 'Loading selected Property Agent...'}</p>
-                  <p className="mt-1 text-xs text-secondary">This selection is locked for the request. Choose a different agent from the public directory to change it.</p>
-                  <Link to={agentDirectoryPath} className="mt-3 inline-block text-sm font-bold text-primary underline">Choose a different Property Agent</Link>
+                  <p className="mt-2 text-lg font-black">{inspectorName || 'Loading selected Inspection Partner...'}</p>
+                  <p className="mt-1 text-xs text-secondary">This selection is locked for the request. Choose a different Inspection Partner from the public directory to change it.</p>
+                  <Link to={agentDirectoryPath} className="mt-3 inline-block text-sm font-bold text-primary underline">Choose a different Inspection Partner</Link>
                 </>
               ) : (
                 <>
-                  <p className="mt-2 text-sm text-secondary">No Property Agent selected yet.</p>
-                  <Link to={agentDirectoryPath} className="mt-3 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-bold text-on-primary">Choose a Property Agent</Link>
+                  <p className="mt-2 text-sm text-secondary">No Inspection Partner selected yet.</p>
+                  <Link to={agentDirectoryPath} className="mt-3 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-bold text-on-primary">Choose an Inspection Partner</Link>
                 </>
               )}
               {inspectorLookupError ? <p role="alert" className="mt-3 text-sm text-red-800">{inspectorLookupError}</p> : null}

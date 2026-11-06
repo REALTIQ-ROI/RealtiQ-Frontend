@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import Swal from 'sweetalert2';
-import { useAuth } from '../../../contexts/AuthContext';
+import { Link } from 'react-router-dom';
 import { propertyRouteReference, type Property } from '../../../types';
 import MediaPreview from '../MediaPreview';
 import MobileMapListToggle, { type MapListView } from './MobileMapListToggle';
@@ -19,8 +17,6 @@ const matchesSearch = (property: Property, query: string) =>
   !query || `${property.title} ${property.location} ${property.propertyType}`.toLowerCase().includes(query.toLowerCase());
 
 const MapListLayout = ({ properties, detailsPath, actions, children, mapClassName = '' }: Props) => {
-  const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
   const [mobileView, setMobileView] = useState<MapListView>('list');
   const [fullscreen, setFullscreen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -67,29 +63,6 @@ const MapListLayout = ({ properties, detailsPath, actions, children, mapClassNam
     setFullscreenVisibleProperties(fullscreenProperties);
   }, [fullscreenProperties]);
 
-  const handleAnalyticsOpen = async () => {
-    if (isAuthenticated) {
-      navigate('/analytics/property-market');
-      return;
-    }
-
-    const result = await Swal.fire({
-      title: 'Login required',
-      text: 'You have to login to view property market analytics.',
-      icon: 'info',
-      showCancelButton: true,
-      confirmButtonText: 'Login',
-      cancelButtonText: 'Stay here',
-      confirmButtonColor: '#000000',
-      cancelButtonColor: '#6b7280',
-      reverseButtons: true,
-    });
-
-    if (result.isConfirmed) {
-      navigate('/login', { state: { from: { pathname: '/analytics/property-market' } } });
-    }
-  };
-
   const fullscreenFilters = (
     <div className="mt-3 grid grid-cols-2 gap-2">
       <select aria-label="Filter by property type" value={propertyType} onChange={(event) => setPropertyType(event.target.value)} className="min-w-0 rounded-lg bg-surface-container-low px-2 py-2 text-xs outline-none"><option value="">All types</option>{propertyTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
@@ -122,11 +95,6 @@ const MapListLayout = ({ properties, detailsPath, actions, children, mapClassNam
       <div className="flex items-center gap-3">
         <div className="flex-1"><MobileMapListToggle value={mobileView} onChange={setMobileView} /></div>
         <div className="flex flex-col items-stretch gap-2 sm:w-auto">
-          <button type="button" onClick={() => void handleAnalyticsOpen()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-on-primary">
-            <span className="material-symbols-outlined text-lg">query_stats</span>
-            <span className="hidden sm:inline">Market Analytics</span>
-            <span className="sm:hidden">Analytics</span>
-          </button>
           <button type="button" onClick={() => setFullscreen(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-surface-container-low px-4 py-2.5 text-sm font-bold text-primary" aria-label="Open fullscreen property map"><span className="material-symbols-outlined text-lg">fullscreen</span><span className="hidden sm:inline">Fullscreen map</span><span className="sm:hidden">Fullscreen</span></button>
         </div>
       </div>

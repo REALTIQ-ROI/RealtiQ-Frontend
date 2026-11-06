@@ -1,11 +1,9 @@
 export type MapProvider = 'leaflet' | 'mapbox';
 
-/**
- * Keep public maps usable when the optional Mapbox build setting is absent.
- * Deployments should provide a Mapbox token only after the provider's licensing
- * and data-handling approvals are complete. Leaflet is the existing fallback.
- */
+/** Legacy provider helper retained for compatibility. Runtime maps do not use it to switch providers. */
 export const resolveMapProvider = (requestedProvider: MapProvider, mapboxToken?: string): MapProvider =>
   requestedProvider === 'mapbox' && !mapboxToken?.trim() ? 'leaflet' : requestedProvider;
 
-export const MAP_PROVIDER: MapProvider = resolveMapProvider('mapbox', import.meta.env.VITE_MAPBOX_ACCESS_TOKEN);
+// Mapbox is the source-defined maps provider. Missing configuration is shown as
+// unavailable by map surfaces; the UI must not substitute an unapproved provider.
+export const MAP_PROVIDER: MapProvider = 'mapbox';

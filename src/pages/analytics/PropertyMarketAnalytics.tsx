@@ -81,11 +81,15 @@ const MarketHeatmap = ({
   const leafletMapRef = useRef<L.Map | null>(null);
   const leafletLayerRef = useRef<L.LayerGroup | null>(null);
   const heatCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [mapUnavailable, setMapUnavailable] = useState(() => !configureMapbox());
 
   useEffect(() => {
-    if (MAP_PROVIDER !== 'mapbox' || !containerRef.current || mapRef.current || !configureMapbox()) return;
+    if (MAP_PROVIDER !== 'mapbox' || !containerRef.current || mapRef.current) return;
+    if (!configureMapbox()) { setMapUnavailable(true); return; }
     const map = new mapboxgl.Map({ container: containerRef.current, style: MAPBOX_STYLE, center: [3.3792, 6.5244], zoom: 10 });
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    map.on('error', () => setMapUnavailable(true));
+    map.on('load', () => setMapUnavailable(false));
     mapRef.current = map;
     const heatCanvas = document.createElement('canvas');
     heatCanvas.className = 'pointer-events-none absolute inset-0 z-[450] mix-blend-multiply';
@@ -153,7 +157,11 @@ const MarketHeatmap = ({
   return (
     <div className="relative min-h-[420px] overflow-hidden rounded-xl border border-outline-variant/10 bg-surface-container-low">
       <div ref={containerRef} className="absolute inset-0" />
-      {data && data.points.length === 0 && matchingProperties.filter(isMappable).length === 0 ? (
+      {mapUnavailable ? (
+        <div role="status" className="absolute inset-0 z-[500] flex items-center justify-center bg-white/90 p-8 text-center text-sm text-secondary">
+          Mapbox is unavailable. Market summaries and list results remain available.
+        </div>
+      ) : data && data.points.length === 0 && matchingProperties.filter(isMappable).length === 0 ? (
         <div className="absolute inset-0 z-[500] flex items-center justify-center bg-white/85 p-8 text-center text-sm text-secondary">
           Not enough aggregate activity is available for this area and date range.
         </div>
@@ -201,7 +209,7 @@ const Paywall = ({
     <span className="material-symbols-outlined text-5xl text-primary">query_stats</span>
     <h1 className="mt-4 text-3xl font-black tracking-tight text-primary">Unlock Property Market Analytics</h1>
     <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-secondary">
-      Access aggregate heatmaps, market summaries, and price trends for the RealtIQ property market. Your access is securely verified each time.
+      Access aggregate heatmaps, market summaries, and price trends for the REALTIQ property market. Your access is securely verified each time.
     </p>
     {message ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800">{message}</p> : null}
     <div className="mt-6 flex flex-wrap justify-center gap-3">

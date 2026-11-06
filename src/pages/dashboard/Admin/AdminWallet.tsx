@@ -21,9 +21,9 @@ const toIsoBoundary = (value: string, end = false): string | undefined => {
 };
 
 const transactionTypeLabel = (type: WalletTransactionType) => ({
-  proxy_inspection_commission: 'Proxy Inspector Commission',
+  proxy_inspection_commission: 'Inspection Partner Commission',
   proxy_inspection_buyer_fee: 'Buyer Platform & Protection Fee',
-  proxy_inspection_refund: 'Property Agent refund',
+  proxy_inspection_refund: 'Inspection Partner refund',
   property_analytics_access: 'Property analytics access',
   title_document_view: 'Title document view',
   tour_payment: 'Tour payment',
@@ -69,7 +69,7 @@ const AdminWallet = () => {
     } catch (raw) {
       setSummary(null);
       setTransactions(null);
-      setError(raw instanceof Error ? raw.message : 'Unable to load the RealtIQ platform ledger.');
+      setError(raw instanceof Error ? raw.message : 'Unable to load the REALTIQ platform ledger.');
     } finally {
       setLoading(false);
     }
@@ -107,7 +107,7 @@ const AdminWallet = () => {
     ['Available ledger revenue', summary.availableRevenue],
     ['Title-document views', summary.breakdown.titleDocumentViews],
     ['Tour payments', summary.breakdown.tourPayments],
-    ['Property Agent revenue', summary.breakdown.proxyInspectionRevenue],
+    ['Inspection Partner revenue', summary.breakdown.proxyInspectionRevenue],
     ['Other platform revenue', summary.breakdown.other],
     ['Refunds', summary.breakdown.refunds],
   ] as const : [];
@@ -116,7 +116,7 @@ const AdminWallet = () => {
     <AdminLayout>
       <main className="mx-auto max-w-[1500px] px-4 py-8 sm:px-8 lg:px-12">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-secondary">RealtIQ platform ledger</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-secondary">REALTIQ platform ledger</p>
           <h1 className="mt-1 text-3xl font-extrabold">Platform revenue</h1>
           <p className="mt-2 text-sm text-secondary">Internal accounting records, not a Paystack bank balance. Credits, refunds, and reversals remain as separate audit entries.</p>
         </div>
@@ -144,9 +144,9 @@ const AdminWallet = () => {
                   <option value="title_document_view">Title document view</option>
                   <option value="tour_payment">Tour payment</option>
                   <option value="platform_fee">Platform fee</option>
-                  <option value="proxy_inspection_commission">Proxy Inspector Commission</option>
+                  <option value="proxy_inspection_commission">Inspection Partner Commission</option>
                   <option value="proxy_inspection_buyer_fee">Buyer Platform & Protection Fee</option>
-                  <option value="proxy_inspection_refund">Property Agent refund</option>
+                  <option value="proxy_inspection_refund">Inspection Partner refund</option>
                   <option value="property_analytics_access">Property analytics access</option>
                   <option value="other">Other</option>
                 </select>
@@ -169,7 +169,7 @@ const AdminWallet = () => {
                   <option value="failed">Failed</option>
                   <option value="canceled">Canceled</option>
                 </select>
-                <input aria-label="Inspector filter" placeholder="Inspector user ID" value={searchParams.get('inspector') ?? ''} onChange={(event) => updateFilter('inspector', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
+                <input aria-label="Inspection Partner filter" placeholder="Inspection Partner ID" value={searchParams.get('inspector') ?? ''} onChange={(event) => updateFilter('inspector', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
                 <input aria-label="Inspection request filter" placeholder="Inspection request ID" value={searchParams.get('inspectionRequest') ?? ''} onChange={(event) => updateFilter('inspectionRequest', event.target.value)} className="rounded-lg bg-surface-container-low px-3 py-3 text-sm" />
               </div>
               <div className="mt-5 overflow-x-auto">

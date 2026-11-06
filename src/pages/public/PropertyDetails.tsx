@@ -537,8 +537,7 @@ const PropertyDetails = () => {
   }
 
   const currency = property.currency ?? 'NGN';
-  const ownerName = owner?.name ?? 'RealtIQ Agent';
-  const ownerEmail = owner?.email ?? 'support@realtiq.com';
+  const ownerName = owner?.name ?? 'Not provided';
   const nearbyMapProperties = nearby
     .map((item): Property | null => {
       const reference = item.publicReference || item._id;
@@ -1427,7 +1426,7 @@ const PropertyDetails = () => {
                       navigate(path);
                     }}
                   >
-                    Hire a RealtIQ Verified Property Agent
+                    Find an Inspection Partner
                   </Button>
                 )
               ) : null}
@@ -1520,22 +1519,6 @@ const PropertyDetails = () => {
                   </Button>
                 </div>
               ) : null}
-              <Button
-                fullWidth
-                variant='secondary'
-                onClick={() => navigate(`/properties/${propertyReference}/roi`)}
-              >
-                <span className='material-symbols-outlined text-sm mr-1'>
-                  monitoring
-                </span>
-                Analyze ROI
-              </Button>
-              {isAuthenticated && property.approvalStatus === 'approved' && /^RTQ-PROP-[A-Za-z0-9-]+$/.test(propertyReference) ? (
-                <Button fullWidth variant='secondary' onClick={() => navigate(`/dashboard/roi-v1/properties/${propertyReference}/new`)}>
-                  <span className='material-symbols-outlined text-sm mr-1'>fact_check</span>
-                  Evidence-backed ROI
-                </Button>
-              ) : null}
               {isAuthenticated &&
               property.approvalStatus === 'approved' &&
               property.listingType !== 'off_plan' ? (
@@ -1579,7 +1562,6 @@ const PropertyDetails = () => {
                   </div>
                   <div>
                     <div className='flex flex-wrap items-center gap-2'><p className='font-bold text-sm'>{ownerName}</p><SellerTrustBadge badge={owner?.trustBadge ?? ownerTrustBadge} compact /></div>
-                    <p className='text-xs text-secondary'>{ownerEmail}</p>
                   </div>
                 </div>
               </div>

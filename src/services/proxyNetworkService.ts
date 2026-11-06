@@ -66,7 +66,7 @@ export const parseProxyInspectionDetail = (value: unknown): ProxyInspectionDetai
     (value.dispute !== null && !isRecord(value.dispute)) ||
     !Array.isArray(value.evidence)
   ) {
-    throw new Error('Property Agent job detail is not available in a supported format.');
+    throw new Error('Inspection Partner job detail is not available in a supported format.');
   }
   return { ...value, evidence: parseProxyEvidenceList(value.evidence) } as unknown as ProxyInspectionDetail;
 };
@@ -259,7 +259,7 @@ export const proxyNetworkService = {
   },
   async getAdminInspector(id: string, signal?: AbortSignal) {
     if (!id || id === 'undefined' || id === 'null') {
-      throw new Error('Property Agent profile ID is missing. Return to the review queue and reopen the record.');
+      throw new Error('Inspection Partner profile ID is missing. Return to the review queue and reopen the record.');
     }
     const { data } = await api.get<AdminInspectorDetail>(`/admin/proxy-inspectors/${encodeURIComponent(id)}`, config(signal)); return data;
   },

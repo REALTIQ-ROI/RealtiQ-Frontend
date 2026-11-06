@@ -175,17 +175,17 @@ const AdminDashboard = () => {
                 <StatCard title="Sold Properties" value={stats.soldProperties.toLocaleString()} icon="verified" to="/dashboard/admin/manage-properties" canNavigate={canReadListings} />
                 <StatCard title="Total Inquiries" value={stats.totalInquiries.toLocaleString()} icon="mail" to="/dashboard/admin/manage-inquiries" canNavigate={canReadInquiries} />
                 <StatCard title="Total Revenue" value={formatNGN(stats.totalRevenue)} icon="payments" to="/dashboard/admin/wallet" canNavigate={canReadFinance} />
-                <OptionalStatCard title="Verified Property Agents" value={stats.totalProxyInspectors} icon="engineering" to="/admin/proxy-inspectors" canNavigate={hasAnyAdminCapability(adminAccess, ['network.read', 'search.proxy_inspector.read'])} />
-                <OptionalStatCard title="Pending Inspector Approvals" value={stats.pendingProxyInspectorApprovals} icon="pending_actions" to="/admin/proxy-inspectors" canNavigate={hasAnyAdminCapability(adminAccess, ['network.read', 'search.proxy_inspector.read'])} />
-                <OptionalStatCard title="Approved Inspectors" value={stats.approvedProxyInspectors} icon="verified" to="/admin/proxy-inspectors" canNavigate={hasAnyAdminCapability(adminAccess, ['network.read', 'search.proxy_inspector.read'])} />
-                <OptionalStatCard title="Suspended Inspectors" value={stats.suspendedProxyInspectors} icon="person_off" to="/admin/proxy-inspectors" canNavigate={hasAnyAdminCapability(adminAccess, ['network.read', 'search.proxy_inspector.read'])} />
-                <OptionalStatCard title="Property Agent Requests" value={stats.totalProxyInspectionRequests} icon="fact_check" to="/admin/proxy-inspections" canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
-                <OptionalStatCard title="Active Property Agent Jobs" value={stats.activeProxyInspectionJobs} icon="construction" to="/admin/proxy-inspections" canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
-                <OptionalStatCard title="Completed Property Agent Jobs" value={stats.completedProxyInspectionJobs} icon="task_alt" to="/admin/proxy-inspections" canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
-                <OptionalStatCard title="Disputed Property Agent Jobs" value={stats.disputedProxyInspectionJobs} icon="gavel" to="/admin/proxy-inspections" canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
-                <OptionalStatCard title="Property Agent Gross Volume" value={stats.proxyInspectionGrossVolume} icon="account_balance" to="/admin/proxy-inspections" currency canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
-                <OptionalStatCard title="Property Agent Network Revenue" value={stats.proxyInspectionRevenue} icon="paid" to="/dashboard/admin/wallet" currency canNavigate={canReadFinance} />
-                <OptionalStatCard title="Inspector Payout Total" value={stats.proxyInspectorPayoutTotal} icon="payments" to="/dashboard/admin/wallet" currency canNavigate={canReadFinance} />
+                <OptionalStatCard title="Inspection Partners" value={stats.totalProxyInspectors} icon="engineering" to="/admin/proxy-inspectors" canNavigate={hasAnyAdminCapability(adminAccess, ['network.read', 'search.proxy_inspector.read'])} />
+                <OptionalStatCard title="Pending Inspection Partner Approvals" value={stats.pendingProxyInspectorApprovals} icon="pending_actions" to="/admin/proxy-inspectors" canNavigate={hasAnyAdminCapability(adminAccess, ['network.read', 'search.proxy_inspector.read'])} />
+                <OptionalStatCard title="Approved Inspection Partners" value={stats.approvedProxyInspectors} icon="verified" to="/admin/proxy-inspectors" canNavigate={hasAnyAdminCapability(adminAccess, ['network.read', 'search.proxy_inspector.read'])} />
+                <OptionalStatCard title="Suspended Inspection Partners" value={stats.suspendedProxyInspectors} icon="person_off" to="/admin/proxy-inspectors" canNavigate={hasAnyAdminCapability(adminAccess, ['network.read', 'search.proxy_inspector.read'])} />
+                <OptionalStatCard title="Inspection Partner Requests" value={stats.totalProxyInspectionRequests} icon="fact_check" to="/admin/proxy-inspections" canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
+                <OptionalStatCard title="Active Inspection Partner Jobs" value={stats.activeProxyInspectionJobs} icon="construction" to="/admin/proxy-inspections" canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
+                <OptionalStatCard title="Completed Inspection Partner Jobs" value={stats.completedProxyInspectionJobs} icon="task_alt" to="/admin/proxy-inspections" canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
+                <OptionalStatCard title="Disputed Inspection Partner Jobs" value={stats.disputedProxyInspectionJobs} icon="gavel" to="/admin/proxy-inspections" canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
+                <OptionalStatCard title="Inspection Partner Gross Volume" value={stats.proxyInspectionGrossVolume} icon="account_balance" to="/admin/proxy-inspections" currency canNavigate={hasAdminCapability(adminAccess, 'network.read')} />
+                <OptionalStatCard title="Inspection Partner Network Revenue" value={stats.proxyInspectionRevenue} icon="paid" to="/dashboard/admin/wallet" currency canNavigate={canReadFinance} />
+                <OptionalStatCard title="Inspection Partner Payout Total" value={stats.proxyInspectorPayoutTotal} icon="payments" to="/dashboard/admin/wallet" currency canNavigate={canReadFinance} />
               </>
             )}
           </section>

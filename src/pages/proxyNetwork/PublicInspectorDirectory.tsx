@@ -73,8 +73,8 @@ const PublicInspectorDirectory = () => {
     <PublicLayout>
       <section className="mx-auto max-w-7xl px-4 py-12 sm:px-8">
         <div className="flex flex-wrap items-end justify-between gap-5">
-          <div><p className="text-xs font-bold uppercase tracking-[.2em] text-secondary">Independent professional network</p><h1 className="mt-2 text-4xl font-black">Find a RealtIQ Verified Property Agent</h1><p className="mt-3 max-w-3xl text-secondary">Hire a RealtIQ Verified Property Agent to record a walkthrough, photograph the property, and prepare an observational condition report. These agents are independent third parties, not RealtIQ employees.</p></div>
-          <Link to="/proxy-inspectors/register" className="rounded-lg bg-primary px-5 py-3 text-sm font-bold text-on-primary">Join as a professional</Link>
+          <div><p className="text-xs font-bold uppercase tracking-[.2em] text-secondary">Independent professional network</p><h1 className="mt-2 text-4xl font-black">Find an Inspection Partner</h1><p className="mt-3 max-w-3xl text-secondary">Inspection Partners record on-site walkthroughs and prepare observational condition reports. They are independent third parties, not REALTIQ employees.</p></div>
+          <Link to="/proxy-inspectors/register" className="rounded-lg bg-primary px-5 py-3 text-sm font-bold text-on-primary">Register as an Inspection Partner</Link>
         </div>
         <form className="mt-8 grid gap-3 rounded-2xl bg-white p-5 shadow-sm sm:grid-cols-2 lg:grid-cols-4" onSubmit={(event) => { event.preventDefault(); update('search', search.trim()); }}>
           <label className="text-xs font-bold">Search<input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, title, specialty" className="mt-2 w-full rounded-lg bg-surface-container-low px-3 py-3 text-sm" /></label>
@@ -90,11 +90,11 @@ const PublicInspectorDirectory = () => {
           <button className="rounded-lg border border-outline px-4 py-3 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={clearFilters} disabled={!hasActiveFilters}>Clear all filters</button>
         </form>
         {facets.error ? <p role="status" className="mt-3 text-sm text-error">Filter options could not be refreshed. <button type="button" className="font-bold underline" onClick={() => void facets.reload()}>Retry</button></p> : null}
-        {resource.loading ? <LoadingState label="Finding verified property agents..." /> : null}
+        {resource.loading ? <LoadingState label="Finding Inspection Partners..." /> : null}
         {resource.error ? <ErrorState message={resource.error.message} onRetry={() => void resource.reload()} /> : null}
-        {resource.data && inspectors.length === 0 ? <div className="py-16 text-center"><h2 className="text-xl font-bold">No property agents found</h2><p className="mt-2 text-secondary">Try a broader location or fewer filters.</p></div> : null}
+        {resource.data && inspectors.length === 0 ? <div className="py-16 text-center"><h2 className="text-xl font-bold">No Inspection Partners found</h2><p className="mt-2 text-secondary">Try a broader location or fewer filters.</p></div> : null}
         <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{inspectors.map((item, index) => <ProxyInspectorCard key={`${item._id || 'inspector'}-${index}`} inspector={item} propertyId={params.get('propertyId') || undefined} />)}</div>
-        {resource.data ? <nav aria-label="Property agent pages" className="mt-8 flex items-center justify-between"><p className="text-sm text-secondary">Page {resource.data.page} · {resource.data.total} professionals</p><div className="flex gap-2"><button disabled={resource.data.page <= 1} onClick={() => update('page', String(resource.data!.page - 1))} className="rounded-lg bg-white px-4 py-2 disabled:opacity-40">Previous</button><button disabled={resource.data.page * resource.data.limit >= resource.data.total} onClick={() => update('page', String(resource.data!.page + 1))} className="rounded-lg bg-white px-4 py-2 disabled:opacity-40">Next</button></div></nav> : null}
+        {resource.data ? <nav aria-label="Inspection Partner pages" className="mt-8 flex items-center justify-between"><p className="text-sm text-secondary">Page {resource.data.page} · {resource.data.total} professionals</p><div className="flex gap-2"><button disabled={resource.data.page <= 1} onClick={() => update('page', String(resource.data!.page - 1))} className="rounded-lg bg-white px-4 py-2 disabled:opacity-40">Previous</button><button disabled={resource.data.page * resource.data.limit >= resource.data.total} onClick={() => update('page', String(resource.data.page + 1))} className="rounded-lg bg-white px-4 py-2 disabled:opacity-40">Next</button></div></nav> : null}
       </section>
     </PublicLayout>
   );

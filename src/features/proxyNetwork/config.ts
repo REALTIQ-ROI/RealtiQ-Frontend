@@ -18,9 +18,9 @@ export const formatNgn = (value?: number) => value == null ? '—' : new Intl.Nu
 export const refId = <T extends { _id: string }>(value?: string | T | null) => typeof value === 'string' ? value : value?._id ?? '';
 
 export const publicInspectorDisplayName = (user: unknown): string => {
-  if (typeof user !== 'object' || user === null || Array.isArray(user)) return 'Verified professional';
+  if (typeof user !== 'object' || user === null || Array.isArray(user)) return 'Inspection Partner';
   const name = (user as Record<string, unknown>).name;
-  return typeof name === 'string' && name.trim() ? name.trim() : 'Verified professional';
+  return typeof name === 'string' && name.trim() ? name.trim() : 'Inspection Partner';
 };
 
 /** Resolve only the professional profile's own identifier; never substitute its user/account ID. */

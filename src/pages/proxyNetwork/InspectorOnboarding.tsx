@@ -74,15 +74,15 @@ const InspectorOnboarding = () => {
   return <ProxyInspectorLayout title="Verification and onboarding"><section className="rounded-2xl bg-white p-6 shadow-sm"><p className="text-xs font-bold uppercase tracking-widest text-secondary">Current status</p><h2 className="mt-2 text-3xl font-black capitalize">{status.replaceAll('_', ' ')}</h2>
     {!user?.emailVerified ? <p className="mt-3 text-secondary">Verify your email using the link sent during registration before submitting KYC.</p> : null}
     {status === 'under_review' ? <p className="mt-3 text-secondary">Your identity and professional documents are under Admin review. Uploaded credentials remain unverified until explicitly approved.</p> : null}
-    {status === 'approved' ? <p className="mt-3 text-emerald-800">Your professional profile is approved. Public visibility and availability remain realtiq-controlled.</p> : null}
+    {status === 'approved' ? <p className="mt-3 text-emerald-800">Your professional profile is approved. Public visibility and availability remain controlled by REALTIQ.</p> : null}
     {status === 'suspended' ? <p className="mt-3 text-red-800">Your profile is suspended and hidden from discovery. Existing task history remains available.</p> : null}
-    {status === 'rejected' ? <p className="mt-3 text-red-800">Your submission was not approved. Review any reason supplied by RealtIQ before resubmitting.</p> : null}
+    {status === 'rejected' ? <p className="mt-3 text-red-800">Your submission was not approved. Review any reason supplied by REALTIQ before resubmitting.</p> : null}
     <div className="mt-5 flex flex-wrap items-center gap-3">
       <button type="button" onClick={() => void refreshLatestStatus(false)} disabled={statusPending} className="rounded-lg border border-outline px-4 py-2 text-sm font-bold disabled:opacity-50">{statusPending ? 'Refreshing...' : 'Refresh status'}</button>
       {statusMessage ? <p role="status" className="text-sm text-secondary">{statusMessage}</p> : null}
     </div>
   </section>
-  {canSubmit ? <form className="mt-6 space-y-5 rounded-2xl bg-white p-6 shadow-sm" onSubmit={(e) => void submit(e)} autoComplete="off"><h2 className="text-2xl font-black">Secure KYC submission</h2><p className="text-sm text-secondary">These details are sent securely to RealtIQ and are not saved in browser storage. Uploaded credentials remain unverified until RealtIQ review.</p>
+  {canSubmit ? <form className="mt-6 space-y-5 rounded-2xl bg-white p-6 shadow-sm" onSubmit={(e) => void submit(e)} autoComplete="off"><h2 className="text-2xl font-black">Secure KYC submission</h2><p className="text-sm text-secondary">These details are sent securely to REALTIQ and are not saved in browser storage. Uploaded credentials remain unverified until REALTIQ review.</p>
     {([['fullLegalName','Full legal name'],['phone','Phone'],['address','Residential address'],['nationalId','National ID']] as const).map(([key,label]) => <label key={key} className="block text-sm font-bold">{label}<input required value={values[key]} onChange={(e) => setValues((old) => ({...old,[key]:e.target.value}))} className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 font-normal" /></label>)}
     <label className="block text-sm font-bold">Identity document (required image)<input required type="file" accept="image/*" onChange={(e) => setIdDocument(e.target.files?.[0])} className="mt-2 block w-full rounded-lg bg-surface-container-low p-3" /></label>
     <label className="block text-sm font-bold">Selfie (required image)<input required type="file" accept="image/*" onChange={(e) => setSelfie(e.target.files?.[0])} className="mt-2 block w-full rounded-lg bg-surface-container-low p-3" /></label>

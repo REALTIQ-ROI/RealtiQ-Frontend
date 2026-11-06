@@ -27,8 +27,8 @@ const navLinks = [
   { to: '/dashboard/admin/message-moderation', label: 'Message Moderation', icon: 'shield', capability: 'moderation.manage' },
   { to: '/dashboard/admin/notifications/digest', label: 'Digest', icon: 'campaign', capability: 'marketing.manage' },
   { to: '/dashboard/admin/notification-deliveries', label: 'Delivery Reconciliation', icon: 'outbox', capability: 'notification_delivery.read' },
-  { to: '/admin/proxy-inspectors', label: 'Verified Property Agents', icon: 'engineering', capability: ['network.read', 'search.proxy_inspector.read'] },
-  { to: '/admin/proxy-inspections', label: 'Property Agent Jobs', icon: 'fact_check', capability: 'network.read' },
+  { to: '/admin/proxy-inspectors', label: 'Inspection Partners', icon: 'engineering', capability: ['network.read', 'search.proxy_inspector.read'] },
+  { to: '/admin/proxy-inspections', label: 'Inspection Partner Jobs', icon: 'fact_check', capability: 'network.read' },
   { to: '/dashboard/admin/virtual-tours', label: 'Virtual Tours', icon: 'view_in_ar', capability: 'virtual_tours.manage' },
   { to: '/dashboard/admin/title-verifications', label: 'Title Review', icon: 'verified', capability: 'title_verification.read' },
   { to: '/dashboard/admin/trust-appeals', label: 'Trust Appeals', icon: 'balance', capability: 'trust.read' },
@@ -67,7 +67,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       {menuOpen ? <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMenuOpen(false)} /> : null}
       <aside ref={sidebarRef} className={`h-screen w-64 fixed left-0 top-0 bg-slate-50 flex flex-col p-4 z-50 overflow-y-auto overscroll-contain transition-transform lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="mb-10 px-4">
-          <h1 className="text-2xl font-bold tracking-tighter text-slate-900 font-headline">RealtIQ</h1>
+          <h1 className="text-2xl font-bold tracking-tighter text-slate-900 font-headline">REALTIQ</h1>
           <p className="text-xs text-secondary font-medium uppercase tracking-widest mt-1">Admin Console</p>
         </div>
 

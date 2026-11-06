@@ -133,7 +133,7 @@ const BuyerPricingBreakdown = ({ pricing }: { pricing: NormalizedProxyPricing })
 const InspectorPricingBreakdown = ({ pricing }: { pricing: NormalizedProxyPricing }) => (
   <div className="mt-4 rounded-xl bg-surface-container-low p-4">
     <div className="flex items-center justify-between gap-3">
-      <h3 className="font-black">Server-reported inspector payout</h3>
+      <h3 className="font-black">Server-reported Inspection Partner payout</h3>
     </div>
     <dl className="mt-3 grid gap-3 sm:grid-cols-3">
       <div>
@@ -141,11 +141,11 @@ const InspectorPricingBreakdown = ({ pricing }: { pricing: NormalizedProxyPricin
         <dd className="font-black">{formatNgn(pricing.agreedPrice)}</dd>
       </div>
       <div>
-        <dt className="text-xs font-bold text-secondary">Inspector commission ({percentLabel(pricing.inspectorCommissionPercentage)})<FeeInfo label="This value is returned by the backend. This screen cannot confirm an approved partner-fee policy." /></dt>
+        <dt className="text-xs font-bold text-secondary">Inspection Partner commission ({percentLabel(pricing.inspectorCommissionPercentage)})<FeeInfo label="This value is returned by the backend. This screen cannot confirm an approved partner-fee policy." /></dt>
         <dd className="font-black">{formatNgn(pricing.inspectorCommissionAmount)}</dd>
       </div>
       <div>
-        <dt className="text-xs font-bold text-secondary">Expected inspector payout</dt>
+        <dt className="text-xs font-bold text-secondary">Expected Inspection Partner payout</dt>
         <dd className="font-black">{formatNgn(pricing.inspectorPayoutAmount)}</dd>
       </div>
     </dl>
@@ -160,8 +160,8 @@ const AdminPricingBreakdown = ({ pricing }: { pricing: NormalizedProxyPricing })
     <div><dt className="text-xs text-secondary">Agreed price</dt><dd className="font-bold">{formatNgn(pricing.agreedPrice)}</dd></div>
     <div><dt className="text-xs text-secondary">Buyer fee ({percentLabel(pricing.buyerFeePercentage)})</dt><dd className="font-bold">{formatNgn(pricing.buyerFeeAmount)}</dd></div>
     <div><dt className="text-xs text-secondary">Buyer total paid</dt><dd className="font-bold">{formatNgn(pricing.buyerTotalAmount)}</dd></div>
-    <div><dt className="text-xs text-secondary">Inspector commission ({percentLabel(pricing.inspectorCommissionPercentage)})</dt><dd className="font-bold">{formatNgn(pricing.inspectorCommissionAmount)}</dd></div>
-    <div><dt className="text-xs text-secondary">Inspector payout</dt><dd className="font-bold">{formatNgn(pricing.inspectorPayoutAmount)}</dd></div>
+    <div><dt className="text-xs text-secondary">Inspection Partner commission ({percentLabel(pricing.inspectorCommissionPercentage)})</dt><dd className="font-bold">{formatNgn(pricing.inspectorCommissionAmount)}</dd></div>
+    <div><dt className="text-xs text-secondary">Inspection Partner payout</dt><dd className="font-bold">{formatNgn(pricing.inspectorPayoutAmount)}</dd></div>
     <div><dt className="text-xs text-secondary">Server-reported platform revenue</dt><dd className="font-bold">{formatNgn(pricing.totalPlatformRevenue)}</dd></div>
   </dl>
 );
@@ -233,7 +233,7 @@ const ConversationPanel = ({
             >
               <p className="text-xs font-bold">
                 {message.kind === "administrative"
-                  ? "RealtIQ Admin"
+                  ? "REALTIQ Admin"
                   : message.kind === "system"
                     ? "System update"
                     : typeof message.sender === "string" || !message.sender
@@ -589,7 +589,7 @@ const completionMissingItems = (
     missing.push("accepted report declaration");
   }
   if (!hasText(report?.signedByName)) {
-    missing.push("inspector signature name");
+    missing.push("Inspection Partner signature name");
   }
   if (services.includes("condition_report")) {
     if (!report?.sections?.length) {
@@ -668,7 +668,7 @@ const ReportPanel = ({
         <h2 className="text-xl font-black">Structured condition report</h2>
         {!report ? (
           <p className="mt-3 text-secondary">
-            The Inspector has not created a report yet.
+            The Inspection Partner has not created a report yet.
           </p>
         ) : (
           <>
@@ -933,7 +933,7 @@ const AdminResolution = ({
     ],
     [
       "release_inspector",
-      "Release to Inspector",
+      "Release to Inspection Partner",
       "Starts Paystack transfer processing; it is not final payment.",
     ],
     [
@@ -984,7 +984,7 @@ const AdminResolution = ({
             setConfirm({
               title: "Confirm dispute resolution",
               description:
-                "Provider processing actions remain in progress until RealtIQ receives final confirmation.",
+              "Provider processing actions remain in progress until REALTIQ receives final confirmation.",
               confirmLabel: "Submit resolution",
               tone: choice === "resume_service" ? "primary" : "danger",
               onConfirm: () => {
@@ -1085,7 +1085,7 @@ const CompletionActions = ({
             ))}
           </ul>
           <p className="mt-3 text-xs text-secondary">
-            Submit completion is enabled only after the requested service requirements are satisfied. RealtIQ checks the saved report and uploaded evidence before completion.
+            Submit completion is enabled only after the requested service requirements are satisfied. REALTIQ checks the saved report and uploaded evidence before completion.
           </p>
           {frontendMissing.length ? (
             <div role="alert" className="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
@@ -1116,7 +1116,7 @@ const CompletionActions = ({
               setConfirm({
                 title: "Submit completion",
                 description:
-                  "This sends the job to the Buyer for review and locks ordinary report editing. RealtIQ will validate the authoritative completion requirements.",
+                  "This sends the job to the Buyer for review and locks ordinary report editing. REALTIQ will validate the authoritative completion requirements.",
                 confirmLabel: "Submit completion",
                 onConfirm: () => {
                   if (!canSubmitCompletion) return;
@@ -1238,7 +1238,7 @@ const CompletionActions = ({
             </p>
           ) : null}
           <p className="mt-3 text-xs text-secondary">
-            If a full refund is approved before the inspector's payout, the complete amount you paid, including the Platform & Protection Fee, will be returned through the original payment method.
+            If a full refund is approved before the Inspection Partner's payout, the complete amount you paid, including the Platform & Protection Fee, will be returned through the original payment method.
           </p>
         </div>
       ) : null}
@@ -1614,11 +1614,11 @@ const ProxyWorkspace = ({
           </div>
           <div>
             <p className="text-xs font-bold text-secondary">
-              Independent RealtIQ Verified Property Agent
+              Independent Inspection Partner
             </p>
             <p>
               {typeof detail.request.inspector === "string"
-                ? "RealtIQ Verified Property Agent"
+                ? "Inspection Partner"
                 : detail.request.inspector.name}
             </p>
           </div>
@@ -1638,9 +1638,7 @@ const ProxyWorkspace = ({
           </p>
         ) : null}
         <p className="mt-4 text-xs text-secondary">
-          The RealtIQ Verified Property Agent is an independent third party, not
-          a RealtIQ employee. This job uses uploaded recorded media and does not
-          include live video or calls.
+          The Inspection Partner is an independent third party, not a REALTIQ employee. This inspection record uses uploaded recorded media.
         </p>
         {role === "buyer" ? (
           <p role="note" className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">
@@ -1666,7 +1664,7 @@ const ProxyWorkspace = ({
             {detail.request.buyerPriceConfirmed ? "✓" : "○"} Buyer confirmed
           </span>
           <span>
-            {detail.request.inspectorPriceConfirmed ? "✓" : "○"} Inspector
+            {detail.request.inspectorPriceConfirmed ? "✓" : "○"} Inspection Partner
             confirmed
           </span>
         </div>
@@ -1838,7 +1836,7 @@ const ProxyWorkspace = ({
         <section className={card}>
           <h2 className="text-xl font-black">Confirmed inspection time</h2>
           <p className="mt-2 text-sm text-secondary">
-            The preferred date is the buyer's requested time. The Property Agent confirms the actual appointment after payment is funded.
+            The preferred date is the buyer's requested time. The Inspection Partner confirms the actual appointment after payment is funded.
           </p>
           <dl className="mt-4 grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg bg-surface-container-low p-3">
@@ -1878,7 +1876,7 @@ const ProxyWorkspace = ({
               }}
             >
               <label className="text-sm font-bold">
-                Confirm or update inspection appointment as the Property Agent
+                Confirm or update inspection appointment as the Inspection Partner
                 <input
                   required
                   type="datetime-local"
@@ -1900,7 +1898,7 @@ const ProxyWorkspace = ({
             </form>
           ) : role === "buyer" && ["funded", "scheduled"].includes(detail.request.status) ? (
             <p className="mt-4 rounded-lg bg-surface-container-low p-3 text-sm text-secondary">
-              The Property Agent is responsible for confirming the appointment. Use the private job conversation to request a change.
+              The Inspection Partner is responsible for confirming the appointment. Use the private job conversation to request a change.
             </p>
           ) : null}
           {actions.start ? (
@@ -1975,9 +1973,9 @@ const ProxyWorkspace = ({
             className={`${action} mt-4`}
             onClick={() =>
               setConfirm({
-                title: "Initiate Property Agent payout",
+                title: "Initiate Inspection Partner payout",
                 description:
-                  "This starts Paystack transfer processing. The payout remains in progress until RealtIQ receives confirmation from Paystack.",
+                  "This starts Paystack transfer processing. The payout remains in progress until REALTIQ receives confirmation from Paystack.",
                 confirmLabel: "Initiate payout",
                 tone: "danger",
                 onConfirm: () => {
@@ -2002,7 +2000,7 @@ const ProxyWorkspace = ({
         detail.request.status === "release_pending" &&
         !detail.payoutAccount?.verifiedAt ? (
         <p className="rounded-xl bg-amber-50 p-4 text-sm">
-          Payout is unavailable until the Inspector has a verified payout
+          Payout is unavailable until the Inspection Partner has a verified payout
           account.
         </p>
       ) : null}

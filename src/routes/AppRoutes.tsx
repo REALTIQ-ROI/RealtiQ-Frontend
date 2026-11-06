@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 
 import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -98,11 +98,7 @@ import ProtectedRoute from './ProtectedRoute';
 import { AdminAccessBoundary, AdminAccessRoute, AdminCapabilityRoute } from './AdminAccessRoute';
 import { useAuth } from '../contexts/AuthContext';
 import ROICalculatorPage from '../pages/dashboard/ROI/ROICalculatorPage';
-import PropertyROICalculatorPage from '../pages/dashboard/ROI/PropertyROICalculatorPage';
 import MyROIScenarios from '../pages/dashboard/ROI/MyROIScenarios';
-import RoiV1EstimatePage from '../pages/dashboard/ROI/RoiV1EstimatePage';
-import RoiV1DetailPage from '../pages/dashboard/ROI/RoiV1DetailPage';
-import RoiV1HistoryPage from '../pages/dashboard/ROI/RoiV1HistoryPage';
 import ROIAssumptions from '../pages/dashboard/Admin/ROIAssumptions';
 import AdminSettings from '../pages/dashboard/Admin/AdminSettings';
 import AdminPolicies from '../pages/dashboard/Admin/AdminPolicies';
@@ -126,7 +122,6 @@ import { BuyerProxyInspections, InspectorTasks, AdminProxyInspections } from '..
 import { BuyerProxyWorkspace, InspectorProxyWorkspace, AdminProxyWorkspace } from '../pages/proxyNetwork/ProxyWorkspaces';
 import ProxyPaymentReturn from '../pages/proxyNetwork/ProxyPaymentReturn';
 import { AdminInspectorDetailPage, AdminInspectorList } from '../pages/proxyNetwork/AdminInspectors';
-import PropertyMarketAnalytics from '../pages/analytics/PropertyMarketAnalytics';
 import Messages from '../pages/dashboard/Messages';
 import Personalisation from '../pages/dashboard/Personalisation';
 import Notifications from '../pages/dashboard/Notifications';
@@ -150,21 +145,9 @@ const ScrollToTop = () => {
 const adminPage = (capability: string | readonly string[], page: ReactNode, allowReadOnly = false) =>
   <AdminCapabilityRoute capability={capability} allowReadOnly={allowReadOnly}>{page}</AdminCapabilityRoute>;
 
-const PropertyAnalyticsRoute = () => {
-  const { user } = useAuth();
-  const page = <PropertyMarketAnalytics />;
-  return user?.role === 'admin'
-    ? <AdminAccessBoundary>{adminPage('analytics.read', page)}</AdminAccessBoundary>
-    : page;
-};
-
-const RoleScopedRoiV1History = () => {
-  const { user } = useAuth();
-  if (user?.role === 'admin') {
-    return <AdminAccessBoundary>{adminPage('analytics.read', <RoiV1HistoryPage />)}</AdminAccessBoundary>;
-  }
-  if (user?.role === 'owner') return <RoiV1HistoryPage />;
-  return <Navigate to="/dashboard" replace />;
+const DeveloperProfileRoute = () => {
+  const { activeProfile } = useAuth();
+  return activeProfile?.kind === 'developer' ? <Outlet /> : <Navigate to="/dashboard" replace />;
 };
 
 const AppRoutes = () => {
@@ -227,7 +210,9 @@ const AppRoutes = () => {
         <Route path="/title-verification/:publicVerificationId" element={<TitleVerificationRegistry />} />
         <Route path="/title-registry/snapshots" element={<TitleRegistrySnapshots />} />
         <Route path="/protected-title-viewer" element={<ProtectedTitleViewer />} />
-        <Route path="/properties/:propertyId/roi" element={<PropertyROICalculatorPage />} />
+        <Route path="/properties/:propertyId/roi" element={<Navigate to="/properties" replace />} />
+        <Route path="/analytics/property-market" element={<Navigate to="/properties" replace />} />
+        <Route path="/analytics/property-market/access" element={<Navigate to="/properties" replace />} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard/verification" element={<LandlordVerification />} />
@@ -239,15 +224,13 @@ const AppRoutes = () => {
           <Route path='/dashboard/organization' element={<OrganizationManagement />} />
           <Route path='/dashboard/valuations/:propertyReference' element={<ValuationPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/dashboard/roi-v1/properties/:propertyReference/new" element={<RoiV1EstimatePage />} />
-          <Route path="/dashboard/roi-v1/estimates/:estimateReference" element={<RoiV1DetailPage />} />
-          <Route path="/analytics/property-market" element={<PropertyAnalyticsRoute />} />
-          <Route path="/analytics/property-market/access" element={<PropertyAnalyticsRoute />} />
+          <Route path="/dashboard/roi-v1/properties/:propertyReference/new" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard/roi-v1/estimates/:estimateReference" element={<Navigate to="/dashboard" replace />} />
           <Route path="/analytics/property-market/payment-return" element={<ProxyPaymentReturn />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['owner', 'admin']} />}>
-          <Route path="/dashboard/roi-v1/properties/:propertyReference/history" element={<RoleScopedRoiV1History />} />
+          <Route path="/dashboard/roi-v1/properties/:propertyReference/history" element={<Navigate to="/dashboard" replace />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={['buyer']} />}>
@@ -288,12 +271,14 @@ const AppRoutes = () => {
         <Route element={<ProtectedRoute allowedRoles={['owner']} />}>
           <Route path="/dashboard/landlord" element={<LandlordDashboard />} />
           <Route path="/dashboard/landlord/my-properties" element={<LandlordMyProperties />} />
-          <Route path="/dashboard/landlord/projects" element={<LandlordProjects />} />
-          <Route path="/dashboard/landlord/projects/new" element={<ProjectEditor />} />
-          <Route path="/dashboard/landlord/projects/:id" element={<ProjectManage />} />
-          <Route path="/dashboard/landlord/projects/:id/edit" element={<ProjectEditor />} />
-          <Route path="/dashboard/landlord/projects/:id/imports" element={<ProjectPropertyImports />} />
-          <Route path="/dashboard/landlord/projects/:id/imports/:importId" element={<ProjectPropertyImports />} />
+          <Route element={<DeveloperProfileRoute />}>
+            <Route path="/dashboard/landlord/projects" element={<LandlordProjects />} />
+            <Route path="/dashboard/landlord/projects/new" element={<ProjectEditor />} />
+            <Route path="/dashboard/landlord/projects/:id" element={<ProjectManage />} />
+            <Route path="/dashboard/landlord/projects/:id/edit" element={<ProjectEditor />} />
+            <Route path="/dashboard/landlord/projects/:id/imports" element={<ProjectPropertyImports />} />
+            <Route path="/dashboard/landlord/projects/:id/imports/:importId" element={<ProjectPropertyImports />} />
+          </Route>
           <Route path="/dashboard/landlord/tours" element={<Tours />} />
           <Route path="/dashboard/landlord/installments" element={<Installments />} />
           <Route path="/dashboard/landlord/installments/:id" element={<Installments />} />
