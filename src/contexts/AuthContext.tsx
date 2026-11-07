@@ -56,6 +56,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [adminAccessError, setAdminAccessError] = useState<string | null>(null);
   const [loginChallenge, setLoginChallenge] = useState<LoginSecondFactorChallenge | null>(null);
   const accessRequestVersion = useRef(0);
+  const profileRequestVersion = useRef(0);
   const latestSession = useRef({ userId: user?._id ?? null, role: user?.role ?? null, token, profileId: activeProfile?.id ?? null });
   latestSession.current = { userId: user?._id ?? null, role: user?.role ?? null, token, profileId: activeProfile?.id ?? null };
 
@@ -74,6 +75,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setAdminAccessError(null);
     setAdminAccessLoading(false);
     accessRequestVersion.current += 1;
+    profileRequestVersion.current += 1;
     setLoginChallenge(null);
     setIsLoading(false);
   }, []);
@@ -91,6 +93,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setAdminAccessError(null);
     setAdminAccessLoading(false);
     accessRequestVersion.current += 1;
+    profileRequestVersion.current += 1;
     setProfiles([]);
     setActiveProfile(null);
     setLoginChallenge(null);
@@ -169,16 +172,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [token, updateUser, userId]);
 
   const refreshProfiles = useCallback(async () => {
+    const requestVersion = ++profileRequestVersion.current;
+    const session = latestSession.current;
+    const selectedIdAtStart = localStorage.getItem('activeProfileId');
+    const isCurrent = () => requestVersion === profileRequestVersion.current &&
+      latestSession.current.userId === session.userId && latestSession.current.token === session.token &&
+      localStorage.getItem('token') === session.token &&
+      localStorage.getItem('activeProfileId') === selectedIdAtStart;
+    if (!session.userId || !session.token) return;
     if (user?.role !== 'admin') {
       await authService.account();
+      if (!isCurrent()) return;
       await refreshUser();
+      if (!isCurrent()) return;
     }
     const result = await profileService.list();
-    const selectedId = localStorage.getItem('activeProfileId');
+    if (!isCurrent()) return;
+    const selectedId = selectedIdAtStart;
     const selected = user?.role === 'admin'
       ? result.profiles.find((profile) => profile.id === selectedId && profile.kind === 'staff')
       : result.profiles.find((profile) => profile.id === selectedId) ?? result.profiles[0];
     if (!selected) {
+      if (!isCurrent()) return;
       setProfiles([]);
       setActiveProfile(null);
       setAdminAccess(null);
@@ -186,6 +201,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
     const current = await profileService.current(selected.id);
+    if (!isCurrent()) return;
     localStorage.setItem('activeProfileId', selected.id);
     setProfiles(result.profiles);
     setActiveProfile(current.profile);
@@ -194,19 +210,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [refreshAdminAccess, refreshUser, user?.role]);
 
   const switchProfile = useCallback(async (id: string) => {
+    const requestVersion = ++profileRequestVersion.current;
+    const session = latestSession.current;
+    const selectedIdAtStart = localStorage.getItem('activeProfileId');
+    const isCurrent = () => requestVersion === profileRequestVersion.current &&
+      latestSession.current.userId === session.userId && latestSession.current.token === session.token &&
+      localStorage.getItem('token') === session.token &&
+      localStorage.getItem('activeProfileId') === selectedIdAtStart;
+    if (!session.userId || !session.token) throw new Error('Sign in again before switching profiles.');
     if (user?.role === 'admin') {
       const selectedStaffProfile = localStorage.getItem('activeProfileId');
       if (id !== selectedStaffProfile) throw new Error('Admin staff-profile switching is disabled. Continue with the current assigned staff profile.');
     }
     if (user?.role !== 'admin') {
       await authService.account();
+      if (!isCurrent()) throw new Error('The session or selected profile changed. Refresh your profile list before continuing.');
       await refreshUser();
+      if (!isCurrent()) throw new Error('The session or selected profile changed. Refresh your profile list before continuing.');
     }
     const result = await profileService.list();
+    if (!isCurrent()) throw new Error('The session or selected profile changed. Refresh your profile list before continuing.');
     const selected = result.profiles.find((profile) => profile.id === id);
     if (!selected) throw new Error('This profile is no longer available to this account. Refresh your profile list and try again.');
     if (user?.role === 'admin' && selected.kind !== 'staff') throw new Error('The Admin Console must use an authorized staff profile.');
     const current = await profileService.current(id);
+    if (!isCurrent()) throw new Error('The session or selected profile changed. Refresh your profile list before continuing.');
     window.dispatchEvent(new Event('realtiq:session-changed'));
     localStorage.setItem('activeProfileId', id);
     setProfiles(result.profiles);

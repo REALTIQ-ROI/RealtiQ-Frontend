@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react';
 import Button from '../ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
-import { profileService, type CreateProfileKind, type ProfileStructure } from '../../services/profileService';
+import { PROFILE_STRUCTURES_BY_KIND, profileService, type CreateProfileKind, type ProfileStructure } from '../../services/profileService';
 
 const profileKinds: Array<{ value: CreateProfileKind; label: string }> = [
   { value: 'buyer', label: 'Buyer' },
@@ -34,6 +34,7 @@ const ProfileSwitcher = ({ allowCreate = true }: ProfileSwitcherProps) => {
   if (user?.role === 'admin') return null;
   if (!activeProfile) return null;
   const canCreateProfile = allowCreate && user !== null && activeProfile.kind !== 'staff';
+  const availableStructures = PROFILE_STRUCTURES_BY_KIND[kind];
 
   const selectCreatedProfile = async (profileId: string) => {
     setSwitching(true);
@@ -52,7 +53,11 @@ const ProfileSwitcher = ({ allowCreate = true }: ProfileSwitcherProps) => {
   const createProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canCreateProfile || creating || switching || !name.trim()) return;
-    const selectedStructure = kind === 'developer' ? 'company' : structure;
+    if (!availableStructures.includes(structure)) {
+      setError('Choose a supported structure for this profile type.');
+      return;
+    }
+    const selectedStructure = structure;
     const bodyWithoutKey = { kind, structure: selectedStructure, name: name.trim() };
     const signature = JSON.stringify(bodyWithoutKey);
     if (operationPayloadRef.current !== signature) {
@@ -106,13 +111,13 @@ const ProfileSwitcher = ({ allowCreate = true }: ProfileSwitcherProps) => {
         <p className="mt-1 text-xs text-secondary">Profiles start private and unverified. Creating one does not grant verification or extra permissions.</p>
         <form className="mt-3 space-y-3" onSubmit={(event) => void createProfile(event)}>
           <label className="block text-xs font-semibold">Profile type
-            <select className="mt-1 w-full rounded-lg border border-outline-variant/30 p-2 text-sm font-normal" value={kind} onChange={(event) => { setKind(event.target.value as CreateProfileKind); if (event.target.value === 'developer') setStructure('company'); }}>
+            <select className="mt-1 w-full rounded-lg border border-outline-variant/30 p-2 text-sm font-normal" value={kind} onChange={(event) => { const nextKind = event.target.value as CreateProfileKind; setKind(nextKind); setStructure(PROFILE_STRUCTURES_BY_KIND[nextKind][0]); }}>
               {profileKinds.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
           <label className="block text-xs font-semibold">Structure
-            <select className="mt-1 w-full rounded-lg border border-outline-variant/30 p-2 text-sm font-normal" value={kind === 'developer' ? 'company' : structure} disabled={kind === 'developer'} onChange={(event) => setStructure(event.target.value as ProfileStructure)}>
-              <option value="individual">Individual</option><option value="company">Company</option><option value="cooperative">Cooperative</option>
+            <select className="mt-1 w-full rounded-lg border border-outline-variant/30 p-2 text-sm font-normal" value={structure} disabled={availableStructures.length === 1} onChange={(event) => setStructure(event.target.value as ProfileStructure)}>
+              {availableStructures.map((option) => <option key={option} value={option}>{option[0].toUpperCase() + option.slice(1)}</option>)}
             </select>
           </label>
           <label className="block text-xs font-semibold">Profile name

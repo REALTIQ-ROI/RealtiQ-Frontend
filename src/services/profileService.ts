@@ -44,6 +44,20 @@ export type CreateProfileKind =
   | 'sellers_agent';
 export type ProfileStructure = 'individual' | 'company' | 'cooperative';
 
+/** Structures supported by the current profile creation contract. */
+export const PROFILE_STRUCTURES_BY_KIND: Readonly<Record<CreateProfileKind, readonly ProfileStructure[]>> = {
+  buyer: ['individual', 'company', 'cooperative'],
+  owner: ['individual'],
+  agency: ['individual', 'company'],
+  developer: ['company'],
+  legal_partner: ['individual', 'company'],
+  engineering_survey_partner: ['individual', 'company'],
+  inspection_partner: ['individual', 'company'],
+  valuation_partner: ['individual', 'company'],
+  buyers_agent: ['individual', 'company'],
+  sellers_agent: ['individual', 'company'],
+};
+
 interface ProfileListResponse {
   profiles: AccountProfileSummary[];
   nextCursor: string | null;

@@ -78,6 +78,32 @@ describe('AuthProvider account and profile lifecycle', () => {
     expect(profileService.current).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores a stale profile response when a newer profile switch completes first', async () => {
+    localStorage.setItem('token', 'session-token');
+    localStorage.setItem('user', JSON.stringify(account));
+    localStorage.setItem('activeProfileId', 'profile-1');
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.activeProfile?.id).toBe('profile-1'));
+
+    let resolveStale!: (value: { profile: AccountProfileSummary }) => void;
+    let currentCalls = 0;
+    vi.mocked(profileService.current).mockImplementation((id) => {
+      if (id === 'profile-1' && ++currentCalls === 1) {
+        return new Promise((resolve) => { resolveStale = resolve; });
+      }
+      return Promise.resolve({ profile: profiles.find((profile) => profile.id === id)! });
+    });
+
+    const staleSwitch = result.current.switchProfile('profile-1');
+    await waitFor(() => expect(profileService.current).toHaveBeenCalledWith('profile-1'));
+    await act(async () => { await result.current.switchProfile('profile-2'); });
+    resolveStale({ profile: profiles[0] });
+    await act(async () => { await expect(staleSwitch).rejects.toThrow('selected profile changed'); });
+
+    expect(result.current.activeProfile?.id).toBe('profile-2');
+    expect(localStorage.getItem('activeProfileId')).toBe('profile-2');
+  });
+
   it('clears session and active profile state immediately on logout', async () => {
     localStorage.setItem('token', 'session-token');
     localStorage.setItem('user', JSON.stringify(account));

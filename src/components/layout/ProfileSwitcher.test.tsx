@@ -6,7 +6,8 @@ import ProfileSwitcher from './ProfileSwitcher';
 const { useAuthMock } = vi.hoisted(() => ({ useAuthMock: vi.fn() }));
 
 vi.mock('../../contexts/AuthContext', () => ({ useAuth: useAuthMock }));
-vi.mock('../../services/profileService', () => ({
+vi.mock('../../services/profileService', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../services/profileService')>(),
   profileService: { create: vi.fn() },
 }));
 
@@ -110,5 +111,24 @@ describe('ProfileSwitcher navigation UI', () => {
     render(<ProfileSwitcher />);
 
     expect(screen.queryByRole('button', { name: 'Create profile' })).not.toBeInTheDocument();
+  });
+
+  it('offers only contract-supported structures for the selected profile type', async () => {
+    const user = userEvent.setup();
+    render(<ProfileSwitcher />);
+    await user.click(screen.getByRole('button', { name: 'Create profile' }));
+
+    const kind = screen.getByLabelText('Profile type');
+    const structure = screen.getByLabelText('Structure');
+    await user.selectOptions(kind, 'owner');
+    expect(structure).toBeDisabled();
+    expect([...structure.querySelectorAll('option')].map((item) => item.value)).toEqual(['individual']);
+
+    await user.selectOptions(kind, 'agency');
+    expect(structure).toBeEnabled();
+    expect([...structure.querySelectorAll('option')].map((item) => item.value)).toEqual(['individual', 'company']);
+
+    await user.selectOptions(kind, 'buyer');
+    expect([...structure.querySelectorAll('option')].map((item) => item.value)).toEqual(['individual', 'company', 'cooperative']);
   });
 });
