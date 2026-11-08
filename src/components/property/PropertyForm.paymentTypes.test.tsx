@@ -1,9 +1,17 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CanonicalFieldDictionary } from '../../services/canonicalFieldService';
 import type { CreatePropertyPayload } from '../../services/propertyService';
 import type { Property } from '../../types';
 import PropertyForm from './PropertyForm';
+import { createCanonicalFieldDictionaryFixture } from '../../test/canonicalFieldDictionaryFixture';
+
+const mocks = vi.hoisted(() => ({ dictionary: null as CanonicalFieldDictionary | null }));
+vi.mock('../../hooks/useCanonicalFieldDictionary', () => ({
+  useCanonicalFieldDictionary: () => ({ dictionary: mocks.dictionary, loading: false, error: null, refresh: vi.fn() }),
+}));
+vi.mock('./LocationCascadeFields', () => ({ default: () => <div data-testid="location-cascade" /> }));
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 vi.mock('./MediaUploader', () => ({ default: () => <div>Media uploader</div> }));
@@ -13,15 +21,14 @@ const initialData: CreatePropertyPayload & { status: string } = {
   title: 'Ikoyi Duplex',
   price: 45_000_000,
   location: 'Ikoyi, Lagos',
-  propertyType: 'house',
+  propertyType: 'detached_duplex',
   bedrooms: 4,
   bathrooms: 4,
-  squareFeet: 3000,
   description: 'A completed duplex.',
   amenities: [],
   media: [{ url: 'https://images.example/home.jpg', public_id: 'home', type: 'image' }],
-  category: 'residential',
-  completionStage: 'finished',
+  category: 'houses',
+  completionStage: 'Newly built',
   currency: 'NGN',
   paymentTypes: ['outright'],
   status: 'available',
@@ -30,14 +37,17 @@ const initialData: CreatePropertyPayload & { status: string } = {
 const savedProperty = (payload: CreatePropertyPayload): Property => ({
   _id: 'prop1',
   ...payload,
-  squareFeet: payload.squareFeet ?? 0,
+  price: payload.price ?? initialData.price!,
   bedrooms: payload.bedrooms ?? 0,
   bathrooms: payload.bathrooms ?? 0,
   status: 'available',
 });
 
 describe('PropertyForm payment types', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.dictionary = createCanonicalFieldDictionaryFixture();
+  });
 
   it('blocks an empty selection with accessible inline validation', async () => {
     const onSubmit = vi.fn();
@@ -72,6 +82,20 @@ describe('PropertyForm payment types', () => {
     expect(installment).toBeEnabled();
   });
 
+  it('submits explicit price-on-application without sending the previous numeric asking price', async () => {
+    const onSubmit = vi.fn(async (payload: CreatePropertyPayload) => { void payload; });
+    render(<PropertyForm mode="edit" initialData={{ ...initialData, canonicalFields: { askingPrice: 45_000_000 } }} onSubmit={onSubmit} />);
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Price on application' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save Property' }));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const payload = onSubmit.mock.calls[0]?.[0];
+    if (!payload) throw new Error('Expected the property form to submit a payload.');
+    expect(payload).not.toHaveProperty('price');
+    expect(payload.canonicalFields).toMatchObject({ priceOnApplication: true });
+    expect(payload.canonicalFieldMutations).toContainEqual({ field: 'askingPrice', operation: 'unset' });
+  });
+
   it('does not force installment at exactly ₦50,000,000', () => {
     render(<PropertyForm mode="edit" initialData={{ ...initialData, price: 50_000_000, paymentTypes: ['escrow'] }} onSubmit={vi.fn()} />);
     const installment = screen.getByRole('checkbox', { name: /Installment plan/i });
@@ -81,18 +105,21 @@ describe('PropertyForm payment types', () => {
 
   it('preserves canonical catalogue values returned by an owner response', async () => {
     const onSubmit = vi.fn(async () => undefined);
-    render(<PropertyForm mode="edit" initialData={{ ...initialData, propertyType: 'Terraced House', category: 'land', completionStage: 'Newly built' }} onSubmit={onSubmit} />);
+    render(<PropertyForm mode="edit" initialData={{ ...initialData, propertyType: 'house', category: 'land', completionStage: 'Newly built' }} onSubmit={onSubmit} />);
     await userEvent.click(screen.getByRole('button', { name: 'Save Property' }));
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ propertyType: 'Terraced House', category: 'land', completionStage: 'Newly built' }));
+    expect(screen.getByRole('option', { name: 'Unavailable option: land' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Unavailable option: house' })).toBeInTheDocument();
+    expect(await screen.findByText('Choose a category from the current backend dictionary.')).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it('serializes explicit false and zero as changed canonical paths', async () => {
     const onSubmit = vi.fn(async () => undefined);
-    render(<PropertyForm mode="edit" initialData={{ ...initialData, category: 'commercial', propertyType: 'commercial' }} onSubmit={onSubmit} />);
+    render(<PropertyForm mode="edit" initialData={{ ...initialData, category: 'commercial_buildings', propertyType: 'office_space' }} onSubmit={onSubmit} />);
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Gated estate' }), 'false');
     await userEvent.type(screen.getByRole('spinbutton', { name: 'Commercial frontage in metres' }), '0');
     await userEvent.click(screen.getByRole('button', { name: 'Save Property' }));
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ canonicalFields: { gatedEstate: false, commercialFrontage: 0 } }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ canonicalFields: expect.objectContaining({ gatedEstate: false, commercialFrontage: 0 }) }));
   });
 
   it('keeps an existing empty canonical value without inventing a clear operation', async () => {
@@ -100,7 +127,9 @@ describe('PropertyForm payment types', () => {
     render(<PropertyForm mode="edit" initialData={{ ...initialData, canonicalFields: { gatedEstate: false, streetAddress: '' } }} onSubmit={onSubmit} />);
     await userEvent.click(screen.getByRole('button', { name: 'Save Property' }));
     expect(onSubmit).toHaveBeenCalled();
-    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('canonicalFields');
+    const submittedFields = onSubmit.mock.calls[0][0].canonicalFields ?? {};
+    expect(submittedFields).not.toHaveProperty('gatedEstate');
+    expect(submittedFields).not.toHaveProperty('streetAddress');
   });
 
   it('shows canonical headline/description without rewriting different legacy values on an unrelated edit', async () => {
@@ -110,6 +139,8 @@ describe('PropertyForm payment types', () => {
     expect(screen.getByDisplayValue('Canonical description')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Save Property' }));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ title: 'Legacy title', description: 'Legacy description' }));
-    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('canonicalFields');
+    const submittedFields = onSubmit.mock.calls[0][0].canonicalFields ?? {};
+    expect(submittedFields).not.toHaveProperty('headline');
+    expect(submittedFields).not.toHaveProperty('description');
   });
 });

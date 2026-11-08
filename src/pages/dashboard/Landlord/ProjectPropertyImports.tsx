@@ -8,6 +8,7 @@ import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
+import { useCanonicalFieldDictionary } from '../../../hooks/useCanonicalFieldDictionary';
 import { ApiRequestError } from '../../../lib/axios';
 import { projectService } from '../../../services/projectService';
 import type { ImportRowStatus, ProjectDetail, ProjectImportListItem, ProjectImportRow, ProjectImportSchema, ProjectImportSession } from '../../../types';
@@ -15,8 +16,8 @@ import { downloadBlob, rowDataDisplayValue, rowDataValue, sanitizeImportRowPaylo
 import { formatDate, labelize } from '../../../utils/projectFormatters';
 import { buildProjectImportMapping, IGNORE_IMPORT_COLUMN, parseCsvHeader, type ImportColumnMappingDraft } from '../../../utils/projectImportMapping';
 import { isVerifiedOwner } from '../../../utils/landlordPropertyAccess';
+import { fieldVocabularyOptions } from '../../../utils/propertyVocabulary';
 
-const numericFields = new Set(['price', 'bedrooms', 'bathrooms', 'squareFeet', 'constructionProgress', 'reservationAmount', 'minimumInitialDeposit', 'installmentDurationMonths']);
 const statusOptions: Array<ImportRowStatus | 'all'> = ['all', 'valid', 'invalid', 'removed', 'imported', 'failed'];
 const rowStatusClasses: Record<ImportRowStatus, string> = {
   valid: 'bg-emerald-50 text-emerald-700',
@@ -36,6 +37,7 @@ const ProjectPropertyImports = () => {
   const { id = '', importId = '' } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { dictionary, loading: dictionaryLoading, error: dictionaryError, refresh: refreshDictionary } = useCanonicalFieldDictionary();
   const canAddProperty = isVerifiedOwner(user);
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [schema, setSchema] = useState<ProjectImportSchema | null>(null);
@@ -70,7 +72,22 @@ const ProjectPropertyImports = () => {
   const [editingRow, setEditingRow] = useState<ProjectImportRow | null>(null);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
   const importStepUp = useBoundStepUp<ProjectImportSession>();
-  const editableFields = useMemo(() => schema?.fields.map((field) => field.name) ?? [], [schema]);
+  const schemaFields = useMemo(() => (schema?.fields ?? []).filter((field) => dictionary?.fields.some((runtime) => runtime.key === field.name && runtime.importable === true) ?? false), [dictionary, schema]);
+  const unsupportedSchemaFields = useMemo(() => (schema?.fields ?? []).filter((field) => !schemaFields.some((eligible) => eligible.name === field.name)).map((field) => field.name), [schema, schemaFields]);
+  const editableFields = useMemo(() => schemaFields.map((field) => field.name), [schemaFields]);
+  const numericFieldNames = useMemo(() => new Set(schemaFields.flatMap((field) => {
+    const runtime = dictionary?.fields.find((item) => item.key === field.name);
+    return runtime && /integer|number|decimal|money/i.test(`${runtime.kind} ${runtime.dataType}`) ? [field.name] : [];
+  })), [dictionary, schemaFields]);
+  const fieldLabel = (name: string) => {
+    const runtime = dictionary?.fields.find((field) => field.key === name);
+    const label = typeof runtime?.label === 'string' ? runtime.label : name;
+    return runtime?.unit ? `${label} (${runtime.unit})` : label;
+  };
+  const allowedValueLabel = (fieldName: string, value: string) => {
+    const runtime = dictionary?.fields.find((field) => field.key === fieldName);
+    return fieldVocabularyOptions(runtime, dictionary).find((option) => option.value === value)?.label ?? value;
+  };
 
   const load = async () => {
     if (!id) return;
@@ -199,7 +216,7 @@ const ProjectPropertyImports = () => {
     if (!session || pendingAction) return;
     setMappingError('');
     let body: ReturnType<typeof buildProjectImportMapping>;
-    try { body = buildProjectImportMapping(mappingDrafts, (schema?.fields ?? []).map((field) => field.name)); }
+    try { body = buildProjectImportMapping(mappingDrafts, editableFields); }
     catch (raw) { setMappingError(raw instanceof Error ? raw.message : 'Check each source-column mapping.'); return; }
     setPendingAction('mapping');
     try {
@@ -340,7 +357,7 @@ const ProjectPropertyImports = () => {
     if (!editingRow || pendingAction) return;
     setPendingAction(`edit:${editingRow.rowNumber}`);
     try {
-      replaceSession(await projectService.editProjectPropertyImportRow(id, sessionId(session!), editingRow.rowNumber, sanitizeImportRowPayload(editValues, editableFields)));
+      replaceSession(await projectService.editProjectPropertyImportRow(id, sessionId(session!), editingRow.rowNumber, sanitizeImportRowPayload(editValues, editableFields, numericFieldNames)));
       setEditingRow(null);
       toast.success(`Row ${editingRow.rowNumber} updated and revalidated.`);
     } catch (raw) {
@@ -422,6 +439,9 @@ const ProjectPropertyImports = () => {
               <div className="rounded-xl bg-white p-6">
                 <h2 className="text-xl font-black">Template requirements</h2>
                 <p className="mt-2 text-sm text-secondary">Required fields for this project: {schema?.requiredFields.join(', ') || 'See the current server template and schema'}. {schema ? `Multi-value delimiter: ${schema.delimiter}.` : ''}</p>
+                {dictionaryLoading ? <p role="status" className="mt-3 text-sm text-secondary">Checking the current importable field dictionary…</p> : null}
+                {dictionaryError ? <p role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Current field metadata is unavailable, so column mapping and row edits are limited to no confirmed canonical fields. <button type="button" className="font-bold underline" onClick={() => void refreshDictionary()}>Retry field metadata</button></p> : null}
+                {unsupportedSchemaFields.length ? <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">The server schema includes fields not marked importable in the current field dictionary; they are withheld from mapping and editing until the contracts align: {unsupportedSchemaFields.join(', ')}.</p> : null}
                 {schema ? (
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-lg bg-surface-container-low p-4"><p className="text-xs font-bold uppercase text-secondary">Max rows</p><p className="font-black">{schema.limits.maxRows}</p></div>
@@ -432,8 +452,8 @@ const ProjectPropertyImports = () => {
                 <div className="mt-5 overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead><tr className="border-b"><th className="py-2">Column</th><th className="py-2">Allowed values</th></tr></thead>
-                    <tbody>{(schema?.fields ?? []).map((field) => (
-                      <tr key={field.name} className="border-b border-outline-variant/10"><td className="py-2 font-bold">{field.name}{field.required ? ' *' : ''}</td><td className="py-2 text-secondary">{field.allowedValues?.join(', ') || 'Text/value'}</td></tr>
+                    <tbody>{schemaFields.map((field) => (
+                      <tr key={field.name} className="border-b border-outline-variant/10"><td className="py-2 font-bold">{fieldLabel(field.name)}{field.required ? ' *' : ''}</td><td className="py-2 text-secondary">{field.allowedValues?.map((value) => allowedValueLabel(field.name, value)).join(', ') || 'Enter the value using the current field contract.'}</td></tr>
                     ))}</tbody>
                   </table>
                 </div>
@@ -464,7 +484,7 @@ const ProjectPropertyImports = () => {
                   <div>
                     <p className="text-xs font-bold uppercase tracking-widest text-secondary">{session.originalFileName} - {labelize(session.status)}</p>
                     <h2 className="mt-2 text-2xl font-black">Preview rows</h2>
-                    <p className="mt-2 text-sm text-amber-800">Imported Properties start as pending review and will not include media or title documents.</p>
+                    <p className="mt-2 text-sm text-amber-800">Imported properties start as pending review and will not include media or title documents.</p>
                     {session.uploadedAt || session.completedAt ? <p className="mt-2 text-xs text-secondary">{session.uploadedAt ? `Uploaded ${formatDate(session.uploadedAt)}` : ''}{session.completedAt ? ` · Completed ${formatDate(session.completedAt)}` : ''}</p> : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -482,10 +502,10 @@ const ProjectPropertyImports = () => {
                   <form onSubmit={(event) => void mapColumns(event)} className="mt-3 space-y-2">
                     {mappingDrafts.map((draft, index) => <div key={index} className="grid gap-2 sm:grid-cols-[minmax(90px,0.3fr)_1fr_auto]">
                       <label className="text-xs font-semibold">Column number<input type="number" min="1" step="1" value={draft.columnNumber} onChange={(event) => setMappingDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, columnNumber: event.target.value } : item))} className="mt-1 w-full rounded border bg-white px-3 py-2" /></label>
-                      <label className="text-xs font-semibold">Canonical target<select value={draft.field} onChange={(event) => setMappingDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, field: event.target.value } : item))} className="mt-1 w-full rounded border bg-white px-3 py-2"><option value="">Choose a field</option>{(schema?.fields ?? []).map((field) => <option key={field.name} value={field.name}>{field.name}{field.required ? ' *' : ''}</option>)}<option value={IGNORE_IMPORT_COLUMN}>Ignore this source column</option></select></label>
+                      <label className="text-xs font-semibold">Canonical target<select value={draft.field} onChange={(event) => setMappingDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, field: event.target.value } : item))} className="mt-1 w-full rounded border bg-white px-3 py-2"><option value="">Choose a field</option>{schemaFields.map((field) => <option key={field.name} value={field.name}>{fieldLabel(field.name)}{field.required ? ' *' : ''}</option>)}<option value={IGNORE_IMPORT_COLUMN}>Ignore this source column</option></select></label>
                       <Button type="button" variant="ghost" disabled={mappingDrafts.length < 2 || Boolean(pendingAction)} onClick={() => setMappingDrafts((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</Button>
                     </div>)}
-                    <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" disabled={Boolean(pendingAction)} onClick={() => setMappingDrafts((current) => [...current, { columnNumber: '', field: '' }])}>Add mapping</Button><Button type="submit" loading={pendingAction === 'mapping'} loadingLabel="Validating mapping…" disabled={Boolean(pendingAction) || !schema?.fields.length}>Save mapping</Button></div>
+                    <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" disabled={Boolean(pendingAction) || !schemaFields.length} onClick={() => setMappingDrafts((current) => [...current, { columnNumber: '', field: '' }])}>Add mapping</Button><Button type="submit" loading={pendingAction === 'mapping'} loadingLabel="Validating mapping…" disabled={Boolean(pendingAction) || !schemaFields.length}>Save mapping</Button></div>
                     {mappingError ? <p role="alert" className="text-sm text-error">{mappingError}</p> : null}
                   </form>
                 </section>
@@ -580,14 +600,14 @@ const ProjectPropertyImports = () => {
                 {editableFields.map((field) => (
                   <label key={field} className={field === 'description' || field === 'paymentPlanDescription' || field === 'riskDisclosure' ? 'md:col-span-3 text-xs font-bold uppercase tracking-widest text-secondary' : 'text-xs font-bold uppercase tracking-widest text-secondary'}>
                     {field}
-                    {schema?.fields.find((item) => item.name === field)?.allowedValues?.length ? (
-                      <select required={Boolean(schema?.fields.find((item) => item.name === field)?.required)} value={editValues[field] ?? ''} onChange={(event) => setEditValues((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm normal-case outline-none">
-                        <option value="">Choose a server-allowed value</option>{schema?.fields.find((item) => item.name === field)?.allowedValues?.map((value) => <option key={value} value={value}>{value}</option>)}
+                    {schemaFields.find((item) => item.name === field)?.allowedValues?.length ? (
+                      <select required={Boolean(schemaFields.find((item) => item.name === field)?.required)} value={editValues[field] ?? ''} onChange={(event) => setEditValues((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm normal-case outline-none">
+                        <option value="">Choose a server-allowed value</option>{schemaFields.find((item) => item.name === field)?.allowedValues?.map((value) => <option key={value} value={value}>{allowedValueLabel(field, value)}</option>)}
                       </select>
                     ) : field === 'description' || field === 'paymentPlanDescription' || field === 'riskDisclosure' ? (
                       <textarea value={editValues[field] ?? ''} rows={3} onChange={(event) => setEditValues((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm normal-case outline-none disabled:opacity-60" />
                     ) : (
-                      <input required={Boolean(schema?.fields.find((item) => item.name === field)?.required)} type={numericFields.has(field) ? 'text' : field.includes('Date') ? 'date' : 'text'} value={editValues[field] ?? ''} onChange={(event) => setEditValues((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm normal-case outline-none disabled:opacity-60" />
+                      <input required={Boolean(schemaFields.find((item) => item.name === field)?.required)} type={numericFieldNames.has(field) ? 'number' : dictionary?.fields.find((item) => item.key === field)?.dataType.toLowerCase().includes('date') ? 'date' : 'text'} step={numericFieldNames.has(field) ? (dictionary?.fields.find((item) => item.key === field)?.dataType.toLowerCase().includes('integer') ? 1 : 'any') : undefined} value={editValues[field] ?? ''} onChange={(event) => setEditValues((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm normal-case outline-none disabled:opacity-60" />
                     )}
                   </label>
                 ))}

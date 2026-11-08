@@ -1,4 +1,5 @@
 import type { CanonicalFieldDictionary, CanonicalMutationOperation, CanonicalMutationTarget, RuntimeCanonicalField } from '../services/canonicalFieldService';
+import { fieldVocabularyOptions } from './propertyVocabulary';
 
 export type CanonicalEntity = 'property' | 'project' | 'unit';
 export type CanonicalInputKind = 'text' | 'integer' | 'decimal' | 'boolean' | 'enum' | 'multi_enum' | 'coordinates' | 'date' | 'month' | 'json';
@@ -10,6 +11,7 @@ export interface CanonicalFieldDefinition {
   kind: CanonicalInputKind;
   inherits: boolean;
   options?: readonly string[];
+  optionLabels?: Readonly<Record<string, string>>;
   min?: number;
   max?: number;
   unit?: string;
@@ -18,20 +20,16 @@ export interface CanonicalFieldDefinition {
   runtime?: RuntimeCanonicalField;
 }
 
-const buildStages = ['Off-plan', 'Under construction', 'Uncompleted building', 'Semi-finished (Advanced Shell / Lock-up)', 'Newly built', 'Renovated', 'Previously owned', 'Old'] as const;
-const furnishingOptions = ['Furnished', 'Semi-Furnished', 'Unfurnished'] as const;
-
 /**
- * Frontend controls are intentionally a typed subset of the 156-field source dictionary.
- * Complex, private, workflow-owned, catalogue-backed, and unit-type CRUD fields stay out of
- * generic editing until their exact UI/source or endpoint contracts are available.
+ * This registry supplies input labels and broad input kinds only. Active values and constraints
+ * are reconciled from the mounted field dictionary; it is not an option dictionary.
  */
 export const canonicalFieldRegistry: readonly CanonicalFieldDefinition[] = [
   { key: 'projectName', label: 'Project name', entities: ['project'], kind: 'text', inherits: false },
-  { key: 'developmentStructure', label: 'Development structure', entities: ['project'], kind: 'enum', inherits: false, options: ['Estate / gated community', 'Apartment building', 'Mixed-use development', 'Commercial complex', 'Other'] },
+  { key: 'developmentStructure', label: 'Development structure', entities: ['project'], kind: 'enum', inherits: false },
   { key: 'shortDescription', label: 'Short description', entities: ['project'], kind: 'text', inherits: false },
   { key: 'projectDescription', label: 'Project description', entities: ['project'], kind: 'text', inherits: false },
-  { key: 'unitDisplayMode', label: 'Unit display mode', entities: ['project'], kind: 'enum', inherits: false, options: ['Grouped by unit type', 'Individual units'] },
+  { key: 'unitDisplayMode', label: 'Unit display mode', entities: ['project'], kind: 'enum', inherits: false },
   { key: 'state', label: 'State', entities: ['project', 'property'], kind: 'text', inherits: false },
   { key: 'lga', label: 'Local Government Area', entities: ['project', 'property'], kind: 'text', inherits: false, condition: 'Must be a child of state' },
   { key: 'area', label: 'Area', entities: ['project', 'property'], kind: 'text', inherits: false, condition: 'Must be a child of LGA' },
@@ -44,29 +42,29 @@ export const canonicalFieldRegistry: readonly CanonicalFieldDefinition[] = [
   { key: 'estateInternalStreet', label: 'Estate internal street', entities: ['property'], kind: 'text', inherits: false },
   { key: 'estateHouseUnitNumber', label: 'Estate house or unit number', entities: ['property'], kind: 'text', inherits: false, condition: 'Estate address path' },
   { key: 'projectPin', label: 'Map pin', entities: ['project', 'property'], kind: 'coordinates', inherits: false, condition: 'Coordinates must resolve within Nigeria' },
-  { key: 'accessRoadConditions', label: 'Access road conditions', entities: ['project', 'property'], kind: 'multi_enum', inherits: false, options: ['Tarred', 'Untarred', 'Flood-prone', 'Sand-filled area'] },
-  { key: 'buildStage', label: 'Build stage', entities: ['project', 'unit'], kind: 'enum', inherits: true, options: buildStages },
+  { key: 'accessRoadConditions', label: 'Access road conditions', entities: ['project', 'property'], kind: 'multi_enum', inherits: false },
+  { key: 'buildStage', label: 'Build stage', entities: ['project', 'unit'], kind: 'enum', inherits: true },
   { key: 'launchDate', label: 'Launch date', entities: ['project'], kind: 'date', inherits: false },
   { key: 'approximateUnitCount', label: 'Approximate unit count', entities: ['project'], kind: 'integer', inherits: false, min: 1 },
-  { key: 'servicedStatus', label: 'Serviced status', entities: ['project'], kind: 'enum', inherits: false, options: ['Serviced', 'Not Serviced'] },
-  { key: 'paymentOptions', label: 'Payment options', entities: ['project'], kind: 'multi_enum', inherits: false, options: ['Outright Purchase', 'Instalment Plan', 'Mortgage Accepted'] },
+  { key: 'servicedStatus', label: 'Serviced status', entities: ['project'], kind: 'enum', inherits: false },
+  { key: 'paymentOptions', label: 'Payment options', entities: ['project'], kind: 'multi_enum', inherits: false },
   { key: 'maximumInstallmentMonths', label: 'Maximum instalment months', entities: ['project'], kind: 'integer', inherits: false, min: 1, condition: 'Required when Instalment Plan is selected' },
   { key: 'initialDepositPercent', label: 'Initial deposit', entities: ['project'], kind: 'decimal', inherits: false, min: 0, max: 100, unit: '%', condition: 'Required when Instalment Plan is selected' },
-  { key: 'transactionFeePayer', label: 'Transaction fee payer', entities: ['project'], kind: 'enum', inherits: false, options: ['buyer', 'seller', 'split'], condition: 'Required on publication' },
+  { key: 'transactionFeePayer', label: 'Transaction fee payer', entities: ['project'], kind: 'enum', inherits: false, condition: 'Required on publication' },
   { key: 'privateShowingsByAppointment', label: 'Private showings by appointment', entities: ['project'], kind: 'boolean', inherits: false },
   { key: 'liveVideoTourAvailable', label: 'Live video tour available', entities: ['project'], kind: 'boolean', inherits: false },
   { key: 'headline', label: 'Listing headline', entities: ['property'], kind: 'text', inherits: false },
   { key: 'description', label: 'Listing description', entities: ['property'], kind: 'text', inherits: false },
   { key: 'otherAmenity', label: 'Other amenity', entities: ['property'], kind: 'text', inherits: false },
-  { key: 'listingKind', label: 'Listing kind', entities: ['property'], kind: 'enum', inherits: false, options: ['Single Property', 'Development'] },
-  { key: 'advertiserDisplay', label: 'Advertiser display', entities: ['property'], kind: 'enum', inherits: false, options: ['type only', 'type and name'] },
+  { key: 'listingKind', label: 'Listing kind', entities: ['property'], kind: 'enum', inherits: false },
+  { key: 'advertiserDisplay', label: 'Advertiser display', entities: ['property'], kind: 'enum', inherits: false },
   { key: 'propertyLiveVideo', label: 'Live video available', entities: ['property'], kind: 'boolean', inherits: false },
   { key: 'commercialFrontage', label: 'Commercial frontage', entities: ['property', 'unit'], kind: 'decimal', inherits: true, min: 0, unit: 'm' },
   { key: 'commercialFloorsOrUnits', label: 'Commercial floors or units', entities: ['property', 'unit'], kind: 'integer', inherits: true, min: 0 },
   { key: 'loadingVehicleAccess', label: 'Loading vehicle access', entities: ['property', 'unit'], kind: 'boolean', inherits: true },
   { key: 'loadingVehicleAccessType', label: 'Loading access type', entities: ['property', 'unit'], kind: 'text', inherits: true, condition: 'Required when loading vehicle access is true' },
   { key: 'liftCount', label: 'Lift count', entities: ['property', 'unit'], kind: 'integer', inherits: true, min: 0 },
-  { key: 'fitOut', label: 'Fit-out', entities: ['property', 'unit'], kind: 'enum', inherits: true, options: ['Shell & core', 'Partly fitted', 'Fully fitted'] },
+  { key: 'fitOut', label: 'Fit-out', entities: ['property', 'unit'], kind: 'enum', inherits: true },
   { key: 'unitIdentifier', label: 'Unit identifier', entities: ['unit'], kind: 'text', inherits: false },
   { key: 'bedrooms', label: 'Bedrooms', entities: ['unit'], kind: 'integer', inherits: true, min: 0 },
   { key: 'fullBathrooms', label: 'Full bathrooms', entities: ['unit'], kind: 'integer', inherits: true, min: 0 },
@@ -79,8 +77,8 @@ export const canonicalFieldRegistry: readonly CanonicalFieldDefinition[] = [
   { key: 'wholeBuildingFootprint', label: 'Whole building footprint', entities: ['unit'], kind: 'decimal', inherits: true, min: 0, unit: 'm²' },
   { key: 'plotSize', label: 'Plot size', entities: ['unit'], kind: 'decimal', inherits: true, min: 0, unit: 'm²' },
   { key: 'terraceFloors', label: 'Terrace floors', entities: ['unit'], kind: 'integer', inherits: true, min: 1, condition: 'Terraced House or Townhouse' },
-  { key: 'furnishing', label: 'Furnishing', entities: ['unit'], kind: 'enum', inherits: true, options: furnishingOptions },
-  { key: 'occupancy', label: 'Occupancy', entities: ['unit'], kind: 'enum', inherits: false, options: ['Vacant possession', 'Sold with occupiers'] },
+  { key: 'furnishing', label: 'Furnishing', entities: ['unit'], kind: 'enum', inherits: true },
+  { key: 'occupancy', label: 'Occupancy', entities: ['unit'], kind: 'enum', inherits: false },
   { key: 'completedBeforeHandover', label: 'Completed before handover', entities: ['unit'], kind: 'boolean', inherits: true },
   { key: 'projectedHandoverMonth', label: 'Projected handover month', entities: ['unit'], kind: 'month', inherits: true },
 ];
@@ -105,23 +103,6 @@ const toInputKind = (kind: string): CanonicalInputKind => {
   return 'json';
 };
 
-const stringOptions = (value: unknown): readonly string[] | undefined => {
-  if (!Array.isArray(value)) return undefined;
-  const values = value.map((item) => typeof item === 'string' ? item :
-    item && typeof item === 'object' && 'value' in item && typeof item.value === 'string' ? item.value : undefined);
-  return values.every((item): item is string => typeof item === 'string') ? values : undefined;
-};
-
-const runtimeOptions = (field: RuntimeCanonicalField, dictionary: CanonicalFieldDictionary): readonly string[] | undefined => {
-  const direct = stringOptions(field.allowedValues);
-  if (direct) return direct;
-  if (typeof field.catalogue === 'string') {
-    const catalogue = dictionary.catalogues[field.catalogue];
-    return stringOptions(catalogue);
-  }
-  return undefined;
-};
-
 const targetsToEntities = (targets: readonly CanonicalMutationTarget[]): readonly CanonicalEntity[] => targets
   .flatMap((target): CanonicalEntity[] => target === 'unit_type' ? [] : target === 'project_unit' ? ['unit'] : [target]);
 
@@ -133,10 +114,11 @@ export const reconcileCanonicalFieldRegistry = (dictionary: CanonicalFieldDictio
     const mutationTargets = runtime.entityApplicability.mutationTargets;
     const dataType = runtime.dataType || runtime.kind;
     const inferredKind = toInputKind(dataType);
-    const options = runtimeOptions(runtime, dictionary);
-    const kind = inferredKind === 'json' && options?.length && !/(list|array|map|pair|template|schedule|media)/i.test(dataType)
-      ? 'enum'
-      : inferredKind;
+    const optionItems = fieldVocabularyOptions(runtime, dictionary);
+    const options = optionItems.map((option) => option.value);
+    const optionList = /(amenity_key_list|title_declaration_list|enum_list|multi_enum_list|multi_select|payment_option_list|access_road_condition_list)/i.test(dataType);
+    const kind = optionList ? 'multi_enum' : inferredKind === 'json' && options?.length && !/(list|array|map|pair|template|schedule|media)/i.test(dataType)
+      ? 'enum' : inferredKind;
     const constraints = runtime.validationConstraints;
     return {
       ...fallback,
@@ -147,6 +129,7 @@ export const reconcileCanonicalFieldRegistry = (dictionary: CanonicalFieldDictio
       dataType: runtime.dataType,
       inherits: typeof runtime.inheritance === 'string' && runtime.inheritance.includes('>'),
       options,
+      optionLabels: Object.fromEntries(optionItems.map((option) => [option.value, option.label])),
       min: typeof constraints.minimum === 'number' ? constraints.minimum : typeof runtime.minimum === 'number' ? runtime.minimum : undefined,
       max: typeof constraints.maximum === 'number' ? constraints.maximum : typeof runtime.maximum === 'number' ? runtime.maximum : undefined,
       unit: typeof constraints.unit === 'string' ? constraints.unit : runtime.unit ?? fallback?.unit,
@@ -327,7 +310,11 @@ export const parseCanonicalInput = (field: CanonicalFieldDefinition, raw: string
   const constraints = field.runtime?.validationConstraints;
   const min = field.min ?? (typeof constraints?.minimum === 'number' ? constraints.minimum : undefined);
   const max = field.max ?? (typeof constraints?.maximum === 'number' ? constraints.maximum : undefined);
+  const minimumExclusive = typeof constraints?.minimumExclusive === 'number'
+    ? constraints.minimumExclusive
+    : typeof field.runtime?.minimumExclusive === 'number' ? field.runtime.minimumExclusive : undefined;
   if (min !== undefined && value < min) return { ok: false, error: `${field.label} must be at least ${min}.` };
+  if (minimumExclusive !== undefined && value <= minimumExclusive) return { ok: false, error: `${field.label} must be greater than ${minimumExclusive}.` };
   if (max !== undefined && value > max) return { ok: false, error: `${field.label} must be no more than ${max}.` };
   return { ok: true, value };
 };

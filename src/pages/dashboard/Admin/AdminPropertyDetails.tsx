@@ -13,6 +13,7 @@ import { hasAdminCapability } from '../../../services/adminAccessService';
 import { propertyService } from '../../../services/propertyService';
 import { propertyDisplayReference, propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
 import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
+import { effectiveCanonicalValue, formatCanonicalArea } from '../../../utils/propertyVocabulary';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 
@@ -208,10 +209,8 @@ const AdminPropertyDetails = () => {
                   <span className="text-primary font-bold text-sm">{property.propertyType}</span>
                 </div>
                 <div>
-                  <span className="block text-[10px] uppercase tracking-widest text-secondary font-bold mb-1">Sq. Ft</span>
-                  <span className="text-primary font-bold text-sm">
-                    {property.squareFeet ? property.squareFeet.toLocaleString() : '—'}
-                  </span>
+                  <span className="block text-[10px] uppercase tracking-widest text-secondary font-bold mb-1">Internal floor area</span>
+                  <span className="text-primary font-bold text-sm">{formatCanonicalArea(effectiveCanonicalValue(property, 'internalFloorArea'))}</span>
                 </div>
                 <div>
                   <span className="block text-[10px] uppercase tracking-widest text-secondary font-bold mb-1">Listing ID</span>

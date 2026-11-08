@@ -46,7 +46,7 @@ describe('runtime canonical dictionary integration', () => {
     const dictionary = parseCanonicalFieldDictionary({
       version: 2,
       fields: [
-        field('projectFaqs', 'question_answer_list', 'project', { set: true }),
+        field('projectFaqs', 'question_answer_list', 'project', { set: true, unset: true }),
         field('paymentPlan', 'fee_payer_template', 'project', { set: true, setNull: true, unset: true }),
         field('bedrooms', 'integer', 'project_unit', { set: true, unset: true, resetToInherit: true }, { validationConstraints: { minimum: 0, maximum: 8 } }),
         field('floorLevel', 'floor_level', 'project_unit', { set: true }, { allowedValues: ['Ground', '1', '2'] }),

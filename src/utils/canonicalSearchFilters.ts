@@ -1,10 +1,12 @@
 import type { CanonicalFieldDictionary, RuntimeCanonicalField } from '../services/canonicalFieldService';
+import { fieldVocabularyOptions } from './propertyVocabulary';
 
 export interface CanonicalSearchControl {
   field: RuntimeCanonicalField;
   label: string;
   kind: 'boolean' | 'enum' | 'multi_enum' | 'numeric';
   options: string[];
+  optionLabels: Record<string, string>;
   minKey?: string;
   maxKey?: string;
 }
@@ -21,7 +23,7 @@ const explicitSearchKeys = new Set([
   'servicedStatus', 'parkingSpaces', 'occupancy', 'publishedWithin', 'videoTour', 'has3dTour',
   'hasFloorPlan', 'hasDroneFlyThrough', 'openHouse', 'openHouseThisWeekend',
   'privateShowingsByAppointment', 'hasShowHome', 'distressSaleOnly', 'allBedroomsEnSuite',
-  'platformVerifiedTitleOnly', 'platformVerifiedListingOnly', 'constructionMilestone', 'amenities',
+  'platformVerifiedTitleOnly', 'platformVerifiedListingOnly',
   'handoverFrom', 'handoverBy', 'reference', 'exactReference', 'currency', 'featured',
   'fromAccountsIFollow', 'commuteFrom', 'commuteMinutes', 'nearbyLat', 'nearbyLng', 'nearbyRadiusKm',
   'north', 'south', 'east', 'west', 'mapActive', 'mapZoom', 'zoom', 'page', 'limit', 'queryVersion',
@@ -29,21 +31,8 @@ const explicitSearchKeys = new Set([
 
 const titleCaseKey = (key: string) => key.length ? `${key[0].toUpperCase()}${key.slice(1)}` : key;
 
-const optionsFor = (field: RuntimeCanonicalField, dictionary: CanonicalFieldDictionary): string[] => {
-  if (Array.isArray(field.allowedValues)) return field.allowedValues.filter((item): item is string | number => typeof item === 'string' || typeof item === 'number').map(String);
-  if (typeof field.catalogue !== 'string') return [];
-  const catalogue = dictionary.catalogues[field.catalogue];
-  if (Array.isArray(catalogue)) return catalogue.filter((item): item is string | number => typeof item === 'string' || typeof item === 'number').map(String);
-  if (catalogue && typeof catalogue === 'object' && !Array.isArray(catalogue)) {
-    const record = catalogue as Record<string, unknown>;
-    const values = Array.isArray(record.values) ? record.values : Array.isArray(record.options) ? record.options : null;
-    return values ? values.filter((item): item is string | number => typeof item === 'string' || typeof item === 'number').map(String) : [];
-  }
-  return [];
-};
-
 export const canonicalFieldOptions = (field: RuntimeCanonicalField | undefined, dictionary: CanonicalFieldDictionary | null): string[] =>
-  field && dictionary ? optionsFor(field, dictionary) : [];
+  field && dictionary ? fieldVocabularyOptions(field, dictionary).map((option) => option.value) : [];
 
 const isPublicSearchValue = (field: RuntimeCanonicalField) => {
   const visibility = (field.visibility ?? '').toLowerCase();
@@ -60,20 +49,22 @@ export const canonicalSearchControls = (dictionary: CanonicalFieldDictionary | n
     const dataType = field.dataType.toLowerCase();
     const label = typeof field.label === 'string' ? field.label : field.key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`);
     if (dataType === 'boolean') {
-      controls.push({ field, label, kind: 'boolean', options: [] });
+      controls.push({ field, label, kind: 'boolean', options: [], optionLabels: {} });
       continue;
     }
     if (['integer', 'decimal', 'number', 'numeric', 'money', 'money_or_none', 'percentage', 'count'].includes(dataType)) {
       const prefix = titleCaseKey(field.key);
-      controls.push({ field, label, kind: 'numeric', options: [], minKey: `min${prefix}`, maxKey: `max${prefix}` });
+      controls.push({ field, label, kind: 'numeric', options: [], optionLabels: {}, minKey: `min${prefix}`, maxKey: `max${prefix}` });
       continue;
     }
-    const options = optionsFor(field, dictionary);
+    const optionItems = fieldVocabularyOptions(field, dictionary);
+    const options = optionItems.map((option) => option.value);
+    const optionLabels = Object.fromEntries(optionItems.map((option) => [option.value, option.label]));
     if (!options.length) continue;
     if (['multi_enum', 'multi_select', 'multi_enum_list', 'amenity_key_list', 'title_declaration_list'].includes(dataType)) {
-      controls.push({ field, label, kind: 'multi_enum', options });
+      controls.push({ field, label, kind: 'multi_enum', options, optionLabels });
     } else if (dataType === 'enum' || dataType === 'console_enum' || dataType === 'architectural_style') {
-      controls.push({ field, label, kind: 'enum', options });
+      controls.push({ field, label, kind: 'enum', options, optionLabels });
     }
   }
   return controls;
@@ -100,7 +91,7 @@ export const canonicalSearchQueryValue = (control: CanonicalSearchControl, value
 };
 
 export const displayCanonicalSearchValue = (control: CanonicalSearchControl, value: string | string[]): string => {
-  if (Array.isArray(value)) return value.join(', ');
+  if (Array.isArray(value)) return value.map((item) => control.optionLabels[item] ?? item).join(', ');
   if (control.kind === 'boolean') return value === 'true' ? 'Yes' : value === 'false' ? 'No' : value;
-  return value;
+  return control.optionLabels[value] ?? value;
 };

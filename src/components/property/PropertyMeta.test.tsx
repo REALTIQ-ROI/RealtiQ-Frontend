@@ -1,10 +1,12 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Property } from '../../types';
 import PropertyMeta from './PropertyMeta';
 
+vi.mock('../../services/canonicalFieldService', () => ({ canonicalFieldService: { getDictionary: vi.fn().mockResolvedValue(null), clearCache: vi.fn() } }));
+
 describe('PropertyMeta', () => {
-  it('renders a safe placeholder when square footage is omitted', () => {
+  it('uses only the canonical square-metre value and does not relabel legacy square footage', () => {
     const property = {
       _id: 'property-1',
       title: 'Example property',
@@ -21,6 +23,8 @@ describe('PropertyMeta', () => {
 
     render(<PropertyMeta property={property} />);
 
-    expect(screen.getByText('— sq ft')).toBeInTheDocument();
+    const areaLabel = screen.getByText('Internal floor area');
+    expect(areaLabel.nextElementSibling).toHaveTextContent('Not provided');
+    expect(screen.queryByText(/sq ft/i)).not.toBeInTheDocument();
   });
 });

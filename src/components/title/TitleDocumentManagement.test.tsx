@@ -2,12 +2,18 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { titleDocumentService } from '../../services/titleDocumentService';
+import type { CanonicalFieldDictionary } from '../../services/canonicalFieldService';
 import type { ManagedTitleDocument } from '../../types';
+import { createCanonicalFieldDictionaryFixture } from '../../test/canonicalFieldDictionaryFixture';
 import TitleDocumentManagement from './TitleDocumentManagement';
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 const mocks = vi.hoisted(() => ({ stepUp: { begin: vi.fn(), complete: vi.fn(), cancel: vi.fn(), challenge: null, busy: false, error: null } }));
 vi.mock('../../hooks/useBoundStepUp', () => ({ useBoundStepUp: () => mocks.stepUp }));
+const dictionaryMocks = vi.hoisted(() => ({ dictionary: null as CanonicalFieldDictionary | null }));
+vi.mock('../../hooks/useCanonicalFieldDictionary', () => ({
+  useCanonicalFieldDictionary: () => ({ dictionary: dictionaryMocks.dictionary, loading: false, error: null, refresh: vi.fn() }),
+}));
 vi.mock('../../utils/titleUploadStepUp', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../utils/titleUploadStepUp')>();
   return { ...actual, digestTitleUpload: vi.fn().mockResolvedValue('a'.repeat(64)) };
@@ -25,7 +31,7 @@ vi.mock('../../services/titleDocumentService', () => ({
 const rejected: ManagedTitleDocument = {
   id: 'doc1',
   publicReference: 'RTQ-DOC-1',
-  documentType: 'survey_plan',
+  documentType: 'registered_survey',
   title: 'Registered Survey Plan',
   verificationStatus: 'rejected',
   verified: false,
@@ -41,6 +47,7 @@ const rejected: ManagedTitleDocument = {
 describe('TitleDocumentManagement', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    dictionaryMocks.dictionary = createCanonicalFieldDictionaryFixture();
     mocks.stepUp.begin.mockReset().mockResolvedValue(true);
     vi.mocked(titleDocumentService.listManaged).mockResolvedValue([rejected]);
   });
@@ -59,7 +66,7 @@ describe('TitleDocumentManagement', () => {
     await vi.waitFor(() => expect(mocks.stepUp.begin).toHaveBeenCalledWith(expect.objectContaining({
       method: 'POST',
       path: '/api/documents/properties/prop1/title-upload',
-      body: expect.objectContaining({ documentType: 'survey_plan', title: 'Registered Survey Plan', __stepUpFileSha256: 'a'.repeat(64) }),
+      body: expect.objectContaining({ documentType: 'registered_survey', title: 'Registered Survey Plan', __stepUpFileSha256: 'a'.repeat(64) }),
     })));
     expect(titleDocumentService.upload).not.toHaveBeenCalled();
   });

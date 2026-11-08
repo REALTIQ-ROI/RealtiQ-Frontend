@@ -6,6 +6,7 @@ import PropertyMapPreviewCard from './PropertyMapPreviewCard';
 import LeafletPropertyMap from './LeafletPropertyMap';
 import { MAP_PROVIDER } from '../../../config/maps';
 import type { CanonicalMapMarker } from '../../../types/canonicalMap';
+import { effectiveCanonicalValue } from '../../../utils/propertyVocabulary';
 
 interface Props {
   properties: Property[];
@@ -29,12 +30,14 @@ const isMappable = (property: Property) => {
     typeof lng === 'number' && Number.isFinite(lng) && lng >= -180 && lng <= 180;
 };
 
-const priceLabel = (price: number) => {
-  if (!Number.isFinite(price) || price <= 0) return 'View';
+const priceLabel = (price: number, currency?: string) => {
+  if (!Number.isFinite(price) || !currency) return 'View';
+  const prefix = currency === 'NGN' ? '₦' : currency === 'USD' ? '$' : '';
+  if (!prefix) return 'View';
   if (price >= 1_000_000_000) return `₦${(price / 1_000_000_000).toFixed(1)}B`;
   if (price >= 1_000_000) return `₦${(price / 1_000_000).toFixed(1)}M`;
   if (price >= 1_000) return `₦${Math.round(price / 1_000)}K`;
-  return `₦${price}`;
+  return `${prefix}${price}`;
 };
 
 const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, requestedViewport, onSelectProperty, resolveProperty, onDetailsNavigate, canonicalMarkers, onSelectCanonicalMarker }: Props) => {
@@ -192,7 +195,8 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
     const lookup = new Map<string, Property>();
     const features = mappable.map((property, index) => {
       const key = `${propertyRouteReference(property)}-${index}`; lookup.set(key, property);
-      return { type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [property.coordinates!.lng, property.coordinates!.lat] }, properties: { key, label: priceLabel(property.price), title: property.title } };
+      const priceOnApplication = effectiveCanonicalValue(property, 'priceOnApplication') === true;
+      return { type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [property.coordinates!.lng, property.coordinates!.lat] }, properties: { key, label: priceOnApplication ? 'POA' : priceLabel(property.price, property.currency), title: property.title } };
     });
     propertyLookupRef.current = lookup;
     (map.getSource('properties') as mapboxgl.GeoJSONSource).setData({ type: 'FeatureCollection', features });
@@ -221,7 +225,7 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
       Math.abs(current.getEast() - requestedViewport.east) < 0.0001 &&
       Math.abs(current.getWest() - requestedViewport.west) < 0.0001 && Math.abs(map.getZoom() - requestedViewport.zoom) < 0.01) return;
     map.fitBounds([[requestedViewport.west, requestedViewport.south], [requestedViewport.east, requestedViewport.north]], { duration: 0, maxZoom: requestedViewport.zoom });
-  }, [mapLoaded, requestedViewport?.north, requestedViewport?.south, requestedViewport?.east, requestedViewport?.west, requestedViewport?.zoom]);
+  }, [mapLoaded, requestedViewport]);
 
   useEffect(() => {
     const map = mapRef.current;

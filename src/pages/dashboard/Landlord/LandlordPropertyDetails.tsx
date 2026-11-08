@@ -13,6 +13,7 @@ import { inquiryService } from '../../../services/inquiryService';
 import { paymentService } from '../../../services/paymentService';
 import { propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
 import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
+import { effectiveCanonicalValue, formatCanonicalArea } from '../../../utils/propertyVocabulary';
 
 const formatRelativeDate = (date?: string) => {
   if (!date) return 'Recently';
@@ -153,17 +154,17 @@ const LandlordPropertyDetails = () => {
             <div className="mb-12 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
               <div className="bg-surface-container-low p-6 rounded-xl">
                 <span className="material-symbols-outlined text-slate-400 mb-2">bed</span>
-                <p className="text-slate-900 font-bold">{property?.bedrooms ?? 0} Bedrooms</p>
+                <p className="text-slate-900 font-bold">{property?.bedrooms ?? 'Not provided'} Bedrooms</p>
                 <p className="text-slate-500 text-xs">Live listing data</p>
               </div>
               <div className="bg-surface-container-low p-6 rounded-xl">
                 <span className="material-symbols-outlined text-slate-400 mb-2">bathtub</span>
-                <p className="text-slate-900 font-bold">{property?.bathrooms ?? 0} Bathrooms</p>
+                <p className="text-slate-900 font-bold">{property?.bathrooms ?? 'Not provided'} Bathrooms</p>
                 <p className="text-slate-500 text-xs">Live listing data</p>
               </div>
               <div className="bg-surface-container-low p-6 rounded-xl">
                 <span className="material-symbols-outlined text-slate-400 mb-2">square_foot</span>
-                <p className="text-slate-900 font-bold">{property?.squareFeet?.toLocaleString() ?? 0} sq.ft</p>
+                <p className="text-slate-900 font-bold">{formatCanonicalArea(effectiveCanonicalValue(property, 'internalFloorArea'))}</p>
                 <p className="text-slate-500 text-xs">Live listing data</p>
               </div>
             </div>

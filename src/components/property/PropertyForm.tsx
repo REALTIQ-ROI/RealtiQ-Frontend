@@ -1,19 +1,21 @@
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { ApiRequestError } from '../../lib/axios';
 import MediaUploader from './MediaUploader';
+import LocationCascadeFields from './LocationCascadeFields';
+import { resolveCurrentLocationCascade, type LocationCascadeSelection, type LocationSuggestionLevel } from '../../services/locationService';
 import { documentService } from '../../services/documentService';
 import { projectService } from '../../services/projectService';
 import type { CreatePropertyPayload, TitleDocumentUploadMetadata } from '../../services/propertyService';
 import type { ListingType, MediaItem, OffPlanDevelopmentStatus, OffPlanPaymentMilestone, ProjectCard, Property, PropertyPaymentType, TitleDocumentPolicyMode, TitleDocumentType } from '../../types';
-import { documentTypeLabel, titleDocumentTypeOptions } from '../../utils/titleVerification';
+import { documentTypeLabel } from '../../utils/titleVerification';
 import StructuredFactsFields from './StructuredFactsFields';
 import { sellerStructuredFacts, validateStructuredFacts } from '../../features/phase45/structuredFacts';
 import type { StructuredPropertyFacts } from '../../types/phase45';
-import { getCanonicalField, parseCanonicalInput, serializeCanonicalChanges } from '../../utils/canonicalFieldRegistry';
+import { parseCanonicalInput, serializeCanonicalChanges } from '../../utils/canonicalFieldRegistry';
 import CanonicalFieldMutationsEditor from '../canonical/CanonicalFieldMutationsEditor';
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
-import { reconcileCanonicalFieldRegistry, serializeCanonicalMutationDrafts, type CanonicalMutationDraft } from '../../utils/canonicalFieldRegistry';
+import { canonicalMutationAllowed, reconcileCanonicalFieldRegistry, serializeCanonicalMutationDrafts, type CanonicalMutationDraft } from '../../utils/canonicalFieldRegistry';
 import type { ProjectUnitTypeSummary } from '../../types';
 import {
   normalizePaymentTypesForForm,
@@ -21,6 +23,7 @@ import {
   propertyPaymentTypeIcons,
   propertyPaymentTypeLabels,
 } from '../../utils/propertyPaymentTypes';
+import { amenityGroupsForField, dictionaryVocabularyOptions, fieldVocabularyOptions, propertyTypesForCategory } from '../../utils/propertyVocabulary';
 
 interface PropertyFormProps {
   initialData?: Partial<Property & CreatePropertyPayload & { status: string }>;
@@ -30,20 +33,6 @@ interface PropertyFormProps {
   mode?: 'create' | 'edit';
 }
 
-const PROPERTY_TYPES = [
-  'house',
-  'apartment',
-  'commercial',
-  'villa',
-  'penthouse',
-  'estate',
-];
-const CATEGORY_OPTIONS = ['residential', 'commercial', 'mixed_use'];
-const STAGE_OPTIONS = ['off_plan', 'unfinished', 'finished', 'renovation'];
-const CURRENCY_OPTIONS = ['NGN', 'USD'];
-const accessRoadOptions = getCanonicalField('accessRoadConditions')?.options ?? [];
-const listingKindOptions = getCanonicalField('listingKind')?.options ?? [];
-const advertiserDisplayOptions = getCanonicalField('advertiserDisplay')?.options ?? [];
 const LISTING_TYPE_OPTIONS: Array<{ value: ListingType; label: string }> = [
   { value: 'ready', label: 'Ready' },
   { value: 'off_plan', label: 'Off-Plan' },
@@ -55,7 +44,7 @@ const MAX_TITLE_DOCUMENT_BYTES = 50 * 1024 * 1024;
 interface TitleDocumentRow {
   key: string;
   file: File | null;
-  documentType: TitleDocumentType;
+  documentType: string;
   title: string;
   mode: TitleDocumentPolicyMode;
   assetId?: string;
@@ -68,8 +57,8 @@ interface TitleDocumentRow {
 const createTitleDocumentRow = (): TitleDocumentRow => ({
   key: crypto.randomUUID(),
   file: null,
-  documentType: 'survey_plan',
-  title: 'Survey Plan',
+  documentType: '',
+  title: '',
   mode: 'private',
   progress: 0,
   status: 'idle',
@@ -83,6 +72,11 @@ const errorClass = 'text-error text-xs mt-1';
 const canonicalText = (fields: Record<string, unknown> | undefined, key: string): string => {
   const value = fields?.[key];
   return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+};
+
+const canonicalTextOrFallback = (fields: Record<string, unknown> | undefined, key: string, fallback: unknown): string => {
+  if (Object.prototype.hasOwnProperty.call(fields ?? {}, key)) return canonicalText(fields, key);
+  return typeof fallback === 'string' || typeof fallback === 'number' ? String(fallback) : '';
 };
 
 const canonicalBoolean = (fields: Record<string, unknown> | undefined, key: string): string => {
@@ -119,18 +113,16 @@ const savedCanonicalValue = (fields: Record<string, unknown>, key: string): stri
 };
 
 // An empty control is unanswered. Zero and false are explicit answers, never defaults.
-const validate = (data: CreatePropertyPayload & { status?: string }, mode: 'create' | 'edit', hadPaymentTypes: boolean): Record<string, string> => {
+const validate = (data: CreatePropertyPayload & { status?: string }, mode: 'create' | 'edit', hadPaymentTypes: boolean, priceOnApplication: boolean): Record<string, string> => {
   const errs: Record<string, string> = {};
   if (mode === 'create' && !data.title.trim()) errs.title = 'Title is required';
-  if (data.price < 0) errs.price = 'Price cannot be negative';
-  if (!Number.isFinite(data.price)) errs.price = 'Price must be a valid number';
+  if (!priceOnApplication && data.price === undefined && mode === 'create') errs.price = 'Enter an asking price or select Price on application.';
+  if (data.price !== undefined && data.price < 0) errs.price = 'Price cannot be negative';
+  if (data.price !== undefined && !Number.isFinite(data.price)) errs.price = 'Price must be a valid number';
   if (mode === 'create' && !data.location.trim()) errs.location = 'Location is required';
   if (!data.propertyType && mode === 'create') errs.propertyType = 'Property type is required';
   if (data.bedrooms !== undefined && (!Number.isInteger(data.bedrooms) || data.bedrooms < 0)) errs.bedrooms = 'Bedrooms must be a non-negative whole number';
   if (data.bathrooms !== undefined && (!Number.isInteger(data.bathrooms) || data.bathrooms < 0)) errs.bathrooms = 'Bathrooms must be a non-negative whole number';
-  if (!data.completionStage && mode === 'create') errs.completionStage = 'Completion stage is required';
-  if (mode === 'create' && data.squareFeet === undefined) errs.squareFeet = 'Enter square footage, including 0 when explicitly intended';
-  else if (data.squareFeet !== undefined && (!Number.isFinite(data.squareFeet) || data.squareFeet < 0)) errs.squareFeet = 'Square footage must be non-negative';
   if (!data.description.trim() && mode === 'create') errs.description = 'Description is required';
   if ((!data.media || data.media.length === 0) && mode === 'create') errs.media = 'At least one media file is required';
   if (!data.category && mode === 'create') errs.category = 'Category is required';
@@ -153,8 +145,8 @@ const validate = (data: CreatePropertyPayload & { status?: string }, mode: 'crea
     if (mode === 'create' && !data.offPlan.expectedCompletionDate) errs.expectedCompletionDate = 'Expected completion date is required';
     if ((data.offPlan.reservationAmount ?? 0) < 0) errs.reservationAmount = 'Reservation cannot be negative';
     if ((data.offPlan.minimumInitialDeposit ?? 0) < 0) errs.minimumInitialDeposit = 'Deposit cannot be negative';
-    if ((data.offPlan.reservationAmount ?? 0) > data.price) errs.reservationAmount = 'Reservation cannot exceed property price';
-    if ((data.offPlan.minimumInitialDeposit ?? 0) > data.price) errs.minimumInitialDeposit = 'Deposit cannot exceed property price';
+    if (typeof data.price === 'number' && (data.offPlan.reservationAmount ?? 0) > data.price) errs.reservationAmount = 'Reservation cannot exceed property price';
+    if (typeof data.price === 'number' && (data.offPlan.minimumInitialDeposit ?? 0) > data.price) errs.minimumInitialDeposit = 'Deposit cannot exceed property price';
     if ((data.offPlan.unitsAvailable ?? 0) > (data.offPlan.totalUnitsPlanned ?? Number.MAX_SAFE_INTEGER)) errs.unitsAvailable = 'Available units cannot exceed planned units';
     if (mode === 'create' && !data.offPlan.riskDisclosure?.trim()) errs.riskDisclosure = 'Risk disclosure is required for off-plan listings';
     const milestones = data.offPlan.paymentMilestones ?? [];
@@ -168,7 +160,7 @@ const validate = (data: CreatePropertyPayload & { status?: string }, mode: 'crea
     const amountMilestones = milestones.filter((item) => typeof item.amount === 'number');
     if (amountMilestones.length) {
       const total = amountMilestones.reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
-      if (Math.round(total) !== Math.round(data.price)) errs.paymentMilestones = 'Milestone amounts must sum to property price';
+      if (typeof data.price === 'number' && Math.round(total) !== Math.round(data.price)) errs.paymentMilestones = 'Milestone amounts must sum to property price';
     }
   }
   return errs;
@@ -185,33 +177,39 @@ const PropertyForm = ({
   const initialProject = initialData?.project;
   const initialProjectId = searchParams.get('projectId') ?? initialProject?._id ?? '';
   const initialCanonical = initialData?.canonicalFields;
+  const initialPriceOnApplication = initialCanonical?.priceOnApplication === true;
   const initialFormTitle = typeof initialCanonical?.headline === 'string' ? initialCanonical.headline : initialData?.title ?? '';
   const initialFormDescription = typeof initialCanonical?.description === 'string' ? initialCanonical.description : initialData?.description ?? '';
   const initialPin = initialCanonical?.projectPin && typeof initialCanonical.projectPin === 'object'
     ? initialCanonical.projectPin as { lat?: unknown; lng?: unknown }
     : undefined;
   const [title, setTitle] = useState(initialFormTitle);
-  const [price, setPrice] = useState(initialData?.price?.toString() ?? '');
+  const [price, setPrice] = useState(initialPriceOnApplication ? '' : canonicalTextOrFallback(initialCanonical, 'askingPrice', initialData?.price));
   const [location, setLocation] = useState(initialData?.location ?? '');
-  const [propertyType, setPropertyType] = useState(initialData?.propertyType ?? 'apartment');
-  const [bedrooms, setBedrooms] = useState(initialData?.bedrooms?.toString() ?? '1');
-  const [bathrooms, setBathrooms] = useState(initialData?.bathrooms?.toString() ?? '1');
-  const [squareFeet, setSquareFeet] = useState(initialData?.squareFeet?.toString() ?? '');
+  const [propertyType, setPropertyType] = useState(canonicalTextOrFallback(initialCanonical, 'propertyType', initialData?.propertyType));
+  const [bedrooms, setBedrooms] = useState(initialData?.bedrooms?.toString() ?? '');
+  const [bathrooms, setBathrooms] = useState(initialData?.bathrooms?.toString() ?? '');
+  const [internalFloorArea, setInternalFloorArea] = useState(() => canonicalText(initialCanonical, 'internalFloorArea'));
   const [structuredFacts, setStructuredFacts] = useState<StructuredPropertyFacts>(() => sellerStructuredFacts(initialData?.structuredFacts ?? {}));
   const [structuredFactsTouched, setStructuredFactsTouched] = useState(false);
   const [description, setDescription] = useState(initialFormDescription);
-  const [category, setCategory] = useState(initialData?.category ?? (mode === 'create' ? 'residential' : ''));
-  const [completionStage, setCompletionStage] = useState(initialData?.completionStage ?? (mode === 'create' ? 'finished' : ''));
-  const [currency, setCurrency] = useState(initialData?.currency ?? (mode === 'create' ? 'NGN' : ''));
+  const [category, setCategory] = useState(canonicalTextOrFallback(initialCanonical, 'category', initialData?.category));
+  const [completionStage, setCompletionStage] = useState(() => canonicalTextOrFallback(initialCanonical, 'buildStage', initialData?.completionStage));
+  const [currency, setCurrency] = useState(canonicalTextOrFallback(initialCanonical, 'currency', initialData?.currency));
   const [coordinatesLat, setCoordinatesLat] = useState((typeof initialPin?.lat === 'number' ? initialPin.lat : initialData?.coordinates?.lat)?.toString() ?? '');
   const [coordinatesLng, setCoordinatesLng] = useState((typeof initialPin?.lng === 'number' ? initialPin.lng : initialData?.coordinates?.lng)?.toString() ?? '');
   const [priceChangeReason, setPriceChangeReason] = useState('');
   const [amenities, setAmenities] = useState<string[]>(initialData?.amenities ?? []);
-  const [amenityInput, setAmenityInput] = useState('');
+  const [paymentOptions, setPaymentOptions] = useState<string[]>(() => Array.isArray(initialCanonical?.paymentOptions) ? initialCanonical.paymentOptions.filter((item): item is string => typeof item === 'string') : []);
+  const [paymentOptionsTouched, setPaymentOptionsTouched] = useState(false);
+  const [priceOnApplication, setPriceOnApplication] = useState(initialPriceOnApplication);
+  const [secondAskingPrice, setSecondAskingPrice] = useState(() => {
+    const value = initialCanonical?.secondAskingPrice;
+    return typeof value === 'number' && Number.isFinite(value) ? String(value) : typeof value === 'string' ? value : '';
+  });
   const [media, setMedia] = useState<MediaItem[]>(initialData?.media ?? []);
-  const [canonicalState, setCanonicalState] = useState(() => canonicalText(initialCanonical, 'state'));
-  const [canonicalLga, setCanonicalLga] = useState(() => canonicalText(initialCanonical, 'lga'));
-  const [canonicalArea, setCanonicalArea] = useState(() => canonicalText(initialCanonical, 'area'));
+  const [locationSelection, setLocationSelection] = useState<LocationCascadeSelection>({});
+  const [locationLabels, setLocationLabels] = useState<Partial<Record<LocationSuggestionLevel, string>>>({});
   const [accessRoadConditions, setAccessRoadConditions] = useState<string[]>(() => Array.isArray(initialCanonical?.accessRoadConditions) ? initialCanonical.accessRoadConditions.filter((item): item is string => typeof item === 'string') : []);
   const [accessRoadTouched, setAccessRoadTouched] = useState(false);
   const [listingKind, setListingKind] = useState(() => canonicalText(initialCanonical, 'listingKind'));
@@ -248,7 +246,8 @@ const PropertyForm = ({
   const [unitTypesLoading, setUnitTypesLoading] = useState(false);
   const [unitTypesError, setUnitTypesError] = useState<string | null>(null);
   const [canonicalMutationDrafts, setCanonicalMutationDrafts] = useState<CanonicalMutationDraft[]>([]);
-  const { dictionary } = useCanonicalFieldDictionary();
+  const { dictionary, loading: dictionaryLoading, error: dictionaryError, refresh: refreshDictionary } = useCanonicalFieldDictionary();
+  const canonicalFieldDefinitions = useMemo(() => dictionary ? reconcileCanonicalFieldRegistry(dictionary) : [], [dictionary]);
   const [unitNumber, setUnitNumber] = useState(initialData?.projectUnit?.unitNumber ?? '');
   const [listingType, setListingType] = useState<ListingType | ''>(initialData?.listingType ?? (mode === 'create' ? 'ready' : ''));
   const [offPlanTouched, setOffPlanTouched] = useState(false);
@@ -276,18 +275,34 @@ const PropertyForm = ({
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const saving = isLoading || uploadingTitleDocument || submitting;
-  const categoryOptions = CATEGORY_OPTIONS;
-  const propertyTypeOptions = PROPERTY_TYPES;
+  const categoryField = dictionary?.fields.find((field) => field.key === 'category');
+  const propertyTypeField = dictionary?.fields.find((field) => field.key === 'propertyType');
+  const categoryOptions = useMemo(() => dictionaryVocabularyOptions(dictionary, 'categories', categoryField), [categoryField, dictionary]);
+  const allPropertyTypeOptions = useMemo(() => dictionaryVocabularyOptions(dictionary, 'propertyTypes', propertyTypeField), [dictionary, propertyTypeField]);
+  const selectedCategoryKey = categoryOptions.find((option) => option.value === category)?.key ?? category;
+  const propertyTypeOptions = useMemo(() => propertyTypesForCategory(allPropertyTypeOptions, selectedCategoryKey), [allPropertyTypeOptions, selectedCategoryKey]);
+  const buildStageOptions = fieldVocabularyOptions(dictionary?.fields.find((field) => field.key === 'buildStage'), dictionary);
+  const paymentOptionField = dictionary?.fields.find((field) => field.key === 'paymentOptions');
+  const paymentOptionValues = fieldVocabularyOptions(paymentOptionField, dictionary);
+  const mortgageEnabled = dictionary?.configuration.mortgage?.state === 'enabled';
+  const currencyOptions = dictionaryVocabularyOptions(dictionary, 'currencyValues', dictionary?.fields.find((field) => field.key === 'currency'));
+  const accessRoadOptions = fieldVocabularyOptions(dictionary?.fields.find((field) => field.key === 'accessRoadConditions'), dictionary);
+  const fitOutOptions = dictionaryVocabularyOptions(dictionary, 'fitOutValues', dictionary?.fields.find((field) => field.key === 'fitOut'));
+  const listingKindOptions = fieldVocabularyOptions(dictionary?.fields.find((field) => field.key === 'listingKind'), dictionary);
+  const advertiserDisplayOptions = fieldVocabularyOptions(dictionary?.fields.find((field) => field.key === 'advertiserDisplay'), dictionary);
+  const titleDocumentOptions = dictionaryVocabularyOptions(dictionary, 'titleDocumentTypes');
+  const amenityGroups = amenityGroupsForField(dictionary, dictionary?.fields.find((field) => field.key === 'amenities') ?? null);
   const parsedPrice = Number(price) || 0;
   const initialPrice = Number(initialData?.price ?? 0);
   const priceChanged = mode === 'edit' && Number.isFinite(parsedPrice) && initialPrice > 0 && parsedPrice !== initialPrice;
-  const isCommercial = category === 'commercial' || propertyType === 'commercial';
+  const isCommercial = /commercial|mixed.use/i.test(categoryOptions.find((option) => option.value === category)?.label ?? category) ||
+    /commercial|mixed.use/i.test(allPropertyTypeOptions.find((option) => option.value === propertyType)?.category ?? '');
   const incompleteCanonicalIntake = [
     !title.trim() && 'headline',
     !description.trim() && 'description',
-    !canonicalState.trim() && 'state',
-    !canonicalLga.trim() && 'Local Government Area',
-    !canonicalArea.trim() && 'area',
+    !locationSelection.state && 'state',
+    !locationSelection.lga && 'Local Government Area',
+    !locationSelection.area && 'area',
     (!coordinatesLat.trim() || !coordinatesLng.trim()) && 'map pin',
     !accessRoadConditions.length && 'access road conditions',
     !listingKind && 'listing kind',
@@ -333,31 +348,32 @@ const PropertyForm = ({
     setErrors((current) => ({ ...current, paymentTypes: '' }));
   };
 
-  const addAmenity = () => {
-    const trimmed = amenityInput.trim();
-    if (trimmed && !amenities.includes(trimmed)) {
-      setAmenities((prev) => [...prev, trimmed]);
-    }
-    setAmenityInput('');
-  };
-
-  const handleAmenityKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      addAmenity();
-    }
-  };
-
-  const removeAmenity = (item: string) => {
-    setAmenities((prev) => prev.filter((a) => a !== item));
-  };
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (saving) return;
 
-    if (price.trim() === '') {
+    if (!priceOnApplication && price.trim() === '') {
       setErrors((current) => ({ ...current, price: 'Enter an asking price, including 0 when explicitly intended.' }));
+      return;
+    }
+
+    if (Object.entries(locationLabels).some(([level, label]) => Boolean(label?.trim()) && !locationSelection[level as LocationSuggestionLevel])) {
+      setErrors((current) => ({ ...current, locationDirectory: 'Choose each entered location from current suggestions. A typed name is not a valid location ID.' }));
+      return;
+    }
+    if (mode === 'edit' && ['state', 'lga', 'area'].some((level) => Object.prototype.hasOwnProperty.call(initialCanonical ?? {}, level) && initialCanonical?.[level] !== null && initialCanonical?.[level] !== '' && !locationSelection[level as LocationSuggestionLevel])) {
+      setErrors((current) => ({ ...current, locationDirectory: 'The saved location has not been confirmed against the active directory. Wait for resolution or choose it again before saving.' }));
+      return;
+    }
+    let resolvedLocations: LocationCascadeSelection;
+    try {
+      resolvedLocations = await resolveCurrentLocationCascade(locationSelection);
+    } catch (raw: unknown) {
+      setErrors((current) => ({ ...current, locationDirectory: raw instanceof Error ? raw.message : 'The current location directory could not confirm this selection.' }));
+      return;
+    }
+    if (gatedEstate === 'true' && !resolvedLocations.estate) {
+      setErrors((current) => ({ ...current, locationDirectory: 'Choose a current gated estate from the location directory.' }));
       return;
     }
 
@@ -365,9 +381,6 @@ const PropertyForm = ({
       headline: title,
       description,
       otherAmenity,
-      state: canonicalState,
-      lga: canonicalLga,
-      area: canonicalArea,
       gatedEstate,
       unitOrFlatNumber,
       listingKind,
@@ -402,22 +415,36 @@ const PropertyForm = ({
       const fieldsToClear = gatedEstate === 'true' ? oldStandardPathKeys : oldEstatePathKeys;
       if (fieldsToClear.some(hasCanonicalValue)) canonicalErrors.gatedEstate = 'Changing the address path would leave saved values in the other path. No reset operation is documented for those fields.';
     }
+    for (const level of ['state', 'lga', 'area'] as const) {
+      const selected = resolvedLocations[level];
+      if (selected && (!Object.prototype.hasOwnProperty.call(initialCanonical ?? {}, level) || initialCanonical?.[level] !== selected.id)) canonicalDraft[level] = selected.id;
+    }
+    if (resolvedLocations.estate && (!Object.prototype.hasOwnProperty.call(initialCanonical ?? {}, 'estateName') || initialCanonical?.estateName !== resolvedLocations.estate.name)) {
+      canonicalDraft.estateName = resolvedLocations.estate.name;
+    }
     if (mode === 'edit' && loadingVehicleAccess === 'false' && hasCanonicalValue('loadingVehicleAccessType')) {
       canonicalErrors.loadingVehicleAccess = 'The saved loading access type cannot be cleared because no reset operation is documented.';
     }
     for (const [key, value] of Object.entries(canonicalInputs)) {
+      const currentValue = initialCanonical?.[key];
+      if (
+        mode === 'edit' &&
+        Object.prototype.hasOwnProperty.call(initialCanonical ?? {}, key) &&
+        (typeof currentValue === 'string' || typeof currentValue === 'number' || typeof currentValue === 'boolean') &&
+        String(currentValue) === value
+      ) continue;
       if (value.trim() === '' && initialCanonical?.[key] !== undefined && initialCanonical[key] !== null && initialCanonical[key] !== '') {
         canonicalErrors[key] = 'Clearing this saved value requires a documented reset operation.';
         continue;
       }
       if (value.trim() === '') continue;
-      const definition = getCanonicalField(key);
+      const definition = canonicalFieldDefinitions.find((field) => field.key === key);
       const parsed = definition ? parseCanonicalInput(definition, value) : null;
       if (!parsed || !parsed.ok) canonicalErrors[key] = parsed && !parsed.ok ? parsed.error : 'This canonical field is not configured for editing.';
       else canonicalDraft[key] = parsed.value;
     }
     if (accessRoadTouched) {
-      const definition = getCanonicalField('accessRoadConditions');
+      const definition = canonicalFieldDefinitions.find((field) => field.key === 'accessRoadConditions');
       if (!accessRoadConditions.length) canonicalErrors.accessRoadConditions = 'Choose at least one access road condition. Clearing the last saved condition requires a reset operation that is not documented.';
       else if (!definition?.options || accessRoadConditions.some((item) => !definition.options?.includes(item))) canonicalErrors.accessRoadConditions = 'Choose only documented access road conditions.';
       else canonicalDraft.accessRoadConditions = [...accessRoadConditions];
@@ -426,6 +453,53 @@ const PropertyForm = ({
     const hasSavedPin = hasCanonicalValue('projectPin') || Boolean(initialData?.coordinates);
     const pinResetRequested = canonicalMutationDrafts.some((draft) => draft.field === 'projectPin' && draft.operation !== 'set');
     if (mode === 'edit' && hasSavedPin && !coordinatesLat.trim() && !coordinatesLng.trim() && !pinResetRequested) canonicalErrors.projectPin = 'The saved map pin cannot be cleared through empty coordinates. Choose an allowed unset/null operation from the canonical field editor.';
+    if (internalFloorArea.trim() !== '') {
+      const definition = canonicalFieldDefinitions.find((field) => field.key === 'internalFloorArea');
+      const parsed = definition ? parseCanonicalInput(definition, internalFloorArea) : null;
+      if (!parsed || !parsed.ok) canonicalErrors.internalFloorArea = parsed && !parsed.ok ? parsed.error : 'The current field dictionary does not expose internal floor area.';
+      else canonicalDraft.internalFloorArea = parsed.value;
+    }
+    const baselineValue = (key: string, fallback: unknown): unknown =>
+      Object.prototype.hasOwnProperty.call(initialCanonical ?? {}, key) ? initialCanonical?.[key] : fallback;
+    if (category && category !== baselineValue('category', initialData?.category)) canonicalDraft.category = category;
+    if (propertyType && propertyType !== baselineValue('propertyType', initialData?.propertyType)) canonicalDraft.propertyType = propertyType;
+    if (completionStage) {
+      const definition = canonicalFieldDefinitions.find((field) => field.key === 'buildStage');
+      const parsed = definition ? parseCanonicalInput(definition, completionStage) : null;
+      if (!parsed || !parsed.ok) canonicalErrors.buildStage = parsed && !parsed.ok ? parsed.error : 'Choose a build stage from the current dictionary.';
+      else if (parsed.value !== baselineValue('buildStage', initialData?.completionStage)) canonicalDraft.buildStage = parsed.value;
+    }
+    if (currency) {
+      const definition = canonicalFieldDefinitions.find((field) => field.key === 'currency');
+      const parsed = definition ? parseCanonicalInput(definition, currency) : null;
+      if (!parsed || !parsed.ok) canonicalErrors.currency = parsed && !parsed.ok ? parsed.error : 'Choose a currency from the current field dictionary.';
+      else if (parsed.value !== baselineValue('currency', initialData?.currency)) canonicalDraft.currency = parsed.value;
+    }
+    if (!priceOnApplication && price.trim() !== '') {
+      const definition = canonicalFieldDefinitions.find((field) => field.key === 'askingPrice');
+      const parsed = definition ? parseCanonicalInput(definition, price) : null;
+      if (!parsed || !parsed.ok) canonicalErrors.price = parsed && !parsed.ok ? parsed.error : 'Asking price is unavailable in the current field dictionary.';
+      else if (parsed.value !== baselineValue('askingPrice', initialData?.price)) canonicalDraft.askingPrice = parsed.value;
+    }
+    if (secondAskingPrice.trim() !== '') {
+      const definition = canonicalFieldDefinitions.find((field) => field.key === 'secondAskingPrice');
+      const parsed = definition ? parseCanonicalInput(definition, secondAskingPrice) : null;
+      if (!parsed || !parsed.ok) canonicalErrors.secondAskingPrice = parsed && !parsed.ok ? parsed.error : 'The optional alternate price is unavailable in the current field dictionary.';
+      else if (mode !== 'edit' || initialCanonical?.secondAskingPrice !== parsed.value) canonicalDraft.secondAskingPrice = parsed.value;
+    }
+    if (priceOnApplication) canonicalDraft.priceOnApplication = true;
+    else if (mode === 'edit' && initialCanonical?.priceOnApplication === true) canonicalDraft.priceOnApplication = false;
+    if (paymentOptionsTouched) {
+      if (!paymentOptionField || !paymentOptionValues.length) canonicalErrors.paymentOptions = 'Payment-option choices are unavailable in the current backend dictionary.';
+      else if (paymentOptions.some((item) => !paymentOptionValues.some((option) => option.value === item))) canonicalErrors.paymentOptions = 'Choose only payment options returned by the current backend dictionary.';
+      else if (!mortgageEnabled && paymentOptions.includes('Mortgage Accepted')) canonicalErrors.paymentOptions = 'Mortgage Accepted is unavailable while the backend configuration is disabled. Clear that choice before saving.';
+      else {
+        const definition = canonicalFieldDefinitions.find((field) => field.key === 'paymentOptions');
+        const parsed = definition ? parseCanonicalInput(definition, JSON.stringify(paymentOptions)) : null;
+        if (!parsed || !parsed.ok) canonicalErrors.paymentOptions = parsed && !parsed.ok ? parsed.error : 'Payment options are unavailable in the current field dictionary.';
+        else canonicalDraft.paymentOptions = parsed.value;
+      }
+    }
     if (coordinatesLat.trim() !== '' && coordinatesLng.trim() !== '') {
       canonicalDraft.projectPin = { lat: Number(coordinatesLat), lng: Number(coordinatesLng) };
     }
@@ -442,10 +516,18 @@ const PropertyForm = ({
     let canonicalFieldMutations: CreatePropertyPayload['canonicalFieldMutations'] = [];
     if (canonicalMutationDrafts.length) {
       if (!dictionary) { setErrors({ canonicalFields: 'Canonical field policy is unavailable. Refresh and retry.' }); return; }
-      const serialized = serializeCanonicalMutationDrafts(canonicalMutationDrafts, reconcileCanonicalFieldRegistry(dictionary), 'property');
+      const serialized = serializeCanonicalMutationDrafts(canonicalMutationDrafts, canonicalFieldDefinitions, 'property');
       if (Object.keys(serialized.errors).length) { setErrors(serialized.errors); return; }
       if (mode === 'edit') canonicalFieldMutations = serialized.mutations;
       else Object.assign(canonicalFields, Object.fromEntries(serialized.mutations.filter((item) => item.operation === 'set').map((item) => [item.field, item.value])));
+    }
+    if (mode === 'edit' && priceOnApplication && (Object.prototype.hasOwnProperty.call(initialCanonical ?? {}, 'askingPrice') || typeof initialData?.price === 'number')) {
+      const askingPriceField = dictionary ? reconcileCanonicalFieldRegistry(dictionary).find((field) => field.key === 'askingPrice') : undefined;
+      if (!askingPriceField || !canonicalMutationAllowed(askingPriceField, 'property', 'unset')) {
+        setErrors({ askingPrice: 'The current field contract does not allow the existing asking price to be cleared. Price on application cannot be saved until the backend exposes that operation.' });
+        return;
+      }
+      canonicalFieldMutations = [...canonicalFieldMutations, { field: 'askingPrice', operation: 'unset' }];
     }
     const duplicateCanonicalField = canonicalFieldMutations.find((mutation) => Object.prototype.hasOwnProperty.call(canonicalFields, mutation.field));
     if (duplicateCanonicalField) {
@@ -457,11 +539,10 @@ const PropertyForm = ({
     const lngProvided = coordinatesLng.trim() !== '';
     const basePayload: CreatePropertyPayload & { status?: string } = {
       title: mode === 'edit' && title === initialFormTitle ? initialData?.title ?? title.trim() : title.trim(),
-      price: Number(price),
+      ...(!priceOnApplication && price.trim() !== '' ? { price: Number(price) } : {}),
       paymentTypes: normalizePaymentTypesForForm(parsedPrice, paymentTypes),
       location: location.trim(),
       propertyType,
-      ...(squareFeet.trim() === '' ? {} : { squareFeet: Number(squareFeet) }),
       ...(mode === 'create' || structuredFactsTouched ? { structuredFacts: sellerStructuredFacts(structuredFacts) } : {}),
       description: mode === 'edit' && description === initialFormDescription ? initialData?.description ?? description.trim() : description.trim(),
       amenities,
@@ -476,7 +557,6 @@ const PropertyForm = ({
           : undefined,
       bedrooms: isCommercial || bedrooms.trim() === '' ? undefined : Number(bedrooms),
       bathrooms: isCommercial || bathrooms.trim() === '' ? undefined : Number(bathrooms),
-      ...(completionStage ? { completionStage } : {}),
       ...(priceChanged && priceChangeReason.trim() ? { priceChangeReason: priceChangeReason.trim().slice(0, 500) } : {}),
       ...(mode === 'create' && projectId ? {
         publicationAction: 'save_draft' as const,
@@ -516,7 +596,14 @@ const PropertyForm = ({
       });
       return;
     }
-    const errs = { ...validate(basePayload, mode, Boolean(initialData?.paymentTypes?.length)), ...validateStructuredFacts(basePayload.structuredFacts) };
+    if (mode === 'create' && dictionaryLoading) { setErrors({ dictionary: 'Wait for the current property vocabulary to load before creating a listing.' }); return; }
+    if (mode === 'create' && (!category || !categoryOptions.some((option) => option.value === category))) canonicalErrors.category = 'Choose a current property category from the field dictionary.';
+    if (!category || !categoryOptions.some((option) => option.value === category)) canonicalErrors.category = 'Choose a category from the current backend dictionary.';
+    if (!propertyType || !propertyTypeOptions.some((option) => option.value === propertyType)) canonicalErrors.propertyType = 'Choose a property type in the selected category from the current backend dictionary.';
+    if (mode === 'create' && dictionary && dictionary.fields.some((field) => field.key === 'buildStage' && field.requiredness === 'required') && !completionStage) canonicalErrors.buildStage = 'Choose a build stage.';
+    if (!priceOnApplication && price.trim() !== '' && (!Number.isInteger(Number(price)) || !Number.isFinite(Number(price)))) canonicalErrors.price = 'Asking price must be a whole-number amount.';
+    if (Object.keys(canonicalErrors).length) { setErrors(canonicalErrors); return; }
+    const errs = { ...validate(basePayload, mode, Boolean(initialData?.paymentTypes?.length), priceOnApplication), ...validateStructuredFacts(basePayload.structuredFacts) };
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
@@ -569,7 +656,7 @@ const PropertyForm = ({
         titleDocuments = stagedRows.map((row) => ({
           assetId: row.assetId!,
           title: row.title.trim() || documentTypeLabel(row.documentType),
-          documentType: row.documentType,
+          documentType: row.documentType as TitleDocumentType,
           accessPolicy: { enabled: row.mode !== 'private', mode: row.mode },
         }));
       } catch (raw) {
@@ -636,6 +723,8 @@ const PropertyForm = ({
 
   return (
     <form onSubmit={(e) => void handleSubmit(e)} className="space-y-8" style={{ fontFamily: 'Inter, sans-serif' }}>
+      {dictionaryLoading ? <p role="status" className="rounded-lg bg-surface-container-low p-3 text-sm text-secondary">Loading the current property vocabulary and field rules…</p> : null}
+      {dictionaryError ? <div role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Current property vocabulary is unavailable. New category, type and option selections are disabled. <button type="button" className="font-bold underline" onClick={refreshDictionary}>Retry vocabulary</button></div> : null}
       <div className="bg-white rounded-2xl p-6 space-y-5 border border-outline-variant/10">
         <h2 className="text-base font-black text-on-surface tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
           Property Details
@@ -656,43 +745,45 @@ const PropertyForm = ({
 
           <div>
             <label className={labelClass}>Property Type</label>
-            <select value={propertyType} onChange={(e) => setPropertyType(e.target.value)} className={inputClass}>
-              {propertyType && !propertyTypeOptions.includes(propertyType) ? <option value={propertyType}>{propertyType}</option> : null}
-              {propertyTypeOptions.map((t) => (
-                <option key={t} value={t} className="capitalize">
-                  {t.replace('_', ' ')}
+            <select value={propertyType} onChange={(e) => setPropertyType(e.target.value)} className={inputClass} disabled={!dictionary || propertyTypeOptions.length === 0}>
+              <option value="">Choose a property type</option>
+              {propertyType && !propertyTypeOptions.some((option) => option.value === propertyType) ? <option value={propertyType}>Unavailable option: {propertyType}</option> : null}
+              {propertyTypeOptions.map((option) => (
+                <option key={option.key ?? option.value} value={option.value} title={option.definition}>
+                  {option.label}
                 </option>
               ))}
             </select>
+            {propertyTypeOptions.find((option) => option.value === propertyType)?.definition ? <p className="mt-1 text-xs text-secondary">{propertyTypeOptions.find((option) => option.value === propertyType)?.definition}</p> : null}
             {errors.propertyType && <p className={errorClass}>{errors.propertyType}</p>}
           </div>
 
           <div>
             <label className={labelClass}>Category</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
-              {mode === 'edit' ? <option value="">Unanswered</option> : null}
-              {category && !categoryOptions.includes(category) ? <option value={category}>{category.replaceAll('_', ' ')}</option> : null}
-              {categoryOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option.replace('_', ' ')}
-                </option>
-              ))}
+            <select value={category} onChange={(e) => { setCategory(e.target.value); setPropertyType(''); }} className={inputClass} disabled={!dictionary || categoryOptions.length === 0}>
+              <option value="">Choose a category</option>
+              {category && !categoryOptions.some((option) => option.value === category) ? <option value={category}>Unavailable option: {category}</option> : null}
+              {categoryOptions.map((option) => <option key={option.key ?? option.value} value={option.value}>{option.label}</option>)}
             </select>
             {errors.category && <p className={errorClass}>{errors.category}</p>}
           </div>
 
           <div>
-            <label className={labelClass}>Price</label>
+            <label className={labelClass}>Asking price</label>
             <input
               type="number"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              placeholder="e.g. 15000000"
+              placeholder={priceOnApplication ? 'Not used while price on application is selected' : 'Enter the whole-number price'}
               min={0}
+              step={1}
+              disabled={priceOnApplication}
               className={inputClass}
             />
             {errors.price && <p className={errorClass}>{errors.price}</p>}
           </div>
+
+          <label className="flex items-center gap-2 self-end rounded-lg border border-outline-variant/20 p-3 text-sm font-semibold"><input type="checkbox" checked={priceOnApplication} onChange={(event) => { const checked = event.target.checked; setPriceOnApplication(checked); if (checked) setPrice(''); }} />Price on application</label>
 
           {priceChanged ? (
             <div>
@@ -712,15 +803,19 @@ const PropertyForm = ({
 
           <div>
             <label className={labelClass}>Currency</label>
-            <select value={currency} onChange={(e) => setCurrency(e.target.value)} className={inputClass}>
-              {mode === 'edit' ? <option value="">Unanswered</option> : null}
-              {CURRENCY_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
+            <select value={currency} onChange={(e) => setCurrency(e.target.value)} className={inputClass} disabled={!dictionary || currencyOptions.length === 0}>
+              <option value="">Choose a currency</option>
+              {currency && !currencyOptions.some((option) => option.value === currency) ? <option value={currency}>Unavailable option: {currency}</option> : null}
+              {currencyOptions.map((option) => <option key={option.key ?? option.value} value={option.value}>{option.label}</option>)}
             </select>
             {errors.currency && <p className={errorClass}>{errors.currency}</p>}
+          </div>
+
+          <div>
+            <label className={labelClass}>Optional alternate asking price ({currency === 'NGN' ? 'USD' : currency === 'USD' ? 'NGN' : 'other currency'})</label>
+            <input type="number" min={0} step={1} value={secondAskingPrice} onChange={(event) => setSecondAskingPrice(event.target.value)} disabled={!currency} className={inputClass} placeholder={currency ? 'Seller-stated amount; no conversion is performed' : 'Select the primary currency first'} />
+            <p className="mt-1 text-xs text-secondary">The other currency is determined by the primary currency. This is a seller-stated amount, not an exchange-rate calculation.</p>
+            {errors.secondAskingPrice && <p className={errorClass}>{errors.secondAskingPrice}</p>}
           </div>
 
           <div className="md:col-span-2">
@@ -749,30 +844,29 @@ const PropertyForm = ({
           </> : null}
 
           <div>
-            <label className={labelClass}>Square Feet</label>
+            <label className={labelClass}>Internal floor area (m²)</label>
             <input
+              aria-label="Internal floor area (m²)"
               type="number"
-              value={squareFeet}
-              onChange={(e) => setSquareFeet(e.target.value)}
-              placeholder="e.g. 1200"
+              value={internalFloorArea}
+              onChange={(e) => setInternalFloorArea(e.target.value)}
+              placeholder="Enter area in square metres"
               min={0}
+              step="any"
               className={inputClass}
             />
-            {errors.squareFeet && <p className={errorClass}>{errors.squareFeet}</p>}
+            <p className="mt-1 text-xs text-secondary">Areas use square metres. Enter a value greater than 0; no unit conversion is performed.</p>
+            {errors.internalFloorArea && <p className={errorClass}>{errors.internalFloorArea}</p>}
           </div>
 
           <div>
-            <label className={labelClass}>Completion Stage</label>
-            <select value={completionStage} onChange={(e) => setCompletionStage(e.target.value)} className={inputClass}>
-              {mode === 'edit' ? <option value="">Unanswered</option> : null}
-              {completionStage && !STAGE_OPTIONS.includes(completionStage) ? <option value={completionStage}>{completionStage.replaceAll('_', ' ')}</option> : null}
-              {STAGE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option.replace('_', ' ')}
-                </option>
-              ))}
+            <label className={labelClass}>Build stage</label>
+            <select value={completionStage} onChange={(e) => setCompletionStage(e.target.value)} className={inputClass} disabled={!dictionary || buildStageOptions.length === 0}>
+              <option value="">Choose a build stage</option>
+              {completionStage && !buildStageOptions.some((option) => option.value === completionStage) ? <option value={completionStage}>Unavailable option: {completionStage}</option> : null}
+              {buildStageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
-            {errors.completionStage && <p className={errorClass}>{errors.completionStage}</p>}
+            {errors.buildStage && <p className={errorClass}>{errors.buildStage}</p>}
           </div>
 
           <div>
@@ -829,21 +923,19 @@ const PropertyForm = ({
           <p className="mt-1 text-xs text-secondary">An unanswered field stays unset. False and zero remain explicit values. Existing values are sent only when changed.</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div>
-            <label htmlFor="canonical-state" className={labelClass}>Canonical state</label>
-            <input id="canonical-state" value={canonicalState} onChange={(event) => setCanonicalState(event.target.value)} className={inputClass} placeholder="Validated against approved location data" />
-            {errors.state && <p className={errorClass}>{errors.state}</p>}
-          </div>
-          <div>
-            <label htmlFor="canonical-lga" className={labelClass}>Canonical Local Government Area</label>
-            <input id="canonical-lga" value={canonicalLga} onChange={(event) => setCanonicalLga(event.target.value)} className={inputClass} placeholder="Must belong to the selected state" />
-            {errors.lga && <p className={errorClass}>{errors.lga}</p>}
-          </div>
-          <div>
-            <label htmlFor="canonical-area" className={labelClass}>Canonical area</label>
-            <input id="canonical-area" value={canonicalArea} onChange={(event) => setCanonicalArea(event.target.value)} className={inputClass} placeholder="Must belong to the selected LGA" />
-            {errors.area && <p className={errorClass}>{errors.area}</p>}
-          </div>
+          <LocationCascadeFields
+            className="md:col-span-2"
+            includeEstate={gatedEstate === 'true'}
+            initialIds={{ state: canonicalText(initialCanonical, 'state'), lga: canonicalText(initialCanonical, 'lga'), area: canonicalText(initialCanonical, 'area') }}
+            initialLabels={gatedEstate === 'true' && canonicalText(initialCanonical, 'estateName') ? { estate: canonicalText(initialCanonical, 'estateName') } : {}}
+            onChange={(selection, labels) => {
+              setLocationSelection(selection);
+              setLocationLabels(labels);
+              setEstateName(selection.estate?.name ?? '');
+              setErrors((current) => ({ ...current, locationDirectory: '' }));
+            }}
+          />
+          {errors.locationDirectory ? <p role="alert" className={`${errorClass} md:col-span-2`}>{errors.locationDirectory}</p> : null}
           <div>
             <label htmlFor="canonical-other-amenity" className={labelClass}>Other amenity <span className="normal-case tracking-normal">(optional)</span></label>
             <input id="canonical-other-amenity" value={otherAmenity} onChange={(event) => setOtherAmenity(event.target.value)} className={inputClass} />
@@ -851,17 +943,12 @@ const PropertyForm = ({
           </div>
           <div>
             <label className={labelClass}>Gated estate</label>
-            <select aria-label="Gated estate" value={gatedEstate} onChange={(e) => setGatedEstate(e.target.value)} className={inputClass}>
+            <select aria-label="Gated estate" value={gatedEstate} onChange={(e) => { const next = e.target.value; setGatedEstate(next); if (next !== 'true') { setLocationSelection((current) => { const selected = { ...current }; delete selected.estate; return selected; }); setLocationLabels((current) => { const selected = { ...current }; delete selected.estate; return selected; }); setEstateName(''); } }} className={inputClass}>
               <option value="">Unanswered</option><option value="true">Yes</option><option value="false">No</option>
             </select>
             {errors.gatedEstate && <p className={errorClass}>{errors.gatedEstate}</p>}
           </div>
           {gatedEstate === 'true' ? <>
-            <div>
-              <label className={labelClass}>Estate name</label>
-              <input value={estateName} onChange={(e) => setEstateName(e.target.value)} className={inputClass} />
-              {errors.estateName && <p className={errorClass}>{errors.estateName}</p>}
-            </div>
             <div>
               <label className={labelClass}>Estate access street</label>
               <input value={estateAccessStreet} onChange={(e) => setEstateAccessStreet(e.target.value)} className={inputClass} />
@@ -897,7 +984,7 @@ const PropertyForm = ({
           <fieldset className="md:col-span-2">
             <legend className={labelClass}>Access road conditions <span className="normal-case tracking-normal">(select every applicable condition)</span></legend>
             <div className="grid gap-2 sm:grid-cols-2">
-              {accessRoadOptions.map((option) => <label key={option} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={accessRoadConditions.includes(option)} onChange={(event) => { setAccessRoadTouched(true); setAccessRoadConditions((current) => event.target.checked ? [...current, option] : current.filter((item) => item !== option)); }} />{option}</label>)}
+              {accessRoadOptions.map((option) => <label key={option.value} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={accessRoadConditions.includes(option.value)} onChange={(event) => { setAccessRoadTouched(true); setAccessRoadConditions((current) => event.target.checked ? [...current, option.value] : current.filter((item) => item !== option.value)); }} />{option.label}</label>)}
             </div>
             {errors.accessRoadConditions && <p className={errorClass}>{errors.accessRoadConditions}</p>}
             {!accessRoadConditions.length ? <p className="mt-1 text-xs text-secondary">No condition selected yet. The dictionary requires at least one for complete intake.</p> : null}
@@ -931,7 +1018,7 @@ const PropertyForm = ({
         effectiveFields={initialData?.effectiveCanonicalFields}
         fieldSources={initialData?.canonicalFieldProvenance}
         createMode={mode === 'create'}
-        exclude={['state', 'lga', 'area', 'headline', 'description', 'otherAmenity', 'listingKind', 'advertiserDisplay', 'propertyLiveVideo', 'gatedEstate', 'estateName', 'streetAddress', 'houseNumber', 'unitOrFlatNumber', 'estateAccessStreet', 'estateInternalStreet', 'estateHouseUnitNumber', 'accessRoadConditions', 'commercialFrontage', 'commercialFloorsOrUnits', 'loadingVehicleAccess', 'loadingVehicleAccessType', 'liftCount', 'fitOut', ...(mode === 'create' ? ['projectPin'] : [])]}
+        exclude={['state', 'lga', 'area', 'headline', 'description', 'otherAmenity', 'listingKind', 'advertiserDisplay', 'propertyLiveVideo', 'gatedEstate', 'estateName', 'streetAddress', 'houseNumber', 'unitOrFlatNumber', 'estateAccessStreet', 'estateInternalStreet', 'estateHouseUnitNumber', 'accessRoadConditions', 'commercialFrontage', 'commercialFloorsOrUnits', 'loadingVehicleAccess', 'loadingVehicleAccessType', 'liftCount', 'fitOut', 'internalFloorArea', 'askingPrice', 'secondAskingPrice', 'priceOnApplication', 'currency', 'paymentOptions', 'category', 'propertyType', 'buildStage', 'amenities', ...(mode === 'create' ? ['projectPin'] : [])]}
       />
 
       {isCommercial ? <div className="bg-white rounded-2xl p-6 space-y-5 border border-outline-variant/10">
@@ -942,7 +1029,7 @@ const PropertyForm = ({
           <div><label className={labelClass}>Loading vehicle access</label><select value={loadingVehicleAccess} onChange={(e) => setLoadingVehicleAccess(e.target.value)} className={inputClass}><option value="">Unanswered</option><option value="true">Yes</option><option value="false">No</option></select>{errors.loadingVehicleAccess && <p className={errorClass}>{errors.loadingVehicleAccess}</p>}</div>
           {loadingVehicleAccess === 'true' ? <div><label className={labelClass}>Loading access type</label><input value={loadingVehicleAccessType} onChange={(e) => setLoadingVehicleAccessType(e.target.value)} className={inputClass} />{errors.loadingVehicleAccessType && <p className={errorClass}>{errors.loadingVehicleAccessType}</p>}</div> : null}
           <div><label className={labelClass}>Lift count</label><input type="number" min={0} step={1} value={liftCount} onChange={(e) => setLiftCount(e.target.value)} className={inputClass} />{errors.liftCount && <p className={errorClass}>{errors.liftCount}</p>}</div>
-          <div><label className={labelClass}>Fit-out</label><select value={fitOut} onChange={(e) => setFitOut(e.target.value)} className={inputClass}><option value="">Unanswered</option><option value="Shell & core">Shell &amp; core</option><option value="Partly fitted">Partly fitted</option><option value="Fully fitted">Fully fitted</option></select>{errors.fitOut && <p className={errorClass}>{errors.fitOut}</p>}</div>
+          <div><label className={labelClass}>Fit-out</label><select value={fitOut} onChange={(e) => setFitOut(e.target.value)} className={inputClass} disabled={!dictionary || fitOutOptions.length === 0}><option value="">Unanswered</option>{fitOutOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{errors.fitOut && <p className={errorClass}>{errors.fitOut}</p>}</div>
         </div>
       </div> : null}
 
@@ -954,14 +1041,14 @@ const PropertyForm = ({
           <div>
             <label htmlFor="canonical-listing-kind" className={labelClass}>Canonical listing kind</label>
             <select id="canonical-listing-kind" value={listingKind} onChange={(event) => setListingKind(event.target.value)} className={inputClass}>
-              <option value="">Not specified</option>{listingKindOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+              <option value="">Not specified</option>{listingKindOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
             {errors.listingKind && <p className={errorClass}>{errors.listingKind}</p>}
           </div>
           <div>
             <label htmlFor="canonical-advertiser-display" className={labelClass}>Advertiser display preference</label>
             <select id="canonical-advertiser-display" value={advertiserDisplay} onChange={(event) => setAdvertiserDisplay(event.target.value)} className={inputClass}>
-              <option value="">No preference supplied</option>{advertiserDisplayOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+              <option value="">No preference supplied</option>{advertiserDisplayOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
             {errors.advertiserDisplay && <p className={errorClass}>{errors.advertiserDisplay}</p>}
           </div>
@@ -1160,48 +1247,30 @@ const PropertyForm = ({
         {errors.paymentTypes ? <p id="payment-types-error" role="alert" className={errorClass}>{errors.paymentTypes}</p> : null}
       </fieldset>
 
+      <fieldset className="rounded-2xl border border-outline-variant/10 bg-white p-6" aria-describedby={errors.paymentOptions ? 'payment-options-error' : undefined}>
+        <legend className="px-1 text-base font-black text-on-surface">Published payment options</legend>
+        <p className="mt-1 text-xs text-secondary">Options and accepted request values come from the current backend field dictionary.</p>
+        {paymentOptions.includes('Mortgage Accepted') && !mortgageEnabled ? <label className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900"><input type="checkbox" checked onChange={() => { setPaymentOptionsTouched(true); setPaymentOptions((current) => current.filter((item) => item !== 'Mortgage Accepted')); }} /><span>Mortgage Accepted is no longer available. Clear this saved option before saving changes.</span></label> : null}
+        {!paymentOptionValues.length ? <p role="status" className="mt-3 text-sm text-secondary">Payment options are unavailable until the field dictionary provides current choices.</p> : <div className="mt-3 grid gap-2 sm:grid-cols-2">{paymentOptionValues.filter((option) => option.value !== 'Mortgage Accepted' || mortgageEnabled).map((option) => <label key={option.value} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={paymentOptions.includes(option.value)} onChange={(event) => { setPaymentOptionsTouched(true); setPaymentOptions((current) => event.target.checked ? [...current, option.value] : current.filter((item) => item !== option.value)); }} />{option.label}</label>)}</div>}
+        {!mortgageEnabled ? <p className="mt-2 text-xs text-secondary">Mortgage Accepted is hidden while the backend configuration reports it disabled.</p> : null}
+        {errors.paymentOptions ? <p id="payment-options-error" role="alert" className={errorClass}>{errors.paymentOptions}</p> : null}
+      </fieldset>
+
       <div className="bg-white rounded-2xl p-6 space-y-4 border border-outline-variant/10">
         <h2 className="text-base font-black text-on-surface tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
           Amenities
         </h2>
 
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={amenityInput}
-            onChange={(e) => setAmenityInput(e.target.value)}
-            onKeyDown={handleAmenityKey}
-            placeholder="Type amenity and press Enter"
-            className={`${inputClass} flex-1`}
-          />
-          <button
-            type="button"
-            onClick={addAmenity}
-            className="px-4 py-3 rounded-lg bg-surface-container text-on-surface text-sm font-bold hover:bg-surface-container-high transition-colors"
-          >
-            Add
-          </button>
-        </div>
-
-        {amenities.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {amenities.map((a) => (
-              <span
-                key={a}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container text-on-surface text-xs font-semibold"
-              >
-                {a}
-                <button
-                  type="button"
-                  onClick={() => removeAmenity(a)}
-                  className="text-on-surface-variant hover:text-error transition-colors"
-                >
-                  <span className="material-symbols-outlined text-xs">close</span>
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
+        {!dictionary ? <p role="status" className="text-sm text-secondary">{dictionaryLoading ? 'Loading the current amenity list…' : 'The amenity list is unavailable; no free-text substitute will be submitted.'}</p> : null}
+        {dictionary && !amenityGroups.length ? <p role="status" className="text-sm text-secondary">The backend has not returned an amenity catalogue.</p> : null}
+        {amenities.filter((item) => !amenityGroups.some((group) => group.entries.some((entry) => entry.key === item || entry.value === item))).map((stale) => <p key={`stale:${stale}`} role="status" className="text-xs text-amber-800">Previously selected amenity “{stale}” is not in the current dictionary. Choose current options before changing it.</p>)}
+        {amenityGroups.map((group) => <fieldset key={group.label} className="rounded-lg border border-outline-variant/20 p-3">
+          <legend className="px-1 text-xs font-bold">{group.label}</legend>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{group.entries.map((amenity) => <label key={amenity.key ?? amenity.value} className="flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={amenities.includes(amenity.value)} onChange={(event) => setAmenities((current) => event.target.checked ? [...current, amenity.value] : current.filter((item) => item !== amenity.value))} />
+            <span>{amenity.label}{amenity.priority ? <span className="ml-1 text-xs font-semibold text-secondary">Priority</span> : null}</span>
+          </label>)}</div>
+        </fieldset>)}
       </div>
 
       <div className="bg-white rounded-2xl p-6 space-y-4 border border-outline-variant/10">
@@ -1256,16 +1325,15 @@ const PropertyForm = ({
                   <select
                     value={row.documentType}
                     onChange={(event) => {
-                      const documentType = event.target.value as TitleDocumentType;
+                      const documentType = event.target.value;
                       setTitleDocumentRows((current) => current.map((item) =>
                         item.key === row.key ? { ...item, documentType, title: documentTypeLabel(documentType) } : item,
                       ));
                     }}
                     className={inputClass}
                   >
-                    {titleDocumentTypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
+                    <option value="">Choose a title document type</option>
+                    {titleDocumentOptions.map((option) => <option key={option.key ?? option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
                 <div>

@@ -4,6 +4,8 @@ import type { Property } from '../../../types';
 import MediaPreview from '../MediaPreview';
 import PaymentTypeBadges from '../PaymentTypeBadges';
 import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
+import { useCanonicalFieldDictionary } from '../../../hooks/useCanonicalFieldDictionary';
+import { effectiveCanonicalValue, fieldVocabularyLabel, vocabularyLabel } from '../../../utils/propertyVocabulary';
 
 interface Props {
   property: Property;
@@ -13,16 +15,29 @@ interface Props {
   onDetailsNavigate?: () => void;
 }
 
-const formatPrice = (property: Property) => property.price > 0
-  ? new Intl.NumberFormat('en-NG', {
-    style: 'currency',
-    currency: property.currency || 'NGN',
-    maximumFractionDigits: 0,
-  }).format(property.price)
+const formatPrice = (property: Property) => typeof property.price === 'number' && Number.isFinite(property.price) && typeof property.currency === 'string'
+  ? (() => {
+    try {
+      return new Intl.NumberFormat('en-NG', {
+        style: 'currency',
+        currency: property.currency,
+        maximumFractionDigits: 0,
+      }).format(property.price);
+    } catch {
+      return 'Price unavailable';
+    }
+  })()
   : 'Price unavailable';
 
 const PropertyMapPreviewCard = ({ property, detailsPath, actions, onClose, onDetailsNavigate }: Props) => {
   const location = useLocation();
+  const { dictionary } = useCanonicalFieldDictionary();
+  const typeLabel = fieldVocabularyLabel(dictionary, 'propertyType', property.propertyType)
+    ?? vocabularyLabel(dictionary, 'propertyTypes', property.propertyType)
+    ?? 'Property type unavailable';
+  const priceLabel = effectiveCanonicalValue(property, 'priceOnApplication') === true
+    ? 'Price on application'
+    : formatPrice(property);
   return <article className="absolute bottom-4 left-4 right-4 z-[1000] overflow-hidden rounded-xl bg-white shadow-2xl sm:left-auto sm:w-80">
     <button
       type="button"
@@ -38,22 +53,22 @@ const PropertyMapPreviewCard = ({ property, detailsPath, actions, onClose, onDet
     <div className="space-y-2 p-4">
       <div>
         <h3 className="truncate font-bold text-on-surface">{property.title}</h3>
-        <p className="truncate text-xs text-secondary">{property.location}</p>
+        <p className="truncate text-xs text-secondary">{property.location || 'Location unavailable'}</p>
       </div>
       <div className="flex items-center justify-between gap-2">
-        <strong className="text-primary">{formatPrice(property)}</strong>
+        <strong className="text-primary">{priceLabel}</strong>
         <span className="rounded-full bg-surface-container-low px-2 py-1 text-[10px] font-bold uppercase text-secondary">
-          {property.propertyType}
+          {typeLabel}
         </span>
       </div>
-      {(property.bedrooms > 0 || property.bathrooms > 0) && (
+      {(typeof property.bedrooms === 'number' && Number.isFinite(property.bedrooms) || typeof property.bathrooms === 'number' && Number.isFinite(property.bathrooms)) && (
         <p className="text-xs font-medium text-secondary">
-          {property.bedrooms > 0 ? `${property.bedrooms} beds` : ''}
-          {property.bedrooms > 0 && property.bathrooms > 0 ? ' · ' : ''}
-          {property.bathrooms > 0 ? `${property.bathrooms} baths` : ''}
+          {typeof property.bedrooms === 'number' && Number.isFinite(property.bedrooms) ? `${property.bedrooms} beds` : ''}
+          {typeof property.bedrooms === 'number' && Number.isFinite(property.bedrooms) && typeof property.bathrooms === 'number' && Number.isFinite(property.bathrooms) ? ' · ' : ''}
+          {typeof property.bathrooms === 'number' && Number.isFinite(property.bathrooms) ? `${property.bathrooms} baths` : ''}
         </p>
       )}
-      <PaymentTypeBadges paymentTypes={normalizePropertyPaymentTypes(property.paymentTypes, property.price)} />
+      {Array.isArray(property.paymentTypes) && property.paymentTypes.length ? <PaymentTypeBadges paymentTypes={normalizePropertyPaymentTypes(property.paymentTypes, property.price)} /> : null}
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <Link className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-on-primary" to={detailsPath(property)} state={{ from: `${location.pathname}${location.search}` }} onClick={onDetailsNavigate}>
           View Details

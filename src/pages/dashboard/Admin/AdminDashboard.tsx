@@ -9,6 +9,7 @@ import { adminService } from '../../../services/adminService';
 import type { AdminStats, Property } from '../../../types';
 import { useAuth } from '../../../contexts/AuthContext';
 import { hasAdminCapability, hasAnyAdminCapability } from '../../../services/adminAccessService';
+import { effectiveCanonicalValue, formatCanonicalArea } from '../../../utils/propertyVocabulary';
 
 // const barHeights = [30, 45, 40, 65, 50, 35, 60, 85, 45, 55, 70, 40, 30, 50, 95, 45, 60, 35, 75, 55];
 
@@ -110,7 +111,7 @@ const PropertyCard = ({ property }: { property: Property }) => {
           </span>
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-sm">square_foot</span>{' '}
-            {property.squareFeet?.toLocaleString() ?? '—'} sqft
+            {formatCanonicalArea(effectiveCanonicalValue(property, 'internalFloorArea'))}
           </span>
         </div>
       </div>

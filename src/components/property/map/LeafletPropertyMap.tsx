@@ -4,6 +4,7 @@ import 'leaflet.markercluster';
 import { propertyPublicReference, propertyRouteReference, type Property } from '../../../types';
 import PropertyMapPreviewCard from './PropertyMapPreviewCard';
 import type { CanonicalMapMarker } from '../../../types/canonicalMap';
+import { effectiveCanonicalValue } from '../../../utils/propertyVocabulary';
 
 interface Props {
   properties: Property[];
@@ -27,12 +28,14 @@ const isMappable = (property: Property) => {
     typeof lng === 'number' && Number.isFinite(lng) && lng >= -180 && lng <= 180;
 };
 
-const priceLabel = (price: number) => {
-  if (!Number.isFinite(price) || price <= 0) return 'View';
-  if (price >= 1_000_000_000) return `₦${(price / 1_000_000_000).toFixed(1)}B`;
-  if (price >= 1_000_000) return `₦${(price / 1_000_000).toFixed(1)}M`;
-  if (price >= 1_000) return `₦${Math.round(price / 1_000)}K`;
-  return `₦${price}`;
+const priceLabel = (price: number, currency?: string) => {
+  if (!Number.isFinite(price) || !currency) return '—';
+  const prefix = currency === 'NGN' ? '₦' : currency === 'USD' ? '$' : '';
+  if (!prefix) return '—';
+  if (price >= 1_000_000_000) return `${prefix}${(price / 1_000_000_000).toFixed(1)}B`;
+  if (price >= 1_000_000) return `${prefix}${(price / 1_000_000).toFixed(1)}M`;
+  if (price >= 1_000) return `${prefix}${Math.round(price / 1_000)}K`;
+  return `${prefix}${price}`;
 };
 
 const LeafletPropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, requestedViewport, onSelectProperty, resolveProperty, onDetailsNavigate, canonicalMarkers, onSelectCanonicalMarker }: Props) => {
@@ -94,7 +97,7 @@ const LeafletPropertyMap = ({ properties, detailsPath, actions, className = '', 
       Math.abs(current.getEast() - requestedViewport.east) < 0.0001 &&
       Math.abs(current.getWest() - requestedViewport.west) < 0.0001 && Math.abs(map.getZoom() - requestedViewport.zoom) < 0.01) return;
     map.fitBounds([[requestedViewport.south, requestedViewport.west], [requestedViewport.north, requestedViewport.east]], { animate: false, maxZoom: requestedViewport.zoom });
-  }, [requestedViewport?.north, requestedViewport?.south, requestedViewport?.east, requestedViewport?.west, requestedViewport?.zoom]);
+  }, [requestedViewport]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -107,7 +110,7 @@ const LeafletPropertyMap = ({ properties, detailsPath, actions, className = '', 
       const marker = L.marker([lat, lng], {
         icon: L.divIcon({
           className: 'realtiq-map-marker',
-          html: `<span>${priceLabel(property.price)}</span>`,
+          html: `<span>${effectiveCanonicalValue(property, 'priceOnApplication') === true ? 'POA' : priceLabel(property.price, property.currency)}</span>`,
           iconSize: [76, 32],
           iconAnchor: [38, 32],
         }),

@@ -5,18 +5,41 @@ import type {
   TitleRiskFlag,
   TitleVerificationStatus,
 } from '../types';
+import type { CanonicalFieldDictionary } from '../services/canonicalFieldService';
+import { dictionaryVocabularyOptions, vocabularyLabel } from './propertyVocabulary';
 
 export const titleDocumentTypeOptions: Array<{ value: TitleDocumentType; label: string }> = [
-  { value: 'survey_plan', label: 'Survey Plan' },
-  { value: 'certificate_of_occupancy', label: 'Certificate of Occupancy' },
+  { value: 'c_of_o', label: 'C of O' },
+  { value: 'global_c_of_o', label: 'Global C of O' },
+  { value: 'governors_consent', label: 'Governor’s Consent' },
   { value: 'deed_of_assignment', label: 'Deed of Assignment' },
-  { value: 'governors_consent', label: "Governor's Consent" },
-  { value: 'allocation_letter', label: 'Allocation Letter' },
-  { value: 'approved_building_plan', label: 'Approved Building Plan' },
+  { value: 'deed_of_sub_lease', label: 'Deed of Sub-Lease' },
+  { value: 'letter_of_allocation', label: 'Letter of Allocation' },
+  { value: 'registered_survey', label: 'Registered Survey' },
+  { value: 'excision', label: 'Excision' },
   { value: 'gazette', label: 'Gazette' },
-  { value: 'excision_document', label: 'Excision Document' },
+  { value: 'approved_building_plan', label: 'Approved Building Plan' },
+  { value: 'r_of_o', label: 'R of O' },
   { value: 'other', label: 'Other' },
 ];
+
+const legacyTitleDocumentTypeAliases: Partial<Record<TitleDocumentType, TitleDocumentType>> = {
+  survey_plan: 'registered_survey',
+  certificate_of_occupancy: 'c_of_o',
+  allocation_letter: 'letter_of_allocation',
+  excision_document: 'excision',
+};
+
+/** Map only the four documented compatibility aliases to canonical upload values. */
+export const canonicalTitleDocumentTypeKey = (value?: string): string | undefined =>
+  value ? legacyTitleDocumentTypeAliases[value as TitleDocumentType] ?? value : undefined;
+
+/** Active upload choices come from the current property field dictionary, not this legacy display map. */
+export const currentTitleDocumentTypeOptions = (dictionary: CanonicalFieldDictionary | null | undefined) =>
+  dictionaryVocabularyOptions(dictionary, 'titleDocumentTypes');
+
+export const currentDocumentTypeLabel = (dictionary: CanonicalFieldDictionary | null | undefined, value?: string): string =>
+  vocabularyLabel(dictionary, 'titleDocumentTypes', canonicalTitleDocumentTypeKey(value)) ?? documentTypeLabel(value);
 
 export const allowedTitleMatchMimeTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
@@ -43,7 +66,7 @@ export const externalAnchorLabel = (status?: ExternalAnchorStatus | string): str
 };
 
 export const documentTypeLabel = (value?: TitleDocumentType | string): string =>
-  titleDocumentTypeOptions.find((option) => option.value === value)?.label ?? 'Title Document';
+  titleDocumentTypeOptions.find((option) => option.value === canonicalTitleDocumentTypeKey(value))?.label ?? 'Title Document';
 
 export const titleStatusClasses = (status?: string): string => {
   if (status === 'published') return 'bg-emerald-50 text-emerald-800 border-emerald-200';

@@ -1,28 +1,31 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { PropertyFiltersQuery } from '../../services/propertyService';
+import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
+import { dictionaryVocabularyOptions, fieldVocabularyOptions, propertyTypesForCategory } from '../../utils/propertyVocabulary';
 
 interface PropertyFiltersProps {
   initialFilters?: PropertyFiltersQuery;
   onApply: (filters: PropertyFiltersQuery) => void;
 }
 
-const PROPERTY_TYPES = [
-  { value: '', label: 'All Types' },
-  { value: 'house', label: 'House' },
-  { value: 'apartment', label: 'Apartment' },
-  { value: 'commercial', label: 'Commercial' },
-  { value: 'villa', label: 'Villa' },
-  { value: 'penthouse', label: 'Penthouse' },
-  { value: 'estate', label: 'Estate' },
-];
-
 const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps) => {
+  const { dictionary, loading, error, refresh } = useCanonicalFieldDictionary();
+  const [category, setCategory] = useState(initialFilters.category ?? '');
+  const categoryField = dictionary?.fields.find((field) => field.key === 'category');
+  const propertyTypeField = dictionary?.fields.find((field) => field.key === 'propertyType');
+  const categories = useMemo(() => dictionaryVocabularyOptions(dictionary, 'categories', categoryField), [dictionary, categoryField]);
+  const propertyTypes = useMemo(
+    () => propertyTypesForCategory(dictionaryVocabularyOptions(dictionary, 'propertyTypes', propertyTypeField), category),
+    [dictionary, propertyTypeField, category],
+  );
+  const buildStages = useMemo(() => fieldVocabularyOptions(dictionary?.fields.find((field) => field.key === 'buildStage'), dictionary), [dictionary]);
+  const currencies = useMemo(() => fieldVocabularyOptions(dictionary?.fields.find((field) => field.key === 'currency'), dictionary), [dictionary]);
+  const availability = useMemo(() => fieldVocabularyOptions(dictionary?.fields.find((field) => field.key === 'availability'), dictionary), [dictionary]);
   const [search, setSearch] = useState(initialFilters.search ?? '');
   const [minPrice, setMinPrice] = useState(initialFilters.minPrice?.toString() ?? '');
   const [maxPrice, setMaxPrice] = useState(initialFilters.maxPrice?.toString() ?? '');
   const [propertyType, setPropertyType] = useState(initialFilters.propertyType ?? '');
   const [bedrooms, setBedrooms] = useState(initialFilters.bedrooms?.toString() ?? '');
-  const [category, setCategory] = useState(initialFilters.category ?? '');
   const [completionStage, setCompletionStage] = useState(initialFilters.completionStage ?? '');
   const [currency, setCurrency] = useState(initialFilters.currency ?? '');
   const [featured, setFeatured] = useState(initialFilters.featured === true ? 'true' : '');
@@ -107,12 +110,12 @@ const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps)
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Property Type</label>
-        <select value={propertyType} onChange={(e) => setPropertyType(e.target.value)} className={inputClass}>
-          {PROPERTY_TYPES.map(({ value, label }) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
+        <label htmlFor="property-filter-type" className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Property Type</label>
+        <select id="property-filter-type" value={propertyType} onChange={(e) => setPropertyType(e.target.value)} className={inputClass} disabled={!dictionary || !category}>
+          <option value="">{category ? 'All types in category' : 'Choose a category first'}</option>
+          {propertyType && !propertyTypes.some((option) => option.value === propertyType) ? <option value={propertyType}>Unavailable option: {propertyType}</option> : null}
+          {propertyTypes.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
       </div>
@@ -128,42 +131,40 @@ const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps)
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Category</label>
-        <input
-          type="text"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          placeholder="residential"
-          className={inputClass}
-        />
+        <label htmlFor="property-filter-category" className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Category</label>
+        <select id="property-filter-category" value={category} onChange={(e) => { setCategory(e.target.value); setPropertyType(''); }} className={inputClass} disabled={!dictionary}>
+          <option value="">All categories</option>
+          {category && !categories.some((option) => option.value === category) ? <option value={category}>Unavailable option: {category}</option> : null}
+          {categories.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Completion Stage</label>
-        <input
-          type="text"
-          value={completionStage}
-          onChange={(e) => setCompletionStage(e.target.value)}
-          placeholder="finished"
-          className={inputClass}
-        />
+        <label htmlFor="property-filter-stage" className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Completion Stage</label>
+        <select id="property-filter-stage" value={completionStage} onChange={(e) => setCompletionStage(e.target.value)} className={inputClass} disabled={!dictionary}>
+          <option value="">Any stage</option>
+          {completionStage && !buildStages.some((option) => option.value === completionStage) ? <option value={completionStage}>Unavailable option: {completionStage}</option> : null}
+          {buildStages.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Currency</label>
-        <input
-          type="text"
-          value={currency}
-          onChange={(e) => setCurrency(e.target.value)}
-          placeholder="NGN"
-          className={inputClass}
-        />
+        <label htmlFor="property-filter-currency" className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Currency</label>
+        <select id="property-filter-currency" value={currency} onChange={(e) => setCurrency(e.target.value)} className={inputClass} disabled={!dictionary}>
+          <option value="">Any currency</option>
+          {currency && !currencies.some((option) => option.value === currency) ? <option value={currency}>Unavailable option: {currency}</option> : null}
+          {currencies.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1.5">
-          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Status</label>
-          <input value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass} />
+          <label htmlFor="property-filter-status" className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Status</label>
+          <select id="property-filter-status" value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass} disabled={!dictionary}>
+            <option value="">Any status</option>
+            {status && !availability.some((option) => option.value === status) ? <option value={status}>Unavailable option: {status}</option> : null}
+            {availability.filter((option) => option.label.trim().toLowerCase() !== 'not released').map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
         </div>
         <div className="space-y-1.5">
           <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Featured</label>
@@ -174,6 +175,8 @@ const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps)
           </select>
         </div>
       </div>
+
+      {!dictionary ? <div role="status" className="text-xs text-secondary">{loading ? 'Loading current property vocabulary…' : <>{error ?? 'Property vocabulary is unavailable.'} <button type="button" className="font-bold underline" onClick={refresh}>Retry</button></>}</div> : null}
 
       <div className="flex flex-col gap-2 pt-2">
         <button

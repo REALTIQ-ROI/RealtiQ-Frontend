@@ -1,12 +1,16 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../../lib/axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { projectService } from '../../services/projectService';
 import { stepUpService } from '../../services/stepUpService';
+import type { CanonicalFieldDictionary } from '../../services/canonicalFieldService';
+import { createCanonicalFieldDictionaryFixture } from '../../test/canonicalFieldDictionaryFixture';
 import UnitGridPanel from './UnitGridPanel';
 
+const dictionaryMocks = vi.hoisted(() => ({ dictionary: null as CanonicalFieldDictionary | null }));
+vi.mock('../../hooks/useCanonicalFieldDictionary', () => ({ useCanonicalFieldDictionary: () => ({ dictionary: dictionaryMocks.dictionary, loading: false, error: null, refresh: vi.fn() }) }));
 vi.mock('../../services/projectService', () => ({ projectService: { getUnitGrid: vi.fn(), editUnitGrid: vi.fn(), createUnitGridJob: vi.fn(), getUnitGridJob: vi.fn(), cancelUnitGridJob: vi.fn() } }));
 vi.mock('../../services/stepUpService', () => ({ stepUpService: { start: vi.fn(), verify: vi.fn(), undoUnitGridOperation: vi.fn() } }));
 vi.mock('../../contexts/AuthContext', () => ({ useAuth: vi.fn() }));
@@ -21,6 +25,7 @@ describe('canonical unit grid', () => {
     localStorage.setItem('activeProfileId', 'profile-1');
     localStorage.setItem('token', 'session-1');
     sessionStorage.clear();
+    dictionaryMocks.dictionary = createCanonicalFieldDictionaryFixture();
     vi.mocked(useAuth).mockReturnValue({ activeProfile: { id: 'profile-1' }, token: 'session-1' } as ReturnType<typeof useAuth>);
     vi.mocked(projectService.getUnitGrid).mockResolvedValue(grid);
     vi.mocked(projectService.editUnitGrid).mockResolvedValue({ operation: { id: 'op', state: 'applied', action: 'field_edit', undoAvailable: false, rowCount: 1, createdAt: '', rows: [] }, projectVersion: 9, replayed: false });
@@ -50,10 +55,10 @@ describe('canonical unit grid', () => {
     await screen.findByText(/RTQ-UNIT-1/);
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Grid currency' }), 'USD');
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort grid' }), 'price_asc');
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Grid availability filter' }), 'under_offer');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Grid availability filter' }), 'Under Offer');
     await userEvent.click(screen.getByRole('checkbox', { name: 'Problems only' }));
     await waitFor(() => expect(projectService.getUnitGrid).toHaveBeenLastCalledWith('p', expect.objectContaining({
-      page: 1, sort: 'price_asc', currency: 'USD', availability: 'under_offer', problemsOnly: true,
+      page: 1, sort: 'price_asc', currency: 'USD', availability: 'Under Offer', problemsOnly: true,
     })));
   });
 
@@ -72,11 +77,17 @@ describe('canonical unit grid', () => {
     expect(projectService.editUnitGrid).toHaveBeenCalledTimes(1);
   });
 
-  it('creates a bounded availability job and excludes Sold as an availability target', async () => {
+  it('uses dictionary availability values, requires an explicit target, and excludes workflow states', async () => {
     render(<UnitGridPanel projectId="p" />);
     await screen.findByText(/RTQ-UNIT-1/);
+    expect(within(screen.getByRole('combobox', { name: 'Grid availability filter' })).getByRole('option', { name: 'Available' })).toBeInTheDocument();
+    expect(within(screen.getByRole('combobox', { name: 'Grid availability filter' })).getByRole('option', { name: 'Sold' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('checkbox', { name: /RTQ-UNIT-1/ }));
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Grid job action' }), 'availability');
+    expect(within(screen.getByRole('combobox', { name: 'Target availability' })).queryByRole('option', { name: 'Sold' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('combobox', { name: 'Target availability' })).queryByRole('option', { name: 'Not released' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Queue selected job' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Choose a target availability state supported by the current backend dictionary.');
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Target availability' }), 'Under Offer');
     await userEvent.click(screen.getByRole('button', { name: 'Queue selected job' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Queue job' }));
@@ -86,7 +97,6 @@ describe('canonical unit grid', () => {
       actionOptions: { targetAvailability: 'Under Offer' },
       rows: [{ unitId: 'unit-1', expectedVersion: 4 }],
     })));
-    expect(screen.getByRole('combobox', { name: 'Target availability' })).not.toHaveTextContent('Sold');
     await userEvent.click(screen.getByRole('checkbox', { name: /RTQ-UNIT-1/ }));
     expect(await screen.findByText(/active job is retained for refresh recovery/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Queue selected job' })).toBeDisabled();

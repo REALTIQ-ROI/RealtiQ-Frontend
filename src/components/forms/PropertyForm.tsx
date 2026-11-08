@@ -22,7 +22,7 @@ const PropertyForm = ({ initialValue, submitLabel, onSubmit }: PropertyFormProps
   const [bedrooms, setBedrooms] = useState(3);
   const [bathrooms, setBathrooms] = useState(2);
   const [description, setDescription] = useState('');
-  const [squareFeet, setSquareFeet] = useState(1200);
+  const [internalFloorArea, setInternalFloorArea] = useState('');
   const [mediaUrl, setMediaUrl] = useState(defaultImage);
   const [amenities, setAmenities] = useState('Parking, Security');
   const [submitting, setSubmitting] = useState(false);
@@ -39,7 +39,8 @@ const PropertyForm = ({ initialValue, submitLabel, onSubmit }: PropertyFormProps
     setBedrooms(initialValue.bedrooms ?? 3);
     setBathrooms(initialValue.bathrooms ?? 2);
     setDescription(initialValue.description ?? '');
-    setSquareFeet(initialValue.squareFeet ?? 1200);
+    const initialArea = initialValue.canonicalFields?.internalFloorArea;
+    setInternalFloorArea(typeof initialArea === 'number' && Number.isFinite(initialArea) ? String(initialArea) : '');
     setMediaUrl(initialValue.media?.[0]?.url ?? defaultImage);
     setAmenities((initialValue.amenities ?? []).join(', '));
   }, [initialValue]);
@@ -58,7 +59,10 @@ const PropertyForm = ({ initialValue, submitLabel, onSubmit }: PropertyFormProps
         bedrooms,
         bathrooms,
         description,
-        squareFeet,
+        canonicalFields: {
+          ...initialValue?.canonicalFields,
+          ...(internalFloorArea.trim() ? { internalFloorArea: Number(internalFloorArea) } : {}),
+        },
         media: [{ url: mediaUrl, public_id: `media-${Date.now()}`, type: 'image' }],
         featured: false,
         amenities: amenities
@@ -104,7 +108,7 @@ const PropertyForm = ({ initialValue, submitLabel, onSubmit }: PropertyFormProps
       </div>
       <Input label="Bedrooms" type="number" value={bedrooms} onChange={(event) => setBedrooms(Number(event.target.value))} required />
       <Input label="Bathrooms" type="number" value={bathrooms} onChange={(event) => setBathrooms(Number(event.target.value))} required />
-      <Input label="Square Feet" type="number" value={squareFeet} onChange={(event) => setSquareFeet(Number(event.target.value))} required />
+      <Input label="Internal floor area (m²)" type="number" value={internalFloorArea} onChange={(event) => setInternalFloorArea(event.target.value)} min={0} step="any" />
       <Input label="Hero Image URL" value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} required />
       <div className="md:col-span-2">
         <label className="block text-on-surface font-label text-xs font-bold uppercase tracking-wider mb-2">Description</label>

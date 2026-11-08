@@ -939,15 +939,22 @@ export type PropertyTitleVerificationStatus =
   | 'revoked';
 
 export type TitleDocumentType =
+  | 'c_of_o'
+  | 'global_c_of_o'
+  | 'governors_consent'
+  | 'deed_of_assignment'
+  | 'deed_of_sub_lease'
+  | 'letter_of_allocation'
+  | 'registered_survey'
+  | 'excision'
+  | 'gazette'
+  | 'approved_building_plan'
+  | 'r_of_o'
+  | 'other'
   | 'survey_plan'
   | 'certificate_of_occupancy'
-  | 'deed_of_assignment'
-  | 'governors_consent'
   | 'allocation_letter'
-  | 'approved_building_plan'
-  | 'gazette'
-  | 'excision_document'
-  | 'other';
+  | 'excision_document';
 
 export type TitleDocumentPolicyMode = 'private' | 'paid_view_once' | 'paid_view_multiple';
 export type PaidAccessMode = 'view_once' | 'view_multiple';

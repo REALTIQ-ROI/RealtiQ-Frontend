@@ -9,6 +9,7 @@ import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictio
 import CanonicalFieldMutationsEditor from '../canonical/CanonicalFieldMutationsEditor';
 import StepUpDialog from '../auth/StepUpDialog';
 import Button from '../ui/Button';
+import { dictionaryVocabularyOptions, propertyTypesForCategory } from '../../utils/propertyVocabulary';
 
 interface UnitTypeManagementProps {
   project: ProjectDetail;
@@ -33,6 +34,10 @@ const UnitTypeManagement = ({ project, onChanged }: UnitTypeManagementProps) => 
   const stepUp = useBoundStepUp<unknown>();
   const { dictionary } = useCanonicalFieldDictionary();
   const registry = useMemo(() => dictionary ? reconcileCanonicalFieldRegistry(dictionary) : [], [dictionary]);
+  const categoryOptions = useMemo(() => dictionaryVocabularyOptions(dictionary, 'categories', dictionary?.fields.find((field) => field.key === 'category')), [dictionary]);
+  const allPropertyTypeOptions = useMemo(() => dictionaryVocabularyOptions(dictionary, 'propertyTypes', dictionary?.fields.find((field) => field.key === 'propertyType')), [dictionary]);
+  const selectedCategoryKey = categoryOptions.find((option) => option.value === category)?.key ?? category;
+  const propertyTypeOptions = useMemo(() => propertyTypesForCategory(allPropertyTypeOptions, selectedCategoryKey), [allPropertyTypeOptions, selectedCategoryKey]);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -60,7 +65,7 @@ const UnitTypeManagement = ({ project, onChanged }: UnitTypeManagementProps) => 
     projectService.createUnitType(project._id, body, challengeId);
 
   const create = async () => {
-    if (!name.trim() || !category.trim() || !propertyType.trim() || !quantity.trim()) {
+    if (!name.trim() || !categoryOptions.some((option) => option.value === category) || !propertyTypeOptions.some((option) => option.value === propertyType) || !quantity.trim()) {
       setCreateError('Enter the documented unit type name, category, property type and quantity.'); return;
     }
     const unitCount = Number(quantity);
@@ -167,8 +172,8 @@ const UnitTypeManagement = ({ project, onChanged }: UnitTypeManagementProps) => 
     {!loading && !types.length ? <p className="rounded-lg border border-dashed p-4 text-sm text-secondary">No unit types are configured for this project yet.</p> : null}
     <div className="grid gap-3 rounded-lg bg-surface-container-low p-4 md:grid-cols-4">
       <label className="text-xs font-bold">Unit type name<input className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={name} onChange={(event) => setName(event.target.value)} /></label>
-      <label className="text-xs font-bold">Category<input className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={category} onChange={(event) => setCategory(event.target.value)} /></label>
-      <label className="text-xs font-bold">Property type<input className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={propertyType} onChange={(event) => setPropertyType(event.target.value)} /></label>
+      <label className="text-xs font-bold">Category<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={category} onChange={(event) => { setCategory(event.target.value); setPropertyType(''); }} disabled={!dictionary}><option value="">Choose a category</option>{categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+      <label className="text-xs font-bold">Property type<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={propertyType} onChange={(event) => setPropertyType(event.target.value)} disabled={!category || !propertyTypeOptions.length}><option value="">Choose a property type</option>{propertyTypeOptions.map((option) => <option key={option.value} value={option.value} title={option.definition}>{option.label}</option>)}</select></label>
       <label className="text-xs font-bold">Unit type quantity<input type="number" min={1} step={1} className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
       <div className="md:col-span-4"><CanonicalFieldMutationsEditor target="unit_type" title="Optional unit-type defaults" value={createDrafts} onChange={setCreateDrafts} createMode exclude={['unitTypeName', 'category', 'propertyType', 'unitTypeQuantity']} /></div>
       <div className="md:col-span-4"><Button type="button" disabled={loading || stepUp.busy || Boolean(stepUp.challenge) || projectVersion === null} onClick={() => void create()}>Create unit type</Button>{createError ? <p role="alert" className="mt-2 text-sm text-error">{createError}</p> : null}</div>

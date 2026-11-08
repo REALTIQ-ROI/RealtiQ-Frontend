@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { propertyService } from '../../services/propertyService';
+import type { CanonicalFieldDictionary } from '../../services/canonicalFieldService';
+import { createCanonicalFieldDictionaryFixture } from '../../test/canonicalFieldDictionaryFixture';
 import type { Property } from '../../types';
 import PropertyDetails from './PropertyDetails';
 
@@ -37,7 +39,9 @@ const property: Property = {
 };
 
 let currentProperty = property;
+const dictionaryMocks = vi.hoisted(() => ({ dictionary: null as CanonicalFieldDictionary | null }));
 
+vi.mock('../../hooks/useCanonicalFieldDictionary', () => ({ useCanonicalFieldDictionary: () => ({ dictionary: dictionaryMocks.dictionary, loading: false, error: null, refresh: vi.fn() }) }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('sweetalert2', () => ({ default: { fire: vi.fn() } }));
 vi.mock('../../components/layout/PublicLayout', () => ({
@@ -73,6 +77,7 @@ describe('public property escrow action for guests', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     currentProperty = property;
+    dictionaryMocks.dictionary = createCanonicalFieldDictionaryFixture();
   });
 
   it('uses mobile-safe Nearby Properties cards and full-width touch actions', async () => {
@@ -161,7 +166,7 @@ describe('public property escrow action for guests', () => {
     expect(screen.getByRole('option', { name: 'Open House' })).toBeInTheDocument();
   });
 
-  it('renders the public property page when square footage is absent', () => {
+  it('renders the public property page without inventing an area when no canonical area is returned', () => {
     currentProperty = { ...property, squareFeet: undefined };
 
     render(
@@ -172,7 +177,25 @@ describe('public property escrow action for guests', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Area unavailable')).toBeInTheDocument();
+    expect(screen.getAllByText('Not provided').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/sq ft/i)).not.toBeInTheDocument();
     expect(screen.getByText('List Price')).toBeInTheDocument();
+  });
+
+  it('renders amenity keys with dictionary labels and keeps the display-only custom amenity separate', () => {
+    currentProperty = {
+      ...property,
+      amenities: ['boys_quarters', 'swimming_pool'],
+      canonicalFields: { otherAmenity: 'Private rooftop garden' },
+    };
+    render(
+      <MemoryRouter initialEntries={['/properties/RTQ-PROP-1']}>
+        <Routes><Route path="/properties/:id" element={<PropertyDetails />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Boys’ Quarters (BQ)')).toBeInTheDocument();
+    expect(screen.getByText('Swimming Pool')).toBeInTheDocument();
+    expect(screen.getByText('Private rooftop garden')).toBeInTheDocument();
   });
 });

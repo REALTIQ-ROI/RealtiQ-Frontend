@@ -9,7 +9,6 @@ export const useCanonicalFieldDictionary = () => {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
     canonicalFieldService.getDictionary(refreshVersion > 0)
       .then((value) => { if (active) { setDictionary(value); setError(null); } })
       .catch((raw: unknown) => { if (active) setError(raw instanceof Error ? raw.message : 'Canonical field metadata is unavailable.'); })
@@ -17,6 +16,11 @@ export const useCanonicalFieldDictionary = () => {
     return () => { active = false; };
   }, [refreshVersion]);
 
-  const refresh = useCallback(() => setRefreshVersion((version) => version + 1), []);
+  const refresh = useCallback(() => {
+    setDictionary(null);
+    setLoading(true);
+    setError(null);
+    setRefreshVersion((version) => version + 1);
+  }, []);
   return { dictionary, loading, error, refresh };
 };

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { titleDocumentService } from '../../services/titleDocumentService';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
+import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
 import StepUpDialog from '../auth/StepUpDialog';
 import { ApiRequestError } from '../../lib/axios';
 import type {
@@ -11,7 +12,7 @@ import type {
   TitleDocumentPolicyMode,
   TitleDocumentType,
 } from '../../types';
-import { documentTypeLabel, formatDateTime, titleDocumentTypeOptions, titleStatusClasses } from '../../utils/titleVerification';
+import { canonicalTitleDocumentTypeKey, currentDocumentTypeLabel, currentTitleDocumentTypeOptions, documentTypeLabel, formatDateTime, titleStatusClasses } from '../../utils/titleVerification';
 import { buildTitleUploadStepUpBody, digestTitleUpload, validateTitleUploadFile } from '../../utils/titleUploadStepUp';
 import Button from '../ui/Button';
 
@@ -32,11 +33,13 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [documentType, setDocumentType] = useState<TitleDocumentType>('survey_plan');
-  const [title, setTitle] = useState('Survey Plan');
+  const [documentType, setDocumentType] = useState('');
+  const [title, setTitle] = useState('');
   const [mode, setMode] = useState<TitleDocumentPolicyMode>('private');
   const [uploadOutcomeUnknown, setUploadOutcomeUnknown] = useState(false);
   const uploadStepUp = useBoundStepUp<Awaited<ReturnType<typeof titleDocumentService.upload>>>();
+  const { dictionary, loading: dictionaryLoading } = useCanonicalFieldDictionary();
+  const documentTypeOptions = currentTitleDocumentTypeOptions(dictionary);
 
   const refresh = useCallback(async () => {
     if (!propertyId) return;
@@ -56,16 +59,17 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
   }, [refresh]);
 
   const unavailableTypes = useMemo(
-    () => new Set(documents.filter((document) => activeStatuses.has(document.verificationStatus)).map((document) => document.documentType)),
+    () => new Set(documents.filter((document) => activeStatuses.has(document.verificationStatus)).map((document) => canonicalTitleDocumentTypeKey(document.documentType) ?? document.documentType)),
     [documents],
   );
 
   const submitDocument = async (event: FormEvent) => {
     event.preventDefault();
     if (sold || !file || uploadOutcomeUnknown || uploadStepUp.busy || uploadStepUp.challenge) return;
+    if (!documentTypeOptions.some((option) => option.value === documentType)) { toast.error('Choose a current title document type from the backend dictionary.'); return; }
     const fileError = validateTitleUploadFile(file);
     if (fileError) { toast.error(fileError); return; }
-    const input = { file, documentType, title: title.trim(), accessPolicy: { enabled: mode !== 'private', mode } };
+    const input = { file, documentType: documentType as TitleDocumentType, title: title.trim(), accessPolicy: { enabled: mode !== 'private', mode } };
     try {
       const digest = await digestTitleUpload(file);
       const body = buildTitleUploadStepUpBody({ documentType, title: input.title, accessPolicy: input.accessPolicy }, digest);
@@ -161,17 +165,18 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
             <label className="text-xs font-bold uppercase tracking-widest text-secondary">Document type</label>
             <select
               value={documentType}
-              disabled={busyId === 'upload' || uploadStepUp.busy || Boolean(uploadStepUp.challenge)}
+                disabled={dictionaryLoading || !documentTypeOptions.length || busyId === 'upload' || uploadStepUp.busy || Boolean(uploadStepUp.challenge)}
               onChange={(event) => {
-                const next = event.target.value as TitleDocumentType;
+                const next = event.target.value;
                 setDocumentType(next);
-                setTitle(documentTypeLabel(next));
+                setTitle(currentDocumentTypeLabel(dictionary, next));
               }}
               className="mt-2 w-full rounded-lg bg-white px-4 py-3 text-sm"
             >
-              {titleDocumentTypeOptions.map((option) => (
-                <option key={option.value} value={option.value} disabled={unavailableTypes.has(option.value)}>
-                  {option.label}{unavailableTypes.has(option.value) ? ' — active submission exists' : ''}
+              <option value="">Choose a document type</option>
+              {documentTypeOptions.map((option) => (
+                <option key={option.value} value={option.value} disabled={unavailableTypes.has(option.value as TitleDocumentType)}>
+                  {option.label}{unavailableTypes.has(option.value as TitleDocumentType) ? ' — active submission exists' : ''}
                 </option>
               ))}
             </select>
@@ -253,7 +258,7 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
                     type="button"
                     className="text-xs font-bold text-primary underline"
                     onClick={() => {
-                      setDocumentType(document.documentType);
+                      setDocumentType(canonicalTitleDocumentTypeKey(document.documentType) ?? '');
                       setTitle(document.title);
                       setShowUpload(true);
                     }}

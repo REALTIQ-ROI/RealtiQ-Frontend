@@ -13,6 +13,7 @@ import { useAsync } from '../../../hooks/useAsync';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { adminService } from '../../../services/adminService';
 import { propertyService } from '../../../services/propertyService';
+import { effectiveCanonicalValue, formatCanonicalArea } from '../../../utils/propertyVocabulary';
 
 const formatNGN = (value: number) =>
   new Intl.NumberFormat('en-NG', {
@@ -149,7 +150,7 @@ const FeaturedListings = () => {
                         <div className="mt-3 flex flex-wrap items-center gap-4 text-xs font-bold text-secondary">
                           <span>{property.bedrooms} Beds</span>
                           <span>{property.bathrooms} Baths</span>
-                          <span>{property.squareFeet?.toLocaleString() ?? 'N/A'} sqft</span>
+                          <span>{formatCanonicalArea(effectiveCanonicalValue(property, 'internalFloorArea'))}</span>
                           <span className="text-primary">{formatNGN(property.price)}</span>
                         </div>
                       </div>

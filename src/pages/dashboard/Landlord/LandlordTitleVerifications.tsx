@@ -9,6 +9,7 @@ import RegistryAuditDetails from '../../../components/title/RegistryAuditDetails
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
+import { useCanonicalFieldDictionary } from '../../../hooks/useCanonicalFieldDictionary';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { documentService } from '../../../services/documentService';
@@ -24,7 +25,7 @@ import {
   type TitleRiskFlag,
   type TitleVerification,
 } from '../../../types';
-import { documentTypeLabel, formatDateTime, riskFlagText, shortenHash, titleDocumentTypeOptions } from '../../../utils/titleVerification';
+import { currentDocumentTypeLabel, currentTitleDocumentTypeOptions, documentTypeLabel, formatDateTime, riskFlagText, shortenHash } from '../../../utils/titleVerification';
 import { buildTitleUploadStepUpBody, digestTitleUpload, validateTitleUploadFile } from '../../../utils/titleUploadStepUp';
 
 const TITLE_DOCUMENT_ACCEPT = '.pdf,image/jpeg,image/png,image/webp';
@@ -35,17 +36,19 @@ const LandlordTitleVerifications = () => {
   const { properties, refreshProperties } = useProperties();
   const [searchParams] = useSearchParams();
   const [propertyId, setPropertyId] = useState(searchParams.get('propertyId') ?? '');
-  const [documentType, setDocumentType] = useState<TitleDocumentType>('certificate_of_occupancy');
+  const [documentType, setDocumentType] = useState('');
   const [documents, setDocuments] = useState<TitleDocumentRecord[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [selectedDocumentId, setSelectedDocumentId] = useState('');
   const [submittingVerification, setSubmittingVerification] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadTitle, setUploadTitle] = useState('Certificate of Occupancy');
+  const [uploadTitle, setUploadTitle] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadOutcomeUnknown, setUploadOutcomeUnknown] = useState(false);
   const titleUploadStepUp = useBoundStepUp<Awaited<ReturnType<typeof documentService.uploadTitleDocument>>>();
+  const { dictionary, loading: dictionaryLoading } = useCanonicalFieldDictionary();
+  const documentTypeOptions = currentTitleDocumentTypeOptions(dictionary);
   const [openingDocumentId, setOpeningDocumentId] = useState('');
   const [verifications, setVerifications] = useState<TitleVerification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,6 +118,10 @@ const LandlordTitleVerifications = () => {
       toast.error('Select a PDF, JPEG, PNG, or WebP title document.');
       return;
     }
+    if (!documentTypeOptions.some((option) => option.value === documentType)) {
+      toast.error('Choose a current title document type from the backend dictionary.');
+      return;
+    }
     if (uploadOutcomeUnknown || titleUploadStepUp.busy || titleUploadStepUp.challenge) return;
     const fileError = validateTitleUploadFile(uploadFile);
     if (fileError) { toast.error(fileError); return; }
@@ -122,12 +129,12 @@ const LandlordTitleVerifications = () => {
     try {
       const input = {
         propertyId: selectedPropertyPublicReference,
-        documentType,
+        documentType: documentType as TitleDocumentType,
         title: uploadTitle,
         file: uploadFile,
       };
       const digest = await digestTitleUpload(uploadFile);
-      const body = buildTitleUploadStepUpBody({ documentType, title: uploadTitle }, digest);
+      const body = buildTitleUploadStepUpBody({ documentType: documentType as TitleDocumentType, title: uploadTitle }, digest);
       await titleUploadStepUp.begin({
         method: 'POST',
         path: `/api/documents/properties/${encodeURIComponent(selectedPropertyPublicReference)}/title-upload`,
@@ -195,6 +202,11 @@ const LandlordTitleVerifications = () => {
       toast.error('Select a restricted title document before submitting it for legal review.');
       return;
     }
+    const selectedDocumentType = document.documentType || documentType;
+    if (!documentTypeOptions.some((option) => option.value === selectedDocumentType)) {
+      toast.error('This document type is not in the current title document dictionary. Refresh the document list and select a current document type.');
+      return;
+    }
     setSubmittingVerification(true);
     setRiskFlags([]);
     setSubmissionError(null);
@@ -202,7 +214,7 @@ const LandlordTitleVerifications = () => {
       const response = await titleVerificationService.submitTitleVerification({
         propertyId: selectedPropertyPublicReference,
         documentId: selectedDocumentId,
-        documentType: document.documentType || documentType,
+        documentType: selectedDocumentType as TitleDocumentType,
         metadata: { source: 'title_document_upload' },
       });
       setVerifications((current) => [
@@ -249,13 +261,15 @@ const LandlordTitleVerifications = () => {
                 <select
                   className="mt-1 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm"
                   value={documentType}
+                  disabled={dictionaryLoading || !documentTypeOptions.length || uploading || titleUploadStepUp.busy || Boolean(titleUploadStepUp.challenge)}
                   onChange={(event) => {
-                    const nextType = event.target.value as TitleDocumentType;
+                    const nextType = event.target.value;
                     setDocumentType(nextType);
-                    setUploadTitle(titleDocumentTypeOptions.find((option) => option.value === nextType)?.label ?? 'Title Document');
+                    setUploadTitle(currentDocumentTypeLabel(dictionary, nextType));
                   }}
                 >
-                  {titleDocumentTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  <option value="">Choose a document type</option>
+                  {documentTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </label>
               {documents.length ? (
@@ -313,8 +327,8 @@ const LandlordTitleVerifications = () => {
               <p className="text-sm font-bold">Upload a restricted title document</p>
               <p className="mt-1 text-xs text-secondary">RealtIQ stores the file securely in the Document Vault and creates the title review automatically.</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                <select className="rounded-lg bg-white px-3 py-2 text-sm" value={uploadTitle} disabled={uploading || titleUploadStepUp.busy || Boolean(titleUploadStepUp.challenge)} onChange={(event) => setUploadTitle(event.target.value)}>
-                  {titleDocumentTypeOptions.map((option) => <option key={option.value} value={option.label}>{option.label}</option>)}
+                <select className="rounded-lg bg-white px-3 py-2 text-sm" value={uploadTitle} disabled={dictionaryLoading || !documentTypeOptions.length || uploading || titleUploadStepUp.busy || Boolean(titleUploadStepUp.challenge)} onChange={(event) => { const option = documentTypeOptions.find((item) => item.label === event.target.value); if (option) { setDocumentType(option.value); setUploadTitle(option.label); } }}>
+                  <option value="">Choose a document title</option>{documentTypeOptions.map((option) => <option key={option.value} value={option.label}>{option.label}</option>)}
                 </select>
                 <input className="rounded-lg bg-white px-3 py-2 text-sm" type="file" accept={TITLE_DOCUMENT_ACCEPT} disabled={uploading || titleUploadStepUp.busy || Boolean(titleUploadStepUp.challenge)} onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} />
                 <Button type="button" variant="secondary" onClick={() => void uploadTitleDocument()} disabled={uploading || titleUploadStepUp.busy || Boolean(titleUploadStepUp.challenge) || !uploadFile || uploadOutcomeUnknown}>

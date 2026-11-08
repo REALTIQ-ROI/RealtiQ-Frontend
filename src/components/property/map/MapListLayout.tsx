@@ -4,6 +4,8 @@ import { propertyRouteReference, type Property } from '../../../types';
 import MediaPreview from '../MediaPreview';
 import MobileMapListToggle, { type MapListView } from './MobileMapListToggle';
 import PropertyMap from './PropertyMap';
+import { useCanonicalFieldDictionary } from '../../../hooks/useCanonicalFieldDictionary';
+import { effectiveCanonicalValue, fieldVocabularyOptions } from '../../../utils/propertyVocabulary';
 
 interface Props {
   properties: Property[];
@@ -15,8 +17,20 @@ interface Props {
 
 const matchesSearch = (property: Property, query: string) =>
   !query || `${property.title} ${property.location} ${property.propertyType}`.toLowerCase().includes(query.toLowerCase());
+const normalizedAvailability = (value: string) => value.trim().toLowerCase().replaceAll('_', ' ').replace(/\s+/g, ' ');
+const matchesAvailability = (property: Property, selected: string, options: ReturnType<typeof fieldVocabularyOptions>) => {
+  const selectedLabel = options.find((option) => option.value === selected)?.label ?? selected;
+  const current = [property.status, effectiveCanonicalValue(property, 'availability')].filter((value): value is string => typeof value === 'string');
+  return current.some((value) => normalizedAvailability(value) === normalizedAvailability(selected) || normalizedAvailability(value) === normalizedAvailability(selectedLabel));
+};
+const formatPrice = (property: Property) => effectiveCanonicalValue(property, 'priceOnApplication') === true
+  ? 'Price on application'
+  : typeof property.price === 'number' && Number.isFinite(property.price) && typeof property.currency === 'string'
+    ? (() => { try { return new Intl.NumberFormat('en-NG', { style: 'currency', currency: property.currency, maximumFractionDigits: 0 }).format(property.price); } catch { return 'Price unavailable'; } })()
+    : 'Price unavailable';
 
 const MapListLayout = ({ properties, detailsPath, actions, children, mapClassName = '' }: Props) => {
+  const { dictionary } = useCanonicalFieldDictionary();
   const [mobileView, setMobileView] = useState<MapListView>('list');
   const [fullscreen, setFullscreen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -26,6 +40,8 @@ const MapListLayout = ({ properties, detailsPath, actions, children, mapClassNam
   const [status, setStatus] = useState('');
   const [visibleProperties, setVisibleProperties] = useState<Property[]>(properties);
   const [fullscreenVisibleProperties, setFullscreenVisibleProperties] = useState<Property[]>(properties);
+  const propertyTypeOptions = useMemo(() => fieldVocabularyOptions(dictionary?.fields.find((field) => field.key === 'propertyType'), dictionary), [dictionary]);
+  const availabilityOptions = useMemo(() => fieldVocabularyOptions(dictionary?.fields.find((field) => field.key === 'availability'), dictionary).filter((option) => normalizedAvailability(option.label) !== 'not released'), [dictionary]);
 
   useEffect(() => {
     setVisibleProperties(properties);
@@ -52,11 +68,10 @@ const MapListLayout = ({ properties, detailsPath, actions, children, mapClassNam
     () => properties.filter((property) =>
       matchesSearch(property, debouncedQuery) &&
       (!propertyType || property.propertyType === propertyType) &&
-      (!status || property.status === status),
+      (!status || matchesAvailability(property, status, availabilityOptions)),
     ),
-    [debouncedQuery, properties, propertyType, status],
+    [availabilityOptions, debouncedQuery, properties, propertyType, status],
   );
-  const propertyTypes = useMemo(() => [...new Set(properties.map((property) => property.propertyType))].sort(), [properties]);
   const renderedChildren = typeof children === 'function' ? children(visibleProperties) : children;
 
   useEffect(() => {
@@ -65,8 +80,8 @@ const MapListLayout = ({ properties, detailsPath, actions, children, mapClassNam
 
   const fullscreenFilters = (
     <div className="mt-3 grid grid-cols-2 gap-2">
-      <select aria-label="Filter by property type" value={propertyType} onChange={(event) => setPropertyType(event.target.value)} className="min-w-0 rounded-lg bg-surface-container-low px-2 py-2 text-xs outline-none"><option value="">All types</option>{propertyTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select>
-      <select aria-label="Filter by status" value={status} onChange={(event) => setStatus(event.target.value)} className="min-w-0 rounded-lg bg-surface-container-low px-2 py-2 text-xs outline-none"><option value="">Any status</option><option value="available">Available</option><option value="sold">Sold</option></select>
+      <select aria-label="Filter by property type" value={propertyType} onChange={(event) => setPropertyType(event.target.value)} className="min-w-0 rounded-lg bg-surface-container-low px-2 py-2 text-xs outline-none" disabled={!dictionary}><option value="">All types</option>{propertyType && !propertyTypeOptions.some((option) => option.value === propertyType) ? <option value={propertyType}>Unavailable option: {propertyType}</option> : null}{propertyTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+      <select aria-label="Filter by availability" value={status} onChange={(event) => setStatus(event.target.value)} className="min-w-0 rounded-lg bg-surface-container-low px-2 py-2 text-xs outline-none" disabled={!dictionary}><option value="">Any availability</option>{status && !availabilityOptions.some((option) => option.value === status) ? <option value={status}>Unavailable option: {status}</option> : null}{availabilityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
     </div>
   );
 
@@ -78,7 +93,7 @@ const MapListLayout = ({ properties, detailsPath, actions, children, mapClassNam
           <div className="min-w-0 flex-1">
             <h3 className="truncate text-sm font-bold text-on-surface">{property.title}</h3>
             <p className="truncate text-xs text-secondary">{property.location}</p>
-            <p className="mt-1 text-sm font-black text-primary">{new Intl.NumberFormat('en-NG', { style: 'currency', currency: property.currency || 'NGN', maximumFractionDigits: 0 }).format(property.price)}</p>
+            <p className="mt-1 text-sm font-black text-primary">{formatPrice(property)}</p>
             {detailsPath(property) ? (
               <Link to={detailsPath(property)} className="mt-1 inline-block text-xs font-bold text-primary hover:underline">View Details</Link>
             ) : (

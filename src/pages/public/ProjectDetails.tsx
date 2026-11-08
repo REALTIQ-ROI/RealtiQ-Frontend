@@ -8,10 +8,13 @@ import LoadingState from '../../components/ui/LoadingState';
 import { useAsync } from '../../hooks/useAsync';
 import { projectService } from '../../services/projectService';
 import { formatDate, formatPriceRange, labelize } from '../../utils/projectFormatters';
+import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
+import { fieldVocabularyLabel, vocabularyLabel } from '../../utils/propertyVocabulary';
 
 const ProjectDetails = () => {
   const { slug = '' } = useParams();
   const location = useLocation();
+  const { dictionary } = useCanonicalFieldDictionary();
   const projectNavigationState = location.state as { from?: string; discoveryFrom?: string } | null;
   const searchReturn = typeof projectNavigationState?.discoveryFrom === 'string' && projectNavigationState.discoveryFrom.startsWith('/projects')
     ? projectNavigationState.discoveryFrom
@@ -21,6 +24,15 @@ const ProjectDetails = () => {
   const { data, loading, error, execute } = useAsync(() => projectService.getProject(slug), Boolean(slug));
   const project = data?.project;
   const preview = project?.propertyPreview ?? [];
+  const projectTypeLabel = project ? fieldVocabularyLabel(dictionary, 'projectType', project.projectType) ?? project.projectType : '';
+  const facilities = Array.isArray(project?.canonicalFields?.estateFacilities)
+    ? (project.canonicalFields.estateFacilities as unknown[]).flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const facility = item as { key?: unknown; state?: unknown };
+      if (typeof facility.key !== 'string' || (facility.state !== 'Delivered' && facility.state !== 'Planned')) return [];
+      return [{ key: facility.key, state: facility.state, label: vocabularyLabel(dictionary, 'amenities', facility.key) ?? facility.key }];
+    })
+    : [];
 
   return (
     <PublicLayout>
@@ -33,7 +45,7 @@ const ProjectDetails = () => {
               <div>
                 <Link to={searchReturn} className="mb-4 inline-flex text-sm font-bold text-primary hover:underline">← Back to project results</Link>
                 <div className="mb-4 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-primary px-3 py-1 text-xs font-black uppercase tracking-widest text-on-primary">{labelize(project.projectType)}</span>
+                  <span className="rounded-full bg-primary px-3 py-1 text-xs font-black uppercase tracking-widest text-on-primary">{projectTypeLabel}</span>
                   <span className="rounded-full bg-surface-container-low px-3 py-1 text-xs font-black uppercase tracking-widest">{labelize(project.status)}</span>
                   {project.isPublished ? <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-widest text-emerald-700">Published</span> : null}
                 </div>
@@ -89,20 +101,16 @@ const ProjectDetails = () => {
               </aside>
             </div>
 
-            {(project.amenities?.length || project.features?.length || project.nearbyLandmarks?.length) ? (
-              <section className="grid gap-6 lg:grid-cols-3">
-                <div className="rounded-xl bg-surface-container-lowest p-5">
-                  <h3 className="font-black">Amenities</h3>
-                  <div className="mt-3 flex flex-wrap gap-2">{(project.amenities ?? []).map((item) => <span key={item} className="rounded-full bg-white px-3 py-1 text-xs font-bold">{item}</span>)}</div>
-                </div>
-                <div className="rounded-xl bg-surface-container-lowest p-5">
-                  <h3 className="font-black">Features</h3>
-                  <div className="mt-3 flex flex-wrap gap-2">{(project.features ?? []).map((item) => <span key={item} className="rounded-full bg-white px-3 py-1 text-xs font-bold">{item}</span>)}</div>
-                </div>
-                <div className="rounded-xl bg-surface-container-lowest p-5">
+            {(facilities.length || project.nearbyLandmarks?.length) ? (
+              <section className="grid gap-6 lg:grid-cols-2">
+                {facilities.length ? <div className="rounded-xl bg-surface-container-lowest p-5">
+                  <h3 className="font-black">Estate facilities</h3>
+                  <div className="mt-3 flex flex-wrap gap-2">{facilities.map((item) => <span key={item.key} className="rounded-full bg-white px-3 py-1 text-xs font-bold">{item.label} · {item.state}</span>)}</div>
+                </div> : null}
+                {project.nearbyLandmarks?.length ? <div className="rounded-xl bg-surface-container-lowest p-5">
                   <h3 className="font-black">Nearby</h3>
                   <div className="mt-3 space-y-2">{(project.nearbyLandmarks ?? []).map((item) => <p key={`${item.name}-${item.distance}`} className="text-sm"><strong>{item.name}</strong>{item.distance ? ` - ${item.distance}` : ''}</p>)}</div>
-                </div>
+                </div> : null}
               </section>
             ) : null}
 

@@ -165,7 +165,7 @@ export interface UnitGridQuery {
   sort?: 'newest' | 'price_asc' | 'price_desc' | 'availability' | 'publication' | 'unit_type';
   search?: string;
   unitTypeId?: string;
-  availability?: 'available' | 'under_offer' | 'sold' | 'not_released';
+  availability?: string;
   publicationState?: 'published' | 'unpublished' | 'blocked' | 'needs_review' | 'archived';
   problemsOnly?: boolean;
   minPrice?: number;

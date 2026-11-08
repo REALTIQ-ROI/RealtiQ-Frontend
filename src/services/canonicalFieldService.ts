@@ -119,33 +119,41 @@ export const parseCanonicalFieldDictionary = (value: unknown): CanonicalFieldDic
     if (!record(item) || typeof item.state !== 'string') throw new Error(`Canonical configuration ${key} has no state.`);
     configuration[key] = item as CanonicalFieldDictionary['configuration'][string];
   }
-  const { version, fields: _fields, configuration: _configuration, ...catalogues } = value;
+  const version = value.version as string | number;
+  const catalogues = Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== 'version' && key !== 'fields' && key !== 'configuration'),
+  );
   return { version, fields, configuration, catalogues } as CanonicalFieldDictionary;
 };
 
 let cachedDictionary: CanonicalFieldDictionary | null = null;
 let pendingDictionary: Promise<CanonicalFieldDictionary> | null = null;
+let dictionaryGeneration = 0;
 
 export const canonicalFieldService = {
   async getDictionary(forceRefresh = false): Promise<CanonicalFieldDictionary> {
     if (forceRefresh) {
+      dictionaryGeneration += 1;
       cachedDictionary = null;
       pendingDictionary = null;
     }
     if (cachedDictionary) return cachedDictionary;
     if (!pendingDictionary) {
-      pendingDictionary = api.get<unknown>('/properties/field-dictionary')
+      const generation = dictionaryGeneration;
+      const request = api.get<unknown>('/properties/field-dictionary')
         .then(({ data }) => {
           const parsed = parseCanonicalFieldDictionary(data);
-          cachedDictionary = parsed;
+          if (generation === dictionaryGeneration) cachedDictionary = parsed;
           return parsed;
         })
-        .finally(() => { pendingDictionary = null; });
+        .finally(() => { if (pendingDictionary === request) pendingDictionary = null; });
+      pendingDictionary = request;
     }
     return pendingDictionary;
   },
 
   clearCache(): void {
+    dictionaryGeneration += 1;
     cachedDictionary = null;
     pendingDictionary = null;
   },

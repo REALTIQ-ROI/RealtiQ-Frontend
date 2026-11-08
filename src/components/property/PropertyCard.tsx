@@ -11,9 +11,11 @@ import TitleVerificationBadge from '../title/TitleVerificationBadge';
 import PaymentTypeBadges from './PaymentTypeBadges';
 import OffPlanBadges from './OffPlanBadges';
 import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
+import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
+import { effectiveCanonicalValue, fieldVocabularyLabel, formatCanonicalArea, vocabularyLabel } from '../../utils/propertyVocabulary';
 
-const formatCurrency = (value?: number, currency = 'NGN') =>
-  typeof value === 'number' && Number.isFinite(value)
+const formatCurrency = (value?: number, currency?: string) =>
+  typeof value === 'number' && Number.isFinite(value) && currency
     ? new Intl.NumberFormat('en-NG', {
         style: 'currency',
         currency,
@@ -34,12 +36,20 @@ const PropertyCard = ({
   onSave?: (property: Property) => void;
 }) => {
   const location = useLocation();
+  const { dictionary } = useCanonicalFieldDictionary();
   const cover = property.media?.[0];
   const coverUrl = cover?.url;
   const isVideo = cover?.type === 'video';
   const routeReference = propertyPublicReference(property);
   const title = property.title || property.publicReference || 'Untitled property';
   const propertyLocation = property.location || [property.projectUnit?.block, property.projectUnit?.phase, property.projectUnit?.unitNumber].filter(Boolean).join(' - ') || 'Location unavailable';
+  const typeLabel = fieldVocabularyLabel(dictionary, 'propertyType', property.propertyType) ?? vocabularyLabel(dictionary, 'propertyTypes', property.propertyType) ?? property.propertyType;
+  const availabilityValue = effectiveCanonicalValue(property, 'availability') ?? property.status;
+  const statusLabel = vocabularyLabel(dictionary, 'availabilityValues', availabilityValue) ?? fieldVocabularyLabel(dictionary, 'availability', availabilityValue);
+  const publicStatusLabel = statusLabel?.trim().toLowerCase() === 'not released' ? undefined : statusLabel;
+  const isSold = publicStatusLabel?.toLowerCase() === 'sold';
+  const isAvailable = publicStatusLabel?.toLowerCase() === 'available';
+  const areaValue = effectiveCanonicalValue(property, 'internalFloorArea');
   const paymentTypes = normalizePropertyPaymentTypes(property.paymentTypes, property.price ?? 0);
   const [fetchedTitleDocuments, setFetchedTitleDocuments] = useState<{
     propertyReference: string;
@@ -106,17 +116,17 @@ const PropertyCard = ({
               Featured
             </span>
           )}
-          <span
+          {publicStatusLabel ? <span
             className={`px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wide shadow ${
-              property.status === 'available'
+              isAvailable
                 ? 'bg-green-500 text-white'
-                : property.status === 'sold'
-                  ? 'bg-red-500 text-white'
+                : isSold
+                  ? 'bg-gray-500 text-white'
                   : 'bg-surface-container-lowest text-on-surface'
             }`}
           >
-              {property.status || 'status pending'}
-          </span>
+              {publicStatusLabel}
+          </span> : null}
           {property.currency ? (
             <span className="px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wide shadow bg-surface-container-lowest text-on-surface">
               {property.currency}
@@ -170,14 +180,15 @@ const PropertyCard = ({
               Featured
             </span>
           ) : null}
+          {typeLabel ? <span className="px-2 py-1 rounded-full bg-surface-container-low text-on-surface text-[10px] font-black uppercase tracking-wide">{typeLabel}</span> : null}
           {property.category ? (
             <span className="px-2 py-1 rounded-full bg-surface-container-low text-on-surface text-[10px] font-black uppercase tracking-wide">
-              {property.category}
+              {vocabularyLabel(dictionary, 'categories', property.category) ?? property.category}
             </span>
           ) : null}
           {property.completionStage ? (
             <span className="px-2 py-1 rounded-full bg-surface-container-low text-on-surface text-[10px] font-black uppercase tracking-wide">
-              {property.completionStage}
+              {fieldVocabularyLabel(dictionary, 'buildStage', property.completionStage) ?? property.completionStage}
             </span>
           ) : null}
           {property.project ? (
@@ -199,7 +210,7 @@ const PropertyCard = ({
           </span>
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-xs">square_foot</span>
-            {formatCount(property.squareFeet, ' sqft')}
+            {formatCanonicalArea(areaValue)}
           </span>
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-xs">visibility</span>

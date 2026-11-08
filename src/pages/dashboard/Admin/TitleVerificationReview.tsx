@@ -12,11 +12,12 @@ import TitleVerificationBadge from '../../../components/title/TitleVerificationB
 import { useAuth } from '../../../contexts/AuthContext';
 import { hasAdminCapability } from '../../../services/adminAccessService';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
+import { useCanonicalFieldDictionary } from '../../../hooks/useCanonicalFieldDictionary';
 import { ApiRequestError } from '../../../lib/axios';
 import { documentService } from '../../../services/documentService';
 import { titleVerificationService } from '../../../services/titleVerificationService';
 import type { TitleDocumentRecord, TitleDocumentType, TitleRiskFlag, TitleVerification, TitleVerificationLog, TitleVerificationStatus } from '../../../types';
-import { documentTypeLabel, externalAnchorLabel, formatDateTime, riskFlagText, shortenHash, titleDocumentTypeOptions } from '../../../utils/titleVerification';
+import { currentTitleDocumentTypeOptions, documentTypeLabel, externalAnchorLabel, formatDateTime, riskFlagText, shortenHash } from '../../../utils/titleVerification';
 
 const statusOptions: Array<TitleVerificationStatus | 'all'> = ['all', 'pending', 'under_review', 'approved', 'published', 'rejected', 'revoked', 'superseded'];
 type PendingAction = 'approve' | 'reject' | 'revoke' | 'external-anchor' | 'retry-anchor';
@@ -29,6 +30,8 @@ const propertyName = (verification: TitleVerification) => {
 
 const TitleVerificationReview = () => {
   const { token, adminAccess } = useAuth();
+  const { dictionary } = useCanonicalFieldDictionary();
+  const documentTypeOptions = currentTitleDocumentTypeOptions(dictionary);
   const canManageTitleVerification = hasAdminCapability(adminAccess, 'title_verification.manage');
   const [status, setStatus] = useState<TitleVerificationStatus | 'all'>('pending');
   const [documentType, setDocumentType] = useState<TitleDocumentType | 'all'>('all');
@@ -249,7 +252,7 @@ const TitleVerificationReview = () => {
               </select>
               <select className="rounded-lg bg-surface-container-low px-4 py-3 text-sm" value={documentType} onChange={(event) => setDocumentType(event.target.value as TitleDocumentType | 'all')}>
                 <option value="all">All document types</option>
-                {titleDocumentTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                {documentTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
               <select className="rounded-lg bg-surface-container-low px-4 py-3 text-sm" value={riskSeverity} onChange={(event) => setRiskSeverity(event.target.value)}>
                 <option value="all">All risk levels</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>

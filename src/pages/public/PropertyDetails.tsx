@@ -29,6 +29,7 @@ import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
 import FavouriteButton from '../../components/phase2/FavouriteButton';
 import { useRecordRecentProperty } from '../../hooks/useRecordRecentProperty';
+import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
 import { messageService } from '../../services/messageService';
 import { useProperties } from '../../contexts/PropertiesContext';
 import { useAsync } from '../../hooks/useAsync';
@@ -62,13 +63,14 @@ import {
 import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
 import { formatDate, formatNgn, labelize } from '../../utils/projectFormatters';
 import { hasPropertyMap, propertyGallerySlideCount } from '../../utils/propertyGallery';
+import { effectiveCanonicalValue, fieldVocabularyLabel, formatCanonicalArea, vocabularyLabel } from '../../utils/propertyVocabulary';
 
-const formatCurrency = (value: number, currency = 'NGN') =>
-  new Intl.NumberFormat('en-NG', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(value);
+const formatCurrency = (value: number | undefined, currency?: string) => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || !currency) return 'Price unavailable';
+  try {
+    return new Intl.NumberFormat('en-NG', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
+  } catch { return 'Price unavailable'; }
+};
 
 const PROPERTY_TOUR_TYPES = [
   { value: 'open_house', label: 'Open House' },
@@ -97,6 +99,7 @@ const PropertyDetails = () => {
     ? (location.state as { from: string }).from
     : '/properties';
   const { user, isAuthenticated } = useAuth();
+  const { dictionary } = useCanonicalFieldDictionary();
   const { refreshProperties } = useProperties();
   const propertyPaymentStepUp = useBoundStepUp<InitializePaymentResponse>();
   const [paymentOutcomeUnknown, setPaymentOutcomeUnknown] = useState(false);
@@ -109,6 +112,22 @@ const PropertyDetails = () => {
     error,
     execute,
   } = useAsync(() => propertyService.getPublicProperty(id), true);
+  const areaValue = effectiveCanonicalValue(property, 'internalFloorArea');
+  const areaLabel = formatCanonicalArea(areaValue);
+  const availabilityValue = effectiveCanonicalValue(property, 'availability') ?? property?.status;
+  const availabilityLabel = vocabularyLabel(dictionary, 'availabilityValues', availabilityValue)
+    ?? fieldVocabularyLabel(dictionary, 'availability', availabilityValue);
+  const publicAvailabilityLabel = availabilityLabel?.trim().toLowerCase() === 'not released'
+    ? undefined
+    : availabilityLabel;
+  const displayAmenities = (property?.amenities ?? []).map((amenity) => ({
+    key: amenity,
+    label: vocabularyLabel(dictionary, 'amenities', amenity) ?? amenity,
+  }));
+  const otherAmenity = effectiveCanonicalValue(property, 'otherAmenity');
+  const propertyTypeLabel = property
+    ? fieldVocabularyLabel(dictionary, 'propertyType', property.propertyType) ?? vocabularyLabel(dictionary, 'propertyTypes', property.propertyType) ?? property.propertyType
+    : '';
   const {
     data: installmentData,
     loading: installmentLoading,
@@ -536,7 +555,7 @@ const PropertyDetails = () => {
     );
   }
 
-  const currency = property.currency ?? 'NGN';
+  const currency = property.currency ?? (typeof property.effectiveCanonicalFields?.currency === 'string' ? property.effectiveCanonicalFields.currency : undefined);
   const ownerName = owner?.name ?? 'Not provided';
   const nearbyMapProperties = nearby
     .map((item): Property | null => {
@@ -546,18 +565,9 @@ const PropertyDetails = () => {
         _id: reference,
         publicReference: item.publicReference,
         title: item.title,
-        price: 0,
-        location: 'Nearby property',
-        propertyType: 'property',
-        bedrooms: 0,
-        bathrooms: 0,
-        description: '',
-        squareFeet: 0,
-        paymentTypes: item.paymentTypes ?? [],
         coordinates: item.coordinates,
-        media: [],
-        status: 'available',
-      };
+        ...(item.paymentTypes ? { paymentTypes: item.paymentTypes } : {}),
+      } as Property;
     })
     .filter((item): item is Property => item !== null);
 
@@ -638,7 +648,7 @@ const PropertyDetails = () => {
                     <span>{property.bedrooms ?? '—'} Beds</span>
                     <span>{property.bathrooms ?? '—'} Baths</span>
                     <span>
-                      {property.squareFeet?.toLocaleString() ?? '—'} sq ft
+                      {areaLabel}
                     </span>
                   </div>
                 </div>
@@ -651,7 +661,7 @@ const PropertyDetails = () => {
                   <p className='text-[11px] font-semibold text-secondary'>
                     {property.bedrooms ?? '—'} Beds ·{' '}
                     {property.bathrooms ?? '—'} Baths ·{' '}
-                    {property.squareFeet?.toLocaleString() ?? '—'} sq ft
+                    {areaLabel}
                   </p>
                 </div>
                 {canPurchase && hasActiveInstallment && propertyInstallment ? (
@@ -705,17 +715,19 @@ const PropertyDetails = () => {
             <div>
               <div className='flex flex-wrap items-center gap-2 mb-3'>
                 <span className='bg-primary/10 text-primary text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest'>
-                  {property.propertyType}
+                  {propertyTypeLabel}
                 </span>
-                <span
+                {publicAvailabilityLabel ? <span
                   className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest ${
-                    property.status === 'sold'
-                      ? 'bg-red-100 text-red-700'
-                      : 'bg-emerald-50 text-emerald-700'
+                    publicAvailabilityLabel.toLowerCase() === 'sold'
+                      ? 'bg-gray-100 text-gray-700'
+                      : publicAvailabilityLabel.toLowerCase() === 'available'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-surface-container-low text-on-surface'
                   }`}
                 >
-                  {property.status}
-                </span>
+                  {publicAvailabilityLabel}
+                </span> : null}
                 {property.featured ? (
                   <span className='bg-amber-400/15 text-amber-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest'>
                     Featured
@@ -778,7 +790,7 @@ const PropertyDetails = () => {
                       {property.project.name}
                     </h2>
                     <p className='text-sm text-secondary'>
-                      {labelize(property.project.projectType)} -{' '}
+                    {fieldVocabularyLabel(dictionary, 'projectType', property.project.projectType) ?? property.project.projectType} -{' '}
                       {labelize(property.project.status)}
                     </p>
                     {property.projectUnit ? (
@@ -972,21 +984,22 @@ const PropertyDetails = () => {
               </div>
             ) : null}
 
-            {property.amenities?.length ? (
+            {displayAmenities.length || (typeof otherAmenity === 'string' && otherAmenity.trim()) ? (
               <div>
                 <h2 className='text-2xl font-bold mb-4'>Amenities</h2>
                 <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
-                  {property.amenities.map((amenity) => (
+                  {displayAmenities.map((amenity) => (
                     <div
-                      key={amenity}
+                      key={amenity.key}
                       className='flex items-center gap-2 text-sm text-on-surface-variant bg-surface-container-lowest rounded-lg px-4 py-3 border border-outline-variant/10'
                     >
                       <span className='material-symbols-outlined text-sm text-primary'>
                         check_circle
                       </span>
-                      {amenity}
+                      {amenity.label}
                     </div>
                   ))}
+                  {typeof otherAmenity === 'string' && otherAmenity.trim() ? <div className='flex items-center gap-2 text-sm text-on-surface-variant bg-surface-container-lowest rounded-lg px-4 py-3 border border-outline-variant/10'><span className='material-symbols-outlined text-sm text-primary'>check_circle</span><span>{otherAmenity}</span></div> : null}
                 </div>
               </div>
             ) : null}
@@ -1395,22 +1408,22 @@ const PropertyDetails = () => {
                 {formatCurrency(property.price, currency)}
               </p>
               <p className='text-xs text-secondary'>
-                {typeof property.squareFeet === 'number' && Number.isFinite(property.squareFeet)
-                  ? `${property.squareFeet.toLocaleString()} sq ft`
-                  : 'Area unavailable'}
+                {areaLabel}
               </p>
-              <div className='text-sm'>
+              {publicAvailabilityLabel ? <div className='text-sm'>
                 Status:{' '}
                 <span
                   className={
-                    property.status === 'sold'
-                      ? 'text-error font-semibold'
-                      : 'text-green-700 font-semibold'
+                    publicAvailabilityLabel.toLowerCase() === 'sold'
+                      ? 'text-gray-700 font-semibold'
+                      : publicAvailabilityLabel.toLowerCase() === 'available'
+                        ? 'text-green-700 font-semibold'
+                        : 'font-semibold'
                   }
                 >
-                  {property.status.toUpperCase()}
+                  {publicAvailabilityLabel}
                 </span>
-              </div>
+              </div> : null}
               <PaymentTypeBadges paymentTypes={paymentTypes} />
               {property.status === 'available' &&
               (!property.approvalStatus ||

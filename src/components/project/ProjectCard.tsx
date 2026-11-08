@@ -2,6 +2,8 @@ import { Link, useLocation } from 'react-router-dom';
 import type { ProjectCard as ProjectCardType } from '../../types';
 import { formatPriceRange, labelize, projectStatusClasses } from '../../utils/projectFormatters';
 import { isProjectExplicitlyUnpublished, isProjectPublished } from '../../utils/projectPublication';
+import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
+import { fieldVocabularyLabel } from '../../utils/propertyVocabulary';
 
 interface ProjectCardProps {
   project: ProjectCardType;
@@ -10,6 +12,8 @@ interface ProjectCardProps {
 
 const ProjectCard = ({ project, requirePublishedToView = false }: ProjectCardProps) => {
   const location = useLocation();
+  const { dictionary } = useCanonicalFieldDictionary();
+  const projectTypeLabel = fieldVocabularyLabel(dictionary, 'projectType', project.projectType) ?? project.projectType;
   const projectLocation = [project.location?.area, project.location?.city, project.location?.state].filter(Boolean).join(', ');
   const cover = project.coverImage?.url;
   const path = `/projects/${project.slug || project._id}`;
@@ -28,7 +32,7 @@ const ProjectCard = ({ project, requirePublishedToView = false }: ProjectCardPro
       )}
       <div className="absolute left-3 top-3 flex flex-wrap gap-2">
         <span className="rounded-full bg-primary px-3 py-1 text-[10px] font-black uppercase tracking-wide text-on-primary">
-          {labelize(project.projectType)}
+          {projectTypeLabel}
         </span>
         {project.isFeatured ? <span className="rounded-full bg-amber-300 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-amber-950">Featured</span> : null}
         <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wide ${projectStatusClasses[project.status] ?? 'bg-slate-100 text-slate-700'}`}>

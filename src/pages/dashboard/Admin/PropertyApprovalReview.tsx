@@ -15,6 +15,7 @@ import { propertyService, type PropertyApprovalDetailResponse, type PropertyAppr
 import { propertyDisplayReference, type Property } from '../../../types';
 import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
 import { formatDate, labelize } from '../../../utils/projectFormatters';
+import { effectiveCanonicalValue, formatCanonicalArea } from '../../../utils/propertyVocabulary';
 
 const resolveOwnerName = (property?: Property | null) => {
   const owner = property?.ownerId;
@@ -267,7 +268,7 @@ const PropertyApprovalReview = () => {
                 <div><dt className="text-xs font-bold uppercase text-secondary">Listing Type</dt><dd className="mt-1">{labelize(selectedProperty.listingType ?? 'ready')}</dd></div>
                 <div><dt className="text-xs font-bold uppercase text-secondary">Bedrooms</dt><dd className="mt-1">{selectedProperty.bedrooms ?? 'N/A'}</dd></div>
                 <div><dt className="text-xs font-bold uppercase text-secondary">Bathrooms</dt><dd className="mt-1">{selectedProperty.bathrooms ?? 'N/A'}</dd></div>
-                <div><dt className="text-xs font-bold uppercase text-secondary">Area</dt><dd className="mt-1">{selectedProperty.squareFeet ? `${selectedProperty.squareFeet.toLocaleString()} sqft` : 'N/A'}</dd></div>
+                <div><dt className="text-xs font-bold uppercase text-secondary">Internal floor area</dt><dd className="mt-1">{formatCanonicalArea(effectiveCanonicalValue(selectedProperty, 'internalFloorArea'))}</dd></div>
                 <div><dt className="text-xs font-bold uppercase text-secondary">Title Document Status</dt><dd className="mt-1">{detail?.titleDocumentStatus || 'not_submitted'}</dd></div>
                 <div><dt className="text-xs font-bold uppercase text-secondary">Title Verification</dt><dd className="mt-1"><TitleVerificationBadge summary={selectedProperty.titleVerification} context="admin" /></dd></div>
                 {selectedProperty.project ? <div><dt className="text-xs font-bold uppercase text-secondary">Project</dt><dd className="mt-1">{selectedProperty.project.name}</dd></div> : null}

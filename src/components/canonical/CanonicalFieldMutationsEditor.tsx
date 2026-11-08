@@ -7,6 +7,7 @@ import {
   type CanonicalMutationDraft,
 } from '../../utils/canonicalFieldRegistry';
 import type { CanonicalMutationOperation, CanonicalMutationTarget } from '../../services/canonicalFieldService';
+import { groupedFieldVocabularyOptions } from '../../utils/propertyVocabulary';
 
 const fieldInput = 'w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm';
 
@@ -98,6 +99,13 @@ const CanonicalFieldMutationsEditor = ({
       const source = fieldSources?.[draft.field];
       const hasExplicit = Object.prototype.hasOwnProperty.call(canonicalFields ?? {}, draft.field);
       const effective = effectiveFields?.[draft.field];
+      const selectedMultiValues = (): string[] => {
+        try {
+          const parsed: unknown = JSON.parse(draft.rawValue || '[]');
+          return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+        } catch { return []; }
+      };
+      const vocabularyGroups = groupedFieldVocabularyOptions(dictionary, runtime);
       return <div key={draft.field} className="rounded-lg border border-outline-variant/20 p-3">
         <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-bold">{definition.label}</p><p className="text-xs text-secondary">{runtime.dataType} · {runtime.visibility ?? 'visibility not specified'}</p>
           <p className="mt-1 text-xs text-secondary">{hasExplicit ? `Stored value: ${formatStoredValue(canonicalFields?.[draft.field])}` : 'No explicit value stored.'}{effective !== undefined ? ` · Effective value: ${formatStoredValue(effective)}` : ' · Effective value not returned.'}{source ? ` · Source: ${source.sourceLevel ?? 'unspecified'} (${source.state ?? 'unspecified'})` : ' · Source not returned.'}</p>
@@ -105,8 +113,29 @@ const CanonicalFieldMutationsEditor = ({
         </div><button type="button" aria-label={`Remove ${definition.label} edit`} className="text-sm font-bold text-error underline" onClick={() => onChange(value.filter((item) => item.field !== draft.field))}>Remove</button></div>
         {createMode ? <p className="mt-2 text-xs text-secondary">New records can set a value; reset/null/unset require an existing record.</p> : <select aria-label={`${definition.label} operation`} className={`${fieldInput} mt-2`} value={draft.operation} onChange={(event) => changeDraft(draft.field, { operation: event.target.value as CanonicalMutationOperation })}>{operations.map(([operation, label]) => <option key={operation} value={operation}>{label}</option>)}</select>}
         {draft.operation === 'set' ? <div className="mt-2">{definition.kind === 'boolean' ? <select aria-label={`${definition.label} value`} className={fieldInput} value={draft.rawValue} onChange={(event) => changeDraft(draft.field, { rawValue: event.target.value })}><option value="">Choose true or false</option><option value="true">True</option><option value="false">False</option></select>
-          : definition.kind === 'enum' && definition.options?.length ? <select aria-label={`${definition.label} value`} className={fieldInput} value={draft.rawValue} onChange={(event) => changeDraft(draft.field, { rawValue: event.target.value })}><option value="">Choose a value</option>{definition.options.map((option) => <option key={option} value={option}>{option}</option>)}</select>
-            : definition.kind === 'multi_enum' ? <textarea aria-label={`${definition.label} JSON value`} className={fieldInput} rows={3} value={draft.rawValue} onChange={(event) => changeDraft(draft.field, { rawValue: event.target.value })} placeholder='JSON array, for example ["Tarred"]' />
+          : definition.kind === 'enum' && /milestone/i.test(definition.key) && vocabularyGroups.length ? <select aria-label={`${definition.label} value`} className={fieldInput} value={draft.rawValue} onChange={(event) => changeDraft(draft.field, { rawValue: event.target.value })}><option value="">Choose a value</option>{draft.rawValue && !vocabularyGroups.some((group) => group.values.some((option) => option.value === draft.rawValue)) ? <option value={draft.rawValue}>Unavailable option: {draft.rawValue}</option> : null}{vocabularyGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.values.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</optgroup>)}</select>
+            : definition.kind === 'enum' && definition.options?.length ? <select aria-label={`${definition.label} value`} className={fieldInput} value={draft.rawValue} onChange={(event) => changeDraft(draft.field, { rawValue: event.target.value })}><option value="">Choose a value</option>{definition.options.map((option) => <option key={option} value={option}>{definition.optionLabels?.[option] ?? option}</option>)}</select>
+            : definition.kind === 'multi_enum' && definition.options?.length ? <div aria-label={`${definition.label} values`} className="max-h-72 space-y-3 overflow-auto rounded-lg border border-outline-variant/20 p-3">{vocabularyGroups.map((group) => <fieldset key={group.label}><legend className="mb-1 text-xs font-bold text-secondary">{group.label}</legend><div className="space-y-1">{group.values.map((option) => <label key={option.value} className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={selectedMultiValues().includes(option.value)} onChange={(event) => {
+                const current = selectedMultiValues();
+                const next = event.target.checked ? [...current, option.value] : current.filter((item) => item !== option.value);
+                changeDraft(draft.field, { rawValue: JSON.stringify(next) });
+              }} />{option.label}{'priority' in option && option.priority ? <span className="text-xs text-secondary">Priority</span> : null}</label>)}</div></fieldset>)}</div>
+              : runtime.dataType === 'milestone_target_list' ? <div aria-label={`${definition.label} entries`} className="space-y-3 rounded-lg border border-outline-variant/20 p-3">
+                {(() => {
+                  let rows: Array<{ milestone: string; targetMonth: string; originalTargetMonth?: string }> = [];
+                  try { const parsed: unknown = JSON.parse(draft.rawValue || '[]'); if (Array.isArray(parsed)) rows = parsed.filter((item): item is { milestone: string; targetMonth: string; originalTargetMonth?: string } => Boolean(item && typeof item === 'object' && typeof (item as { milestone?: unknown }).milestone === 'string' && typeof (item as { targetMonth?: unknown }).targetMonth === 'string')); } catch { /* Serializer reports malformed values. */ }
+                  const updateRows = (next: typeof rows) => changeDraft(draft.field, { rawValue: JSON.stringify(next) });
+                  return <>
+                    {rows.map((row, index) => <fieldset key={`${row.milestone}-${index}`} className="grid gap-2 rounded-lg bg-surface-container-low p-3 sm:grid-cols-3"><legend className="text-xs font-bold">Milestone {index + 1}</legend>
+                      <label className="text-xs font-semibold">Milestone<select aria-label={`Milestone ${index + 1}`} className={fieldInput} value={row.milestone} onChange={(event) => updateRows(rows.map((item, rowIndex) => rowIndex === index ? { ...item, milestone: event.target.value } : item))}><option value="">Choose milestone</option>{vocabularyGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.values.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</optgroup>)}</select></label>
+                      <label className="text-xs font-semibold">Target handover month<input aria-label={`Target handover month ${index + 1}`} type="month" className={fieldInput} value={row.targetMonth} onChange={(event) => updateRows(rows.map((item, rowIndex) => rowIndex === index ? { ...item, targetMonth: event.target.value } : item))} /></label>
+                      <div className="flex items-end gap-2"><label className="flex-1 text-xs font-semibold">Original target month <span className="font-normal">(optional)</span><input aria-label={`Original target month ${index + 1}`} type="month" className={fieldInput} value={row.originalTargetMonth ?? ''} onChange={(event) => updateRows(rows.map((item, rowIndex) => rowIndex === index ? { ...item, ...(event.target.value ? { originalTargetMonth: event.target.value } : { originalTargetMonth: undefined }) } : item))} /></label><button type="button" className="rounded-lg px-2 py-2 text-sm font-bold text-error underline" onClick={() => updateRows(rows.filter((_, rowIndex) => rowIndex !== index))}>Remove</button></div>
+                    </fieldset>)}
+                    <button type="button" className="rounded-lg bg-surface-container px-3 py-2 text-xs font-bold" onClick={() => updateRows([...rows, { milestone: '', targetMonth: '' }])}>Add milestone</button>
+                  </>;
+                })()}
+              </div>
+              : definition.kind === 'multi_enum' ? <p role="status" className="text-xs text-amber-800">This field has no current dictionary choices, so it cannot be edited with an invented value.</p>
               : definition.kind === 'json' || definition.kind === 'coordinates' ? <textarea aria-label={`${definition.label} JSON value`} className={fieldInput} rows={4} value={draft.rawValue} onChange={(event) => changeDraft(draft.field, { rawValue: event.target.value })} placeholder="Enter the source-defined JSON value" />
                 : <input aria-label={`${definition.label} value`} className={fieldInput} type={definition.kind === 'integer' || definition.kind === 'decimal' ? 'number' : definition.kind === 'date' ? 'date' : definition.kind === 'month' ? 'month' : 'text'} min={definition.min} max={definition.max} step={definition.kind === 'integer' ? 1 : 'any'} value={draft.rawValue} onChange={(event) => changeDraft(draft.field, { rawValue: event.target.value })} placeholder={definition.unit ? `Value (${definition.unit})` : 'Enter a value'} />}
           {definition.condition ? <p className="mt-1 text-xs text-secondary">Condition: {definition.condition}</p> : null}

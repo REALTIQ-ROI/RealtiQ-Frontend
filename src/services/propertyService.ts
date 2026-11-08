@@ -43,7 +43,7 @@ export interface CreatePropertyPayload {
   canonicalUnitTypeId?: string;
   publicationAction?: 'save_draft';
   title: string;
-  price: number;
+  price?: number;
   paymentTypes: PropertyPaymentType[];
   location: string;
   propertyType: PropertyType | string;

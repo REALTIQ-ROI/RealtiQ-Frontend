@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalFieldRegistry, getCanonicalFields, inspectCanonicalPresence, parseCanonicalInput, serializeCanonicalChanges } from './canonicalFieldRegistry';
+import { canonicalFieldRegistry, getCanonicalFields, inspectCanonicalPresence, parseCanonicalInput, reconcileCanonicalFieldRegistry, serializeCanonicalChanges } from './canonicalFieldRegistry';
+import { createCanonicalFieldDictionaryFixture } from '../test/canonicalFieldDictionaryFixture';
 
 describe('canonical field registry', () => {
   it('keeps documented entity applicability and inheritance rules', () => {
@@ -8,14 +9,15 @@ describe('canonical field registry', () => {
     expect(getCanonicalFields('project').find((field) => field.key === 'gatedEstate')?.condition).toBeUndefined();
     expect(getCanonicalFields('project').find((field) => field.key === 'streetAddress')).toMatchObject({ kind: 'text', condition: 'Standard address path' });
     expect(getCanonicalFields('property').find((field) => field.key === 'estateName')?.condition).toContain('gatedEstate');
-    expect(getCanonicalFields('project').find((field) => field.key === 'servicedStatus')?.options).toEqual(['Serviced', 'Not Serviced']);
+    expect(getCanonicalFields('project').find((field) => field.key === 'servicedStatus')?.options).toBeUndefined();
     expect(getCanonicalFields('unit').find((field) => field.key === 'parkingSpaces')).toMatchObject({ kind: 'integer', inherits: true, min: 0 });
     expect(new Set(canonicalFieldRegistry.map((field) => field.key)).size).toBe(canonicalFieldRegistry.length);
   });
 
   it('validates exact enums, conditional numeric limits, month values, zero, and explicit false', () => {
     const bedrooms = canonicalFieldRegistry.find((field) => field.key === 'bedrooms')!;
-    const furnishing = canonicalFieldRegistry.find((field) => field.key === 'furnishing')!;
+    const runtimeFields = reconcileCanonicalFieldRegistry(createCanonicalFieldDictionaryFixture());
+    const furnishing = runtimeFields.find((field) => field.key === 'furnishing')!;
     const month = canonicalFieldRegistry.find((field) => field.key === 'projectedHandoverMonth')!;
     const date = canonicalFieldRegistry.find((field) => field.key === 'launchDate')!;
     const gated = canonicalFieldRegistry.find((field) => field.key === 'gatedEstate')!;
