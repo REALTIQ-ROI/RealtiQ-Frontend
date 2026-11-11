@@ -5,7 +5,6 @@ import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAsync } from '../../../hooks/useAsync';
-import { userService } from '../../../services/userService';
 import SellerTrustBadge from '../../../components/trust/SellerTrustBadge';
 import SellerPayoutAccountSettings from '../../../components/escrow/SellerPayoutAccountSettings';
 import DataProtectionRequests from '../../../components/profile/DataProtectionRequests';
@@ -21,12 +20,12 @@ const formatLabel = (value?: string) =>
     : 'N/A';
 
 const LandlordSettings = () => {
-  const { user } = useAuth();
-  const { data: profile, loading, error, execute } = useAsync(
-    () => (user?._id ? userService.fetchUserById(user._id) : Promise.reject(new Error('Missing user id'))),
+  const { user, refreshUser } = useAuth();
+  const { loading, error, execute } = useAsync(
+    refreshUser,
     Boolean(user?._id),
   );
-  const account = profile ?? user;
+  const account = user;
 
   return (
     <LandlordPortalLayout active="settings" title="Settings">
@@ -65,7 +64,7 @@ const LandlordSettings = () => {
                       <label className="text-[11px] font-bold uppercase tracking-wider text-secondary">Email Address</label>
                       <input
                         className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 rounded-lg px-4 py-3 text-sm"
-                        value={profile?.email ?? user?.email ?? ''}
+                        value={account?.email ?? ''}
                         readOnly
                         type="email"
                       />

@@ -8,6 +8,19 @@ export interface OnboardingDraftField {
   required: boolean;
 }
 
+const declaredPersonCollections = ['directors', 'beneficialOwners', 'executiveMembers', 'authorizedSignatories'] as const;
+
+/** The handoff names these declared-person arrays but does not define a row schema. */
+export const isUndescribedDeclaredPersonPath = (path: string, values: Record<string, unknown>): boolean => {
+  const collection = declaredPersonCollections.find((field) => path === field || path.startsWith(`${field}[`));
+  if (!collection) return false;
+  if (path === collection) return true;
+  const rows = values[collection];
+  if (!Array.isArray(rows)) return true;
+  const index = Number(path.slice(collection.length).match(/^\[(\d+)\]/)?.[1]);
+  return !Number.isInteger(index) || index < 0 || index >= rows.length;
+};
+
 const displayFieldPath = (path: string): string => path
   .replace(/\[(\d+)\]/g, ' $1')
   .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -56,6 +69,7 @@ export const onboardingDraftFields = (
 
   Object.entries(values).forEach(([key, value]) => visit(value, key));
   requiredPaths.forEach((path) => {
+    if (isUndescribedDeclaredPersonPath(path, values)) return;
     if (!fields.has(path)) fields.set(path, {
       path,
       label: displayFieldPath(path),

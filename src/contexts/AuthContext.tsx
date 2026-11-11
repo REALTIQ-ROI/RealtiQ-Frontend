@@ -1,7 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { authService, isLoginSecondFactorChallenge, type LoginSecondFactorChallenge, type RegisterResponse } from '../services/authService';
-import { userService } from '../services/userService';
 import { profileService, type AccountProfileSummary } from '../services/profileService';
 import { adminAccessService, type AdminAccessProjection } from '../services/adminAccessService';
 import type { LoginPayload, RegisterPayload, User } from '../types';
@@ -57,6 +56,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loginChallenge, setLoginChallenge] = useState<LoginSecondFactorChallenge | null>(null);
   const accessRequestVersion = useRef(0);
   const profileRequestVersion = useRef(0);
+  const accountRequestVersion = useRef(0);
   const latestSession = useRef({ userId: user?._id ?? null, role: user?.role ?? null, token, profileId: activeProfile?.id ?? null });
   latestSession.current = { userId: user?._id ?? null, role: user?.role ?? null, token, profileId: activeProfile?.id ?? null };
 
@@ -160,13 +160,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshUser = useCallback(async (): Promise<User | null> => {
     if (!userId || !token) return null;
+    const requestVersion = ++accountRequestVersion.current;
     const sessionToken = token;
-    const refreshed = await userService.fetchUserById(userId);
-    if (!refreshed || refreshed._id !== userId) return null;
+    const refreshed = await authService.account();
     if (
+      requestVersion !== accountRequestVersion.current ||
       latestSession.current.userId !== userId || latestSession.current.token !== sessionToken ||
       localStorage.getItem('token') !== sessionToken
     ) return null;
+    if (!refreshed || refreshed._id !== userId) throw new Error('The current account could not be confirmed. Refresh your account before continuing.');
     updateUser(refreshed);
     return refreshed;
   }, [token, updateUser, userId]);
@@ -181,8 +183,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       localStorage.getItem('activeProfileId') === selectedIdAtStart;
     if (!session.userId || !session.token) return;
     if (user?.role !== 'admin') {
-      await authService.account();
-      if (!isCurrent()) return;
       await refreshUser();
       if (!isCurrent()) return;
     }
@@ -223,8 +223,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (id !== selectedStaffProfile) throw new Error('Admin staff-profile switching is disabled. Continue with the current assigned staff profile.');
     }
     if (user?.role !== 'admin') {
-      await authService.account();
-      if (!isCurrent()) throw new Error('The session or selected profile changed. Refresh your profile list before continuing.');
       await refreshUser();
       if (!isCurrent()) throw new Error('The session or selected profile changed. Refresh your profile list before continuing.');
     }

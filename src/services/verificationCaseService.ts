@@ -7,7 +7,9 @@ export interface ProfileEvidenceContract {
   documentKinds: Record<string, string[]>;
   maxBytes: number;
   policies: Record<string, { state: string; revision?: number }>;
-  acceptedInternationalIds: string[];
+  // The handoff documents this array but no populated entry DTO. Do not infer
+  // country/document fields from the separate Console policy value schema.
+  acceptedInternationalIds: unknown[];
   individualRoutes: Record<string, string[]>;
   serviceAreaSource: { state: string; endpoint?: string };
   subjects: { fixed: string[]; personFields: string[] };
@@ -77,6 +79,24 @@ export interface VerificationCaseHistoryPage {
   events: Array<{ id: string; action: string; version: number; at: string; [key: string]: unknown }>;
   nextCursor: string | null;
 }
+
+// Section 02 uses `history`; the earlier chapter 19 response uses `events`.
+// Keep the UI's internal page shape while supporting both documented envelopes.
+const normalizeHistoryPage = (data: unknown): VerificationCaseHistoryPage => {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Verification case history returned an unsupported response. Refresh to try again.');
+  }
+  const page = data as Record<string, unknown>;
+  const events = 'history' in page ? page.history : page.events;
+  if (!Array.isArray(events) || !events.every((event) => (
+    event && typeof event === 'object' && typeof event.id === 'string' &&
+    typeof event.action === 'string' && typeof event.at === 'string' &&
+    typeof event.version === 'number' && Number.isInteger(event.version) && event.version >= 0
+  )) || (page.nextCursor !== null && typeof page.nextCursor !== 'string')) {
+    throw new Error('Verification case history returned an unsupported response. Refresh to try again.');
+  }
+  return { events, nextCursor: page.nextCursor as string | null };
+};
 
 export const verificationDecisionSources = [
   'original_document',
@@ -167,8 +187,8 @@ export const verificationCaseService = {
   },
 
   async holderHistory(id: string, before?: string): Promise<VerificationCaseHistoryPage> {
-    const { data } = await api.get<VerificationCaseHistoryPage>(`${holderBase}/verification-cases/${encodeURIComponent(id)}/history`, { params: { limit: 25, ...(before ? { before } : {}) } });
-    return data;
+    const { data } = await api.get<unknown>(`${holderBase}/verification-cases/${encodeURIComponent(id)}/history`, { params: { limit: 25, ...(before ? { before } : {}) } });
+    return normalizeHistoryPage(data);
   },
 
   async withdrawCase(id: string, body: { expectedVersion: number; action: 'withdraw' }, challengeId: string): Promise<VerificationCase> {
@@ -187,8 +207,8 @@ export const verificationCaseService = {
   },
 
   async staffHistory(id: string, before?: string): Promise<VerificationCaseHistoryPage> {
-    const { data } = await api.get<VerificationCaseHistoryPage>(`${adminBase}/${encodeURIComponent(id)}/history`, { params: { limit: 25, ...(before ? { before } : {}) } });
-    return data;
+    const { data } = await api.get<unknown>(`${adminBase}/${encodeURIComponent(id)}/history`, { params: { limit: 25, ...(before ? { before } : {}) } });
+    return normalizeHistoryPage(data);
   },
 
   async staffEvidenceContent(caseId: string, evidenceId: string): Promise<Blob> {

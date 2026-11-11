@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import useHasScrolled from '../../hooks/useHasScrolled';
 import usePreservedSidebarScroll from '../../hooks/usePreservedSidebarScroll';
+import BuyerKycNotice from '../verification/BuyerKycNotice';
 import ProfileSwitcher from './ProfileSwitcher';
 
 interface BuyerPortalLayoutProps {
@@ -43,7 +44,7 @@ const BuyerPortalLayout = ({
   pageEyebrow = 'Buyer Portal',
   topbarRight,
 }: BuyerPortalLayoutProps) => {
-  const { user, logout } = useAuth();
+  const { activeProfile, user, logout } = useAuth();
   const { itemCount } = useCart();
   const hasScrolled = useHasScrolled(8);
   const sidebarRef = usePreservedSidebarScroll('buyer');
@@ -135,6 +136,7 @@ const BuyerPortalLayout = ({
             </div>
             {pageSubtitle ? <p className="text-on-surface-variant max-w-2xl mt-3 text-sm leading-relaxed">{pageSubtitle}</p> : null}
           </section>
+          {activeProfile?.kind === 'buyer' ? <BuyerKycNotice status={activeProfile.verification?.status ?? user?.kyc?.status} /> : null}
           {children}
         </div>
       </main>

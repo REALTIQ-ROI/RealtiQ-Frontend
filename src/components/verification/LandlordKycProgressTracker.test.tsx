@@ -38,6 +38,35 @@ describe('LandlordKycProgressTracker', () => {
     expect(screen.getByText(/KYC has been approved/i)).toBeInTheDocument();
   });
 
+  it('names the missing profile field and links directly to the editable KYC draft', () => {
+    const progress = buildLandlordKycProgress({
+      verificationStatus: 'not_submitted',
+      cases: [],
+      availableEvidenceCount: 0,
+      hasOnboardingDraft: true,
+      intakeMissingCount: 1,
+      intakeMissingFields: ['Country of residence'],
+    });
+
+    render(<MemoryRouter><LandlordKycProgressTracker progress={progress} /></MemoryRouter>);
+
+    expect(screen.getByText(/Complete Country of residence before adding evidence/i)).toBeInTheDocument();
+    expect(screen.getByText(/profile draft still needs: Country of residence/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Complete profile details' })).toHaveAttribute('href', '#kyc-profile-draft');
+  });
+
+  it('does not let an older approved case override the current profile verification status', () => {
+    const progress = buildLandlordKycProgress({
+      verificationStatus: 'not_submitted',
+      cases: [{ id: 'older-approved-case', state: 'approved', submittedAt: '2026-10-31T10:00:00.000Z' }],
+      availableEvidenceCount: 2,
+      hasOnboardingDraft: true,
+    });
+
+    expect(progress.approved).toBe(false);
+    expect(progress.summary).toMatch(/not confirmed as approved/i);
+  });
+
   it('keeps later step links unavailable until the prior KYC step is complete', () => {
     const progress = buildLandlordKycProgress({
       verificationStatus: 'not_submitted',

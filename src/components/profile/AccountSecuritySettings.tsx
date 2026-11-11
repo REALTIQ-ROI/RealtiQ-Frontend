@@ -24,7 +24,7 @@ const errorText = (error: unknown) => {
 };
 
 const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
-  const { activeProfile, logout, updateUser, refreshProfiles } = useAuth();
+  const { activeProfile, isLoading: accountLoading, logout, updateUser, refreshProfiles, refreshUser } = useAuth();
   const stepUp = useBoundStepUp<unknown>();
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phone ?? '');
@@ -272,7 +272,7 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
   };
 
   const startPhoneChallenge = async () => {
-    if (!user.phone || phoneBusy) return;
+    if (accountLoading || user.phoneVerified !== false || !user.phone || phoneBusy) return;
     setPhoneBusy(true);
     setPhoneError(null);
     try {
@@ -295,6 +295,7 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
     setPhoneError(null);
     try {
       setPhoneChallenge(await authService.phoneVerification(phoneChallenge.id));
+      await refreshUser();
     } catch (error) {
       setPhoneError(errorText(error));
     } finally {
@@ -304,12 +305,13 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
 
   const submitPhoneCode = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!phoneChallenge || phoneBusy || !/^\d+$/.test(phoneCode)) return;
+    if (user.phoneVerified !== false || !phoneChallenge || phoneBusy || !/^\d+$/.test(phoneCode)) return;
     setPhoneBusy(true);
     setPhoneError(null);
     try {
       setPhoneChallenge(await authService.verifyPhone(phoneChallenge.id, phoneCode));
       setPhoneCode('');
+      await refreshUser();
     } catch (error) {
       setPhoneError(errorText(error));
     } finally {
@@ -347,6 +349,15 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
     }
   };
 
+  const refreshPhoneAccount = async () => {
+    if (phoneBusy) return;
+    setPhoneBusy(true);
+    setPhoneError(null);
+    try { await refreshUser(); }
+    catch (error) { setPhoneError(errorText(error)); }
+    finally { setPhoneBusy(false); }
+  };
+
   const verified = Boolean(phoneChallenge?.verifiedAt);
 
   return (
@@ -374,7 +385,7 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
       </form>
 
       <div className="grid gap-4 border-t border-outline-variant/10 pt-5 lg:grid-cols-2">
-        <section className="rounded-lg bg-surface-container-low p-4" aria-labelledby="phone-verification-heading">
+        {accountLoading ? <p role="status" className="text-sm text-secondary">Loading account verification status…</p> : user.phoneVerified === false ? <section className="rounded-lg bg-surface-container-low p-4" aria-labelledby="phone-verification-heading">
           <h4 id="phone-verification-heading" className="font-bold">Phone verification</h4>
           <p className="mt-1 text-sm text-secondary">SMS is sent to the phone number saved on this account. Phone verification does not replace identity or organization verification.</p>
           {!user.phone ? <p className="mt-3 text-sm text-amber-800">Add an E.164 phone number and sign in again before requesting a verification code.</p> : null}
@@ -383,7 +394,7 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
             <p><strong>Expires:</strong> {new Date(phoneChallenge.expiresAt).toLocaleString()}</p>
             {phoneChallenge.errorCode ? <p className="text-amber-800"><strong>Delivery result:</strong> {phoneChallenge.errorCode}</p> : null}
             {phoneChallenge.sentAt ? <p><strong>Sent:</strong> {new Date(phoneChallenge.sentAt).toLocaleString()}</p> : null}
-            {verified ? <p role="status" className="mt-2 font-semibold text-emerald-700">Phone verified.</p> : null}
+            {verified ? <p role="status" className="mt-2 font-semibold">Phone confirmation received. Refresh account status to confirm verification.</p> : null}
           </div> : null}
           {phoneError ? <p role="alert" className="mt-3 text-sm text-error">{phoneError}</p> : null}
           {phoneHistory ? <div className="mt-3 rounded-md bg-white p-3"><h5 className="text-xs font-bold">Recent verification history</h5>{phoneHistory.length ? <ul className="mt-2 space-y-2">{phoneHistory.map((event) => <li key={event.id} className="border-t pt-2 text-xs"><span className="font-semibold">{event.action.replace(/_/g, ' ')}</span> · attempt {event.attempt} · {new Date(event.at).toLocaleString()}{event.errorCode ? <span className="ml-1 text-amber-800">({event.errorCode})</span> : null}<span className="block text-[10px] text-secondary">Challenge {event.challengeId}</span></li>)}</ul> : <p className="mt-1 text-xs text-secondary">No verification events were returned.</p>}</div> : null}
@@ -404,7 +415,11 @@ const AccountSecuritySettings = ({ user }: AccountSecuritySettingsProps) => {
             </div>
           </>}
           <p className="mt-3 text-xs text-secondary">If SMS delivery is unavailable, the returned configuration/provider error is shown here. The request is not retried automatically.</p>
-        </section>
+        </section> : user.phoneVerified !== true ? <div className="rounded-lg bg-surface-container-low p-4">
+          <p role="status" className="text-sm text-secondary">Account phone verification status is unavailable.</p>
+          {phoneError ? <p role="alert" className="mt-2 text-sm text-error">{phoneError}</p> : null}
+          <Button type="button" variant="secondary" className="mt-3" disabled={phoneBusy} onClick={() => void refreshPhoneAccount()}>Refresh account status</Button>
+        </div> : null}
 
         <section className="rounded-lg bg-surface-container-low p-4" aria-labelledby="sessions-heading">
           <h4 id="sessions-heading" className="font-bold">Signed-in sessions</h4>

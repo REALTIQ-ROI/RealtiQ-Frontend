@@ -150,8 +150,8 @@ export const authService = {
     return data;
   },
 
-  async account(): Promise<unknown> {
-    const { data } = await api.get<unknown>('/auth/account');
+  async account(): Promise<User & { adminAccess?: AdminAccessProjection }> {
+    const { data } = await api.get<User & { adminAccess?: AdminAccessProjection }>('/auth/account');
     return data;
   },
 

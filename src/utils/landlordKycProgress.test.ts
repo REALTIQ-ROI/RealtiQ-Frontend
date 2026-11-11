@@ -33,7 +33,7 @@ describe('buildLandlordKycProgress', () => {
 
     expect(progress.percent).toBe(0);
     expect(progress.steps.map(({ state }) => state)).toEqual(['current', 'upcoming', 'upcoming', 'upcoming']);
-    expect(progress.steps[0].detail).toContain('Complete the 2 required profile details');
+    expect(progress.steps[0].detail).toContain('Complete 2 required profile details');
     expect(progress.nextAction).toContain('before moving to evidence');
   });
 
@@ -71,6 +71,7 @@ describe('buildLandlordKycProgress', () => {
   it('shows completion only when the server reports approval', () => {
     const fromProfile = buildLandlordKycProgress(input({ verificationStatus: 'approved', hasOnboardingDraft: false }));
     const fromCase = buildLandlordKycProgress(input({
+      verificationStatus: undefined,
       cases: [{ id: 'case-2', state: 'approved', submittedAt: '2026-10-30T12:00:00.000Z' }],
     }));
 

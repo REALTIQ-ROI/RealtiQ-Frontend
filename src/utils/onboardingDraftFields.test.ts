@@ -20,4 +20,11 @@ describe('onboarding draft fields', () => {
     expect(updatedCount).toEqual({ companyName: 'RealtiQ', directors: [{ name: 'Ada' }], seats: 3, active: true, countryOfResidence: 'NG' });
     expect(current.directors[0].name).toBe('Amina');
   });
+
+  it('does not replace an undescribed empty declared-person collection with a text field', () => {
+    const values = { directors: [] };
+    expect(onboardingDraftFields(values, ['directors[0].fullLegalName'])).toEqual([]);
+    expect(updateOnboardingDraftField(values, 'companyName', 'Example Ltd')).toEqual({ directors: [], companyName: 'Example Ltd' });
+    expect(values.directors).toEqual([]);
+  });
 });

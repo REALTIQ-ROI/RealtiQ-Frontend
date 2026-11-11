@@ -28,7 +28,7 @@ describe('AuthProvider account and profile lifecycle', () => {
     vi.clearAllMocks();
     localStorage.clear();
     sessionStorage.clear();
-    vi.mocked(authService.account).mockResolvedValue({});
+    vi.mocked(authService.account).mockResolvedValue(account);
     vi.mocked(authService.logout).mockResolvedValue(undefined);
     vi.mocked(profileService.list).mockResolvedValue({ profiles, nextCursor: null });
     vi.mocked(profileService.current).mockImplementation(async (id) => ({ profile: profiles.find((profile) => profile.id === id)! }));
@@ -39,7 +39,7 @@ describe('AuthProvider account and profile lifecycle', () => {
     localStorage.setItem('user', JSON.stringify(account));
     localStorage.setItem('activeProfileId', 'profile-2');
     const calls: string[] = [];
-    vi.mocked(authService.account).mockImplementation(async () => { calls.push('account'); return {}; });
+    vi.mocked(authService.account).mockImplementation(async () => { calls.push('account'); return account; });
     vi.mocked(profileService.list).mockImplementation(async () => { calls.push('profiles'); return { profiles, nextCursor: null }; });
     vi.mocked(profileService.current).mockImplementation(async (id) => { calls.push(`current:${id}`); return { profile: profiles.find((profile) => profile.id === id)! }; });
 
@@ -62,6 +62,42 @@ describe('AuthProvider account and profile lifecycle', () => {
     expect(profileService.current).toHaveBeenLastCalledWith('profile-2');
     expect(localStorage.getItem('activeProfileId')).toBe('profile-2');
     expect(result.current.activeProfile?.id).toBe('profile-2');
+  });
+
+  it('refreshes the account phone flag from the identity endpoint and preserves it across profile switching', async () => {
+    localStorage.setItem('token', 'session-token');
+    localStorage.setItem('user', JSON.stringify({ ...account, phoneVerified: false }));
+    localStorage.setItem('activeProfileId', 'profile-1');
+    vi.mocked(authService.account).mockResolvedValue({ ...account, phoneVerified: false });
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.activeProfile?.id).toBe('profile-1'));
+
+    vi.mocked(authService.account).mockResolvedValue({ ...account, phoneVerified: true });
+    await act(async () => { await result.current.refreshUser(); });
+    expect(result.current.user?.phoneVerified).toBe(true);
+    const accountRefreshesBeforeSwitch = vi.mocked(authService.account).mock.calls.length;
+    await act(async () => { await result.current.switchProfile('profile-2'); });
+    expect(authService.account).toHaveBeenCalledTimes(accountRefreshesBeforeSwitch + 1);
+    expect(result.current.user?.phoneVerified).toBe(true);
+    expect(JSON.parse(localStorage.getItem('user')!).phoneVerified).toBe(true);
+
+    vi.mocked(authService.account).mockResolvedValue({ ...account, phone: '+2348012349999', phoneVerified: false });
+    await act(async () => { await result.current.refreshUser(); });
+    expect(result.current.user?.phoneVerified).toBe(false);
+  });
+
+  it('ignores an older account response after a newer phone verification refresh', async () => {
+    localStorage.setItem('token', 'session-token');
+    localStorage.setItem('user', JSON.stringify(account));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    let resolveOlder!: (value: User) => void;
+    vi.mocked(authService.account).mockImplementationOnce(() => new Promise((resolve) => { resolveOlder = resolve; }));
+    const older = result.current.refreshUser();
+    vi.mocked(authService.account).mockResolvedValueOnce({ ...account, phoneVerified: true });
+    await act(async () => { await result.current.refreshUser(); });
+    await act(async () => { resolveOlder({ ...account, phoneVerified: false }); await older; });
+    expect(result.current.user?.phoneVerified).toBe(true);
   });
 
   it('does not change selected profile when membership disappeared before switching', async () => {

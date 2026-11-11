@@ -1,4 +1,5 @@
 import type { ProfileEvidenceContract } from '../services/verificationCaseService';
+import { internationalIdentityUnavailable } from './individualKycEvidence';
 
 export const HARD_EVIDENCE_UPLOAD_LIMIT = 50 * 1024 * 1024;
 export const STEP_UP_FILE_DIGEST_FIELD = '__stepUpFileSha256';
@@ -26,6 +27,11 @@ export const validateEvidenceUpload = (file: File, metadata: BoundEvidenceMetada
   if (!contract.purposes.includes(metadata.purpose)) return 'Choose a purpose from the current evidence policy.';
   if (!contract.subjects.fixed.includes(metadata.subject) && !contract.subjects.personFields.includes(metadata.subject)) return 'Choose a subject from the current profile evidence policy.';
   const allowedKinds = contract.documentKinds[metadata.purpose];
+  if (metadata.purpose === 'residence_national_id') {
+    const unavailable = internationalIdentityUnavailable(contract);
+    if (unavailable) return unavailable;
+    if (!allowedKinds?.length) return 'Accepted residence national ID document kinds are unavailable. Contact support before uploading this evidence.';
+  }
   if (allowedKinds?.length ? !allowedKinds.includes(metadata.documentKind) : metadata.documentKind !== metadata.purpose) return 'Choose a document kind allowed by the current evidence policy.';
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,99}$/.test(metadata.operationKey) || metadata.operationKey.startsWith('legacy_')) return 'The upload operation key must contain 8–100 allowed characters.';
   if (!contract.formats.includes(file.type)) return 'Choose a PDF, JPEG, PNG or WebP file accepted by the current policy.';

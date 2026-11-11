@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   holderHistory: vi.fn(),
   stepUpStart: vi.fn(),
   stepUpVerify: vi.fn(),
+  uploadEvidence: vi.fn(),
+  toastSuccess: vi.fn(),
 }));
 
 vi.mock('../../../services/profileService', () => ({ profileService: {
@@ -39,6 +41,7 @@ vi.mock('../../../services/verificationCaseService', () => ({ verificationCaseSe
   getEvidenceContent: vi.fn(),
   retryEvidence: vi.fn(),
   deleteEvidence: vi.fn(),
+  uploadEvidence: mocks.uploadEvidence,
   getHolderCase: mocks.getHolderCase,
   holderHistory: mocks.holderHistory,
   createHolderCase: mocks.createHolderCase,
@@ -49,6 +52,7 @@ vi.mock('../../../services/stepUpService', () => ({ stepUpService: {
   start: mocks.stepUpStart,
   verify: mocks.stepUpVerify,
 } }));
+vi.mock('sonner', () => ({ toast: { success: mocks.toastSuccess, error: vi.fn(), info: vi.fn() } }));
 
 vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({
   activeProfile: { id: mocks.profileId, kind: mocks.profileKind, structure: mocks.profileStructure, name: 'Example profile', status: 'active', version: 1, permissions: {} },
@@ -103,6 +107,8 @@ describe('landlord profile verification loading', () => {
     mocks.stepUpStart.mockImplementation((method: 'POST' | 'PATCH') => Promise.resolve({ challengeId: `challenge-${method.toLowerCase()}-${mocks.stepUpStart.mock.calls.length}`, expiresAt: new Date(Date.now() + 60_000).toISOString(), method: 'totp' }));
     mocks.stepUpVerify.mockReset();
     mocks.stepUpVerify.mockResolvedValue(undefined);
+    mocks.uploadEvidence.mockReset();
+    mocks.toastSuccess.mockReset();
   });
 
   it('keeps the page usable when one read request times out and retries that section independently', async () => {
@@ -183,6 +189,9 @@ describe('landlord profile verification loading', () => {
   });
 
   it('shows an evidence selector only for route purposes with available uploaded evidence', async () => {
+    mocks.profileKind = 'buyer';
+    mocks.accountRole = 'buyer';
+    mocks.onboarding.mockResolvedValue({ ...draft, kind: 'buyer' });
     mocks.contract.mockResolvedValue({
       ...contract,
       individualRoutes: { nigerian: ['bvn', 'nin', 'additional_government_id', 'proof_of_address'] },
@@ -206,6 +215,8 @@ describe('landlord profile verification loading', () => {
     expect(screen.queryByLabelText('Evidence for additional government id')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Evidence for proof of address')).not.toBeInTheDocument();
     expect(screen.getByText(/No available bvn evidence has been uploaded/i)).toBeInTheDocument();
+    expect(screen.getByText(/No available additional government id evidence has been uploaded/i)).toBeInTheDocument();
+    expect(screen.getByText(/No available proof of address evidence has been uploaded/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Upload bvn evidence' })).toHaveAttribute('href', '#kyc-evidence-upload');
     expect(screen.getByRole('option', { name: /nin slip · v1/ })).toHaveValue('evidence-nin-1');
 
@@ -216,6 +227,61 @@ describe('landlord profile verification loading', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/bvn, additional government id, proof of address/i);
   });
 
+  it('blocks individual international KYC when the backend accepted-ID list is empty', async () => {
+    mocks.profileKind = 'buyer';
+    mocks.accountRole = 'buyer';
+    mocks.onboarding.mockResolvedValue({ ...draft, kind: 'buyer' });
+    mocks.contract.mockResolvedValue({
+      ...contract,
+      purposes: ['passport', 'residence_national_id', 'overseas_address_proof'],
+      documentKinds: { residence_national_id: ['national_id_card'] },
+      individualRoutes: { international: ['passport', 'residence_national_id', 'overseas_address_proof'] },
+      acceptedInternationalIds: [],
+    });
+    render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Example Landlord' });
+    await userEvent.selectOptions(screen.getByLabelText('Individual identity route'), 'international');
+    expect(screen.getAllByText(/accepted international identity document list has not been configured/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Submit saved draft for verification' })).toBeDisabled();
+  });
+
+  it('shows an explicit success toast when private evidence is returned as available', async () => {
+    mocks.uploadEvidence.mockResolvedValue({
+      id: 'evidence-uploaded', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin',
+      version: 2, previousEvidenceId: 'evidence-old', mimeType: 'application/pdf', size: 100, state: 'available',
+      errorCode: null, contentValidatedAt: '2026-11-11T10:00:00.000Z', createdAt: '2026-11-11T10:00:00.000Z',
+    });
+    mocks.evidence.mockResolvedValue({
+      evidence: [{
+        id: 'evidence-old', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin', version: 1,
+        previousEvidenceId: null, mimeType: 'application/pdf', size: 100, state: 'available', errorCode: null,
+        contentValidatedAt: '2026-11-10T10:00:00.000Z', createdAt: '2026-11-10T10:00:00.000Z',
+      }],
+      nextCursor: null,
+    });
+    const { container } = render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Example Landlord' });
+
+    await userEvent.selectOptions(screen.getByLabelText('Purpose'), 'nin');
+    await userEvent.selectOptions(screen.getByLabelText('Subject'), 'self');
+    await userEvent.selectOptions(screen.getByLabelText(/Replace existing evidence version/), 'evidence-old');
+    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!fileInput) throw new Error('Evidence file input was not rendered.');
+    await userEvent.upload(fileInput, new File(['private evidence'], 'nin.pdf', { type: 'application/pdf' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Verify and continue' }));
+
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      'Private evidence uploaded successfully and is available for selection. KYC approval is a separate step.',
+    ));
+    expect(mocks.uploadEvidence).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Purpose')).toHaveValue('');
+    expect(screen.getByLabelText('Subject')).toHaveValue('');
+    expect(screen.getByLabelText('Document kind')).toHaveValue('');
+    expect(screen.getByLabelText(/Replace existing evidence version/)).toHaveValue('');
+    expect(fileInput).toHaveValue('');
+  }, 15000);
+
   it('shows a normal input for a missing field and saves the first draft using the server version', async () => {
     const emptyDraft = { ...draft, version: 0, values: {}, readiness: { intakeMissing: ['countryOfResidence'] } };
     const savedDraft = { ...emptyDraft, version: 1, values: { countryOfResidence: 'NG' }, readiness: { intakeMissing: [] } };
@@ -225,6 +291,8 @@ describe('landlord profile verification loading', () => {
     render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
     const country = await screen.findByRole('textbox', { name: 'Country Of Residence' });
     expect(country).toHaveAttribute('aria-required', 'true');
+    expect(screen.getByRole('link', { name: 'Complete profile details' })).toHaveAttribute('href', '#kyc-profile-draft');
+    expect(document.getElementById('kyc-profile-draft')).toBeInTheDocument();
     await userEvent.type(country, 'NG');
     await userEvent.click(screen.getByRole('button', { name: 'Save draft with authenticator' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Verify and continue' }));
@@ -277,6 +345,9 @@ describe('landlord profile verification loading', () => {
     expect(submission[0]).toBe('POST');
     expect(submission[1]).toBe('/api/profiles/current/verification-cases');
     expect(submission[2]).toMatchObject({ expectedDraftVersion: 4, people: [] });
+    expect(submission[2]).not.toHaveProperty('identityRoute');
+    expect(submission[2]).not.toHaveProperty('identityCountry');
+    expect(submission[2]).not.toHaveProperty('identityEvidence');
     expect(submission[2]).toHaveProperty('operationKey');
     expect(mocks.stepUpVerify).toHaveBeenNthCalledWith(1, 'challenge-patch-1', '123456');
     expect(mocks.stepUpVerify).toHaveBeenNthCalledWith(2, 'challenge-post-2', '123456');

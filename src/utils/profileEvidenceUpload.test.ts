@@ -43,6 +43,18 @@ describe('profile evidence byte-bound multipart request', () => {
     expect(validateEvidenceUpload(new File(['x'.repeat(2048)], 'large.pdf', { type: 'application/pdf' }), metadata, contract)).toContain('no larger');
   });
 
+  it('does not allow a residence national ID upload when international acceptance is unconfigured', () => {
+    const internationalContract: ProfileEvidenceContract = {
+      ...contract,
+      purposes: [...contract.purposes, 'residence_national_id'],
+      documentKinds: { ...contract.documentKinds, residence_national_id: ['national_id_card'] },
+      individualRoutes: { international: ['passport', 'residence_national_id', 'overseas_address_proof'] },
+    };
+    const file = new File(['identity'], 'id.pdf', { type: 'application/pdf' });
+    const metadata = { purpose: 'residence_national_id', subject: 'self', documentKind: 'national_id_card', operationKey: 'evidence_id_1234' };
+    expect(validateEvidenceUpload(file, metadata, internationalContract)).toMatch(/accepted international identity document list has not been configured/i);
+  });
+
   it('polls current backend validation and removal states', () => {
     expect(isProfileEvidenceProcessing('migration_pending')).toBe(true);
     expect(isProfileEvidenceProcessing('awaiting_upload')).toBe(true);

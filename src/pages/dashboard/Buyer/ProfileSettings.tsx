@@ -4,7 +4,6 @@ import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAsync } from '../../../hooks/useAsync';
-import { userService } from '../../../services/userService';
 import DataProtectionRequests from '../../../components/profile/DataProtectionRequests';
 
 const formatDate = (date?: string) =>
@@ -14,12 +13,12 @@ const formatLabel = (value?: string) =>
   value ? value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'N/A';
 
 const ProfileSettings = () => {
-  const { user } = useAuth();
-  const { data: profile, loading, error, execute } = useAsync(
-    () => (user?._id ? userService.fetchUserById(user._id) : Promise.reject(new Error('Missing user id'))),
+  const { user, refreshUser } = useAuth();
+  const { loading, error, execute } = useAsync(
+    refreshUser,
     Boolean(user?._id),
   );
-  const account = profile ?? user;
+  const account = user;
 
   return (
     <BuyerPortalLayout
@@ -57,7 +56,7 @@ const ProfileSettings = () => {
                         <input
                           className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/20 rounded-lg px-4 py-3 text-sm"
                           type="email"
-                          value={profile?.email ?? user?.email ?? ''}
+                          value={account?.email ?? ''}
                           readOnly
                         />
                       </div>
@@ -137,7 +136,7 @@ const ProfileSettings = () => {
 
           </form>
         )}
-        {account ? <div className="mt-8"><AccountSecuritySettings user={account} /></div> : null}
+        {!loading && !error && account ? <div className="mt-8"><AccountSecuritySettings user={account} /></div> : null}
         <div className="mt-8"><DataProtectionRequests /></div>
       </div>
     </BuyerPortalLayout>

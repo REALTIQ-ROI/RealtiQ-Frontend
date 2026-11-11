@@ -24,6 +24,7 @@ interface LandlordKycProgressInput {
   availableEvidenceCount: number;
   hasOnboardingDraft: boolean;
   intakeMissingCount?: number;
+  intakeMissingFields?: string[];
 }
 
 const submittedCaseStates = new Set(['submitted', 'under_review', 'approved', 'rejected', 'withdrawn', 'superseded', 'expired']);
@@ -42,12 +43,21 @@ export const buildLandlordKycProgress = ({
   availableEvidenceCount,
   hasOnboardingDraft,
   intakeMissingCount = 0,
+  intakeMissingFields = [],
 }: LandlordKycProgressInput): LandlordKycProgress => {
   const latestCase = latestSubmittedCase(cases);
   const caseState = latestCase?.state?.toLowerCase() ?? '';
-  const approved = verificationStatus?.toLowerCase() === 'approved' || caseState === 'approved';
+  const currentProfileStatus = verificationStatus?.trim().toLowerCase();
+  // An explicit current profile decision is authoritative. A stale approved case
+  // must not override a current profile status such as not_submitted or rejected.
+  const approved = currentProfileStatus
+    ? currentProfileStatus === 'approved'
+    : caseState === 'approved';
   const caseSubmitted = Boolean(latestCase && submittedCaseStates.has(caseState));
   const profileStepComplete = (hasOnboardingDraft && intakeMissingCount === 0) || caseSubmitted || approved;
+  const missingProfileDetails = intakeMissingFields.length
+    ? intakeMissingFields.join(', ')
+    : `${intakeMissingCount} required profile detail${intakeMissingCount === 1 ? '' : 's'}`;
   const evidenceStepComplete = caseSubmitted || approved || (profileStepComplete && availableEvidenceCount > 0);
   const submissionStepComplete = caseSubmitted || approved;
 
@@ -61,7 +71,7 @@ export const buildLandlordKycProgress = ({
         : hasOnboardingDraft && intakeMissingCount === 0
           ? 'The required profile details returned by the server are complete.'
           : hasOnboardingDraft
-            ? `Complete the ${intakeMissingCount} required profile detail${intakeMissingCount === 1 ? '' : 's'} before adding evidence.`
+            ? `Complete ${missingProfileDetails} before adding evidence.`
           : 'Load and review the current profile setup draft before moving to evidence.',
     },
     {
@@ -131,8 +141,8 @@ export const buildLandlordKycProgress = ({
     summary = 'The onboarding draft is unavailable, so KYC readiness cannot be assessed yet.';
     nextAction = 'Refresh this page to reload the current profile draft before submitting KYC.';
   } else if (intakeMissingCount > 0) {
-    summary = `The profile draft still has ${intakeMissingCount} required detail${intakeMissingCount === 1 ? '' : 's'} to complete.`;
-    nextAction = 'Complete and save the required profile details before moving to evidence.';
+    summary = `The profile draft still needs: ${missingProfileDetails}.`;
+    nextAction = `Complete and save ${missingProfileDetails} in the Profile draft below before moving to evidence.`;
   } else {
     summary = availableEvidenceCount > 0
       ? `KYC has not been submitted. Profile review is complete and ${availableEvidenceCount} available evidence file${availableEvidenceCount === 1 ? ' is' : 's are'} ready to review.`

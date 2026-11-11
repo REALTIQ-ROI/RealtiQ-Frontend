@@ -20,8 +20,9 @@ import { profileService, type AccountProfileSummary, type ProfileOnboardingDraft
 import { verificationCaseService, type ProfileEvidence, type ProfileEvidenceContract, type VerificationCase, type VerificationCaseHistoryPage, type VerificationCasePersonRoute, type VerificationCaseSubmission } from '../../../services/verificationCaseService';
 import { buildBoundEvidenceFormData, buildEvidenceStepUpBody, isProfileEvidenceAvailable, isProfileEvidenceProcessing, sha256File, validateEvidenceUpload, type BoundEvidenceMetadata } from '../../../utils/profileEvidenceUpload';
 import { buildLandlordKycProgress } from '../../../utils/landlordKycProgress';
+import { availableIndividualEvidence, identityRouteContractIssue, internationalIdentityUnavailable } from '../../../utils/individualKycEvidence';
 import { declaredVerificationPersonPaths, validateVerificationPersonRoutes } from '../../../utils/verificationCaseSubmission';
-import { onboardingDraftFieldDisplayValue, onboardingDraftFields, updateOnboardingDraftField } from '../../../utils/onboardingDraftFields';
+import { isUndescribedDeclaredPersonPath, onboardingDraftFieldDisplayValue, onboardingDraftFields, updateOnboardingDraftField } from '../../../utils/onboardingDraftFields';
 import { isStaffKycProfile, isSupportedApplicantKycProfile } from '../../../utils/supportedKycProfile';
 
 const formatStatus = (value?: string) => value ? value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Not submitted';
@@ -43,11 +44,12 @@ const draftMissingFields = (readiness: unknown): string[] => {
   const missing = (readiness as Record<string, unknown>).intakeMissing;
   return Array.isArray(missing) ? missing.filter((item): item is string => typeof item === 'string') : [];
 };
-const formatDraftFieldName = (field: string) => field.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[._[\]]+/g, ' ').trim();
+const formatDraftFieldName = (field: string) => field.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[._[\]]+/g, ' ').trim().replace(/\b\w/g, (letter) => letter.toUpperCase());
 type VerificationSection = 'draft' | 'evidence' | 'cases' | 'contract';
 type VerificationSectionState<T> = Record<VerificationSection, T>;
 
 const readErrorMessage = (raw: unknown, section: string) => {
+  if (raw instanceof ApiRequestError && raw.code === 'FEATURE_IDENTITY_DOCUMENTS_UNCONFIGURED') return 'International KYC submission is unavailable because the accepted international identity document list has not been configured. Please contact support.';
   if (raw instanceof ApiRequestError && !raw.status && /timed out|unable to confirm a response/i.test(raw.message)) {
     return `${section} did not load before the request timed out. This was a read-only request; no KYC submission or change was made. Retry this section.`;
   }
@@ -92,11 +94,13 @@ const LandlordVerification = () => {
   const [identityCountry, setIdentityCountry] = useState('');
   const [identityEvidence, setIdentityEvidence] = useState<Record<string, string>>({});
   const [caseSubmissionError, setCaseSubmissionError] = useState<string | null>(null);
+  const [caseSubmissionFieldErrors, setCaseSubmissionFieldErrors] = useState<ApiFieldError[]>([]);
   const [contactVerificationRequired, setContactVerificationRequired] = useState(false);
   const caseOperationKeyRef = useRef<{ signature: string; key: string } | null>(null);
   const [pendingUpload, setPendingUpload] = useState<{ challenge: BoundStepUpChallenge; file: File; metadata: BoundEvidenceMetadata; digest: string; profileId: string; token: string } | null>(null);
   const [pendingEvidenceAction, setPendingEvidenceAction] = useState<{ id: string; action: 'retry' | 'delete' } | null>(null);
   const operationKeyRef = useRef<{ signature: string; key: string } | null>(null);
+  const uploadFileInputRef = useRef<HTMLInputElement | null>(null);
   const withdrawStepUp = useBoundStepUp<VerificationCase>();
   const cancelWithdrawStepUp = withdrawStepUp.cancel;
   const createCaseStepUp = useBoundStepUp<VerificationCase>();
@@ -159,7 +163,7 @@ const LandlordVerification = () => {
     setLoading(false);
     setSectionLoading({ draft: false, evidence: false, cases: false, contract: false });
     setSectionErrors({ draft: null, evidence: null, cases: null, contract: null });
-    setCaseSubmissionError(null);
+    setCaseSubmissionError(null); setCaseSubmissionFieldErrors([]);
     setPersonRoutes({});
     setIdentityRoute('');
     setIdentityCountry('');
@@ -235,7 +239,7 @@ const LandlordVerification = () => {
       setError(null);
       setSectionLoading({ draft: false, evidence: false, cases: false, contract: false });
       setSectionErrors({ draft: null, evidence: null, cases: null, contract: null });
-      setCaseSubmissionError(null);
+      setCaseSubmissionError(null); setCaseSubmissionFieldErrors([]);
       setContactVerificationRequired(false);
       setUploadFile(null);
       setUploadPurpose('');
@@ -458,13 +462,15 @@ const LandlordVerification = () => {
   useEffect(() => () => { if (filePreview) URL.revokeObjectURL(filePreview.url); }, [filePreview]);
 
   const availableEvidenceCount = useMemo(() => evidence.filter((item) => isProfileEvidenceAvailable(item.state)).length, [evidence]);
+  const missingDraftFields = useMemo(() => draftMissingFields(onboardingDraft?.readiness), [onboardingDraft?.readiness]);
   const kycProgress = useMemo(() => buildLandlordKycProgress({
     verificationStatus: profile?.verification?.status,
     cases,
     availableEvidenceCount,
     hasOnboardingDraft: Boolean(onboardingDraft),
-    intakeMissingCount: draftMissingFields(onboardingDraft?.readiness).length,
-  }), [availableEvidenceCount, cases, onboardingDraft, profile?.verification?.status]);
+    intakeMissingCount: missingDraftFields.length,
+    intakeMissingFields: missingDraftFields.map(formatDraftFieldName),
+  }), [availableEvidenceCount, cases, missingDraftFields, onboardingDraft, profile?.verification?.status]);
   const profileDataCurrent = Boolean(profileId && loadedProfileId === profileId);
   const pendingEvidenceIds = useMemo(() => evidence.filter((item) => isProfileEvidenceProcessing(item.state)).map((item) => item.id).join(','), [evidence]);
 
@@ -668,8 +674,17 @@ const LandlordVerification = () => {
       const created = await verificationCaseService.uploadEvidence(form, pending.challenge.challengeId);
       if (currentProfileIdRef.current !== pending.profileId) return false;
       setEvidence((current) => [created, ...current.filter((item) => item.id !== created.id)]);
-      setUploadFile(null); setUploadDocumentKind(''); operationKeyRef.current = null;
-      toast.success(`Evidence upload accepted. Current file state: ${formatStatus(created.state)}. File validation status is separate from KYC approval.`);
+      setUploadFile(null);
+      setUploadPurpose('');
+      setUploadSubject('');
+      setUploadDocumentKind('');
+      setUploadPreviousEvidenceId('');
+      setUploadError(null);
+      if (uploadFileInputRef.current) uploadFileInputRef.current.value = '';
+      operationKeyRef.current = null;
+      toast.success(created.state === 'available'
+        ? 'Private evidence uploaded successfully and is available for selection. KYC approval is a separate step.'
+        : `Private evidence upload accepted. Current file state: ${formatStatus(created.state)}. KYC approval is a separate step.`);
       await load();
       return true;
     } catch (raw) {
@@ -705,12 +720,17 @@ const LandlordVerification = () => {
   const draftValuesDirty = Boolean(onboardingDraft && (
     !parsedDraftValues.values || JSON.stringify(parsedDraftValues.values) !== JSON.stringify(onboardingDraft.values)
   ));
-  const missingDraftFields = useMemo(() => draftMissingFields(onboardingDraft?.readiness), [onboardingDraft?.readiness]);
   const draftFields = useMemo(
     () => onboardingDraftFields(parsedDraftValues.values ?? onboardingDraft?.values ?? {}, missingDraftFields),
     [missingDraftFields, onboardingDraft?.values, parsedDraftValues.values],
   );
+  const undescribedPersonFields = useMemo(() => missingDraftFields.filter((path) => isUndescribedDeclaredPersonPath(path, onboardingDraft?.values ?? {})), [missingDraftFields, onboardingDraft?.values]);
   const protectedCaseSubmissionLocked = createCaseStepUp.busy || Boolean(createCaseStepUp.challenge);
+  const internationalSubmissionError = identityRoute
+    ? identityRouteContractIssue(contract, identityRoute)
+    : Object.values(personRoutes).some((person) => person.route === 'international')
+      ? internationalIdentityUnavailable(contract)
+      : null;
   const draftEditorLocked = draftSavePending || saveDraftStepUp.busy || Boolean(saveDraftStepUp.challenge) || protectedCaseSubmissionLocked;
 
   const refreshDraftAfterConflict = async (requestedProfileId: string, message: string) => {
@@ -819,6 +839,8 @@ const LandlordVerification = () => {
 
   const beginCaseSubmission = async () => {
     if (!profileId || !onboardingDraft || !contract || busy || createCaseStepUp.busy || createCaseStepUp.challenge) return;
+    setCaseSubmissionFieldErrors([]);
+    if (internationalSubmissionError) { setCaseSubmissionError(internationalSubmissionError); return; }
     if (draftSavePending || saveDraftStepUp.busy || saveDraftStepUp.challenge) {
       setCaseSubmissionError('Wait for the profile draft save to finish before submitting for verification.');
       return;
@@ -852,10 +874,15 @@ const LandlordVerification = () => {
       ? contract.individualRoutes[identityRoute] ?? []
       : [];
     if (isIndividual && !identityRoute) { setCaseSubmissionError('Choose the identity route required for this individual profile.'); return; }
+    if (isIndividual && identityRoute) {
+      const routeIssue = identityRouteContractIssue(contract, identityRoute);
+      if (routeIssue) { setCaseSubmissionError(routeIssue); return; }
+    }
+    if (isIndividual && !requiredIdentityPurposes.length) { setCaseSubmissionError('The identity evidence requirements are unavailable. Refresh the requirements before submitting.'); return; }
     if (isIndividual && !/^[A-Z]{2}$/.test(identityCountry.trim().toUpperCase())) { setCaseSubmissionError('Enter a two-letter identity country code.'); return; }
     if (isIndividual && identityRoute === 'nigerian' && identityCountry.trim().toUpperCase() !== 'NG') { setCaseSubmissionError('The Nigerian identity route requires country NG.'); return; }
     const identityItems = requiredIdentityPurposes.map((purpose) => ({ purpose, evidenceId: identityEvidence[purpose] ?? '' }));
-    const missingIdentityPurposes = identityItems.filter((item) => !item.evidenceId || !evidence.some((record) => record.id === item.evidenceId && record.purpose === item.purpose && isProfileEvidenceAvailable(record.state)));
+    const missingIdentityPurposes = identityItems.filter((item) => !availableIndividualEvidence(evidence, profileId, item.purpose).some((record) => record.id === item.evidenceId));
     if (missingIdentityPurposes.length) {
       const missingLabels = missingIdentityPurposes.map((item) => item.purpose.replaceAll('_', ' ')).join(', ');
       setCaseSubmissionError(`Available private evidence is required for each configured identity purpose before submitting: ${missingLabels}.`);
@@ -877,7 +904,7 @@ const LandlordVerification = () => {
       : `verification_case_${crypto.randomUUID()}`;
     caseOperationKeyRef.current = { signature, key: operationKey };
     const body: VerificationCaseSubmission = { ...bodyWithoutKey, operationKey };
-    setCaseSubmissionError(null);
+    setCaseSubmissionError(null); setCaseSubmissionFieldErrors([]);
     await createCaseStepUp.begin({
       method: 'POST',
       path: '/api/profiles/current/verification-cases',
@@ -897,8 +924,11 @@ const LandlordVerification = () => {
     const result = await createCaseStepUp.complete(code);
     if (!result.ok) {
       if (handleKycMutationGate(result.code)) return false;
+      setCaseSubmissionFieldErrors(result.fieldErrors ?? []);
       if (!stepUpCodeCanRetryWithSameChallenge(result.code)) {
-        setCaseSubmissionError(result.error ?? 'The verification submission could not be confirmed. Review the latest case and draft status before retrying.');
+        setCaseSubmissionError(result.code === 'FEATURE_IDENTITY_DOCUMENTS_UNCONFIGURED'
+          ? 'International KYC submission is unavailable because the accepted international identity document list has not been configured. Please contact support.'
+          : result.error ?? 'The verification submission could not be confirmed. Review the latest case and draft status before retrying.');
         if (currentProfileIdRef.current === requestedProfileId) {
           if (result.code === 'CONFLICT_ONBOARDING_VERSION') {
             await refreshDraftAfterConflict(requestedProfileId, 'The onboarding draft changed before submission. Review the latest saved version; the case was not submitted against a stale draft.');
@@ -910,7 +940,7 @@ const LandlordVerification = () => {
     }
     if (currentProfileIdRef.current !== requestedProfileId) return false;
     caseOperationKeyRef.current = null;
-    setCaseSubmissionError(null);
+    setCaseSubmissionError(null); setCaseSubmissionFieldErrors([]);
     setCases((current) => [result.value, ...current.filter((item) => item.id !== result.value.id)]);
     toast.success('Verification case submitted. Its status remains pending until an authorized reviewer decides it.');
     await load();
@@ -926,11 +956,13 @@ const LandlordVerification = () => {
     adminAccess?.profileId === profileId &&
     hasAdminCapability(adminAccess, 'verification.read'),
   );
-  const settingsPath = user?.role === 'owner'
+  const settingsPath = selectedProfileKind === 'owner'
     ? '/dashboard/landlord/settings'
-    : user?.role === 'proxy_inspector'
-      ? '/account/security'
-      : '/dashboard/buyer/profile-settings';
+    : selectedProfileKind === 'buyer'
+      ? '/dashboard/buyer/profile-settings'
+      : user?.role === 'proxy_inspector'
+        ? '/account/security'
+        : '/dashboard/buyer/profile-settings';
 
   if (profileDataCurrent && profile && !supportedApplicantProfile) {
     const unsupportedContent = <main className="mx-auto max-w-4xl space-y-6 p-6 sm:p-8 lg:p-12">
@@ -975,7 +1007,7 @@ const LandlordVerification = () => {
         {profileDataCurrent ? <section id="kyc-evidence-upload" aria-label="KYC evidence requirements and upload" className="scroll-mt-6 rounded-2xl border border-outline-variant/10 bg-white p-6">
           {contract ? <>
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Evidence requirements</h2><p className="mt-1 text-sm text-secondary">Current policy version {contract.version} · maximum file size {Math.ceil(contract.maxBytes / 1024 / 1024)} MB · accepted formats {contract.formats.join(', ')}</p></div><span className="text-xs text-secondary">Upload policy: {formatStatus(contract.policies.upload?.state)} · identity policy: {formatStatus(contract.policies.acceptedIdentity?.state)}</span></div>
-          {contract.acceptedInternationalIds.length ? <p className="mt-2 text-sm"><strong>Accepted configured international IDs:</strong> {contract.acceptedInternationalIds.join(', ')}</p> : null}
+          {uploadPurpose === 'residence_national_id' && (internationalIdentityUnavailable(contract) || !contract.documentKinds.residence_national_id?.length) ? <p role="status" className="mt-2 text-sm text-amber-900">{internationalIdentityUnavailable(contract) ?? 'Accepted residence national ID document kinds are unavailable. Contact support before uploading this evidence.'}</p> : null}
           {contract.subjects.personFields.length ? <p className="mt-2 text-sm"><strong>Declared person fields:</strong> {contract.subjects.personFields.join(', ')}</p> : null}
           <div className="mt-4 rounded-lg border border-outline-variant/10 bg-surface-container-low p-4">
             <h3 className="font-bold">Upload private evidence</h3>
@@ -983,10 +1015,10 @@ const LandlordVerification = () => {
             {contract.policies.upload?.state !== 'configured' ? <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">The evidence upload policy is {formatStatus(contract.policies.upload?.state)}. Submission is unavailable until the backend policy is configured.</p> : <div className="mt-3 grid gap-3 md:grid-cols-2">
               <label className="text-xs font-bold">Purpose<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadPurpose} onChange={(event) => { setUploadPurpose(event.target.value); setUploadDocumentKind(''); setUploadPreviousEvidenceId(''); setPendingUpload(null); operationKeyRef.current = null; }}><option value="">Choose purpose</option>{contract.purposes.map((purpose) => <option key={purpose} value={purpose}>{purpose.replaceAll('_', ' ')}</option>)}</select></label>
               <label className="text-xs font-bold">Subject<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadSubject} onChange={(event) => { setUploadSubject(event.target.value); setUploadPreviousEvidenceId(''); setPendingUpload(null); operationKeyRef.current = null; }}><option value="">Choose subject</option>{[...contract.subjects.fixed, ...contract.subjects.personFields].map((subject) => <option key={subject} value={subject}>{subject}</option>)}</select></label>
-              <label className="text-xs font-bold">Document kind<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadDocumentKind || (contract.documentKinds[uploadPurpose]?.length ? '' : uploadPurpose)} onChange={(event) => { setUploadDocumentKind(event.target.value); setPendingUpload(null); operationKeyRef.current = null; }}><option value={contract.documentKinds[uploadPurpose]?.length ? '' : uploadPurpose}>{contract.documentKinds[uploadPurpose]?.length ? 'Choose document kind' : `Use documented default: ${uploadPurpose || 'purpose'}`}</option>{(contract.documentKinds[uploadPurpose] ?? []).map((kind) => <option key={kind} value={kind}>{kind.replaceAll('_', ' ')}</option>)}</select></label>
-              <label className="text-xs font-bold">File<input type="file" accept={contract.formats.join(',')} className="mt-1 block w-full text-sm font-normal" onChange={(event) => { setUploadFile(event.target.files?.[0] ?? null); setPendingUpload(null); operationKeyRef.current = null; setUploadError(null); }} /><span className="mt-1 block font-normal text-secondary">Maximum {Math.ceil(Math.min(contract.maxBytes, 50 * 1024 * 1024) / 1024 / 1024)} MB</span></label>
+              <label className="text-xs font-bold">Document kind<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadDocumentKind || (contract.documentKinds[uploadPurpose]?.length || uploadPurpose === 'residence_national_id' ? '' : uploadPurpose)} onChange={(event) => { setUploadDocumentKind(event.target.value); setPendingUpload(null); operationKeyRef.current = null; }}><option value={contract.documentKinds[uploadPurpose]?.length || uploadPurpose === 'residence_national_id' ? '' : uploadPurpose}>{contract.documentKinds[uploadPurpose]?.length ? 'Choose document kind' : uploadPurpose === 'residence_national_id' ? 'Document choices unavailable' : `Use documented default: ${uploadPurpose || 'purpose'}`}</option>{(contract.documentKinds[uploadPurpose] ?? []).map((kind) => <option key={kind} value={kind}>{kind.replaceAll('_', ' ')}</option>)}</select></label>
+              <label className="text-xs font-bold">File<input ref={uploadFileInputRef} type="file" accept={contract.formats.join(',')} className="mt-1 block w-full text-sm font-normal" onChange={(event) => { setUploadFile(event.target.files?.[0] ?? null); setPendingUpload(null); operationKeyRef.current = null; setUploadError(null); }} /><span className="mt-1 block font-normal text-secondary">Maximum {Math.ceil(Math.min(contract.maxBytes, 50 * 1024 * 1024) / 1024 / 1024)} MB</span></label>
               <label className="text-xs font-bold">Replace existing evidence version (optional)<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadPreviousEvidenceId} onChange={(event) => { setUploadPreviousEvidenceId(event.target.value); setPendingUpload(null); operationKeyRef.current = null; }}><option value="">Submit as a new evidence record</option>{evidence.filter((item) => item.purpose === uploadPurpose && item.subject === uploadSubject && !['deleted', 'deleting', 'privacy_deleting'].includes(item.state)).map((item) => <option key={item.id} value={item.id}>{formatStatus(item.state)} · v{item.version} · {item.id}</option>)}</select><span className="mt-1 block font-normal text-secondary">The server verifies that the selected record is the current version for this purpose and subject.</span></label>
-              <div className="md:col-span-2"><Button type="button" disabled={uploadBusy || Boolean(pendingUpload) || !uploadFile || !uploadPurpose || !uploadSubject || !profileId} onClick={() => void beginEvidenceUpload()}>{uploadBusy ? 'Preparing secure upload…' : 'Continue with authenticator'}</Button>{uploadError ? <p role="alert" className="mt-2 text-sm text-error">{uploadError}</p> : null}</div>
+              <div className="md:col-span-2"><Button type="button" disabled={uploadBusy || Boolean(pendingUpload) || !uploadFile || !uploadPurpose || !uploadSubject || !profileId || (uploadPurpose === 'residence_national_id' && Boolean(internationalIdentityUnavailable(contract) || !contract.documentKinds.residence_national_id?.length))} onClick={() => void beginEvidenceUpload()}>{uploadBusy ? 'Preparing secure upload…' : 'Continue with authenticator'}</Button>{uploadError ? <p role="alert" className="mt-2 text-sm text-error">{uploadError}</p> : null}</div>
             </div>}
           </div>
           </> : <div className="rounded-lg border border-outline-variant/10 bg-surface-container-low p-4"><h2 className="text-xl font-extrabold">Evidence requirements</h2>{sectionErrors.contract ? <p role="alert" className="mt-2 text-sm text-error">{sectionErrors.contract}</p> : <p role="status" className="mt-2 text-sm text-secondary">{sectionLoading.contract ? 'Loading evidence requirements…' : 'Evidence requirements are unavailable.'}</p>}<Button type="button" variant="secondary" className="mt-3" disabled={sectionLoading.contract} onClick={() => void retrySection('contract')}>Retry requirements</Button></div>}
@@ -1005,7 +1037,7 @@ const LandlordVerification = () => {
               <h3 className="font-bold">Submit a verification case</h3>
               <p className="mt-1 text-sm text-secondary">Complete your profile and required evidence before submitting for KYC review.</p>
               {!onboardingDraft ? sectionErrors.draft ? <div role="alert" className="mt-2 text-sm text-error"><p>{sectionErrors.draft}</p><Button type="button" variant="secondary" className="mt-2" disabled={sectionLoading.draft} onClick={() => void retrySection('draft')}>Retry profile draft</Button></div> : <p role="status" className="mt-2 text-sm text-amber-900">{sectionLoading.draft ? 'Loading profile…' : 'Profile details are unavailable. Refresh before submission.'}</p> : null}
-              {onboardingDraft ? <div className="mt-3 rounded-lg bg-white p-3">
+              {onboardingDraft ? <div id="kyc-profile-draft" tabIndex={-1} className="mt-3 scroll-mt-6 rounded-lg bg-white p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h4 className="font-semibold">Profile draft</h4>
                   <p role="status" className={draftValuesDirty || missingDraftFields.length ? 'text-sm font-semibold text-amber-800' : 'text-sm font-semibold text-emerald-700'}>
@@ -1034,6 +1066,7 @@ const LandlordVerification = () => {
                   })}
                   {!draftFields.length ? <p className="text-sm text-secondary sm:col-span-2">No profile fields are currently marked as missing or returned with editable values.</p> : null}
                 </div>
+                {undescribedPersonFields.length ? <p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">The draft requires declared-person details for {undescribedPersonFields.map(formatDraftFieldName).join(', ')}, but the frontend handoff does not define the person-row fields needed to add them. Refresh the draft or contact support; verification submission will remain blocked until these required fields are complete.</p> : null}
                 <p className="mt-2 text-xs text-secondary">Enter your profile details below. These values are saved to your private onboarding draft; verification review is a separate step.</p>
                 {draftConflict ? <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
                   <p>{draftConflict.message} The latest saved draft is version {draftConflict.latest.version}. Review it before continuing.</p>
@@ -1059,8 +1092,8 @@ const LandlordVerification = () => {
                 <label className="text-xs font-bold">Individual identity route<select disabled={protectedCaseSubmissionLocked} className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={identityRoute} onChange={(event) => { setIdentityRoute(event.target.value as 'nigerian' | 'international' | ''); setIdentityEvidence({}); }}><option value="">Choose configured route</option>{(['nigerian', 'international'] as const).filter((route) => Object.prototype.hasOwnProperty.call(contract?.individualRoutes ?? {}, route)).map((route) => <option key={route} value={route}>{route === 'nigerian' ? 'Nigerian' : 'International'}</option>)}</select></label>
                 <label className="text-xs font-bold">Identity country<input disabled={protectedCaseSubmissionLocked} className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal uppercase" maxLength={2} value={identityCountry} onChange={(event) => setIdentityCountry(event.target.value.toUpperCase())} placeholder="NG" /></label>
                 {(identityRoute ? contract?.individualRoutes[identityRoute] ?? [] : []).map((purpose) => {
-                  const purposeEvidence = evidence.filter((item) => item.purpose === purpose);
-                  const availablePurposeEvidence = purposeEvidence.filter((item) => isProfileEvidenceAvailable(item.state));
+                  const purposeEvidence = evidence.filter((item) => item.profileId === profileId && item.subject === 'self' && item.purpose === purpose);
+                  const availablePurposeEvidence = availableIndividualEvidence(evidence, profileId ?? '', purpose);
 
                   if (availablePurposeEvidence.length) {
                     return <label key={purpose} className="text-xs font-bold">Evidence for {purpose.replaceAll('_', ' ')}<select disabled={protectedCaseSubmissionLocked} className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={identityEvidence[purpose] ?? ''} onChange={(event) => setIdentityEvidence((current) => ({ ...current, [purpose]: event.target.value }))}><option value="">Choose available private evidence</option>{availablePurposeEvidence.map((item) => <option key={item.id} value={item.id}>{item.documentKind.replaceAll('_', ' ')} · v{item.version} · {item.id}</option>)}</select></label>;
@@ -1089,8 +1122,10 @@ const LandlordVerification = () => {
                 })}
                 {contract?.policies.acceptedIdentity?.state !== 'configured' ? <p role="status" className="text-sm text-amber-900 sm:col-span-2">Identity verification policy is {formatStatus(contract?.policies.acceptedIdentity?.state)}. The server will not accept identity evidence until its policy is configured.</p> : null}
               </div> : null}
+              {internationalSubmissionError ? <p role="status" className="mt-3 text-sm text-amber-900">{internationalSubmissionError}</p> : null}
+              {caseSubmissionFieldErrors.length ? <ul role="alert" className="mt-3 list-disc pl-5 text-sm text-error">{caseSubmissionFieldErrors.map((item, index) => <li key={`${item.path ?? 'field'}-${index}`}>{item.path ? `${formatDraftFieldName(item.path)}: ` : ''}{item.msg ?? 'Check this value.'}</li>)}</ul> : null}
               {caseSubmissionError || createCaseStepUp.error ? <p role="alert" className="mt-3 text-sm text-error">{caseSubmissionError ?? createCaseStepUp.error}</p> : null}
-              <Button type="button" className="mt-3" disabled={!onboardingDraft || busy || draftValuesDirty || missingDraftFields.length > 0 || draftSavePending || saveDraftStepUp.busy || Boolean(saveDraftStepUp.challenge) || Boolean(draftConflict && !draftConflictReviewed) || createCaseStepUp.busy || Boolean(createCaseStepUp.challenge) || (onboardingDraft.structure === 'individual' && contract?.policies.acceptedIdentity?.state !== 'configured')} onClick={() => void beginCaseSubmission()}>{createCaseStepUp.busy ? 'Preparing secure submission…' : 'Submit saved draft for verification'}</Button>
+              <Button type="button" className="mt-3" disabled={Boolean(internationalSubmissionError) || !onboardingDraft || busy || draftValuesDirty || missingDraftFields.length > 0 || draftSavePending || saveDraftStepUp.busy || Boolean(saveDraftStepUp.challenge) || Boolean(draftConflict && !draftConflictReviewed) || createCaseStepUp.busy || Boolean(createCaseStepUp.challenge) || (onboardingDraft.structure === 'individual' && contract?.policies.acceptedIdentity?.state !== 'configured')} onClick={() => void beginCaseSubmission()}>{createCaseStepUp.busy ? 'Preparing secure submission…' : 'Submit saved draft for verification'}</Button>
             </div>
           </div>
         </section> : null}
@@ -1098,7 +1133,7 @@ const LandlordVerification = () => {
         {profileDataCurrent && selectedCase ? <section className="rounded-2xl border border-outline-variant/10 bg-white p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Case detail and history</h2><p className="mt-1 text-sm text-secondary">{selectedCase.kind} · {selectedCase.state} · Version {selectedCase.version}</p></div><Button type="button" variant="secondary" onClick={() => setSelectedCase(null)}>Close case</Button></div><p className="mt-3 text-sm">Rejection codes: {selectedCase.rejectionCodes.length ? selectedCase.rejectionCodes.join(', ') : 'None returned.'}</p><div className="mt-4 space-y-2">{history?.events.map((event) => <div key={event.id} className="rounded-lg bg-surface-container-low p-3 text-sm"><strong>{event.action}</strong><span className="ml-2 text-xs text-secondary">Version {event.version} · {formatDate(event.at)}</span></div>)}{!history?.events.length ? <p className="text-sm text-secondary">No case history events returned.</p> : null}</div>{history?.nextCursor ? <Button type="button" variant="secondary" disabled={busy} className="mt-3" onClick={async () => { const requestedProfileId = profileId; setBusy(true); try { const page = await verificationCaseService.holderHistory(selectedCase.id, history.nextCursor ?? undefined); if (currentProfileIdRef.current === requestedProfileId) setHistory((current) => current ? { events: [...current.events, ...page.events], nextCursor: page.nextCursor } : page); } catch (raw) { if (currentProfileIdRef.current === requestedProfileId) setError(readErrorMessage(raw, 'Verification case history')); } finally { if (currentProfileIdRef.current === requestedProfileId) setBusy(false); } }}>Load more history</Button> : null}{['submitted', 'under_review'].includes(selectedCase.state) ? <Button type="button" variant="secondary" className="mt-4" disabled={busy || withdrawStepUp.busy || Boolean(withdrawStepUp.challenge)} onClick={() => void beginWithdraw()}>Withdraw case</Button> : null}</section> : null}
         {profileDataCurrent && filePreview ? <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 p-4" role="presentation"><section role="dialog" aria-modal="true" aria-label="Private evidence viewer" className="flex h-[90vh] w-full max-w-5xl flex-col rounded-xl bg-white p-4"><div className="flex items-center justify-between"><h2 className="font-bold">Authorized private evidence · {filePreview.id}</h2><Button type="button" variant="secondary" onClick={() => { URL.revokeObjectURL(filePreview.url); setFilePreview(null); }}>Close viewer</Button></div><div className="mt-3 min-h-0 flex-1"><AuthorizedFilePreview url={filePreview.url} mimeType={filePreview.mimeType} alt="Private profile evidence" /></div></section></div> : null}
         <StepUpDialog challenge={profileDataCurrent ? withdrawStepUp.challenge : null} busy={withdrawStepUp.busy} error={withdrawStepUp.error} onCancel={withdrawStepUp.cancel} onSubmit={completeWithdraw} />
-        <StepUpDialog challenge={profileDataCurrent ? createCaseStepUp.challenge : null} busy={createCaseStepUp.busy} error={createCaseStepUp.error || caseSubmissionError} onCancel={() => { createCaseStepUp.cancel(); setCaseSubmissionError(null); }} onSubmit={completeCaseSubmission} />
+        <StepUpDialog challenge={profileDataCurrent ? createCaseStepUp.challenge : null} busy={createCaseStepUp.busy} error={createCaseStepUp.error || caseSubmissionError} onCancel={() => { createCaseStepUp.cancel(); setCaseSubmissionError(null); setCaseSubmissionFieldErrors([]); }} onSubmit={completeCaseSubmission} />
         <StepUpDialog challenge={profileDataCurrent ? saveDraftStepUp.challenge : null} busy={saveDraftStepUp.busy} error={saveDraftStepUp.error || draftSaveError} onCancel={() => { saveDraftStepUp.cancel(); setDraftSavePending(false); setDraftSaveError(null); }} onSubmit={completeDraftSave} />
         <StepUpDialog challenge={profileDataCurrent ? evidenceStepUp.challenge : null} busy={evidenceStepUp.busy} error={evidenceStepUp.error} onCancel={() => { evidenceStepUp.cancel(); setPendingEvidenceAction(null); }} onSubmit={completeEvidenceAction} />
         <StepUpDialog challenge={profileDataCurrent && pendingUpload && pendingUpload.profileId === profileId ? pendingUpload.challenge : null} busy={uploadBusy} error={uploadError} onCancel={() => { setPendingUpload(null); setUploadError(null); }} onSubmit={completeEvidenceUpload} />
