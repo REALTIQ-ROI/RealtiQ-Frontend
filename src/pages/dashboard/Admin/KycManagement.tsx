@@ -1,3 +1,4 @@
+import ModalPortal from '../../../components/ui/ModalPortal';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AdminLayout from '../../../components/layout/AdminLayout';
 import Button from '../../../components/ui/Button';
@@ -584,7 +585,7 @@ const ManageKyc = () => {
         </div>
 
         <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy} error={stepUp.error} onCancel={stepUp.cancel} onSubmit={completeProtected} />
-        {filePreview ? <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 p-3 sm:p-6"><section role="dialog" aria-modal="true" aria-label="Protected case evidence" className="flex h-[92vh] w-full max-w-6xl flex-col rounded-2xl bg-white p-4 shadow-2xl"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/10 pb-3"><div><p className="text-xs font-bold uppercase tracking-wide text-indigo-700">Protected document</p><h2 className="mt-1 font-bold text-primary">{filePreview.title}</h2><p className="mt-0.5 text-xs text-secondary">The content was retrieved through the authorized case evidence route.</p></div><Button type="button" variant="secondary" onClick={() => { URL.revokeObjectURL(filePreview.url); setFilePreview(null); }}>Close document</Button></div><div className="mt-3 min-h-0 flex-1"><AuthorizedFilePreview url={filePreview.url} mimeType={filePreview.mimeType} alt={filePreview.title} /></div></section></div> : null}
+        {filePreview ? <ModalPortal><div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 p-3 sm:p-6"><section role="dialog" aria-modal="true" aria-label="Protected case evidence" className="flex h-[92vh] w-full max-w-6xl flex-col rounded-2xl bg-white p-4 shadow-2xl"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/10 pb-3"><div><p className="text-xs font-bold uppercase tracking-wide text-indigo-700">Protected document</p><h2 className="mt-1 font-bold text-primary">{filePreview.title}</h2><p className="mt-0.5 text-xs text-secondary">The content was retrieved through the authorized case evidence route.</p></div><Button type="button" variant="secondary" onClick={() => { URL.revokeObjectURL(filePreview.url); setFilePreview(null); }}>Close document</Button></div><div className="mt-3 min-h-0 flex-1"><AuthorizedFilePreview url={filePreview.url} mimeType={filePreview.mimeType} alt={filePreview.title} /></div></section></div></ModalPortal> : null}
       </main>
     </AdminLayout>
   );

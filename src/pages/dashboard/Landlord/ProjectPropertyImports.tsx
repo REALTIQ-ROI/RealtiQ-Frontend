@@ -1,3 +1,4 @@
+import ModalPortal from '../../../components/ui/ModalPortal';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -590,7 +591,7 @@ const ProjectPropertyImports = () => {
         ) : null}
 
         {editingRow ? (
-          <div className="fixed inset-0 z-[2000] overflow-y-auto bg-black/50 p-4">
+          <ModalPortal><div className="fixed inset-0 z-[2000] overflow-y-auto bg-black/50 p-4">
             <form onSubmit={(event) => void submitEdit(event)} className="mx-auto my-8 max-w-5xl rounded-xl bg-white p-6 shadow-xl">
               <div className="flex items-start justify-between gap-4">
                 <div><h2 className="text-2xl font-black">Edit row {editingRow.rowNumber}</h2><p className="text-sm text-secondary">Fields come from this project's server schema. Save revalidates the row.</p></div>
@@ -617,9 +618,9 @@ const ProjectPropertyImports = () => {
                 <Button type="submit" loading={pendingAction === `edit:${editingRow.rowNumber}`} loadingLabel="Saving...">Save row</Button>
               </div>
             </form>
-          </div>
+          </div></ModalPortal>
         ) : null}
-        {cancelReviewOpen && session ? <div className="fixed inset-0 z-[1900] flex items-center justify-center bg-black/50 p-4"><section role="dialog" aria-modal="true" aria-labelledby="import-cancel-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><h2 id="import-cancel-title" className="text-xl font-black">Request import cancellation?</h2><p className="mt-3 text-sm text-secondary">Cancellation is cooperative. Rows already committed will remain in the project and will be reported in the import results.</p><div className="mt-5 flex justify-end gap-2"><Button type="button" variant="secondary" disabled={Boolean(pendingAction)} onClick={() => setCancelReviewOpen(false)}>Keep importing</Button><Button type="button" variant="ghost" loading={pendingAction === 'cancel'} loadingLabel="Cancelling..." disabled={Boolean(pendingAction)} onClick={() => void cancel()}>Request cancellation</Button></div></section></div> : null}
+        {cancelReviewOpen && session ? <ModalPortal><div className="fixed inset-0 z-[1900] flex items-center justify-center bg-black/50 p-4"><section role="dialog" aria-modal="true" aria-labelledby="import-cancel-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><h2 id="import-cancel-title" className="text-xl font-black">Request import cancellation?</h2><p className="mt-3 text-sm text-secondary">Cancellation is cooperative. Rows already committed will remain in the project and will be reported in the import results.</p><div className="mt-5 flex justify-end gap-2"><Button type="button" variant="secondary" disabled={Boolean(pendingAction)} onClick={() => setCancelReviewOpen(false)}>Keep importing</Button><Button type="button" variant="ghost" loading={pendingAction === 'cancel'} loadingLabel="Cancelling..." disabled={Boolean(pendingAction)} onClick={() => void cancel()}>Request cancellation</Button></div></section></div></ModalPortal> : null}
       </main>
       <StepUpDialog challenge={importStepUp.challenge} busy={importStepUp.busy} error={importStepUp.error} onCancel={cancelProtectedImportAction} onSubmit={completeProtectedImportAction} />
     </LandlordPortalLayout>

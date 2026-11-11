@@ -1,3 +1,4 @@
+import ModalPortal from '../../components/ui/ModalPortal';
 import {
   useCallback,
   useEffect,
@@ -1367,7 +1368,7 @@ const PropertyDetails = () => {
             </div>
 
             {nearbyMapOpen ? (
-              <div
+              <ModalPortal><div
                 className='fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-0 sm:p-4'
                 role='dialog'
                 aria-modal='true'
@@ -1404,7 +1405,7 @@ const PropertyDetails = () => {
                     onDetailsNavigate={() => setNearbyMapOpen(false)}
                   />
                 </div>
-              </div>
+              </div></ModalPortal>
             ) : null}
           </div>
 

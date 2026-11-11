@@ -35,7 +35,7 @@ const LandlordKycProgressTracker = ({ progress }: LandlordKycProgressTrackerProp
         <div className="flex items-center justify-between gap-2"><span className="text-xs font-bold uppercase tracking-wide">{stepLabel[step.state]}</span>{step.state === 'complete' ? <span className="material-symbols-outlined text-lg" aria-hidden="true">check_circle</span> : null}</div>
         <h3 className="mt-2 font-bold">{step.label}</h3><p className="mt-1 text-xs leading-5">{step.detail}</p>
         {step.id === 'profile' ? <a className="mt-3 inline-block text-xs font-bold underline" href="#kyc-profile-draft">Complete profile details</a> : null}
-        {step.id === 'evidence' ? step.state === 'upcoming' ? <span className="mt-3 inline-block text-xs text-secondary">Available after profile review</span> : <a className="mt-3 inline-block text-xs font-bold underline" href="#kyc-evidence-upload">Go to evidence upload</a> : null}
+        {step.id === 'evidence' ? step.state === 'upcoming' ? <span className="mt-3 inline-block text-xs text-secondary">Available after profile review</span> : <a className="mt-3 inline-block text-xs font-bold underline" href="#kyc-case-submission">Review required documents</a> : null}
         {step.id === 'submission' ? step.state === 'upcoming' ? <span className="mt-3 inline-block text-xs text-secondary">Available after evidence</span> : <a className="mt-3 inline-block text-xs font-bold underline" href="#kyc-case-submission">Go to case submission</a> : null}
         {step.id === 'review' ? step.state === 'upcoming' ? <span className="mt-3 inline-block text-xs text-secondary">Available after submission</span> : <a className="mt-3 inline-block text-xs font-bold underline" href="#kyc-case-list">Go to case status</a> : null}
       </li>)}

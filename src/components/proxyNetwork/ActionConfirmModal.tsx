@@ -1,3 +1,4 @@
+import ModalPortal from '../ui/ModalPortal';
 import { useEffect, useRef } from 'react';
 
 interface ActionConfirmModalProps {
@@ -32,7 +33,7 @@ const ActionConfirmModal = ({ title, description, confirmLabel, pending = false,
     : 'bg-primary text-on-primary';
 
   return (
-    <div
+    <ModalPortal><div
       className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
@@ -57,7 +58,7 @@ const ActionConfirmModal = ({ title, description, confirmLabel, pending = false,
           <button ref={confirmRef} type="button" onClick={onConfirm} disabled={pending} className={`rounded-lg px-5 py-3 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60 ${confirmClass}`}>{pending ? 'Working...' : confirmLabel}</button>
         </div>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 };
 

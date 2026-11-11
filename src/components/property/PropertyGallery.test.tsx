@@ -42,6 +42,7 @@ describe('property gallery map slide', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'View property map' }));
     await userEvent.click(screen.getByRole('button', { name: 'Expand property map' }));
     const dialog = screen.getByRole('dialog');
+    expect(dialog.parentElement).toBe(document.body);
     expect(screen.getAllByRole('region', { name: 'Lekki Home map' })).toHaveLength(1);
     const pan = within(dialog).getByRole('button', { name: 'Pan map' });
     await userEvent.click(pan);

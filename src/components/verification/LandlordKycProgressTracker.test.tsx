@@ -18,7 +18,7 @@ describe('LandlordKycProgressTracker', () => {
     expect(screen.getByRole('heading', { name: 'KYC progress' })).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: 'KYC completion progress' })).toHaveAttribute('aria-valuenow', '75');
     expect(screen.getByText('Waiting for review')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Go to evidence upload' })).toHaveAttribute('href', '#kyc-evidence-upload');
+    expect(screen.getByRole('link', { name: 'Review required documents' })).toHaveAttribute('href', '#kyc-case-submission');
     expect(screen.getByRole('link', { name: 'Go to case submission' })).toHaveAttribute('href', '#kyc-case-submission');
     expect(screen.getByText(/authorized reviewer/i)).toBeInTheDocument();
   });
@@ -78,7 +78,7 @@ describe('LandlordKycProgressTracker', () => {
     render(<MemoryRouter><LandlordKycProgressTracker progress={progress} /></MemoryRouter>);
 
     expect(screen.getByRole('progressbar', { name: 'KYC completion progress' })).toHaveAttribute('aria-valuenow', '25');
-    expect(screen.getByRole('link', { name: 'Go to evidence upload' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Review required documents' })).toBeInTheDocument();
     expect(screen.getByText('Available after evidence')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Go to case submission' })).not.toBeInTheDocument();
     expect(screen.getByText('Available after submission')).toBeInTheDocument();

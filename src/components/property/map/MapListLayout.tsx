@@ -1,3 +1,4 @@
+import ModalPortal from '../../ui/ModalPortal';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { propertyRouteReference, type Property } from '../../../types';
@@ -126,7 +127,7 @@ const MapListLayout = ({ properties, detailsPath, actions, children, mapClassNam
       </div>
 
       {fullscreen ? (
-        <div className="fixed inset-0 z-[2000] bg-surface" role="dialog" aria-modal="true" aria-label="Fullscreen property map">
+        <ModalPortal><div className="fixed inset-0 z-[2000] bg-surface" role="dialog" aria-modal="true" aria-label="Fullscreen property map">
           <div className="absolute inset-0 lg:right-[360px]"><PropertyMap properties={fullscreenProperties} detailsPath={detailsPath} actions={actions} className="h-full min-h-0 rounded-none" onVisiblePropertiesChange={setFullscreenVisibleProperties} /></div>
           <button type="button" onClick={() => setFullscreen(false)} className="absolute right-3 top-3 z-[2100] flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold text-primary shadow-lg lg:right-[372px]" aria-label="Exit fullscreen map"><span className="material-symbols-outlined">close_fullscreen</span><span className="hidden sm:inline">Exit</span></button>
           <aside className="absolute bottom-0 right-0 top-0 hidden w-[360px] flex-col border-l border-outline-variant/20 bg-surface-container-low lg:flex">
@@ -138,7 +139,7 @@ const MapListLayout = ({ properties, detailsPath, actions, children, mapClassNam
             <div className="border-t border-outline-variant/20 px-3 pb-2"><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search properties..." className="mt-3 w-full rounded-lg bg-surface-container-low px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20" />{fullscreenFilters}</div>
             <div className="min-h-0 flex-1 overflow-y-auto">{resultCards}</div>
           </div>
-        </div>
+        </div></ModalPortal>
       ) : null}
     </div>
   );

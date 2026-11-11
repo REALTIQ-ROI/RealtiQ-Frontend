@@ -1,3 +1,4 @@
+import ModalPortal from '../ui/ModalPortal';
 import { useEffect, useRef, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { getKycMediaKind } from '../../features/proxyNetwork/kycMedia';
@@ -94,7 +95,7 @@ const AdminKycMediaViewer = ({ title, url, mimeType = '', onClose }: AdminKycMed
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4" role="dialog" aria-modal="true" aria-labelledby="admin-kyc-viewer-title" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <ModalPortal><div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4" role="dialog" aria-modal="true" aria-labelledby="admin-kyc-viewer-title" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="w-full max-w-5xl">
         <div className="mb-3 flex items-center justify-between gap-4 text-white">
           <h2 id="admin-kyc-viewer-title" className="text-sm font-semibold uppercase tracking-widest">{title}</h2>
@@ -105,7 +106,7 @@ const AdminKycMediaViewer = ({ title, url, mimeType = '', onClose }: AdminKycMed
         {kind === 'word' ? <div className="rounded-xl bg-white p-8 text-center"><span className="material-symbols-outlined text-5xl text-secondary" aria-hidden="true">description</span><h3 className="mt-3 text-xl font-black">Word document</h3><p className="mt-2 text-sm text-secondary">Browsers cannot reliably preview DOC/DOCX files. Use the signed file action below.</p><div className="mt-5 flex justify-center"><FileFallback url={url} download /></div></div> : null}
         {kind === 'unsupported' ? <div className="rounded-xl bg-white p-8 text-center"><h3 className="text-xl font-black">Preview unavailable</h3><p className="mt-2 text-sm text-secondary">This file type is not supported for an in-app preview.</p><div className="mt-5 flex justify-center"><FileFallback url={url} /></div></div> : null}
       </div>
-    </div>
+    </div></ModalPortal>
   );
 };
 

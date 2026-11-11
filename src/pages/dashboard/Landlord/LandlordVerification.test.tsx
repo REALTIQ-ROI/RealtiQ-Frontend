@@ -194,6 +194,7 @@ describe('landlord profile verification loading', () => {
     mocks.onboarding.mockResolvedValue({ ...draft, kind: 'buyer' });
     mocks.contract.mockResolvedValue({
       ...contract,
+      purposes: ['bvn', 'nin', 'additional_government_id', 'proof_of_address'],
       individualRoutes: { nigerian: ['bvn', 'nin', 'additional_government_id', 'proof_of_address'] },
     });
     mocks.evidence.mockResolvedValue({
@@ -217,7 +218,11 @@ describe('landlord profile verification loading', () => {
     expect(screen.getByText(/No available bvn evidence has been uploaded/i)).toBeInTheDocument();
     expect(screen.getByText(/No available additional government id evidence has been uploaded/i)).toBeInTheDocument();
     expect(screen.getByText(/No available proof of address evidence has been uploaded/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Upload bvn evidence' })).toHaveAttribute('href', '#kyc-evidence-upload');
+    await userEvent.click(screen.getByRole('button', { name: 'Upload BVN evidence' }));
+    expect(screen.getByRole('dialog', { name: 'Upload private evidence' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Upload private evidence' }).parentElement?.parentElement).toBe(document.body);
+    expect(screen.getByText('Document: BVN · For you')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.getByRole('option', { name: /nin slip · v1/ })).toHaveValue('evidence-nin-1');
 
     await userEvent.selectOptions(screen.getByLabelText('Evidence for nin'), 'evidence-nin-1');
@@ -259,13 +264,14 @@ describe('landlord profile verification loading', () => {
       }],
       nextCursor: null,
     });
-    const { container } = render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+    render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
     await screen.findByRole('heading', { name: 'Example Landlord' });
 
+    await userEvent.click(screen.getByRole('button', { name: 'Upload a document' }));
     await userEvent.selectOptions(screen.getByLabelText('Purpose'), 'nin');
     await userEvent.selectOptions(screen.getByLabelText('Subject'), 'self');
     await userEvent.selectOptions(screen.getByLabelText(/Replace existing evidence version/), 'evidence-old');
-    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
     if (!fileInput) throw new Error('Evidence file input was not rendered.');
     await userEvent.upload(fileInput, new File(['private evidence'], 'nin.pdf', { type: 'application/pdf' }));
     await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
@@ -275,11 +281,13 @@ describe('landlord profile verification loading', () => {
       'Private evidence uploaded successfully and is available for selection. KYC approval is a separate step.',
     ));
     expect(mocks.uploadEvidence).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: 'Upload private evidence' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Upload a document' }));
     expect(screen.getByLabelText('Purpose')).toHaveValue('');
     expect(screen.getByLabelText('Subject')).toHaveValue('');
     expect(screen.getByLabelText('Document kind')).toHaveValue('');
     expect(screen.getByLabelText(/Replace existing evidence version/)).toHaveValue('');
-    expect(fileInput).toHaveValue('');
+    expect(document.querySelector<HTMLInputElement>('input[type="file"]')).toHaveValue('');
   }, 15000);
 
   it('shows a normal input for a missing field and saves the first draft using the server version', async () => {

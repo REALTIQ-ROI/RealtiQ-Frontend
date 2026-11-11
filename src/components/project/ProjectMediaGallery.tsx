@@ -1,3 +1,4 @@
+import ModalPortal from '../ui/ModalPortal';
 import { useMemo, useState } from 'react';
 import type { ProjectMedia } from '../../types';
 
@@ -122,7 +123,7 @@ const ProjectMediaGallery = ({ media = [], title }: { media?: ProjectMedia[]; ti
       {activeMedia?.caption ? <p className="text-sm text-secondary">{activeMedia.caption}</p> : null}
 
       {lightboxOpen ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4" onClick={() => setLightboxOpen(false)}>
+        <ModalPortal><div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4" onClick={() => setLightboxOpen(false)}>
           <button type="button" className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20" onClick={() => setLightboxOpen(false)} aria-label="Close project media viewer">
             <span className="material-symbols-outlined">close</span>
           </button>
@@ -152,7 +153,7 @@ const ProjectMediaGallery = ({ media = [], title }: { media?: ProjectMedia[]; ti
             <span className="material-symbols-outlined">chevron_right</span>
           </button>
           <p className="absolute bottom-4 text-sm text-white/60">{activeIndex + 1} / {orderedMedia.length}</p>
-        </div>
+        </div></ModalPortal>
       ) : null}
     </div>
   );

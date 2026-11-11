@@ -1,3 +1,4 @@
+import ModalPortal from '../ui/ModalPortal';
 import { useCallback, useEffect, useState, type RefObject } from 'react';
 import type { Property } from '../../types';
 import LocationMap from './map/LocationMap';
@@ -114,7 +115,7 @@ const PropertyGallery = ({ property, activeIndex, onActiveIndexChange, mediaSect
         ) : null}
       </div>
       {lightboxOpen ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 px-14 py-16 sm:px-20" role="dialog" aria-modal="true" aria-label="Property media viewer" onClick={() => setLightboxOpen(false)}>
+        <ModalPortal><div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 px-14 py-16 sm:px-20" role="dialog" aria-modal="true" aria-label="Property media viewer" onClick={() => setLightboxOpen(false)}>
           <button type="button" autoFocus aria-label="Close media viewer" className="absolute right-4 top-4 z-20 rounded-full bg-white/10 p-2 text-white hover:bg-white/20" onClick={() => setLightboxOpen(false)}><span aria-hidden="true" className="material-symbols-outlined">close</span></button>
           {slideCount > 1 ? <button type="button" aria-label="Previous property media" className="absolute left-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-white/10 p-2 text-white sm:left-4" onClick={(event) => { event.stopPropagation(); previous(); }}><span aria-hidden="true" className="material-symbols-outlined">chevron_left</span></button> : null}
           <div className="max-h-[80vh] w-full max-w-5xl" onClick={(event) => event.stopPropagation()}>
@@ -122,7 +123,7 @@ const PropertyGallery = ({ property, activeIndex, onActiveIndexChange, mediaSect
           </div>
           {slideCount > 1 ? <button type="button" aria-label="Next property media" className="absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-white/10 p-2 text-white sm:right-4" onClick={(event) => { event.stopPropagation(); next(); }}><span aria-hidden="true" className="material-symbols-outlined">chevron_right</span></button> : null}
           <span className="absolute bottom-5 left-1/2 -translate-x-1/2 text-sm font-bold text-white">{currentIndex + 1} / {slideCount}{isMap ? ' \u00b7 Map' : ''}</span>
-        </div>
+        </div></ModalPortal>
       ) : null}
     </div>
   );

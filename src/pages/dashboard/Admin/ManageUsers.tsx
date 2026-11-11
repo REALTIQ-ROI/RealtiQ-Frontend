@@ -1,3 +1,4 @@
+import ModalPortal from '../../../components/ui/ModalPortal';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import Swal from 'sweetalert2';
@@ -307,7 +308,7 @@ const ManageUsers = () => {
         </section>
 
       {editingUser && canManageAccounts ? (
-          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
+          <ModalPortal><div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
             <form className="bg-white rounded-xl p-6 w-full max-w-md space-y-4" onSubmit={(event) => void submitEdit(event)}>
               <div>
                 <h3 className="text-xl font-extrabold">Edit User</h3>
@@ -321,7 +322,7 @@ const ManageUsers = () => {
                 <Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</Button>
               </div>
             </form>
-          </div>
+          </div></ModalPortal>
         ) : null}
         <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy} error={stepUp.error} onCancel={stepUp.cancel} onSubmit={editingUser ? completeEdit : completeDelete} />
       </div>

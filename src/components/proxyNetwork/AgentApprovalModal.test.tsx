@@ -9,14 +9,14 @@ describe('Property Agent approval modal', () => {
     render(<AgentApprovalModal agentName="Ada Agent" pending={false} onClose={() => undefined} onSubmit={onSubmit} />);
     const user = userEvent.setup();
 
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('dialog').parentElement).toBe(document.body);
     expect(screen.getByText(/Ada Agent/)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Approve Property Agent' }));
+    await user.click(screen.getByRole('button', { name: 'Approve Inspection Partner' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Approval notes are required.');
     expect(onSubmit).not.toHaveBeenCalled();
 
     await user.type(screen.getByLabelText('Approval notes'), '  Identity and professional details verified.  ');
-    await user.click(screen.getByRole('button', { name: 'Approve Property Agent' }));
+    await user.click(screen.getByRole('button', { name: 'Approve Inspection Partner' }));
     expect(onSubmit).toHaveBeenCalledWith('Identity and professional details verified.');
   });
 
@@ -25,7 +25,7 @@ describe('Property Agent approval modal', () => {
     const { rerender } = render(<AgentApprovalModal agentName="Ada Agent" pending={false} onClose={() => undefined} onSubmit={onSubmit} />);
     const user = userEvent.setup();
     await user.type(screen.getByLabelText('Approval notes'), 'Verified.');
-    await user.click(screen.getByRole('button', { name: 'Approve Property Agent' }));
+    await user.click(screen.getByRole('button', { name: 'Approve Inspection Partner' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('This profile was already reviewed.');
 
     rerender(<AgentApprovalModal agentName="Ada Agent" pending onClose={() => undefined} onSubmit={onSubmit} />);

@@ -1,3 +1,4 @@
+import ModalPortal from '../ui/ModalPortal';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FloorPlanResponse, MeasurementsResponse, PropertyVirtualTourResponse, RoomsResponse, VirtualTourSummary } from '../../types/virtualTour';
 import { virtualTourService } from '../../services/virtualTourService';
@@ -187,7 +188,7 @@ const VirtualTourExperience = ({ propertyId, summary, onPhotosSelected }: Props)
         {summary?.fallbackUsed ? <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">Preferred provider unavailable — fallback active</span> : null}
       </div>
 
-      {modalOpen && mode !== 'photos' ? <div
+      {modalOpen && mode !== 'photos' ? <ModalPortal><div
         className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-0 backdrop-blur-sm sm:p-4"
         role="dialog"
         aria-modal="true"
@@ -234,7 +235,7 @@ const VirtualTourExperience = ({ propertyId, summary, onPhotosSelected }: Props)
           {mode === 'floorplan' && floorPlan?.available && floorPlan.provider === 'matterport' ? <div className="max-h-32 shrink-0 overflow-y-auto bg-white p-4 text-sm"><p className="font-bold">Interactive viewer floor plan</p><p className="text-secondary">No purchased schematic floor plan is included.</p>{floorPlan.data?.floorPlanAssets.map((asset) => <a key={asset.url} className="mt-2 inline-block font-bold text-primary underline" href={asset.url} target="_blank" rel="noreferrer">Open returned floor-plan image ({asset.floor.label})</a>)}</div> : null}
           {mode === 'measurements' && measurements?.available && measurements.provider === 'realsee' && measurements.measurements?.length ? <div className="max-h-32 shrink-0 overflow-y-auto bg-white p-4 text-sm"><p className="font-bold">Saved provider measurements ({measurements.unit ?? 'm'})</p><ul>{measurements.measurements.map((item) => <li key={item.id}>{item.id}: {item.value} {measurements.unit ?? 'm'}</li>)}</ul></div> : null}
         </div>
-      </div> : null}
+      </div></ModalPortal> : null}
       {!summary?.available && mode === 'photos' ? <p className="text-sm text-secondary">{summary ? statusMessage(summary) : 'Virtual-tour availability has not been provided for this listing.'}</p> : null}
     </section>
   );

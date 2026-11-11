@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { BoundStepUpChallenge } from '../../hooks/useBoundStepUp';
 import Button from '../ui/Button';
+import ModalPortal from '../ui/ModalPortal';
 
 interface StepUpDialogProps {
   challenge: BoundStepUpChallenge | null;
@@ -27,7 +28,7 @@ const StepUpChallengeForm = ({ challenge, busy, error, onCancel, onSubmit }: Ste
     await onSubmit(submittedCode);
   };
 
-  return <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-4" role="presentation">
+  return <ModalPortal><div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-4" role="presentation">
     <section role="dialog" aria-modal="true" aria-labelledby="step-up-title" aria-describedby="step-up-description" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
       <p className="text-xs font-bold uppercase tracking-widest text-secondary">Account security</p>
       <h2 id="step-up-title" className="mt-2 text-2xl font-black">Confirm with authenticator</h2>
@@ -43,7 +44,7 @@ const StepUpChallengeForm = ({ challenge, busy, error, onCancel, onSubmit }: Ste
         </div>
       </form>
     </section>
-  </div>;
+  </div></ModalPortal>;
 };
 
 const StepUpDialog = (props: StepUpDialogProps) => props.challenge
