@@ -6,15 +6,27 @@ import {
   POLICY_NULL_SENTINEL,
   resizePolicyArraysForCount,
   serializePolicyDraft,
+  validatePolicyCrossFields,
 } from './adminPolicyForm';
 
 describe('admin policy schemas and form serialization', () => {
-  it('defines editable schemas for all 31 registered backend policy keys', () => {
-    expect(adminPolicyKeys).toHaveLength(31);
-    expect(adminPolicyRegistry).toHaveLength(31);
+  it('defines editable schemas for all 37 registered backend policy keys', () => {
+    expect(adminPolicyKeys).toHaveLength(37);
+    expect(adminPolicyRegistry).toHaveLength(37);
     for (const key of adminPolicyKeys) {
       expect(getAdminPolicyMetadata(key).fields.length, `${key} fields`).toBeGreaterThan(0);
     }
+  });
+
+  it('keeps Group 04 money policies blank and rejects unsupported launch fees and incomplete billing terms', () => {
+    const fee = getAdminPolicyMetadata('fee_schedule');
+    const tax = getAdminPolicyMetadata('revenue_tax');
+    const catalogue = getAdminPolicyMetadata('profile_billing_catalogue');
+    expect(createPolicyDraft(fee.fields, null)).toEqual({ entries: [] });
+    expect(createPolicyDraft(tax.fields, null)).toEqual({ status: '' });
+    expect(createPolicyDraft(catalogue.fields, null)).toMatchObject({ currency: '', plans: [], renewalMethods: [] });
+    expect(validatePolicyCrossFields('fee_schedule', { entries: [{ code: 'FP-23', mode: null, enabled: true }] })).toContain('entries[0]: FP-23 and FP-24 cannot be enabled.');
+    expect(validatePolicyCrossFields('profile_billing_catalogue', { currency: 'NGN', plans: [{ key: 'plan', terms: [{ period: 'monthly', amountMinor: 101 }] }], additionalSeat: { terms: [] } })).toContain('plans[0].terms: include exactly one monthly and one annual term.');
   });
 
   it('creates blank fields for an unconfigured policy without seeding sample values', () => {

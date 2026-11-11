@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ApiRequestError } from '../../../lib/axios';
@@ -13,7 +13,8 @@ import { useCanonicalFieldDictionary } from '../../../hooks/useCanonicalFieldDic
 import StepUpDialog from '../../../components/auth/StepUpDialog';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { documentService } from '../../../services/documentService';
-import { titleVerificationService } from '../../../services/titleVerificationService';
+import { titleVerificationService, type TitleFeeOrder, type TitleFeeQuote } from '../../../services/titleVerificationService';
+import { formatMoneyMinor } from '../../../utils/moneyMinor';
 import { titleDocumentService } from '../../../services/titleDocumentService';
 import {
   propertyDisplayReference,
@@ -31,7 +32,7 @@ import { buildTitleUploadStepUpBody, digestTitleUpload, validateTitleUploadFile 
 const TITLE_DOCUMENT_ACCEPT = '.pdf,image/jpeg,image/png,image/webp';
 
 const LandlordTitleVerifications = () => {
-  const { user } = useAuth();
+  const { user, activeProfile } = useAuth();
   const navigate = useNavigate();
   const { properties, refreshProperties } = useProperties();
   const [searchParams] = useSearchParams();
@@ -54,6 +55,14 @@ const LandlordTitleVerifications = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [riskFlags, setRiskFlags] = useState<TitleRiskFlag[]>([]);
+  const [feeMode, setFeeMode] = useState<'upfront' | 'deferred' | ''>('');
+  const [feeQuote, setFeeQuote] = useState<TitleFeeQuote | null>(null);
+  const [feeOrder, setFeeOrder] = useState<TitleFeeOrder | null>(null);
+  const [feeBusy, setFeeBusy] = useState(false);
+  const [feeError, setFeeError] = useState('');
+  const [feePaymentUrl, setFeePaymentUrl] = useState<string | null>(null);
+  const feeOperationKey = useRef<string | null>(null);
+  const feeOrderStepUp = useBoundStepUp<Awaited<ReturnType<typeof titleVerificationService.createFeeOrder>>>();
 
   const ownProperties = useMemo(
     () => properties.filter((property) => resolvePropertyOwnerId(property) === user?._id),
@@ -64,6 +73,54 @@ const LandlordTitleVerifications = () => {
     [ownProperties, propertyId],
   );
   const selectedPropertyPublicReference = selectedProperty ? propertyPublicReference(selectedProperty) : '';
+  const feeOrderStorageKey = selectedProperty && activeProfile ? `realtiq.titleFeeOrder:${activeProfile.id}:${selectedProperty._id}` : '';
+  const feeOperationStorageKey = feeOrderStorageKey ? `${feeOrderStorageKey}:operation` : '';
+
+  useEffect(() => {
+    let active = true;
+    setFeeMode(''); setFeeQuote(null); setFeeOrder(null); setFeeError(''); setFeePaymentUrl(null); feeOperationKey.current = null;
+    const savedId = feeOrderStorageKey ? sessionStorage.getItem(feeOrderStorageKey) : null;
+    if (savedId) titleVerificationService.getFeeOrder(savedId).then((order) => { if (active) setFeeOrder(order); }).catch((raw) => { if (active) setFeeError(raw instanceof Error ? raw.message : 'Unable to reload the title fee order.'); });
+    return () => { active = false; feeOrderStepUp.cancel(); };
+    // A change to the property/profile must clear its fee flow and protected challenge.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feeOrderStorageKey]);
+
+  const loadFeeQuote = async () => {
+    if (!selectedProperty || !feeMode || feeBusy) return;
+    setFeeBusy(true); setFeeError(''); setFeeQuote(null);
+    try { setFeeQuote(await titleVerificationService.quoteFee({ propertyId: selectedProperty._id, serviceFeeMode: feeMode })); }
+    catch (raw) { setFeeError(raw instanceof Error ? raw.message : 'Title fee quote is unavailable.'); }
+    finally { setFeeBusy(false); }
+  };
+
+  const beginFeeOrder = async () => {
+    if (!selectedProperty || !feeMode || !feeQuote?.payable || feeOrder || feeOrderStepUp.busy || feeOrderStepUp.challenge) return;
+    const saved = feeOperationStorageKey ? sessionStorage.getItem(feeOperationStorageKey)?.split('|') : null;
+    if (saved?.[0] && saved[0] !== feeMode) { setFeeError('A prior fee-order request has an unresolved result. Review that request before changing the payment mode.'); return; }
+    feeOperationKey.current = saved?.[1] || feeOperationKey.current || `title_fee_${crypto.randomUUID()}`;
+    const body = { propertyId: selectedProperty._id, serviceFeeMode: feeMode, operationKey: feeOperationKey.current };
+    setFeeError('');
+    await feeOrderStepUp.begin({ method: 'POST', path: '/api/title-verifications/fee-orders', body, label: 'Initialize title verification fee order', execute: (challengeId, exactBody) => { if (feeOperationStorageKey) sessionStorage.setItem(feeOperationStorageKey, `${exactBody.serviceFeeMode}|${exactBody.operationKey}`); return titleVerificationService.createFeeOrder(exactBody, challengeId); } });
+  };
+
+  const completeFeeOrder = async (code: string) => {
+    const result = await feeOrderStepUp.complete(code);
+    if (!result.ok) { setFeeError(result.error ?? 'The order outcome is unresolved. Check its reference before another attempt.'); return false; }
+    setFeeOrder(result.value.order);
+    if (feeOrderStorageKey) sessionStorage.setItem(feeOrderStorageKey, result.value.order.id);
+    if (feeOperationStorageKey) sessionStorage.removeItem(feeOperationStorageKey);
+    setFeePaymentUrl(/^https:\/\//i.test(result.value.payment.redirectUrl ?? '') ? result.value.payment.redirectUrl : null);
+    return true;
+  };
+
+  const refreshFeeOrder = async () => {
+    if (!feeOrder) return;
+    setFeeBusy(true); setFeeError('');
+    try { setFeeOrder(await titleVerificationService.getFeeOrder(feeOrder.id)); }
+    catch (raw) { setFeeError(raw instanceof Error ? raw.message : 'Unable to refresh the title fee order.'); }
+    finally { setFeeBusy(false); }
+  };
 
   useEffect(() => {
     if (!propertyId && ownProperties[0]) setPropertyId(propertyRouteReference(ownProperties[0]));
@@ -198,6 +255,10 @@ const LandlordTitleVerifications = () => {
 
   const submitForLegalReview = async () => {
     const document = documents.find((item) => (item.publicReference || item._id) === selectedDocumentId);
+    if (!feeOrder || feeOrder.state !== 'paid' || feeOrder.propertyId !== selectedProperty?._id) {
+      setSubmissionError('A matching title fee order must be confirmed paid by the server before legal review submission. Refresh its status.');
+      return;
+    }
     if (!document || !selectedPropertyPublicReference) {
       toast.error('Select a restricted title document before submitting it for legal review.');
       return;
@@ -212,9 +273,10 @@ const LandlordTitleVerifications = () => {
     setSubmissionError(null);
     try {
       const response = await titleVerificationService.submitTitleVerification({
-        propertyId: selectedPropertyPublicReference,
+        propertyId: selectedProperty._id,
         documentId: selectedDocumentId,
         documentType: selectedDocumentType as TitleDocumentType,
+        feeOrderId: feeOrder.id,
         metadata: { source: 'title_document_upload' },
       });
       setVerifications((current) => [
@@ -245,6 +307,14 @@ const LandlordTitleVerifications = () => {
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
           <section className="rounded-xl bg-white p-6 shadow-sm">
             <h2 className="text-xl font-bold">Upload Title Document</h2>
+            <section className="mt-5 rounded-xl border border-outline-variant/20 bg-surface-container-low p-4" aria-label="Title verification fee order">
+              <h3 className="font-bold">Title verification fee</h3>
+              <p className="mt-1 text-sm text-secondary">The current state band, registry and travel costs, VAT and payable amount come from the server. A quote is informational; only a server-confirmed paid order can accompany a new legal-review submission.</p>
+              <div className="mt-3 flex flex-wrap items-end gap-3"><label className="text-sm font-bold">Service fee mode<select className="mt-1 block rounded-lg border bg-white p-2" value={feeMode} disabled={Boolean(feeOrder)} onChange={(event) => { setFeeMode(event.target.value as 'upfront' | 'deferred'); setFeeQuote(null); feeOperationKey.current = null; }}><option value="">Choose when the service fee is paid</option><option value="upfront">Upfront</option><option value="deferred">Deferred</option></select></label><Button type="button" variant="secondary" disabled={!selectedProperty || !feeMode || feeBusy} onClick={() => void loadFeeQuote()}>{feeBusy ? 'Loading…' : 'Get current quote'}</Button></div>
+              {feeError ? <p role="alert" className="mt-3 text-sm text-error">{feeError}</p> : null}
+              {feeQuote ? <div className="mt-4 rounded-lg bg-white p-4 text-sm"><p className="font-bold">{feeQuote.payable ? 'Payable quote' : 'Quote unavailable'} · {feeQuote.stateLocation?.name ?? 'State unresolved'}</p><dl className="mt-2 grid gap-2 sm:grid-cols-2"><div><dt>Registry and search</dt><dd>{formatMoneyMinor(feeQuote.passThrough.registryAndSearchMinor, 'NGN')}</dd></div><div><dt>Travel</dt><dd>{feeQuote.passThrough.travelMode ?? 'Not returned'} · {formatMoneyMinor(feeQuote.passThrough.travelMinor, 'NGN')}</dd></div><div><dt>Service fee net</dt><dd>{formatMoneyMinor(feeQuote.serviceFee.netMinor, 'NGN')}</dd></div><div><dt>VAT</dt><dd>{formatMoneyMinor(feeQuote.serviceFee.vatMinor, 'NGN')}</dd></div><div><dt>Due now</dt><dd className="font-bold">{formatMoneyMinor(feeQuote.dueNowMinor, 'NGN')}</dd></div></dl>{!feeQuote.payable ? <p role="status" className="mt-2">{feeQuote.unavailableReason ?? 'The current quote cannot be ordered.'}</p> : !feeOrder ? <Button type="button" className="mt-3" disabled={feeOrderStepUp.busy || Boolean(feeOrderStepUp.challenge)} onClick={() => void beginFeeOrder()}>Create fee order with authenticator</Button> : null}</div> : null}
+              {feeOrder ? <div className="mt-4 rounded-lg bg-white p-4 text-sm"><p><strong>Order status:</strong> {feeOrder.state.replaceAll('_', ' ')} · <strong>Provider settlement:</strong> {feeOrder.providerSettlementState.replaceAll('_', ' ')}</p><p className="mt-1">Amount: {formatMoneyMinor(feeOrder.amountMinor, feeOrder.currency)}{feeOrder.paymentReference ? ` · Reference: ${feeOrder.paymentReference}` : ''}</p><div className="mt-3 flex flex-wrap items-center gap-3"><Button type="button" variant="secondary" disabled={feeBusy} onClick={() => void refreshFeeOrder()}>Refresh order status</Button>{feePaymentUrl ? <a className="font-bold underline" href={feePaymentUrl}>Continue at payment provider</a> : null}</div>{feeOrder.state !== 'paid' ? <p className="mt-2 text-secondary">Legal review submission stays unavailable until the server confirms this order as paid.</p> : null}</div> : null}
+            </section>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="text-sm font-semibold">
                 Property
@@ -315,7 +385,7 @@ const LandlordTitleVerifications = () => {
                       })}
                     </select>
                   </label>
-                  <Button type="button" className="mt-3" disabled={submittingVerification || !selectedDocumentId} onClick={() => void submitForLegalReview()}>
+                  <Button type="button" className="mt-3" disabled={submittingVerification || !selectedDocumentId || feeOrder?.state !== 'paid'} onClick={() => void submitForLegalReview()}>
                     {submittingVerification ? 'Submitting…' : 'Submit for legal review'}
                   </Button>
                 </div>
@@ -325,7 +395,7 @@ const LandlordTitleVerifications = () => {
             </div>
             <div className="mt-5 rounded-lg border border-outline-variant/20 bg-surface-container-low p-4">
               <p className="text-sm font-bold">Upload a restricted title document</p>
-              <p className="mt-1 text-xs text-secondary">RealtIQ stores the file securely in the Document Vault and creates the title review automatically.</p>
+              <p className="mt-1 text-xs text-secondary">RealtIQ stores the file in the restricted Document Vault. Review submission and fee-order confirmation are separate steps.</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                 <select className="rounded-lg bg-white px-3 py-2 text-sm" value={uploadTitle} disabled={dictionaryLoading || !documentTypeOptions.length || uploading || titleUploadStepUp.busy || Boolean(titleUploadStepUp.challenge)} onChange={(event) => { const option = documentTypeOptions.find((item) => item.label === event.target.value); if (option) { setDocumentType(option.value); setUploadTitle(option.label); } }}>
                   <option value="">Choose a document title</option>{documentTypeOptions.map((option) => <option key={option.value} value={option.label}>{option.label}</option>)}
@@ -395,6 +465,7 @@ const LandlordTitleVerifications = () => {
           )}
         </section>
         <StepUpDialog challenge={titleUploadStepUp.challenge} busy={uploading || titleUploadStepUp.busy} error={titleUploadStepUp.error} onCancel={titleUploadStepUp.cancel} onSubmit={submitTitleUploadStepUp} />
+        <StepUpDialog challenge={feeOrderStepUp.challenge} busy={feeOrderStepUp.busy} error={feeOrderStepUp.error} onCancel={feeOrderStepUp.cancel} onSubmit={completeFeeOrder} />
       </main>
     </LandlordPortalLayout>
   );

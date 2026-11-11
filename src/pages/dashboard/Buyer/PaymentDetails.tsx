@@ -8,9 +8,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { paymentService } from '../../../services/paymentService';
 import { propertyPublicReference } from '../../../types';
 import type { ApiPayment } from '../../../types';
-
-const formatNGN = (amount: number) =>
-  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(amount);
+import { formatPaymentMajor } from '../../../utils/moneyMinor';
 
 const formatDate = (dateStr: string) =>
   new Date(dateStr).toLocaleString('en-NG', {
@@ -33,7 +31,7 @@ const statusBadge = (status: ApiPayment['status']) => {
 
 const PaymentDetails = () => {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, activeProfile } = useAuth();
   const navigate = useNavigate();
 
   const [payment, setPayment] = useState<ApiPayment | null>(null);
@@ -42,26 +40,30 @@ const PaymentDetails = () => {
   const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
+    let current = true;
     if (!id) {
       setError('No payment ID provided.');
       setLoading(false);
       return;
     }
     setLoading(true);
+    setError(null);
+    setPayment(null);
     paymentService
       .getPaymentById(id)
-      .then(setPayment)
+      .then((value) => { if (current) setPayment(value); })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : 'Payment not found.');
+        if (current) setError(err instanceof Error ? err.message : 'Payment not found.');
       })
-      .finally(() => setLoading(false));
-  }, [id]);
+      .finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
+  }, [id, activeProfile?.id]);
 
   const handleVerify = async () => {
     if (!payment) return;
     const confirmed = await Swal.fire({
       title: 'Verify Payment?',
-      text: 'This will check payment status with Paystack',
+      text: 'This checks the existing payment reference with its provider.',
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Verify',
@@ -244,17 +246,11 @@ const PaymentDetails = () => {
             <div className="grid grid-cols-2 gap-4">
               {[
                 { label: 'Payment Reference', value: payment.reference, mono: true },
-                { label: 'Amount', value: formatNGN(payment.amount) },
+                { label: 'Amount', value: formatPaymentMajor(payment.amount, payment.currency) },
+                { label: 'Currency', value: payment.currency ?? 'Not returned' },
+                { label: 'Purpose', value: payment.purpose ?? 'Not returned' },
                 { label: 'Status', value: payment.status.toUpperCase() },
                 { label: 'Transaction Date', value: formatDate(payment.createdAt) },
-                ...(payment.paystackData
-                  ? [
-                      { label: 'Payment Channel', value: payment.paystackData.channel },
-                      { label: 'Currency', value: payment.paystackData.currency },
-                      { label: 'Gateway Response', value: payment.paystackData.gateway_response },
-                      { label: 'Processing Fees', value: formatNGN(payment.paystackData.fees) },
-                    ]
-                  : []),
               ].map((row) => (
                 <div key={row.label} className="bg-surface-container-low p-4 rounded-lg">
                   <p className="text-[10px] uppercase tracking-widest text-secondary font-bold mb-1">{row.label}</p>
@@ -276,23 +272,10 @@ const PaymentDetails = () => {
                   <span className="material-symbols-outlined text-sm">location_on</span>
                   {payment.property?.location ?? 'Related record unavailable'}
                 </p>
-                {payment.property ? <p className="text-sm font-bold text-primary mt-1">Current listing price: {formatNGN(payment.property.price)}</p> : null}
               </div>
             </div>
           </div>
 
-          <div>
-            <h3 className="text-xs font-bold text-secondary uppercase tracking-widest mb-6">Buyer Details</h3>
-            <div className="flex items-center gap-4 p-6 bg-surface-container-low rounded-xl">
-              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary">
-                {(payment.user?.name ?? 'G').charAt(0)}
-              </div>
-              <div>
-                <p className="font-bold text-on-surface">{payment.user?.name ?? 'Guest'}</p>
-                <p className="text-sm text-secondary">{payment.user?.email ?? 'Secure guest payment'}</p>
-              </div>
-            </div>
-          </div>
         </div>
 
         <div className="col-span-4 space-y-6">
@@ -301,24 +284,8 @@ const PaymentDetails = () => {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-sm text-secondary">Amount</span>
-                <span className="font-bold">{formatNGN(payment.amount)}</span>
+                <span className="font-bold">{formatPaymentMajor(payment.amount, payment.currency)}</span>
               </div>
-              {payment.paystackData && (
-                <>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-secondary">Fees</span>
-                    <span className="font-semibold">{formatNGN(payment.paystackData.fees)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-secondary">Channel</span>
-                    <span className="font-semibold capitalize">{payment.paystackData.channel.replace('_', ' ')}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-secondary">Currency</span>
-                    <span className="font-semibold">{payment.paystackData.currency}</span>
-                  </div>
-                </>
-              )}
               <div className="pt-3 border-t border-surface-container">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-bold text-secondary">Status</span>
@@ -331,7 +298,7 @@ const PaymentDetails = () => {
           {payment.status === 'pending' && canVerify && (
             <div className="bg-amber-50 border border-amber-200 p-6 rounded-xl">
               <h4 className="text-sm font-bold text-amber-800 mb-2">Pending Verification</h4>
-              <p className="text-xs text-amber-700 mb-4">Payment awaiting confirmation. Use the verify button to check status with Paystack.</p>
+              <p className="text-xs text-amber-700 mb-4">Payment awaiting confirmation. Verify the existing reference or refresh its status.</p>
               <button
                 disabled={verifying}
                 onClick={() => void handleVerify()}
@@ -365,7 +332,7 @@ const PaymentDetails = () => {
               </div>
               <div>
                 <h4 className="text-sm font-bold text-white">Secured Transaction</h4>
-                <p className="text-xs opacity-70">Powered by Paystack</p>
+                <p className="text-xs opacity-70">The server confirms payment status from the original provider reference.</p>
               </div>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import AdminLayout from '../../components/layout/AdminLayout';
 import BuyerPortalLayout from '../../components/layout/BuyerPortalLayout';
 import StepUpDialog from '../../components/auth/StepUpDialog';
+import PropertyFxAgreement from '../../components/billing/PropertyFxAgreement';
 import LandlordPortalLayout from '../../components/layout/LandlordPortalLayout';
 import PropertySearchSelect from '../../components/forms/PropertySearchSelect';
 import Button from '../../components/ui/Button';
@@ -14,7 +15,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../lib/axios';
 import { installmentService } from '../../services/installmentService';
-import { paymentService } from '../../services/paymentService';
+import { paymentService, type PaymentInitializationRequest } from '../../services/paymentService';
 import { propertyService } from '../../services/propertyService';
 import { propertyRouteReference } from '../../types';
 import { loadInstallmentProperties } from '../../utils/installmentProperties';
@@ -509,6 +510,7 @@ const PaymentPanel = ({
   installment: Installment;
 }) => {
   const [amount, setAmount] = useState(String(getNextPayableScheduleItem(installment)?.remainingAmount || getTotalOutstandingBalance(installment)));
+  const [selectedFx, setSelectedFx] = useState<{ scheduleItemId: string; id: string } | null>(null);
   const [paying, setPaying] = useState(false);
   const paymentStepUp = useBoundStepUp<Awaited<ReturnType<typeof paymentService.initialize>>>();
   const paymentResourceKey = `installment:${installment._id}`;
@@ -521,19 +523,27 @@ const PaymentPanel = ({
   }, [paymentResourceKey]);
   const selectedItem = getNextPayableScheduleItem(installment);
   const scheduleItemId = selectedItem?._id ?? '';
+  const currency = resolveInstallmentProperty(installment)?.currency;
+  const isUsd = currency === 'USD';
+  const listedAmountMinor = Number(selectedItem?.remainingAmount) * 100;
+  const fxConfirmationId = selectedFx?.scheduleItemId === scheduleItemId ? selectedFx.id : null;
   const targetMilestoneLabel = selectedItem ? `${selectedItem.sequence}. ${selectedItem.title}` : 'No specific milestone';
   const maxPayable = getTotalOutstandingBalance(installment);
   const numericAmount = Number(amount);
   const blockedByConditions = hasUnsatisfiedRequiredConditions(selectedItem);
-  const invalidAmount = !Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > maxPayable;
+  const invalidAmount = isUsd
+    ? !scheduleItemId || !Number.isSafeInteger(listedAmountMinor) || listedAmountMinor <= 0
+    : !Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > maxPayable;
 
   useEffect(() => {
     setAmount(String(getNextPayableScheduleItem(installment)?.remainingAmount || getTotalOutstandingBalance(installment)));
   }, [installment]);
 
   const initialize = async () => {
-    if (invalidAmount || blockedByConditions || !canPayInstallment(installment) || outcomeUnknown || paymentStepUp.busy || paymentStepUp.challenge) return;
-    const body = { installmentId: installment._id, amount: numericAmount, ...(scheduleItemId ? { scheduleItemId } : {}) };
+    if (invalidAmount || blockedByConditions || !currency || (isUsd && (!fxConfirmationId || getOutstandingPenaltyAmount(installment) > 0)) || !canPayInstallment(installment) || outcomeUnknown || paymentStepUp.busy || paymentStepUp.challenge) return;
+    const body: PaymentInitializationRequest = isUsd
+      ? { installmentId: installment._id, scheduleItemId, fxConfirmationId: fxConfirmationId! }
+      : { installmentId: installment._id, amount: numericAmount, ...(scheduleItemId ? { scheduleItemId } : {}) };
     await paymentStepUp.begin({
       method: 'POST', path: '/api/payments/initialize', body,
       label: 'Initialize the selected installment payment',
@@ -593,16 +603,17 @@ const PaymentPanel = ({
       <h3 className="text-lg font-bold">Installment payment</h3>
       <p className="mt-1 text-sm text-secondary">Allocation order: unpaid penalties, overdue principal, due principal, then future eligible principal. Ownership transfers only after valid completion.</p>
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
-        <Input label="Amount" type="number" min="1" max={maxPayable} value={amount} onChange={(event) => setAmount(event.target.value)} error={invalidAmount ? `Enter an amount up to ${formatCurrency(maxPayable)}.` : undefined} />
+        <Input label={isUsd ? 'Current schedule principal (USD)' : 'Amount (NGN)'} type="number" min="1" max={maxPayable} value={isUsd ? String(selectedItem?.remainingAmount ?? '') : amount} readOnly={isUsd} onChange={(event) => setAmount(event.target.value)} error={!isUsd && invalidAmount ? `Enter an amount up to ${formatCurrency(maxPayable)}.` : undefined} />
         <Input label="Target milestone" value={targetMilestoneLabel} readOnly className="cursor-not-allowed opacity-75" />
         <div className="flex items-end">
-          <Button type="button" fullWidth disabled={paying || invalidAmount || blockedByConditions || outcomeUnknown || paymentStepUp.busy || Boolean(paymentStepUp.challenge)} onClick={() => void initialize()}>
-            {outcomeUnknown ? 'Payment outcome unresolved' : paying || paymentStepUp.busy ? 'Preparing secure payment…' : 'Pay with Paystack'}
+          <Button type="button" fullWidth disabled={paying || invalidAmount || blockedByConditions || !currency || (isUsd && (!fxConfirmationId || getOutstandingPenaltyAmount(installment) > 0)) || outcomeUnknown || paymentStepUp.busy || Boolean(paymentStepUp.challenge)} onClick={() => void initialize()}>
+            {outcomeUnknown ? 'Payment outcome unresolved' : paying || paymentStepUp.busy ? 'Preparing secure payment…' : 'Continue to payment'}
           </Button>
         </div>
       </div>
       {blockedByConditions ? <p className="mt-3 text-sm text-error">Required milestone conditions must be satisfied before paying this targeted item.</p> : null}
-      <p className="mt-3 text-sm text-secondary">Maximum payable now: {formatCurrency(maxPayable)}.</p>
+      {isUsd ? <><p className="mt-3 text-sm text-secondary">This payment uses the selected confirmed FX agreement for the current schedule principal. Outstanding penalties cannot be combined in this FX checkout.</p><PropertyFxAgreement installment={{ id: installment._id, scheduleItemId, listedAmountMinor }} onSelect={(id) => setSelectedFx(id ? { scheduleItemId, id } : null)} /></> : <p className="mt-3 text-sm text-secondary">Maximum payable now: {formatCurrency(maxPayable)}.</p>}
+      {!currency ? <p role="alert" className="mt-3 text-sm text-error">The plan's listing currency is unavailable. Refresh the plan before payment.</p> : null}
       {outcomeUnknown ? <div role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950"><p>{statusMessage || 'A previous payment attempt must be reconciled before another initialization.'}</p><p className="mt-1">Reference: {paymentService.getPendingPaymentReference() || 'not available'}</p><Button type="button" variant="secondary" className="mt-2" disabled={checkingStatus || !paymentService.getPendingPaymentReference()} onClick={() => void refreshPaymentStatus()}>{checkingStatus ? 'Checking…' : 'Check payment status'}</Button></div> : statusMessage ? <p role="status" className="mt-3 text-sm text-secondary">{statusMessage}</p> : null}
       {paymentStepUp.error && !paymentStepUp.challenge ? <p role="alert" className="mt-3 text-sm text-error">{paymentStepUp.error}</p> : null}
       <StepUpDialog challenge={paymentStepUp.challenge} busy={paymentStepUp.busy || paying} error={paymentStepUp.error} onCancel={paymentStepUp.cancel} onSubmit={completePaymentStepUp} />
@@ -767,6 +778,8 @@ const InstallmentDetail = ({
   if (!installment) return <div className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-8 text-secondary">Select an installment plan to view details.</div>;
 
   const property = resolveInstallmentProperty(installment);
+  const currentFxItem = getNextPayableScheduleItem(installment);
+  const currentFxMinor = Number(currentFxItem?.remainingAmount) * 100;
   const cancel = async () => {
     const note = window.prompt('Confirm cancellation note. Cancellation does not process a refund or transfer ownership.', '');
     if (note === null) return;
@@ -849,6 +862,8 @@ const InstallmentDetail = ({
       </section>
 
       {role === 'buyer' ? <PaymentPanel installment={installment} /> : null}
+      {role === 'owner' && property?.currency === 'USD' && currentFxItem?._id && Number.isSafeInteger(currentFxMinor) && currentFxMinor > 0 ?
+        <PropertyFxAgreement installment={{ id: installment._id, scheduleItemId: currentFxItem._id, listedAmountMinor: currentFxMinor }} onSelect={() => {}} /> : null}
       <ScheduleTable installment={installment} role={role} onSatisfy={satisfy} />
       <HistoryPanel payments={payments} penalties={penalties} role={role} onWaive={waive} />
 
@@ -1053,7 +1068,7 @@ const Installments = () => {
     <BuyerPortalLayout
       pageEyebrow="Buyer Portal"
       pageTitle="Installments"
-      pageSubtitle="Milestone schedules, penalties, and Paystack payments."
+      pageSubtitle="Milestone schedules, penalties, and payment status."
       topbarRight={searchInput}
     >
       {body}

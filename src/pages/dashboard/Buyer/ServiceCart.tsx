@@ -14,7 +14,7 @@ import { cartService } from '../../../services/cartService';
 import { profileService } from '../../../services/profileService';
 import type { CartCheckoutDetail, CartEligibilityResponse, CartItemResponse } from '../../../types';
 import { cartItemTypeLabel, formatNgn } from '../../../utils/cartFormatters';
-import { checkoutHasUnresolvedProviderOutcome, isUnknownCheckoutInitialization } from '../../../utils/cartCheckoutRecovery';
+import { checkoutHasReference, checkoutHasUnresolvedProviderOutcome, checkoutNeedsReconciliation, isUnknownCheckoutInitialization } from '../../../utils/cartCheckoutRecovery';
 
 interface InvalidCartItem {
   itemId?: string;
@@ -31,6 +31,7 @@ const parseInvalidItems = (value: unknown): InvalidCartItem[] =>
 const EMPTY_CART_ITEMS: CartItemResponse[] = [];
 const checkoutAttemptKey = (profileId: string) => `realtiq.cartCheckoutInitializationAttempt:${profileId}`;
 const checkoutUnknownKey = (profileId: string) => `realtiq.cartCheckoutOutcomeUnknown:${profileId}`;
+const checkoutUnknownReferenceKey = (profileId: string) => `realtiq.cartCheckoutUnknownReference:${profileId}`;
 const eligibilityParams = (item: CartItemResponse) => {
   const rawAccessType = item.metadata?.accessType;
   const accessType = ['one_time', 'daily', 'monthly'].includes(String(rawAccessType)) ? rawAccessType as 'one_time' | 'daily' | 'monthly' : undefined;
@@ -70,17 +71,27 @@ const ServiceCart = () => {
   const paidTourItems = cartItems.filter((item) => item.itemType === 'paid_virtual_tour');
 
   const inspectCheckouts = useCallback(async () => {
+    const profileId = activeProfile?.id;
     setRecoveryError(null);
     try {
-      const result = await cartService.listCartCheckouts({ page: 1, limit: 10 });
+      const unknownReference = profileId ? sessionStorage.getItem(checkoutUnknownReferenceKey(profileId)) : null;
+      const result = await cartService.listCartCheckouts({ page: 1, limit: 10, ...(unknownReference ? { paymentReference: unknownReference } : {}) });
+      if (!profileId || localStorage.getItem('activeProfileId') !== profileId) return;
       setCheckouts(result.checkouts);
-      if (result.checkouts.some((checkout) => checkoutHasUnresolvedProviderOutcome(checkout.initializationState))) {
+      const unresolved = result.checkouts.find(checkoutNeedsReconciliation);
+      if (unresolved) {
         setCheckoutOutcomeUnknown(true);
-        if (activeProfile?.id) sessionStorage.setItem(checkoutUnknownKey(activeProfile.id), '1');
+        sessionStorage.setItem(checkoutUnknownKey(profileId), '1');
+        if (!unknownReference && unresolved.paymentReference) sessionStorage.setItem(checkoutUnknownReferenceKey(profileId), unresolved.paymentReference);
+      } else if (unknownReference && result.checkouts.some((checkout) => checkoutHasReference(checkout, unknownReference))) {
+        setCheckoutOutcomeUnknown(false);
+        sessionStorage.removeItem(checkoutUnknownKey(profileId));
+        sessionStorage.removeItem(checkoutUnknownReferenceKey(profileId));
       }
       setRecoveryReviewed(true);
       setRecoveryAcknowledged(false);
     } catch (raw) {
+      if (!profileId || localStorage.getItem('activeProfileId') !== profileId) return;
       setRecoveryError(raw instanceof Error ? raw.message : 'Unable to inspect recent checkout state.');
       setRecoveryReviewed(false);
     }
@@ -191,6 +202,7 @@ const ServiceCart = () => {
               setCheckoutOutcomeUnknown(true);
               setCheckoutRequestId(raw.requestId ?? null);
               sessionStorage.setItem(checkoutUnknownKey(activeProfile.id), '1');
+              if (raw.reference) sessionStorage.setItem(checkoutUnknownReferenceKey(activeProfile.id), raw.reference);
             }
             const stale = raw instanceof ApiRequestError ? parseInvalidItems(raw.invalidItems) : [];
             if (stale.length) { setInvalidItems(stale); await refreshCart(); }
@@ -212,9 +224,10 @@ const ServiceCart = () => {
     if (!result.ok) return false;
     const response = result.value;
     setServerTotal(response.totalAmount);
-    if (checkoutHasUnresolvedProviderOutcome(response.initializationState)) {
+    if (response.reconciliationRequired || checkoutHasUnresolvedProviderOutcome(response.initializationState) || response.paymentParts.some((part) => part.state === 'outcome_unknown')) {
       setCheckoutOutcomeUnknown(true);
       sessionStorage.setItem(checkoutUnknownKey(activeProfile?.id ?? ''), '1');
+      if (activeProfile?.id && response.reference) sessionStorage.setItem(checkoutUnknownReferenceKey(activeProfile.id), response.reference);
       setRecoveryRequired(true);
       setRecoveryError('The provider initialization result is unresolved. Do not start another checkout. Refresh checkout status or request support.');
       void inspectCheckouts();
@@ -224,13 +237,19 @@ const ServiceCart = () => {
     setRecoveryReviewed(false);
     setRecoveryAcknowledged(false);
     if (response.pending) toast.info('Continuing the existing pending cart checkout.');
-    toast.success(`Checkout total confirmed by the server: ${formatNgn(response.totalAmount)} ${response.currency}.`);
-    const redirect = response.authorizationUrl || response.redirectUrl;
+    toast.info(`Checkout initialized for ${formatNgn(response.totalAmount)}. Payment is not confirmed yet.`);
+    const actionablePart = response.paymentParts.find((part) => part.state === 'initialized' && part.redirectUrl);
+    const redirect = actionablePart?.redirectUrl;
     if (!redirect) {
       setRecoveryRequired(true);
       setRecoveryReviewed(false);
       setRecoveryError('Checkout was created, but no provider URL was returned. Review checkout history before taking another action.');
       void inspectCheckouts();
+      return false;
+    }
+    if (!/^https:\/\//i.test(redirect)) {
+      setRecoveryRequired(true);
+      setRecoveryError('The payment provider URL was invalid. Review the existing checkout before continuing.');
       return false;
     }
     sessionStorage.removeItem(checkoutAttemptKey(activeProfile!.id));
@@ -322,7 +341,7 @@ const ServiceCart = () => {
               Clear cart
             </Button>
             <Button type="button" disabled={!isBuyer || !cart?.items.length || locked || checkoutOutcomeUnknown || checkingOut || checkoutStepUp.busy || Boolean(checkoutStepUp.challenge) || eligibilityLoading || !eligibilityComplete || Boolean(eligibilityProblems.length) || Boolean(paidTourItems.length) || (recoveryRequired && (!recoveryReviewed || !recoveryAcknowledged))} onClick={() => void handleCheckout()}>
-              {checkoutOutcomeUnknown ? 'Checkout unavailable while outcome is unresolved' : checkingOut || checkoutStepUp.busy ? 'Preparing secure checkout…' : recoveryRequired ? 'Authorize a new checkout attempt' : 'Checkout with Paystack'}
+              {checkoutOutcomeUnknown ? 'Checkout unavailable while outcome is unresolved' : checkingOut || checkoutStepUp.busy ? 'Preparing secure checkout…' : recoveryRequired ? 'Authorize a new checkout attempt' : 'Continue to secure checkout'}
             </Button>
             </div>
             {checkoutStepUp.error ? <p role="alert" className="text-xs text-error">{checkoutStepUp.error}</p> : null}
@@ -344,7 +363,7 @@ const ServiceCart = () => {
             <p className="text-xs font-bold uppercase tracking-widest text-secondary">Service Cart</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-primary sm:text-4xl">Service Cart</h1>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
-              Review optional service purchases and pay once through Paystack.
+              Review optional service purchases. The server may initialize separate payment parts for different recipients.
             </p>
           </div>
           {content}
@@ -356,7 +375,7 @@ const ServiceCart = () => {
   return (
     <BuyerPortalLayout
       pageTitle="Service Cart"
-      pageSubtitle="Review optional service purchases and pay once through Paystack."
+      pageSubtitle="Review optional service purchases and their server-created payment parts."
       topbarRight={<Link className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold" to="/dashboard/buyer/cart-checkouts">Checkout history</Link>}
     >
       {content}

@@ -43,10 +43,11 @@ describe('cartService', () => {
       data: {
         checkoutId: 'checkout1',
         reference: 'ref1',
-        redirectUrl: 'https://checkout.paystack.com/ref1',
-        authorizationUrl: 'https://checkout.paystack.com/ref1',
+        redirectUrl: 'https://checkout.monnify.com/ref1',
+        authorizationUrl: 'https://checkout.monnify.com/ref1',
         totalAmount: 55000,
         currency: 'NGN',
+        paymentParts: [{ key: 'merchant-1', custody: 'merchant', paymentId: 'payment-1', reference: 'ref1', amount: 55000, currency: 'NGN', state: 'initialized', redirectUrl: 'https://checkout.monnify.com/ref1', providerCode: null }],
       },
     });
     const result = await cartService.initializeCartCheckout({}, 'challenge-1');
@@ -61,6 +62,8 @@ describe('cartService', () => {
     vi.mocked(api.get).mockResolvedValue({ data: { checkouts: [], total: 0, page: 1, limit: 20 } });
     await cartService.listCartCheckouts({ page: 1, limit: 20, status: 'completed' });
     expect(api.get).toHaveBeenCalledWith('/cart/checkouts', { params: { page: 1, limit: 20, status: 'completed' } });
+    await cartService.listCartCheckouts({ page: 1, limit: 10, paymentReference: 'ref1' });
+    expect(api.get).toHaveBeenCalledWith('/cart/checkouts', { params: { page: 1, limit: 10, paymentReference: 'ref1' } });
     await cartService.adminListCartCheckouts({ page: 1, limit: 20, status: 'partially_failed', user: 'user1', paymentReference: 'ref1' });
     expect(api.get).toHaveBeenCalledWith('/admin/cart-checkouts', { params: { page: 1, limit: 20, status: 'partially_failed', user: 'user1', paymentReference: 'ref1' } });
   });

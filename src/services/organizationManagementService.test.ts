@@ -60,7 +60,7 @@ describe('organizationManagementService', () => {
   it('keeps unconfigured seat plans unavailable and binds seat purchase body to the challenge', async () => {
     const plans = { state: 'unconfigured', plans: [], errorCode: 'FEATURE_POLICY_UNCONFIGURED' };
     const purchase = { purchase: { id: 'purchase-1', profileId: 'org-1', membershipId: 'membership-1', plan: 'returned-plan', reference: 'ref-1', state: 'pending', createdAt: '2026-11-07T10:00:00.000Z' } };
-    const body = { membershipId: 'membership-1', planKey: 'returned-plan', operationKey: 'seat_operation_1' };
+    const body = { membershipId: 'membership-1', planKey: 'returned-plan', billingPeriod: 'monthly' as const, operationKey: 'seat_operation_1' };
     vi.mocked(api.get).mockResolvedValue({ data: plans } as never);
     vi.mocked(api.post).mockResolvedValue({ data: purchase } as never);
 
@@ -111,6 +111,12 @@ describe('organizationManagementService', () => {
     await expect(organizationManagementService.listSeatPurchaseAudit('purchase-1', { limit: 25 })).resolves.toEqual(audit);
     expect(api.get).toHaveBeenNthCalledWith(1, '/profiles/current/seat-purchases/purchase-1');
     expect(api.get).toHaveBeenNthCalledWith(2, '/profiles/current/seat-purchases/purchase-1/audit', { params: { limit: 25 } });
+  });
+
+  it('accepts the current unwrapped seat-purchase detail DTO', async () => {
+    const purchase = { id: 'purchase-2', profileId: 'org-1', membershipId: 'member-1', plan: { key: 'additional-seat', label: 'Seat', billingPeriod: 'annual', amountMinor: 10000, currency: 'NGN', policyRevision: 3 }, reference: 'ref-2', state: 'pending', createdAt: '2026-11-07T10:00:00.000Z' };
+    vi.mocked(api.get).mockResolvedValue({ data: purchase } as never);
+    await expect(organizationManagementService.getSeatPurchase('purchase-2')).resolves.toEqual({ purchase });
   });
 
   it('cancels a seat purchase only with the exact empty-body step-up request', async () => {

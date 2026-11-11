@@ -9,7 +9,7 @@ import { cartService } from '../../services/cartService';
 import { useAuth } from '../../contexts/AuthContext';
 
 vi.mock('../../components/layout/PublicLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
-vi.mock('sonner', () => ({ toast: { success: vi.fn() } }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), info: vi.fn() } }));
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: vi.fn(() => ({ isAuthenticated: true, user: { _id: 'buyer1', role: 'buyer' } })),
 }));
@@ -62,6 +62,16 @@ describe('PostPaymentRedirect', () => {
     expect(screen.getByRole('button', { name: 'Open protected viewer' })).toBeInTheDocument();
     expect(titleDocumentService.openViewer).not.toHaveBeenCalled();
   });
+  it('keeps document access pending when payment is verified but protected access is unavailable', async () => {
+    vi.mocked(escrowService.getPendingId).mockReturnValue(null);
+    vi.mocked(escrowService.getPendingReference).mockReturnValue(null);
+    vi.mocked(titleDocumentService.getPendingPayment).mockReturnValue({ documentId: 'doc1', propertyId: 'prop1', reference: 'RTQ-DOC-PAY-1' });
+    vi.mocked(paymentService.verifyPayment).mockResolvedValue({ verified: true, payment: { _id: 'pay1', status: 'paid', reference: 'RTQ-DOC-PAY-1', purpose: 'title_document_view', metadata: { documentId: 'doc1', propertyId: 'prop1' } } });
+    vi.mocked(titleDocumentService.accessStatus).mockResolvedValue({ hasAccess: false, paymentRequired: false, price: 5000, mode: 'view_once', remainingViews: 0, message: 'Activation pending' });
+    render(<MemoryRouter initialEntries={['/post-payment-redirect?reference=RTQ-DOC-PAY-1']}><PostPaymentRedirect /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: 'Document access pending' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open protected viewer' })).not.toBeInTheDocument();
+  });
   it('shows escrow-specific success and does not claim property purchase completion', async () => {
     render(<MemoryRouter initialEntries={['/post-payment-redirect?reference=ref1']}><PostPaymentRedirect /></MemoryRouter>);
     expect(await screen.findByRole('heading', { name: 'Payment secured in escrow' })).toBeInTheDocument();
@@ -101,12 +111,13 @@ describe('PostPaymentRedirect', () => {
       totalAmount: 55000,
       currency: 'NGN',
       status: 'partially_failed',
+      paymentParts: [{ key: 'merchant_collection_1', custody: 'merchant_collection', paymentId: 'pay1', reference: 'cart-ref-1', amount: 55000, currency: 'NGN', state: 'paid', redirectUrl: null, providerCode: null }],
       items: [{ id: 'item1', type: 'title_document_view', resourceId: 'doc1', amount: 5000, status: 'failed' }],
     });
     render(<MemoryRouter initialEntries={['/post-payment-redirect?reference=cart-ref-1']}><PostPaymentRedirect /></MemoryRouter>);
-    expect(await screen.findByRole('heading', { name: 'Service checkout received' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Service checkout update' })).toBeInTheDocument();
     expect(screen.getByText(/No additional payment is required/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'View Service Receipt' })).toHaveAttribute('href', '/dashboard/buyer/cart-checkouts/checkout1');
+    expect(screen.getByRole('link', { name: 'View Service Checkout' })).toHaveAttribute('href', '/dashboard/buyer/cart-checkouts/checkout1');
     expect(cartService.getCartCheckout).toHaveBeenCalledWith('checkout1');
     expect(cartService.listCartCheckouts).not.toHaveBeenCalled();
   });
@@ -125,10 +136,29 @@ describe('PostPaymentRedirect', () => {
       totalAmount: 55000,
       currency: 'NGN',
       status: 'completed',
+      paymentParts: [{ key: 'merchant_collection_1', custody: 'merchant_collection', paymentId: 'pay1', reference: 'cart-ref-1', amount: 55000, currency: 'NGN', state: 'paid', redirectUrl: null, providerCode: null }],
       items: [{ id: 'item1', type: 'title_document_view', resourceId: 'doc1', amount: 5000, status: 'allocated' }],
     });
     render(<MemoryRouter initialEntries={['/post-payment-redirect?reference=cart-ref-1']}><PostPaymentRedirect /></MemoryRouter>);
-    expect(await screen.findByRole('heading', { name: 'Service checkout received' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Service checkout update' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Back to Service Cart' })).toHaveAttribute('href', '/cart');
+  });
+  it('matches a later payment part and keeps the checkout reference while other parts are pending', async () => {
+    vi.mocked(escrowService.getPendingId).mockReturnValue(null);
+    vi.mocked(escrowService.getPendingReference).mockReturnValue(null);
+    vi.mocked(cartService.getPendingCheckout).mockReturnValue({ checkoutId: 'checkout1', reference: 'part-1' });
+    vi.mocked(paymentService.verifyPayment).mockResolvedValue({ verified: true, payment: { _id: 'pay2', status: 'paid', reference: 'part-2', purpose: 'multi_service_cart', amount: 2000 } });
+    vi.mocked(cartService.getCartCheckout).mockResolvedValue({
+      checkoutId: 'checkout1', paymentReference: 'part-1', totalAmount: 5000, currency: 'NGN', status: 'partially_paid',
+      paymentParts: [
+        { key: 'merchant_collection_1', custody: 'merchant_collection', paymentId: 'pay1', reference: 'part-1', amount: 3000, currency: 'NGN', state: 'initializing', redirectUrl: null, providerCode: null },
+        { key: 'merchant_collection_2', custody: 'merchant_collection', paymentId: 'pay2', reference: 'part-2', amount: 2000, currency: 'NGN', state: 'paid', redirectUrl: null, providerCode: null },
+      ],
+      items: [],
+    });
+    render(<MemoryRouter initialEntries={['/post-payment-redirect?reference=part-2']}><PostPaymentRedirect /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: 'Service checkout update' })).toBeInTheDocument();
+    expect(screen.getByText(/Other parts or service allocations may still be pending/)).toBeInTheDocument();
+    expect(cartService.clearPendingCheckout).not.toHaveBeenCalled();
   });
 });

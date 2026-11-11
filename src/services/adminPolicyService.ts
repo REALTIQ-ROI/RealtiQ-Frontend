@@ -106,7 +106,7 @@ export const adminPolicyService = {
     if (!challengeId.trim()) throw new Error('A step-up challenge is required to decide a policy revision.');
     const { data } = await api.post<{ revision: AdminPolicyRevision }>(
       `/admin/policies/${key}/revisions/${encodeURIComponent(revisionId)}/${decision}`,
-      undefined,
+      {},
       { headers: { 'X-Step-Up-Challenge': challengeId } },
     );
     return data.revision;

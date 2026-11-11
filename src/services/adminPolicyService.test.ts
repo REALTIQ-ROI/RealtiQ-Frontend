@@ -57,8 +57,8 @@ describe('adminPolicyService', () => {
     vi.mocked(api.post).mockResolvedValue({ data: { revision } } as never);
     await adminPolicyService.decideRevision('notification_delivery', 'revision/1', 'approved', 'approve-challenge');
     await adminPolicyService.decideRevision('notification_delivery', 'revision/1', 'rejected', 'reject-challenge');
-    expect(api.post).toHaveBeenNthCalledWith(1, '/admin/policies/notification_delivery/revisions/revision%2F1/approved', undefined, { headers: { 'X-Step-Up-Challenge': 'approve-challenge' } });
-    expect(api.post).toHaveBeenNthCalledWith(2, '/admin/policies/notification_delivery/revisions/revision%2F1/rejected', undefined, { headers: { 'X-Step-Up-Challenge': 'reject-challenge' } });
+    expect(api.post).toHaveBeenNthCalledWith(1, '/admin/policies/notification_delivery/revisions/revision%2F1/approved', {}, { headers: { 'X-Step-Up-Challenge': 'approve-challenge' } });
+    expect(api.post).toHaveBeenNthCalledWith(2, '/admin/policies/notification_delivery/revisions/revision%2F1/rejected', {}, { headers: { 'X-Step-Up-Challenge': 'reject-challenge' } });
   });
 
   it('requires a nonempty challenge for protected policy mutations', async () => {

@@ -7,9 +7,9 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { hasAdminCapability } from '../../../services/adminAccessService';
 import { propertyService } from '../../../services/propertyService';
 import { virtualTourService } from '../../../services/virtualTourService';
-import type { AdminVirtualTourDetail } from '../../../types/virtualTour';
+import type { AdminVirtualTourDetail as AdminVirtualTourDetailDTO } from '../../../types/virtualTour';
 
-type OwnerSummary = NonNullable<AdminVirtualTourDetail['owner']>;
+type OwnerSummary = NonNullable<AdminVirtualTourDetailDTO['owner']>;
 
 const ownerWithName = (candidate: unknown): OwnerSummary | null => {
   if (!candidate || typeof candidate !== 'object') return null;
@@ -18,13 +18,13 @@ const ownerWithName = (candidate: unknown): OwnerSummary | null => {
   return typeof owner.name === 'string' && owner.name.trim() ? owner : null;
 };
 
-const resolveTourOwner = (detail: AdminVirtualTourDetail): OwnerSummary | null =>
+const resolveTourOwner = (detail: AdminVirtualTourDetailDTO): OwnerSummary | null =>
   ownerWithName(detail.owner)
   ?? ownerWithName(detail.property.owner)
   ?? ownerWithName(typeof detail.property.ownerId === 'object' ? detail.property.ownerId : null)
   ?? ownerWithName(detail.project?.owner);
 
-const loadAdminVirtualTour = async (propertyId: string, canReadListingReview: boolean): Promise<AdminVirtualTourDetail> => {
+const loadAdminVirtualTour = async (propertyId: string, canReadListingReview: boolean): Promise<AdminVirtualTourDetailDTO> => {
   const detail = await virtualTourService.getAdminVirtualTour(propertyId);
   if (resolveTourOwner(detail) || !canReadListingReview) return detail;
 

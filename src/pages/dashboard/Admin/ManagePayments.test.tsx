@@ -8,11 +8,11 @@ vi.mock('../../../components/layout/AdminLayout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ activeProfile: { id: 'finance-profile' }, token: 'session-token' }),
+  useAuth: () => ({ activeProfile: { id: 'finance-profile' }, token: 'session-token', adminAccess: { readOnly: false, isInternalAudit: false, staffDepartments: ['finance'], capabilities: ['finance.read', 'finance.manage'] } }),
 }));
 vi.mock('../../../services/paymentService', () => ({
   paymentService: {
-    getPayments: vi.fn(),
+    getPaymentsPage: vi.fn(),
     verifyPayment: vi.fn(),
   },
 }));
@@ -20,14 +20,13 @@ vi.mock('../../../services/paymentService', () => ({
 describe('ManagePayments', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.setItem('activeProfileId', 'finance-profile');
   });
 
-  it('renders guest and missing related records without crashing the page', async () => {
-    vi.mocked(paymentService.getPayments).mockResolvedValue([
+  it('shows the safe payment purpose and missing related records without guessing buyer identity', async () => {
+    const payments = [
       {
         _id: 'payment-1',
-        user: null,
-        guestIdentity: {},
         property: {
           _id: 'property-1',
           title: 'Lekki Home',
@@ -42,14 +41,14 @@ describe('ManagePayments', () => {
       },
       {
         _id: 'payment-2',
-        user: null,
         property: null,
         amount: 5000,
         status: 'pending',
         reference: 'RTQ-DOC-PAY-2',
         createdAt: '2026-07-24T09:00:00.000Z',
       },
-    ]);
+    ] as Awaited<ReturnType<typeof paymentService.getPaymentsPage>>['payments'];
+    vi.mocked(paymentService.getPaymentsPage).mockResolvedValue({ payments, page: 1, limit: 20, total: 2 });
 
     render(
       <MemoryRouter>
@@ -58,24 +57,25 @@ describe('ManagePayments', () => {
     );
 
     expect(await screen.findByText('Lekki Home')).toBeInTheDocument();
-    expect(screen.getAllByText('Guest')).toHaveLength(2);
-    expect(screen.getAllByText('Secure guest payment')).toHaveLength(2);
+    expect(screen.getByText('title document view')).toBeInTheDocument();
+    expect(screen.getByText('Not returned')).toBeInTheDocument();
+    expect(screen.queryByText('Guest')).not.toBeInTheDocument();
     expect(screen.getByText('Property unavailable')).toBeInTheDocument();
     expect(screen.getByText('Related record unavailable')).toBeInTheDocument();
   });
 
   it('offers cancellation only through the documented pending-payment flow', async () => {
-    vi.mocked(paymentService.getPayments).mockResolvedValue([
+    const payments = [
       {
         _id: 'payment-2',
-        user: null,
         property: null,
         amount: 5000,
         status: 'pending',
         reference: 'RTQ-DOC-PAY-2',
         createdAt: '2026-07-24T09:00:00.000Z',
       },
-    ]);
+    ] as Awaited<ReturnType<typeof paymentService.getPaymentsPage>>['payments'];
+    vi.mocked(paymentService.getPaymentsPage).mockResolvedValue({ payments, page: 1, limit: 20, total: 1 });
     render(
       <MemoryRouter>
         <ManagePayments />

@@ -99,6 +99,19 @@ describe('titleVerificationService', () => {
     expect(form.get('file')).toBe(file);
   });
 
+  it('quotes title fees without payment and binds a fee order to the exact protected body', async () => {
+    mockedApi.post.mockResolvedValueOnce({ data: { quote: { payable: false, unavailableReason: 'Travel quote required', dueNowMinor: null } } });
+    await expect(titleVerificationService.quoteFee({ propertyId: 'property-1', serviceFeeMode: 'upfront' })).resolves.toMatchObject({ payable: false, dueNowMinor: null });
+    expect(mockedApi.post).toHaveBeenNthCalledWith(1, '/title-verifications/fee-quotes', { propertyId: 'property-1', serviceFeeMode: 'upfront' });
+
+    const body = { propertyId: 'property-1', serviceFeeMode: 'upfront' as const, operationKey: 'title_fee_12345678' };
+    mockedApi.post.mockResolvedValueOnce({ data: { order: { id: 'order-1', state: 'pending' }, payment: { reference: 'REF-1', state: 'pending', redirectUrl: null }, idempotent: false } });
+    await titleVerificationService.createFeeOrder(body, 'challenge-1');
+    expect(mockedApi.post).toHaveBeenNthCalledWith(2, '/title-verifications/fee-orders', body, { headers: { 'X-Step-Up-Challenge': 'challenge-1' } });
+    mockedApi.get.mockResolvedValueOnce({ data: { order: { id: 'order-1', state: 'paid' } } });
+    await expect(titleVerificationService.getFeeOrder('order-1')).resolves.toMatchObject({ state: 'paid' });
+  });
+
   it('requests external anchoring through the registry endpoint with a bound challenge', async () => {
     mockedApi.post.mockResolvedValue({ data: { record: { publicVerificationId: 'RTQ-TV-2026-000001' } } });
 

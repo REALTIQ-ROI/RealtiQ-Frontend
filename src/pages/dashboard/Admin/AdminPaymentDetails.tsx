@@ -10,9 +10,7 @@ import StepUpDialog from '../../../components/auth/StepUpDialog';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { paymentService } from '../../../services/paymentService';
 import type { ApiPayment } from '../../../types';
-
-const formatNGN = (amount: number) =>
-  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(amount);
+import { formatPaymentMajor } from '../../../utils/moneyMinor';
 
 const formatDate = (dateStr: string) =>
   new Date(dateStr).toLocaleString('en-NG', {
@@ -34,7 +32,8 @@ const statusBadge = (status: ApiPayment['status']) => {
 };
 
 const AdminPaymentDetails = () => {
-  const { adminAccess } = useAuth();
+  const { adminAccess, activeProfile } = useAuth();
+  const selectedProfileId = activeProfile?.id;
   const canManageFinance = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'finance.manage'));
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -58,13 +57,13 @@ const AdminPaymentDetails = () => {
     setPayment(null);
     try {
       const nextPayment = await paymentService.getPaymentById(id);
-      if (requestId === requestSequence.current) setPayment(nextPayment);
+      if (requestId === requestSequence.current && (!selectedProfileId || localStorage.getItem('activeProfileId') === selectedProfileId)) setPayment(nextPayment);
     } catch (err) {
       if (requestId === requestSequence.current) setError(err instanceof Error ? err.message : 'Payment not found.');
     } finally {
       if (requestId === requestSequence.current) setLoading(false);
     }
-  }, [id]);
+  }, [id, selectedProfileId]);
 
   useEffect(() => {
     cancelPendingChallenge();
@@ -231,24 +230,11 @@ const AdminPaymentDetails = () => {
               <div className="grid grid-cols-2 gap-4">
                 {[
                   { label: 'Payment Reference', value: payment.reference, mono: true },
-                  { label: 'Amount', value: formatNGN(payment.amount) },
+                  { label: 'Amount', value: formatPaymentMajor(payment.amount, payment.currency) },
+                  { label: 'Currency', value: payment.currency ?? 'Not returned' },
+                  { label: 'Purpose', value: payment.purpose ?? 'Not returned' },
                   { label: 'Status', value: payment.status.toUpperCase() },
                   { label: 'Transaction Date', value: formatDate(payment.createdAt) },
-                  ...(payment.paystackData
-                    ? [
-                        { label: 'Payment Channel', value: payment.paystackData.channel || 'Not recorded' },
-                        { label: 'Currency', value: payment.paystackData.currency || 'Not recorded' },
-                        { label: 'Gateway Response', value: payment.paystackData.gateway_response || 'Not recorded' },
-                        { label: 'Processing Fees', value: typeof payment.paystackData.fees === 'number' ? formatNGN(payment.paystackData.fees) : 'Not recorded' },
-                      ]
-                    : []),
-                  ...(payment.metadata?.canceledAt
-                    ? [
-                        { label: 'Canceled At', value: formatDate(payment.metadata.canceledAt) },
-                        { label: 'Canceled By', value: payment.metadata.canceledBy || 'Admin' },
-                        { label: 'Cancellation Reason', value: payment.metadata.cancellationReason || 'No reason provided' },
-                      ]
-                    : []),
                 ].map((row) => (
                   <div key={row.label} className="bg-surface-container-low p-4 rounded-lg">
                     <p className="text-[10px] uppercase tracking-widest text-secondary font-bold mb-1">{row.label}</p>
@@ -271,42 +257,22 @@ const AdminPaymentDetails = () => {
                     <span className="material-symbols-outlined text-sm">location_on</span>
                     {payment.property?.location ?? 'Related record unavailable'}
                   </p>
-                  {payment.property ? <p className="text-sm font-bold text-primary mt-1">{formatNGN(payment.property.price)}</p> : null}
                 </div>
               </div>
             </div>
 
-            {/* Buyer Details */}
-            <div className="bg-surface-container-lowest p-8 rounded-xl">
-              <h3 className="text-xs font-bold text-secondary uppercase tracking-widest mb-6">Buyer Details</h3>
-              <div className="flex items-center gap-4 p-6 bg-surface-container-low rounded-xl">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary text-lg">
-                  {(payment.user?.name ?? 'G').charAt(0)}
-                </div>
-                <div>
-                  <p className="font-bold text-on-surface">{payment.user?.name ?? 'Guest'}</p>
-                  <p className="text-sm text-secondary">{payment.user?.email ?? 'Secure guest payment'}</p>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Sidebar */}
           <div className="col-span-12 lg:col-span-4 space-y-6">
             <div className="bg-primary-container p-8 rounded-xl">
               <span className="text-[10px] uppercase tracking-widest opacity-60 font-bold mb-2 block text-on-primary-container">Payment Amount</span>
-              <h2 className="text-3xl font-extrabold tracking-tighter text-white mb-4">{formatNGN(payment.amount)}</h2>
+              <h2 className="text-3xl font-extrabold tracking-tighter text-white mb-4">{formatPaymentMajor(payment.amount, payment.currency)}</h2>
               <div className="pt-4 border-t border-white/20">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-on-primary-container/70">Status</span>
                   {statusBadge(payment.status)}
                 </div>
-                {payment.paystackData && (
-                  <div className="mt-3 flex justify-between items-center">
-                    <span className="text-xs text-on-primary-container/70">Channel</span>
-                    <span className="text-xs font-bold text-white capitalize">{payment.paystackData.channel?.replace('_', ' ') || 'Not recorded'}</span>
-                  </div>
-                )}
               </div>
             </div>
 

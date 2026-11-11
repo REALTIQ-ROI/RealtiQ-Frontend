@@ -8,13 +8,11 @@ import AdminLayout from '../../../components/layout/AdminLayout';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
-import { useAsync } from '../../../hooks/useAsync';
+import { usePaymentPage } from '../../../hooks/usePaymentPage';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { paymentService } from '../../../services/paymentService';
 import type { ApiPayment } from '../../../types';
-
-const formatNGN = (amount: number) =>
-  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(amount);
+import { formatPaymentMajor } from '../../../utils/moneyMinor';
 
 const formatDate = (dateStr: string) =>
   new Date(dateStr).toLocaleString('en-NG', {
@@ -42,13 +40,13 @@ const ManagePayments = () => {
   const canReadFinance = hasAdminCapability(adminAccess, 'finance.read');
   const canManageFinance = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'finance.manage'));
   const navigate = useNavigate();
-  const { data, loading, error, execute } = useAsync(() => paymentService.getPayments(), true);
+  const { data, loading, error, execute, page, setPage } = usePaymentPage();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [exporting, setExporting] = useState(false);
   const exportStepUp = useBoundStepUp<Blob>();
   const cancelStepUp = useBoundStepUp<Awaited<ReturnType<typeof paymentService.cancelPayment>>>();
   const [cancelling, setCancelling] = useState<string | null>(null);
-  const payments = data ?? [];
+  const payments = data?.payments ?? [];
   const filtered = activeTab === 'all' ? payments : payments.filter((p) => p.status === activeTab);
 
   const paidCount = payments.filter((p) => p.status === 'paid').length;
@@ -126,7 +124,7 @@ const ManagePayments = () => {
               <span className="text-[0.65rem] uppercase tracking-[0.2em] font-bold text-secondary mb-3 block">Financial Ledger</span>
               <h2 className="text-4xl font-extrabold tracking-tighter text-primary mb-4 leading-none">Payments Management</h2>
               <p className="text-secondary max-w-md leading-relaxed text-sm">
-                Comprehensive overview of platform liquidity and individual asset performance.
+                Authorized payment records. Counts below describe this page; use the Finance revenue report for platform totals.
               </p>
               <p className="mt-3 text-sm text-secondary">Payment cancellation requires the current Finance staff profile and a bound authenticator challenge. It cancels only a pending attempt and does not issue a refund.</p>
               {canReadFinance ? <button type="button" className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-50" disabled={exporting || exportStepUp.busy || Boolean(exportStepUp.challenge)} onClick={() => void beginExport()}>{exporting || exportStepUp.busy ? 'Preparing protected export…' : 'Export payments CSV'}</button> : null}
@@ -175,7 +173,7 @@ const ManagePayments = () => {
                 <tr className="bg-surface-container-high/50">
                   <th className="px-6 py-4 text-[10px] font-bold text-secondary uppercase tracking-widest">Reference</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-secondary uppercase tracking-widest">Property</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-secondary uppercase tracking-widest">Buyer</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-secondary uppercase tracking-widest">Purpose</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-secondary uppercase tracking-widest">Date</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-secondary uppercase tracking-widest">Amount</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-secondary uppercase tracking-widest">Status</th>
@@ -217,15 +215,10 @@ const ManagePayments = () => {
                           </p>
                         </td>
                         <td className="px-6 py-5">
-                          <p className="text-sm font-medium text-primary">
-                            {payment.user?.name ?? 'Guest'}
-                          </p>
-                          <p className="text-[10px] text-secondary">
-                            {payment.user?.email ?? 'Secure guest payment'}
-                          </p>
+                          <p className="text-sm font-medium text-primary">{payment.purpose?.replaceAll('_', ' ') ?? 'Not returned'}</p>
                         </td>
                         <td className="px-6 py-5 text-sm text-secondary">{formatDate(payment.createdAt)}</td>
-                        <td className="px-6 py-5 text-sm font-bold text-primary">{formatNGN(payment.amount)}</td>
+                        <td className="px-6 py-5 text-sm font-bold text-primary">{formatPaymentMajor(payment.amount, payment.currency)}</td>
                         <td className="px-6 py-5">{statusBadge(payment.status)}</td>
                         <td className="px-6 py-5 text-right">
                           <div className="flex min-w-max items-center justify-end gap-2 whitespace-nowrap">
@@ -272,8 +265,12 @@ const ManagePayments = () => {
 
             <div className="px-6 py-4 flex items-center justify-between bg-surface-container-high/20">
               <span className="text-xs text-secondary">
-                Showing {filtered.length} of {payments.length} transactions
+                Showing {filtered.length} matching records on page {data?.page ?? page}{data?.total !== null && data?.total !== undefined ? ` · ${data.total} total records` : ''}
               </span>
+              {data && (page > 1 || (data.total !== null ? page * data.limit < data.total : payments.length === data.limit)) ? <div className="flex gap-2">
+                <button type="button" disabled={page <= 1 || loading} onClick={() => setPage((current) => current - 1)} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50">Previous</button>
+                <button type="button" disabled={loading || (data.total !== null ? page * data.limit >= data.total : payments.length < data.limit)} onClick={() => setPage((current) => current + 1)} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50">Next</button>
+              </div> : null}
             </div>
           </div>
 

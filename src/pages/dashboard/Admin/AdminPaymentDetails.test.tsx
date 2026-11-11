@@ -21,7 +21,10 @@ vi.mock('../../../services/paymentService', () => ({ paymentService: {
   cancelPayment: mocks.cancelPayment,
 } }));
 vi.mock('../../../services/stepUpService', () => ({ stepUpService: { start: mocks.startStepUp, verify: mocks.verifyStepUp } }));
-vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ activeProfile: { id: 'finance-profile' }, token: 'session-token' }) }));
+vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({
+  activeProfile: { id: 'finance-profile' }, token: 'session-token',
+  adminAccess: { capabilities: ['finance.read', 'finance.manage'], staffDepartments: ['finance'], readOnly: false, isInternalAudit: false },
+}) }));
 vi.mock('sweetalert2', () => ({ default: { fire: mocks.confirm } }));
 
 const pendingPayment = {
@@ -29,6 +32,8 @@ const pendingPayment = {
   user: null,
   property: null,
   amount: 5_000,
+  currency: 'NGN',
+  purpose: 'property_payment',
   status: 'pending' as const,
   reference: 'PAY-1',
   createdAt: '2026-10-01T10:00:00.000Z',

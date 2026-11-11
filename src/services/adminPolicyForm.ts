@@ -315,6 +315,54 @@ export const validatePolicyCrossFields = (key: AdminPolicyKey, value: Record<str
     if (!(numbers('defaultSplitPercentage') > 0)) errors.push('defaultSplitPercentage: value must be greater than 0.');
     if (Math.abs(numbers('defaultSplitPercentage') * 100 - Math.round(numbers('defaultSplitPercentage') * 100)) > 1e-6) errors.push('defaultSplitPercentage: use no more than two decimal places.');
   }
+  if (key === 'fee_schedule') {
+    const entries = (value.entries as Array<Record<string, AdminPolicyJsonValue>> | undefined) ?? [];
+    if (!isUniqueBy(entries, (entry) => `${entry.code}:${entry.mode ?? ''}`)) errors.push('entries: fee code and mode must be unique.');
+    for (const [index, entry] of entries.entries()) {
+      if ((entry.code === 'FP-23' || entry.code === 'FP-24') && entry.enabled === true) errors.push(`entries[${index}]: FP-23 and FP-24 cannot be enabled.`);
+      if (entry.code === 'FP-06' && !['standard', 'protected'].includes(String(entry.mode))) errors.push(`entries[${index}].mode: FP-06 requires standard or protected.`);
+      if (entry.code === 'FP-20' && !['upfront', 'deferred'].includes(String(entry.mode))) errors.push(`entries[${index}].mode: FP-20 requires upfront or deferred.`);
+      const currencies = (entry.currencies as Array<Record<string, AdminPolicyJsonValue>> | undefined) ?? [];
+      if (!isUniqueBy(currencies, (currency) => String(currency.currency))) errors.push(`entries[${index}].currencies: currencies must be unique.`);
+    }
+    const enabledFp06 = entries.filter((entry) => entry.code === 'FP-06' && entry.enabled === true).map((entry) => entry.mode);
+    if (enabledFp06.length && (!enabledFp06.includes('standard') || !enabledFp06.includes('protected'))) errors.push('entries: enabled FP-06 requires standard and protected entries.');
+  }
+  if (key === 'profile_billing_catalogue') {
+    const plans = (value.plans as Array<Record<string, AdminPolicyJsonValue>> | undefined) ?? [];
+    if (!isUniqueBy(plans, (plan) => String(plan.key))) errors.push('plans: plan keys must be unique.');
+    const termCheck = (terms: unknown, path: string) => {
+      const rows = Array.isArray(terms) ? terms as Array<Record<string, AdminPolicyJsonValue>> : [];
+      if (rows.length !== 2 || !rows.some((row) => row.period === 'monthly') || !rows.some((row) => row.period === 'annual')) errors.push(`${path}: include exactly one monthly and one annual term.`);
+      if (value.currency === 'NGN' && rows.some((row) => typeof row.amountMinor === 'number' && row.amountMinor % 100 !== 0)) errors.push(`${path}: NGN amounts must be whole naira in minor units.`);
+    };
+    plans.forEach((plan, index) => termCheck(plan.terms, `plans[${index}].terms`));
+    termCheck((value.additionalSeat as Record<string, AdminPolicyJsonValue> | undefined)?.terms, 'additionalSeat.terms');
+  }
+  if (key === 'financial_execution_controls') {
+    const rows = (value.currencyLimits as Array<Record<string, AdminPolicyJsonValue>> | undefined) ?? [];
+    if (!isUniqueBy(rows, (row) => String(row.currency))) errors.push('currencyLimits: currencies must be unique.');
+    for (const [index, row] of rows.entries()) {
+      if (Number(row.maxDailyTransferMinor) < Number(row.maxSingleTransferMinor)) errors.push(`currencyLimits[${index}]: daily transfer maximum must be at least the single-transfer maximum.`);
+      if (typeof row.noFaultRecoveryMinor === 'number' && row.noFaultRecoveryMinor % 2 !== 0) errors.push(`currencyLimits[${index}].noFaultRecoveryMinor: use an even minor-unit amount.`);
+      if (typeof row.refundApprovalThresholdMinor === 'number' && Number(row.refundApprovalThresholdMinor) > Number(row.maxRefundMinor)) errors.push(`currencyLimits[${index}].refundApprovalThresholdMinor: must not exceed the refund maximum.`);
+      if (typeof row.creditNoteApprovalThresholdMinor === 'number' && Number(row.creditNoteApprovalThresholdMinor) > Number(row.maxCreditNoteMinor)) errors.push(`currencyLimits[${index}].creditNoteApprovalThresholdMinor: must not exceed the credit-note maximum.`);
+    }
+  }
+  if (key === 'title_verification_state_bands') {
+    const rows = (value.states as Array<Record<string, AdminPolicyJsonValue>> | undefined) ?? [];
+    if (!isUniqueBy(rows, (row) => String(row.stateId))) errors.push('states: gazetteer state IDs must be unique.');
+    rows.forEach((row, index) => {
+      if (row.travelCostMode === 'none' && (row.travelCostMinor !== null || row.travelCostReference !== null)) errors.push(`states[${index}]: no travel cost requires null amount and reference.`);
+      if (row.travelCostMode === 'flat' && (typeof row.travelCostMinor !== 'number' || !row.travelCostReference)) errors.push(`states[${index}]: flat travel requires an amount and reference.`);
+      if (row.travelCostMode === 'at_cost' && (row.travelCostMinor !== null || !row.travelCostReference)) errors.push(`states[${index}]: at-cost travel requires a reference and null flat amount.`);
+    });
+  }
+  if (key === 'promotion_campaign_controls') {
+    const rows = (value.currencyRules as Array<Record<string, AdminPolicyJsonValue>> | undefined) ?? [];
+    if (!isUniqueBy(rows, (row) => String(row.currency))) errors.push('currencyRules: currencies must be unique.');
+    if (rows.some((row) => row.currency === 'NGN' && typeof row.minimumBidMinor === 'number' && row.minimumBidMinor % 100 !== 0)) errors.push('currencyRules: NGN minimum bids must be whole naira in minor units.');
+  }
   if (key === 'commercial_uses') {
     const entries = (value.entries as Array<Record<string, AdminPolicyJsonValue>> | undefined) ?? [];
     if (!isUniqueBy(entries, (entry) => String(entry.key))) errors.push('entries: keys must be unique.');

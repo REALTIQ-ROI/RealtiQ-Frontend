@@ -33,6 +33,7 @@ const navLinks = [
   { to: '/dashboard/admin/title-verifications', label: 'Title Review', icon: 'verified', capability: 'title_verification.read' },
   { to: '/dashboard/admin/trust-appeals', label: 'Trust Appeals', icon: 'balance', capability: 'trust.read' },
   { to: '/dashboard/admin/manage-payments', label: 'Payments', icon: 'payments', capability: 'finance.read' },
+  { to: '/dashboard/admin/revenue', label: 'Finance Revenue', icon: 'receipt_long', capability: 'finance.read' },
   { to: '/dashboard/admin/cart-checkouts', label: 'Cart Checkouts', icon: 'receipt_long', capability: 'finance.read' },
   { to: '/dashboard/admin/wallet', label: 'Platform Ledger', icon: 'account_balance_wallet', capability: 'finance.read' },
   { to: '/dashboard/admin/escrows', label: 'Escrow Management', icon: 'shield_lock', capability: ['escrow.read', 'finance.read'] },

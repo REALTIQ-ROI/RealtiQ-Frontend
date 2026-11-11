@@ -1,4 +1,5 @@
 import api from '../lib/axios';
+import type { RenewalAvailability } from './renewalAvailability';
 
 export type OrganizationRole = 'administrator' | 'sales_agent' | 'project_editor' | 'finance' | 'viewer' | 'custom';
 export interface OrganizationMember {
@@ -98,11 +99,32 @@ export interface OrganizationSignatoriesPage {
 }
 
 export interface OrganizationSeatPlans {
-  state: 'configured' | 'unconfigured' | string;
+  state: 'configured' | 'unconfigured' | 'unavailable' | string;
+  catalogueSource?: 'unified';
   revision?: number;
-  currency?: string;
-  plans: Array<Record<string, unknown>>;
+  taxPolicyRevision?: number;
+  currency?: 'NGN' | 'USD';
+  plans: OrganizationSeatPlan[];
+  renewalAvailability?: RenewalAvailability;
   errorCode?: string;
+}
+
+export interface OrganizationSeatTerm {
+  period: 'monthly' | 'annual';
+  amountMinor: number;
+  currency: 'NGN' | 'USD';
+  netMinor: number;
+  vatMinor: number;
+  grossMinor: number;
+  vatRatePercent: number;
+  vatPolicyRevision: number;
+}
+
+export interface OrganizationSeatPlan {
+  key: string;
+  label: string;
+  terms: OrganizationSeatTerm[];
+  policyRevision: number;
 }
 
 export interface OrganizationSeats {
@@ -126,7 +148,7 @@ export interface OrganizationSeatPurchase {
   id: string;
   profileId: string;
   membershipId: string;
-  plan: string;
+  plan: { key: string; label: string; amountMinor: number; netMinor?: number; vatMinor?: number; grossMinor?: number; billingPeriod: 'monthly' | 'annual'; currency: 'NGN' | 'USD'; policyRevision: number } | string;
   reference: string;
   state: string;
   entitlementId?: string | null;
@@ -221,18 +243,18 @@ export const organizationManagementService = {
     return data;
   },
   async getSeatPurchase(id: string): Promise<{ purchase: OrganizationSeatPurchase }> {
-    const { data } = await api.get<{ purchase: OrganizationSeatPurchase }>(`${base}/seat-purchases/${encodeURIComponent(id)}`);
-    return data;
+    const { data } = await api.get<OrganizationSeatPurchase | { purchase: OrganizationSeatPurchase }>(`${base}/seat-purchases/${encodeURIComponent(id)}`);
+    return 'purchase' in data ? data : { purchase: data };
   },
   async listSeatPurchaseAudit(id: string, params: { limit?: number; before?: string } = {}): Promise<OrganizationSeatPurchaseAuditPage> {
     const { data } = await api.get<OrganizationSeatPurchaseAuditPage>(`${base}/seat-purchases/${encodeURIComponent(id)}/audit`, { params });
     return data;
   },
-  async purchaseSeat(body: { membershipId: string; planKey: string; operationKey: string }, challengeId: string): Promise<{ purchase: OrganizationSeatPurchase }> {
+  async purchaseSeat(body: { membershipId: string; planKey: string; billingPeriod: 'monthly' | 'annual'; operationKey: string; saveAuthorizationForRenewal?: boolean }, challengeId: string): Promise<{ purchase: OrganizationSeatPurchase }> {
     const { data } = await api.post<{ purchase: OrganizationSeatPurchase }>(`${base}/seat-purchases`, body, challenge(challengeId));
     return data;
   },
-  async renewSeat(membershipId: string, body: { planKey: string; operationKey: string }, challengeId: string): Promise<{ purchase: OrganizationSeatPurchase }> {
+  async renewSeat(membershipId: string, body: { planKey: string; billingPeriod: 'monthly' | 'annual'; operationKey: string }, challengeId: string): Promise<{ purchase: OrganizationSeatPurchase }> {
     const { data } = await api.post<{ purchase: OrganizationSeatPurchase }>(`${base}/seats/${encodeURIComponent(membershipId)}/renew`, body, challenge(challengeId));
     return data;
   },

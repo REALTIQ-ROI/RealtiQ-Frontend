@@ -5,10 +5,14 @@ const PENDING_PAYMENT_REFERENCE_KEY = 'realtiq.pendingPaymentReference';
 const PENDING_PAYMENT_PROPERTY_KEY = 'realtiq.pendingPaymentPropertyId';
 const PENDING_PAYMENT_RESOURCE_KEY = 'realtiq.pendingPaymentResourceKey';
 
+type FeePayerSelection =
+  | { payerRule?: 'buyer' | 'seller'; buyerSharePercent?: never }
+  | { payerRule: 'split'; buyerSharePercent?: number };
+
 export type PaymentInitializationRequest =
-  | { propertyId: string }
-  | { installmentId: string; amount: number; scheduleItemId?: string }
-  | { escrowId: string };
+  | ({ propertyId: string; fxConfirmationId?: string } & FeePayerSelection)
+  | { installmentId: string; amount?: number; scheduleItemId?: string; fxConfirmationId?: string }
+  | ({ escrowId: string } & FeePayerSelection);
 
 export interface InitializePaymentResponse {
   redirectUrl?: string;
@@ -18,6 +22,11 @@ export interface InitializePaymentResponse {
   reconciliationRequired?: boolean;
   paymentId?: string;
   escrowId?: string;
+  amount?: number | string;
+  currency?: 'NGN' | 'USD';
+  feeCollectionMode?: 'split' | 'invoice_after_recipient_payment';
+  fallbackUsed?: boolean;
+  transactionFee?: Record<string, unknown>;
 }
 
 const persistPendingPayment = (reference: string, propertyId?: string, resourceKey?: string) => {
@@ -72,6 +81,12 @@ export const paymentService = {
   },
 
   async initialize(body: PaymentInitializationRequest, challengeId: string): Promise<InitializePaymentResponse> {
+    if ('buyerSharePercent' in body && body.buyerSharePercent !== undefined &&
+      (body.payerRule !== 'split' || !Number.isFinite(body.buyerSharePercent) ||
+       body.buyerSharePercent < 0 || body.buyerSharePercent > 100 ||
+       Math.round(body.buyerSharePercent * 100) !== body.buyerSharePercent * 100)) {
+      throw new Error('Choose a buyer fee share from 0 to 100 with at most two decimal places.');
+    }
     const resourceKey = resourceKeyFor(body);
     const propertyId = 'propertyId' in body ? body.propertyId : undefined;
     try {
@@ -89,6 +104,17 @@ export const paymentService = {
   async getPayments(): Promise<ApiPayment[]> {
     const { data } = await api.get<ApiPayment[]>('/payments');
     return data;
+  },
+
+  async getPaymentsPage(page = 1, limit = 20): Promise<{ payments: ApiPayment[]; page: number; limit: number; total: number | null }> {
+    if (!Number.isInteger(page) || page < 1 || page > 10000 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Choose a page from 1 to 10000 and a page size from 1 to 100.');
+    const response = await api.get<ApiPayment[]>('/payments', { params: { page, limit } });
+    const header = (name: string): number | null => {
+      const raw = response.headers?.[name];
+      const parsed = Number(raw);
+      return raw !== undefined && raw !== null && Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+    };
+    return { payments: response.data, page: header('x-page') ?? page, limit: header('x-page-limit') ?? limit, total: header('x-total-count') };
   },
 
   async getPaymentById(id: string): Promise<ApiPayment> {

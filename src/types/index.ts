@@ -51,6 +51,8 @@ export type CartStatus =
 export type CartCheckoutStatus =
   | 'pending'
   | 'payment_initialized'
+  | 'partially_paid'
+  | 'reconciliation_required'
   | 'paid'
   | 'allocation_processing'
   | 'completed'
@@ -560,6 +562,7 @@ export interface ApiPayment {
   guestIdentity?: object | null;
   purpose?: string;
   amount: number;
+  currency?: 'NGN' | 'USD';
   status: 'pending' | 'paid' | 'failed' | 'canceled';
   reference: string;
   createdAt: string;
@@ -797,14 +800,28 @@ export interface CartEligibilityResponse {
 }
 
 export interface CartCheckoutInitializeResponse {
-  redirectUrl: string;
-  authorizationUrl: string;
+  redirectUrl: string | null;
+  authorizationUrl: string | null;
   reference: string;
   checkoutId: string;
   totalAmount: number;
   currency: 'NGN';
-  pending?: boolean;
+  pending: boolean;
+  reconciliationRequired?: boolean;
   initializationState?: 'pending' | 'outcome_unknown' | string;
+  paymentParts: CartCheckoutPaymentPart[];
+}
+
+export interface CartCheckoutPaymentPart {
+  key: string;
+  custody: 'merchant_collection' | 'segregated_escrow';
+  paymentId: string;
+  reference: string;
+  amount: number;
+  currency: 'NGN';
+  state: 'reserved' | 'initializing' | 'initialized' | 'outcome_unknown' | 'paid' | 'failed' | 'replaced' | 'late_paid_held';
+  redirectUrl: string | null;
+  providerCode: string | null;
 }
 
 export interface CartCheckoutItemDetail {
@@ -820,11 +837,13 @@ export interface CartCheckoutItemDetail {
 
 export interface CartCheckoutDetail {
   checkoutId: string;
+  profileId?: string;
   paymentReference?: string;
   totalAmount: number;
   currency: 'NGN';
   status: CartCheckoutStatus;
   initializationState?: 'pending' | 'outcome_unknown' | string;
+  paymentParts: CartCheckoutPaymentPart[];
   expiresAt?: string;
   items: CartCheckoutItemDetail[];
 }
@@ -833,13 +852,13 @@ export interface CartCheckoutListQuery {
   page?: number;
   limit?: number;
   status?: CartCheckoutStatus;
+  paymentReference?: string;
   startDate?: string;
   endDate?: string;
 }
 
 export interface AdminCartCheckoutListQuery extends CartCheckoutListQuery {
   user?: string;
-  paymentReference?: string;
 }
 
 export interface CartCheckoutListResponse {

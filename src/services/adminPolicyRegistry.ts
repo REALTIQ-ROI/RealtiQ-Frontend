@@ -206,6 +206,62 @@ const definitions = {
     fields: [e('provider', 'Payout provider', ['monnify']), e('currency', 'Currency', ['NGN']), n('defaultSplitPercentage', 'Default split percentage', 0, 100, { integer: false }), s('legalPolicyReference', 'Legal policy reference', { minLength: 1, maxLength: 300 }), s('splitPolicyReference', 'Split policy reference', { minLength: 1, maxLength: 300 }), s('approvedUntil', 'Approved until (ISO-8601)', { pattern: '^\\d{4}-\\d{2}-\\d{2}T.*(?:Z|[+-]\\d{2}:?\\d{2})$' })],
     note: 'The commercial split is policy-owner input. This policy does not supply provider credentials or establish payout readiness.',
   },
+  fee_schedule: {
+    label: 'Fee schedule', category: 'Revenue and payments', department: 'finance',
+    fields: [objectArray('entries', 'Approved fee entries', [
+      e('code', 'Fee code', ['FP-01', 'FP-02', 'FP-03', 'FP-04', 'FP-05', 'FP-06', 'FP-09', 'FP-10', 'FP-11', 'FP-12', 'FP-13', 'FP-14', 'FP-15', 'FP-16', 'FP-17', 'FP-18', 'FP-19', 'FP-20', 'FP-21', 'FP-22', 'FP-23', 'FP-24', 'FP-25']),
+      s('name', 'Product name', { minLength: 1 }), n('stream', 'Revenue stream', 1, 3),
+      e('route', 'Collection route', ['moniepoint', 'paystack']), b('enabled', 'Enabled'),
+      e('payerRule', 'Payer rule', ['buyer', 'seller', 'split']), e('basis', 'Fee basis', ['flat', 'percentage', 'marginal_bands', 'per_unit', 'per_seat', 'per_period']),
+      nullable('mode', 'Mode', 'string', { help: 'FP-06 requires standard or protected; FP-20 requires upfront or deferred. Other codes use null.' }),
+      e('vatTreatment', 'VAT treatment', ['taxable']), nullable('effectiveFrom', 'Effective from (ISO-8601)', 'string'),
+      objectArray('currencies', 'Currency rules', [
+        e('currency', 'Currency', ['NGN', 'USD']), nullable('amountMinor', 'Flat amount (minor units)', 'number'),
+        nullable('ratePercent', 'Rate percent', 'number'), nullable('unitAmountMinor', 'Unit amount (minor units)', 'number'),
+        arr('bands', 'Marginal bands', obj('_item', 'Band', [nullable('upToMinor', 'Up to (minor units)', 'number'), n('ratePercent', 'Rate percent', 0, 100, { integer: false })]), 0, 100),
+        nullable('minimumMinor', 'Minimum (minor units)', 'number'), nullable('maximumMinor', 'Maximum (minor units)', 'number'),
+      ], 1, 2),
+    ], 1, 100)],
+    note: 'Finance supplies the complete approved product entries and amounts. FP-06 needs both standard and protected modes. FP-23 and FP-24 remain disabled. Preparing this revision does not activate it; independent approval is required.',
+  },
+  revenue_tax: {
+    label: 'Revenue tax', category: 'Revenue and payments', department: 'finance',
+    fields: [e('status', 'Tax adviser approved VAT status', ['not_registered', 'registered_7_5'])],
+    note: 'Select only the status confirmed by Finance and its tax adviser. A prepared revision is pending independent approval.',
+  },
+  profile_billing_catalogue: {
+    label: 'Profile billing catalogue', category: 'Revenue and payments', department: 'sales_partnerships',
+    fields: [e('currency', 'Catalogue currency', ['NGN', 'USD']), objectArray('plans', 'Publication plans', [
+      s('key', 'Plan key', { minLength: 1 }), s('label', 'Plan label', { minLength: 1 }), e('profileType', 'Profile type', ['developer', 'agency', 'partner']),
+      objectArray('terms', 'Monthly and annual terms', [e('period', 'Period', ['monthly', 'annual']), n('amountMinor', 'Amount (minor units)', 0, Number.MAX_SAFE_INTEGER)], 2, 2),
+      obj('entitlements', 'Plan entitlements', [n('activeProjects', 'Active projects', 0, Number.MAX_SAFE_INTEGER), n('activeListings', 'Active listings', 0, Number.MAX_SAFE_INTEGER), n('units', 'Units', 0, Number.MAX_SAFE_INTEGER), n('includedSeats', 'Included seats', 0, Number.MAX_SAFE_INTEGER), n('promotionCreditsMinor', 'Promotion credits (minor units)', 0, Number.MAX_SAFE_INTEGER)]),
+    ], 0, 100), obj('additionalSeat', 'Additional seat terms', [s('label', 'Seat label', { minLength: 1 }), objectArray('terms', 'Monthly and annual terms', [e('period', 'Period', ['monthly', 'annual']), n('amountMinor', 'Amount (minor units)', 0, Number.MAX_SAFE_INTEGER)], 2, 2)]),
+    arr('renewalMethods', 'Approved renewal methods', enumItem(['saved_card', 'transfer_invoice', 'direct_debit']), 0, 3, { unique: true })],
+    note: 'This is the only current source of plan and seat prices. No price or entitlement is prefilled for an unconfigured policy; independent approval is required.',
+  },
+  financial_execution_controls: {
+    label: 'Financial execution controls', category: 'Revenue and payments', department: 'finance',
+    fields: [s('effectiveFrom', 'Effective from (ISO-8601)', { format: 'date-time' }), objectArray('currencyLimits', 'Currency limits', [
+      e('currency', 'Currency', ['NGN', 'USD']), n('maxSingleTransferMinor', 'Maximum single transfer (minor units)', 1, Number.MAX_SAFE_INTEGER), n('maxDailyTransferMinor', 'Maximum daily transfers (minor units)', 1, Number.MAX_SAFE_INTEGER),
+      n('maxRecurringChargeMinor', 'Maximum recurring charge (minor units)', 1, Number.MAX_SAFE_INTEGER), n('maxRefundMinor', 'Maximum refund (minor units)', 1, Number.MAX_SAFE_INTEGER), n('maxCreditNoteMinor', 'Maximum credit note (minor units)', 1, Number.MAX_SAFE_INTEGER),
+      n('noFaultRecoveryMinor', 'No-fault recovery (minor units)', 0, Number.MAX_SAFE_INTEGER, { required: false }), n('refundApprovalThresholdMinor', 'Refund approval threshold (minor units)', 0, Number.MAX_SAFE_INTEGER, { required: false }), n('creditNoteApprovalThresholdMinor', 'Credit-note approval threshold (minor units)', 0, Number.MAX_SAFE_INTEGER, { required: false }),
+    ], 1, 2), e('noFaultCostRecovery', 'No-fault cost recovery', ['split_equally', 'waive']), s('reference', 'Approved control reference', { minLength: 1 })],
+    note: 'Finance must supply approved limits. Independent approval is required before these controls become active.',
+  },
+  title_verification_state_bands: {
+    label: 'Title-verification state bands', category: 'Revenue and payments', department: 'finance',
+    fields: [n('gazetteerRevision', 'Current approved gazetteer revision', 1, Number.MAX_SAFE_INTEGER), s('effectiveFrom', 'Effective from (ISO-8601)', { format: 'date-time' }),
+      objectArray('states', 'All 36 states and FCT', [s('stateId', 'Approved gazetteer state ID', { minLength: 1 }), n('band', 'Band', 1, 3), n('registrySearchCostMinor', 'Registry search cost (minor units)', 0, Number.MAX_SAFE_INTEGER), s('registrySearchReference', 'Registry search reference', { minLength: 1 }),
+        e('travelCostMode', 'Travel cost mode', ['none', 'flat', 'at_cost']), nullable('travelCostMinor', 'Travel cost (minor units)', 'number'), nullable('travelCostReference', 'Travel cost reference', 'string'),
+        s('registryRecipientSubAccountCode', 'Registry recipient reference', { required: false }), s('travelRecipientSubAccountCode', 'Travel recipient reference', { required: false }),
+      ], 37, 37)],
+    note: 'Use exactly the current approved gazetteer state IDs and Finance-approved costs and recipients. No state or price is generated in the browser. Independent approval is required.',
+  },
+  promotion_campaign_controls: {
+    label: 'Promotion campaign controls', category: 'Revenue and payments', department: 'sales_partnerships',
+    fields: [objectArray('currencyRules', 'Currency minimum bids', [e('currency', 'Currency', ['NGN', 'USD']), n('minimumBidMinor', 'Minimum bid (minor units)', 1, Number.MAX_SAFE_INTEGER)], 1, 2)],
+    note: 'Sales & Partnerships supplies approved minimum bids. Independent approval is required.',
+  },
   commercial_uses: {
     label: 'Commercial uses', category: 'Listings and data', department: 'listings_quality',
     fields: [objectArray('entries', 'Commercial-use entries', [s('key', 'Use key', { pattern: keyPattern }), s('label', 'Label', { minLength: 1, maxLength: 100 })], 1, 500)],
@@ -228,5 +284,5 @@ export type AdminPolicyEditorKind = 'schema';
 export const adminPolicyRegistry = Object.entries(definitions).map(([key, definition]) => ({ key: key as AdminPolicyKey, ...definition }));
 export const adminPolicyKeys = adminPolicyRegistry.map(({ key }) => key);
 
-export const getAdminPolicyMetadata = (key: AdminPolicyKey) => definitions[key];
+export const getAdminPolicyMetadata = (key: AdminPolicyKey): AdminPolicyDefinition => definitions[key];
 export const getAdminPolicyCategories = () => [...new Set(adminPolicyRegistry.map(({ category }) => category))];

@@ -61,7 +61,7 @@ describe('AdminPolicies', () => {
     mocks.useAuth.mockReturnValue({
       user: { _id: 'admin-current', name: 'Admin', role: 'admin' },
       activeProfile: { id: 'staff-profile' }, token: 'token',
-      adminAccess: { isExecutive: true, readOnly: false, capabilities: ['policies.read', 'policies.manage', 'policies.approve'] },
+      adminAccess: { isExecutive: true, isInternalAudit: false, readOnly: false, staffDepartments: ['executive'], capabilities: ['policies.read', 'policies.manage', 'policies.approve'] },
     });
     mocks.getPolicy.mockImplementation(async (key: string) => currentPolicy(key));
     mocks.getHistory.mockResolvedValue({ revisions: [], nextCursor: null });
@@ -71,7 +71,7 @@ describe('AdminPolicies', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
-  it('lists all 31 registered policies grouped by category and loads current state from the API', async () => {
+  it('lists all 37 registered policies grouped by category and loads current state from the API', async () => {
     render(<AdminPolicies />);
     expect(await screen.findByRole('heading', { name: 'Identity and profiles' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Notifications and delivery' })).toBeInTheDocument();
@@ -80,10 +80,11 @@ describe('AdminPolicies', () => {
     expect(screen.getByRole('heading', { name: 'Search and discovery' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Plans and payouts' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Listings and data' })).toBeInTheDocument();
-    await waitFor(() => expect(mocks.getPolicy).toHaveBeenCalledTimes(31));
+    expect(screen.getByRole('heading', { name: 'Revenue and payments' })).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getPolicy).toHaveBeenCalledTimes(37));
     for (const item of adminPolicyRegistry) expect(screen.getByText(item.key)).toBeInTheDocument();
-    expect(adminPolicyRegistry).toHaveLength(31);
-    expect(screen.getAllByText('unconfigured')).toHaveLength(31);
+    expect(adminPolicyRegistry).toHaveLength(37);
+    expect(screen.getAllByText('unconfigured')).toHaveLength(37);
   }, 15000);
 
   it('renders named, blank schema fields for an unconfigured policy without supplying guessed defaults', async () => {
@@ -100,7 +101,7 @@ describe('AdminPolicies', () => {
 
   it('shows the current company schema and separately explains deferred expiry reminders', async () => {
     render(<AdminPolicies />);
-    await waitFor(() => expect(mocks.getPolicy).toHaveBeenCalledTimes(31));
+    await waitFor(() => expect(mocks.getPolicy).toHaveBeenCalledTimes(37));
     const policyButtons = screen.getAllByRole('button', { name: /View and edit policy/ });
     expect(policyButtons.filter((button) => button.closest('li')?.textContent?.includes('private_evidence'))).toHaveLength(1);
     expect(policyButtons.filter((button) => button.closest('li')?.textContent?.includes('company_verification'))).toHaveLength(1);

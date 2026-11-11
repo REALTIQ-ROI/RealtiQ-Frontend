@@ -7,6 +7,8 @@ import StepUpDialog from '../../components/auth/StepUpDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
 import { organizationManagementService, type OrganizationAuthorityHistoryPage, type OrganizationInvitation, type OrganizationMandate, type OrganizationMandateAction, type OrganizationMember, type OrganizationRole, type OrganizationRoleDefinition, type OrganizationSeatPurchase, type OrganizationSeatPurchaseAuditPage, type OrganizationSeats, type OrganizationSeatPlans, type OrganizationSignatory } from '../../services/organizationManagementService';
+import { formatMoneyMinor } from '../../utils/moneyMinor';
+import SeatRenewalPreferences from '../../components/billing/SeatRenewalPreferences';
 
 type MutationResult = { member?: OrganizationMember; invitation?: OrganizationInvitation; role?: OrganizationRoleDefinition; mandate?: OrganizationMandate; purchase?: OrganizationSeatPurchase };
 const grantableRoles: OrganizationRole[] = ['administrator', 'sales_agent', 'project_editor', 'finance', 'viewer'];
@@ -19,17 +21,8 @@ const rolePermissions = [
   'personalisation.manage',
 ] as const;
 
-const formatValue = (value: unknown): string => {
-  if (value === null) return 'Not set';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (typeof value === 'string' || typeof value === 'number') return String(value);
-  if (Array.isArray(value)) return value.map(formatValue).join(', ');
-  if (typeof value === 'object') return Object.entries(value as Record<string, unknown>).map(([key, item]) => `${key.replace(/([A-Z])/g, ' $1')}: ${formatValue(item)}`).join(' · ');
-  return 'Not provided';
-};
-
-const explicitSeatPlanKey = (plan: Record<string, unknown>): string | null =>
-  typeof plan.planKey === 'string' && plan.planKey.trim() ? plan.planKey : null;
+const seatPurchasePlanLabel = (purchase: OrganizationSeatPurchase) =>
+  typeof purchase.plan === 'string' ? purchase.plan : `${purchase.plan.label} · ${purchase.plan.billingPeriod} · ${formatMoneyMinor(purchase.plan.grossMinor ?? purchase.plan.amountMinor, purchase.plan.currency)}`;
 
 const OrganizationManagement = () => {
   const { activeProfile, refreshProfiles } = useAuth();
@@ -65,7 +58,9 @@ const OrganizationManagement = () => {
   const [purchaseAuditError, setPurchaseAuditError] = useState('');
   const [selectedSeatMember, setSelectedSeatMember] = useState('');
   const [selectedSeatPlan, setSelectedSeatPlan] = useState('');
+  const [selectedSeatPeriod, setSelectedSeatPeriod] = useState<'monthly' | 'annual'>('monthly');
   const [seatAction, setSeatAction] = useState<'purchase' | 'renew'>('purchase');
+  const [saveSeatAuthorization, setSaveSeatAuthorization] = useState(false);
   const [loadingExtras, setLoadingExtras] = useState(false);
   const [extrasError, setExtrasError] = useState('');
   const [identityId, setIdentityId] = useState('');
@@ -79,6 +74,7 @@ const OrganizationManagement = () => {
   const [notice, setNotice] = useState('');
   const stepUp = useBoundStepUp<MutationResult>();
   const profileId = activeProfile?.id;
+  const seatOperationStorageKey = profileId ? `realtiq.seatPurchaseOperation:${profileId}` : '';
   const profileIdRef = useRef(profileId);
   profileIdRef.current = profileId;
   const seatOperationRef = useRef<{ signature: string; key: string } | null>(null);
@@ -159,7 +155,7 @@ const OrganizationManagement = () => {
       }
       if (seatResult.status === 'fulfilled' && seatResult.value?.paidSeats.length) setSelectedSeatMember((current) => current || seatResult.value!.paidSeats[0].membershipId);
       if (planResult.status === 'fulfilled' && planResult.value?.plans.length) {
-        const firstPlanKey = planResult.value.plans.map(explicitSeatPlanKey).find((key): key is string => Boolean(key));
+        const firstPlanKey = planResult.value.plans.find((plan) => plan.key && plan.terms.length)?.key;
         if (firstPlanKey) setSelectedSeatPlan((current) => current || firstPlanKey);
       }
       const failures = [mandateResult, signatoryResult, authorityResult, planResult, seatResult, purchaseResult]
@@ -172,7 +168,7 @@ const OrganizationManagement = () => {
   useEffect(() => {
     setMembers([]); setCursor(null); setIssuedInvitations([]); setRoles([]); setMandates([]); setAuthorityHistory({ events: [], nextCursor: null }); setSignatories([]);
     setSeatPlans(null); setSeats(null); setSeatPurchases([]); setSeatPurchasesCursor(null); setMemberRoleDrafts({}); setRoleDrafts({});
-    setSelectedSeatMember(''); setSelectedSeatPlan(''); setSelectedSeatPurchaseId(''); selectedSeatPurchaseIdRef.current = ''; purchaseDetailRequestRef.current += 1;
+    setSelectedSeatMember(''); setSelectedSeatPlan(''); setSelectedSeatPeriod('monthly'); setSaveSeatAuthorization(false); setSelectedSeatPurchaseId(''); selectedSeatPurchaseIdRef.current = ''; purchaseDetailRequestRef.current += 1;
     setSelectedSeatPurchase(null); setSelectedPurchaseAudit({ events: [], nextCursor: null }); setPurchaseDetailError(''); setPurchaseAuditError(''); setPurchaseDetailLoading(false); setPurchaseAuditLoading(false);
     seatOperationRef.current = null;
     invitationOperationRef.current = null;
@@ -252,16 +248,26 @@ const OrganizationManagement = () => {
   const beginSeatPurchase = async (event: FormEvent) => {
     event.preventDefault();
     if (!canManage || seatPlans?.state !== 'configured' || !seats || !selectedSeatMember || !selectedSeatPlan || stepUp.busy || stepUp.challenge) return;
-    const selectedPlanIsReturned = seatPlans.plans.some((plan) => explicitSeatPlanKey(plan) === selectedSeatPlan);
-    if (!selectedPlanIsReturned) { setExtrasError('Choose a plan key returned by the current seat-plan response. Refresh plans before continuing.'); return; }
-    const signature = JSON.stringify({ profileId, seatAction, selectedSeatMember, selectedSeatPlan });
-    if (seatOperationRef.current?.signature !== signature) seatOperationRef.current = { signature, key: `seat_${crypto.randomUUID()}` };
+    const selectedPlan = seatPlans.plans.find((plan) => plan.key === selectedSeatPlan);
+    if (!selectedPlan?.terms.some((term) => term.period === selectedSeatPeriod)) { setExtrasError('Choose a current plan and billing period returned by the server.'); return; }
+    const unresolved = seatPurchases.find((purchase) => purchase.membershipId === selectedSeatMember && ['initializing', 'pending', 'outcome_unknown', 'review_required'].includes(purchase.state));
+    if (unresolved) { setExtrasError(`A seat purchase is already ${unresolved.state.replaceAll('_', ' ')}. Reconcile that purchase before starting another.`); return; }
+    const signature = JSON.stringify({ profileId, seatAction, selectedSeatMember, selectedSeatPlan, selectedSeatPeriod, saveSeatAuthorization: seatAction === 'purchase' && saveSeatAuthorization });
+    const stored = seatOperationStorageKey ? sessionStorage.getItem(seatOperationStorageKey) : null;
+    let prior: { signature: string; key: string } | null = null;
+    if (stored) {
+      try { const parsed = JSON.parse(stored) as { signature?: unknown; key?: unknown }; if (typeof parsed.signature === 'string' && typeof parsed.key === 'string') prior = { signature: parsed.signature, key: parsed.key }; }
+      catch { setExtrasError('A saved seat payment attempt could not be read. Refresh the purchase list and contact support before starting another.'); return; }
+    }
+    if (stored && !prior) { setExtrasError('A saved seat payment attempt is incomplete. Review the purchase list and contact support before starting another.'); return; }
+    if (prior && prior.signature !== signature) { setExtrasError('A prior seat payment request has an unresolved outcome. Reconcile that purchase before changing the member or plan.'); return; }
+    if (seatOperationRef.current?.signature !== signature) seatOperationRef.current = prior ?? { signature, key: `seat_${crypto.randomUUID()}` };
     if (seatAction === 'purchase') {
-      const body = { membershipId: selectedSeatMember, planKey: selectedSeatPlan, operationKey: seatOperationRef.current.key };
-      await stepUp.begin({ method: 'POST', path: '/api/profiles/current/seat-purchases', body, label: 'Purchase a team seat', execute: (challengeId, exactBody) => organizationManagementService.purchaseSeat(exactBody, challengeId) });
+      const body = { membershipId: selectedSeatMember, planKey: selectedSeatPlan, billingPeriod: selectedSeatPeriod, operationKey: seatOperationRef.current.key, ...(saveSeatAuthorization ? { saveAuthorizationForRenewal: true } : {}) };
+      await stepUp.begin({ method: 'POST', path: '/api/profiles/current/seat-purchases', body, label: 'Purchase a team seat', execute: (challengeId, exactBody) => { if (seatOperationStorageKey) sessionStorage.setItem(seatOperationStorageKey, JSON.stringify({ signature, key: exactBody.operationKey })); return organizationManagementService.purchaseSeat(exactBody, challengeId); } });
     } else {
-      const body = { planKey: selectedSeatPlan, operationKey: seatOperationRef.current.key };
-      await stepUp.begin({ method: 'POST', path: `/api/profiles/current/seats/${encodeURIComponent(selectedSeatMember)}/renew`, body, label: 'Renew a team seat', execute: (challengeId, exactBody) => organizationManagementService.renewSeat(selectedSeatMember, exactBody, challengeId) });
+      const body = { planKey: selectedSeatPlan, billingPeriod: selectedSeatPeriod, operationKey: seatOperationRef.current.key };
+      await stepUp.begin({ method: 'POST', path: `/api/profiles/current/seats/${encodeURIComponent(selectedSeatMember)}/renew`, body, label: 'Renew a team seat', execute: (challengeId, exactBody) => { if (seatOperationStorageKey) sessionStorage.setItem(seatOperationStorageKey, JSON.stringify({ signature, key: exactBody.operationKey })); return organizationManagementService.renewSeat(selectedSeatMember, exactBody, challengeId); } });
     }
   };
 
@@ -373,7 +379,7 @@ const OrganizationManagement = () => {
         await loadOrganizationContext();
       }
       if (result.value.purchase) {
-        seatOperationRef.current = null;
+        if (['paid', 'cancelled', 'failed', 'reversed'].includes(result.value.purchase.state)) { seatOperationRef.current = null; if (seatOperationStorageKey) sessionStorage.removeItem(seatOperationStorageKey); }
         setNotice(`The server returned seat purchase state “${result.value.purchase.state}”. A payment redirect or request acceptance does not activate access; the server confirms entitlement separately.`);
         await loadOrganizationContext();
       } else {
@@ -406,7 +412,8 @@ const OrganizationManagement = () => {
     ...roles.filter((role) => !role.disabledAt).map((role) => ({ value: `custom:${role.id}`, label: `${role.name} (custom)` })),
   ];
   const renderedSeatPlans = seatPlans?.plans ?? [];
-  const seatPlanKeys = renderedSeatPlans.map(explicitSeatPlanKey).filter((key): key is string => Boolean(key));
+  const seatPlanKeys = renderedSeatPlans.filter((plan) => plan.key && plan.terms.length).map((plan) => plan.key);
+  const selectedSeatTerms = renderedSeatPlans.find((plan) => plan.key === selectedSeatPlan)?.terms ?? [];
   const selectableSeatMembers = members.filter((member) => !member.ownerSeat);
 
   return <BuyerPortalLayout pageEyebrow="Organization" pageTitle="Team and invitations" pageSubtitle="Manage current organization memberships and invitations using the active profile's server-granted authority.">
@@ -477,7 +484,27 @@ const OrganizationManagement = () => {
       {canReadOrganization ? <section className="rounded-xl border border-outline-variant/10 bg-white p-5" aria-labelledby="seats-heading">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 id="seats-heading" className="text-lg font-bold">Team seats</h3><p className="mt-1 text-sm text-secondary">The holder seat is included. Paid seat access changes only after the server confirms the provider payment and entitlement.</p></div><Button type="button" variant="secondary" disabled={loadingExtras} onClick={() => void loadOrganizationContext()}>Refresh seat status</Button></div>
         {seatPlans?.state === 'unconfigured' ? <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Additional seats are unavailable because the server reports {seatPlans.errorCode ?? 'an unconfigured seat policy'}. No plan or price has been assumed.</p> : null}
-        {seatPlans?.state === 'configured' ? <><p className="mt-3 text-sm">Included holder seat: {seats?.includedHolderSeat ? 'Yes' : 'Not confirmed'} · paid active {seats?.counts.paidActive ?? '—'} · paid pending {seats?.counts.paidPending ?? '—'} · members {seats?.counts.totalMembers ?? '—'} · plan revision {seatPlans.revision ?? 'not returned'}{seatPlans.currency ? ` · ${seatPlans.currency}` : ''}</p><div className="mt-3 grid gap-2 sm:grid-cols-2">{renderedSeatPlans.map((plan, index) => <article key={explicitSeatPlanKey(plan) ?? `plan-${index}`} className="rounded-lg bg-surface-container-low p-3 text-sm">{Object.entries(plan).map(([key, value]) => <p key={key}><span className="font-semibold">{key.replace(/([A-Z])/g, ' $1')}: </span>{formatValue(value)}</p>)}</article>)}</div>{!seatPlanKeys.length ? <p className="mt-3 text-xs text-amber-900">The current plan response does not expose the exact `planKey` required by the purchase request, so purchase controls are unavailable. Ask the backend contract owner to document the plan item DTO.</p> : <form onSubmit={(event) => void beginSeatPurchase(event)} className="mt-4 grid gap-3 rounded-lg border border-outline-variant/15 p-4 sm:grid-cols-3"><label className="text-xs font-bold">Seat member<select value={selectedSeatMember} onChange={(event) => setSelectedSeatMember(event.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm font-normal"><option value="">Choose a member</option>{selectableSeatMembers.map((member) => <option key={member.id} value={member.id}>{member.role.replaceAll('_', ' ')} · {member.identityId}</option>)}</select></label><label className="text-xs font-bold">Plan<select value={selectedSeatPlan} onChange={(event) => setSelectedSeatPlan(event.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm font-normal"><option value="">Choose a returned plan</option>{seatPlanKeys.map((key) => <option key={key} value={key}>{key}</option>)}</select></label><label className="text-xs font-bold">Action<select value={seatAction} onChange={(event) => setSeatAction(event.target.value as 'purchase' | 'renew')} className="mt-1 w-full rounded-lg border p-2 text-sm font-normal"><option value="purchase">Purchase seat</option><option value="renew">Renew seat</option></select></label><Button type="submit" className="sm:col-span-3" disabled={!canManage || !selectedSeatMember || !selectedSeatPlan || !seatPlanKeys.length || stepUp.busy || Boolean(stepUp.challenge)}>Continue with authenticator</Button><p className="text-xs text-secondary sm:col-span-3">Payment status and seat eligibility are checked by the server. Do not treat opening a payment page as paid or active.</p></form>}</> : seatPlans ? <p className="mt-3 text-sm text-secondary">The server returned seat-plan state “{seatPlans.state}”. This does not confirm that seats can be purchased.</p> : <p className="mt-3 text-sm text-secondary">Seat plan state has not loaded.</p>}
+        {seatPlans?.state === 'configured' ? <>
+          <p className="mt-3 text-sm">Included holder seat: {seats?.includedHolderSeat ? 'Yes' : 'Not confirmed'} · paid active {seats?.counts.paidActive ?? '—'} · paid pending {seats?.counts.paidPending ?? '—'} · members {seats?.counts.totalMembers ?? '—'} · catalogue revision {seatPlans.revision ?? 'not returned'}</p>
+          {seatPlans.renewalAvailability ? <div className="mt-2 text-sm"><p role="status">Renewal methods: {seatPlans.renewalAvailability.state.replaceAll('_', ' ')}. Manual renewal is {seatPlans.renewalAvailability.manual.available ? 'available' : 'unavailable'}.</p>{seatPlans.renewalAvailability.methods.map((item) => <p key={item.method}>{item.method.replaceAll('_', ' ')}: available{item.requiresActiveAuthorization ? ' with an active authorization' : ''}</p>)}{seatPlans.renewalAvailability.unavailableMethods.map((item) => <p key={item.method} className="text-secondary">{item.method.replaceAll('_', ' ')}: {item.reasonCode}</p>)}</div> : <p role="status" className="mt-2 text-sm">Renewal method availability was not returned. Refresh before setting a renewal preference.</p>}
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {renderedSeatPlans.map((plan) => <article key={plan.key} className="rounded-lg bg-surface-container-low p-3 text-sm">
+              <p className="font-semibold">{plan.label}</p>
+              {plan.terms.map((term) => <p key={term.period}>{term.period}: {formatMoneyMinor(term.grossMinor, term.currency)} gross · {formatMoneyMinor(term.netMinor, term.currency)} net · {formatMoneyMinor(term.vatMinor, term.currency)} VAT</p>)}
+            </article>)}
+          </div>
+          {!seatPlanKeys.length ? <p className="mt-3 text-xs text-amber-900">No purchasable seat terms were returned by the current catalogue.</p> :
+            <form onSubmit={(event) => void beginSeatPurchase(event)} className="mt-4 grid gap-3 rounded-lg border border-outline-variant/15 p-4 sm:grid-cols-2">
+              <label className="text-xs font-bold">Seat member<select value={selectedSeatMember} onChange={(event) => setSelectedSeatMember(event.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm font-normal"><option value="">Choose a member</option>{selectableSeatMembers.map((member) => <option key={member.id} value={member.id}>{member.role.replaceAll('_', ' ')} · {member.identityId}</option>)}</select></label>
+              <label className="text-xs font-bold">Plan<select value={selectedSeatPlan} onChange={(event) => setSelectedSeatPlan(event.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm font-normal"><option value="">Choose a returned plan</option>{renderedSeatPlans.map((plan) => <option key={plan.key} value={plan.key}>{plan.label}</option>)}</select></label>
+              <label className="text-xs font-bold">Billing period<select value={selectedSeatPeriod} onChange={(event) => setSelectedSeatPeriod(event.target.value as 'monthly' | 'annual')} className="mt-1 w-full rounded-lg border p-2 text-sm font-normal">{selectedSeatTerms.map((term) => <option key={term.period} value={term.period}>{term.period} · {formatMoneyMinor(term.grossMinor, term.currency)}</option>)}</select></label>
+              <label className="text-xs font-bold">Action<select value={seatAction} onChange={(event) => setSeatAction(event.target.value as 'purchase' | 'renew')} className="mt-1 w-full rounded-lg border p-2 text-sm font-normal"><option value="purchase">Purchase seat</option><option value="renew">Renew seat</option></select></label>
+              {seatAction === 'purchase' && seatPlans.renewalAvailability?.unavailableMethods.some((item) => item.method === 'saved_card' && item.reasonCode === 'PAYMENT_AUTHORIZATION_REQUIRED') ? <label className="flex items-center gap-2 text-xs sm:col-span-2"><input type="checkbox" checked={saveSeatAuthorization} onChange={(event) => setSaveSeatAuthorization(event.target.checked)} />Save the payment authorization for future seat renewals during this purchase</label> : null}
+              <Button type="submit" className="sm:col-span-2" disabled={!canManage || !selectedSeatMember || !selectedSeatPlan || !selectedSeatTerms.some((term) => term.period === selectedSeatPeriod) || stepUp.busy || Boolean(stepUp.challenge)}>Continue with authenticator</Button>
+              <p className="text-xs text-secondary sm:col-span-2">The selected price is a server catalogue term. Access begins only after the backend confirms payment and entitlement.</p>
+            </form>}
+        </> : seatPlans ? <p className="mt-3 text-sm text-secondary">Seat purchases are unavailable: {seatPlans.errorCode ?? seatPlans.state}. Refresh after the configuration is resolved.</p> : <p className="mt-3 text-sm text-secondary">Seat plan state has not loaded.</p>}
+        {seatPlans?.renewalAvailability && seats ? <SeatRenewalPreferences key={profileId} plans={seatPlans} seats={seats} canManage={canManage} /> : null}
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div>
             <h4 className="font-semibold">Current paid seats</h4>
@@ -488,7 +515,7 @@ const OrganizationManagement = () => {
             <h4 className="font-semibold">Recent seat purchases</h4>
             <ul className="mt-2 space-y-2">{seatPurchases.map((purchase) => <li key={purchase.id} className="rounded-lg bg-surface-container-low p-3 text-xs">
               <p className="font-semibold">{purchase.state.replaceAll('_', ' ')}</p>
-              <p className="mt-1">{purchase.plan} · reference {purchase.reference} · created {new Date(purchase.createdAt).toLocaleDateString()}</p>
+              <p className="mt-1">{seatPurchasePlanLabel(purchase)} · reference {purchase.reference} · created {new Date(purchase.createdAt).toLocaleDateString()}</p>
               {purchase.paidAt ? <p>Paid {new Date(purchase.paidAt).toLocaleDateString()}</p> : null}
               {purchase.redirectUrl && /^https?:\/\//i.test(purchase.redirectUrl) ? <a className="mt-2 inline-block underline" href={purchase.redirectUrl} target="_blank" rel="noreferrer">Continue to payment provider</a> : null}
               <div className="mt-2 flex flex-wrap gap-2">
@@ -499,7 +526,7 @@ const OrganizationManagement = () => {
               {selectedSeatPurchaseId === purchase.id ? <div className="mt-3 rounded border border-outline-variant/20 bg-white p-3" aria-label="Seat purchase detail and audit">
                 {purchaseDetailLoading ? <LoadingState label="Loading purchase details…" /> : null}
                 {purchaseDetailError ? <p role="alert" className="text-error">{purchaseDetailError}</p> : null}
-                {selectedSeatPurchase ? <div className="space-y-1"><h5 className="font-semibold">Server purchase record</h5><p>Status: {selectedSeatPurchase.state.replaceAll('_', ' ')}</p><p>Plan: {selectedSeatPurchase.plan}</p><p>Reference: {selectedSeatPurchase.reference}</p><p>Created: {new Date(selectedSeatPurchase.createdAt).toLocaleString()}</p>{selectedSeatPurchase.paidAt ? <p>Paid: {new Date(selectedSeatPurchase.paidAt).toLocaleString()}</p> : null}{selectedSeatPurchase.fulfilledAt ? <p>Fulfilled: {new Date(selectedSeatPurchase.fulfilledAt).toLocaleString()}</p> : null}</div> : null}
+                {selectedSeatPurchase ? <div className="space-y-1"><h5 className="font-semibold">Server purchase record</h5><p>Status: {selectedSeatPurchase.state.replaceAll('_', ' ')}</p><p>Plan: {seatPurchasePlanLabel(selectedSeatPurchase)}</p><p>Reference: {selectedSeatPurchase.reference}</p><p>Created: {new Date(selectedSeatPurchase.createdAt).toLocaleString()}</p>{selectedSeatPurchase.paidAt ? <p>Paid: {new Date(selectedSeatPurchase.paidAt).toLocaleString()}</p> : null}{selectedSeatPurchase.fulfilledAt ? <p>Fulfilled: {new Date(selectedSeatPurchase.fulfilledAt).toLocaleString()}</p> : null}</div> : null}
                 <div className="mt-3 border-t pt-3"><h5 className="font-semibold">Purchase audit</h5>{purchaseAuditLoading ? <LoadingState label="Loading purchase audit…" /> : null}{purchaseAuditError ? <p role="alert" className="text-error">{purchaseAuditError}</p> : null}<p className="text-secondary">{selectedPurchaseAudit.events.length} audit event(s) returned. Event fields are not defined in the local API contract, so details are not inferred.</p>{selectedPurchaseAudit.nextCursor ? <Button type="button" variant="ghost" className="mt-2" disabled={purchaseAuditLoading} onClick={() => void loadMorePurchaseAudit()}>Load more audit events</Button> : null}</div>
               </div> : null}
             </li>)}</ul>

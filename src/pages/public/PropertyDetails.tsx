@@ -24,6 +24,7 @@ import PublicLayout from '../../components/layout/PublicLayout';
 import Button from '../../components/ui/Button';
 import StepUpDialog from '../../components/auth/StepUpDialog';
 import Card from '../../components/ui/Card';
+import PropertyFxAgreement from '../../components/billing/PropertyFxAgreement';
 import SellerTrustBadge from '../../components/trust/SellerTrustBadge';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
@@ -98,7 +99,7 @@ const PropertyDetails = () => {
     !(location.state as { from: string }).from.startsWith('//')
     ? (location.state as { from: string }).from
     : '/properties';
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, activeProfile } = useAuth();
   const { dictionary } = useCanonicalFieldDictionary();
   const { refreshProperties } = useProperties();
   const propertyPaymentStepUp = useBoundStepUp<InitializePaymentResponse>();
@@ -106,6 +107,7 @@ const PropertyDetails = () => {
   const [paymentTerminalStatus, setPaymentTerminalStatus] = useState<string | null>(null);
   const [paymentStatusMessage, setPaymentStatusMessage] = useState('');
   const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(false);
+  const [fxConfirmationId, setFxConfirmationId] = useState<string | null>(null);
   const {
     data: property,
     loading,
@@ -380,6 +382,11 @@ const PropertyDetails = () => {
       return;
     }
 
+    if (currency === 'USD' && !fxConfirmationId) {
+      toast.error('A current buyer and seller FX agreement is required before paying for this USD listing.');
+      return;
+    }
+
     const confirmed = await Swal.fire({
       title: 'Proceed to Payment?',
       text: 'You will be redirected to the secure payment gateway.',
@@ -393,7 +400,7 @@ const PropertyDetails = () => {
     if (!confirmed.isConfirmed) return;
 
     if (paymentOutcomeUnknown || propertyPaymentStepUp.busy || propertyPaymentStepUp.challenge || !property) return;
-    const body = { propertyId: property._id || propertyReference };
+    const body = { propertyId: property._id || propertyReference, ...(currency === 'USD' && fxConfirmationId ? { fxConfirmationId } : {}) };
     await propertyPaymentStepUp.begin({
       method: 'POST',
       path: '/api/payments/initialize',
@@ -709,6 +716,8 @@ const PropertyDetails = () => {
             </div>
           </div>
         ) : null}
+
+        {property && currency === 'USD' && activeProfile ? <div className="mb-6"><PropertyFxAgreement propertyId={property._id || propertyReference} onSelect={setFxConfirmationId} /></div> : null}
 
         <div className='grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-3 lg:gap-12'>
           <div className='min-w-0 space-y-10 lg:col-span-2'>

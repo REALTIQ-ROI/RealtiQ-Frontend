@@ -59,6 +59,7 @@ import LegalHolds from '../pages/dashboard/Admin/LegalHolds';
 import StaffAccessChanges from '../pages/dashboard/Admin/StaffAccessChanges';
 import NotificationDeliveryReconciliation from '../pages/dashboard/Admin/NotificationDeliveryReconciliation';
 import OrganizationManagement from '../pages/dashboard/OrganizationManagement';
+import ProfileBilling from '../pages/dashboard/ProfileBilling';
 import ManageProperties from '../pages/dashboard/Admin/ManageProperties';
 import AdminProjects from '../pages/dashboard/Admin/Projects';
 import AdminProjectDetails from '../pages/dashboard/Admin/ProjectDetails';
@@ -95,13 +96,14 @@ import LandlordSettings from '../pages/dashboard/Landlord/LandlordSettings';
 import LandlordVerification from '../pages/dashboard/Landlord/LandlordVerification';
 import LandlordTitleVerifications from '../pages/dashboard/Landlord/LandlordTitleVerifications';
 import ProtectedRoute from './ProtectedRoute';
-import { AdminAccessBoundary, AdminAccessRoute, AdminCapabilityRoute } from './AdminAccessRoute';
+import { AdminAccessRoute, AdminCapabilityRoute } from './AdminAccessRoute';
 import { useAuth } from '../contexts/AuthContext';
 import ROICalculatorPage from '../pages/dashboard/ROI/ROICalculatorPage';
 import MyROIScenarios from '../pages/dashboard/ROI/MyROIScenarios';
 import ROIAssumptions from '../pages/dashboard/Admin/ROIAssumptions';
 import AdminSettings from '../pages/dashboard/Admin/AdminSettings';
 import AdminPolicies from '../pages/dashboard/Admin/AdminPolicies';
+import FinanceRevenue from '../pages/dashboard/Admin/FinanceRevenue';
 import AdminVirtualTours from '../pages/dashboard/Admin/AdminVirtualTours';
 import AdminVirtualTourDetail from '../pages/dashboard/Admin/AdminVirtualTourDetail';
 import AdminWallet from '../pages/dashboard/Admin/AdminWallet';
@@ -120,6 +122,7 @@ import PayoutAccountSettings from '../pages/proxyNetwork/PayoutAccountSettings';
 import CreateProxyInspection from '../pages/proxyNetwork/CreateProxyInspection';
 import { BuyerProxyInspections, InspectorTasks, AdminProxyInspections } from '../pages/proxyNetwork/ProxyJobLists';
 import { BuyerProxyWorkspace, InspectorProxyWorkspace, AdminProxyWorkspace } from '../pages/proxyNetwork/ProxyWorkspaces';
+import ProxyFinanceExecution from '../pages/dashboard/Admin/ProxyFinanceExecution';
 import ProxyPaymentReturn from '../pages/proxyNetwork/ProxyPaymentReturn';
 import { AdminInspectorDetailPage, AdminInspectorList } from '../pages/proxyNetwork/AdminInspectors';
 import Messages from '../pages/dashboard/Messages';
@@ -222,6 +225,7 @@ const AppRoutes = () => {
           <Route path='/dashboard/notifications' element={<Notifications />} />
           <Route path='/dashboard/trust' element={<TrustAccount />} />
           <Route path='/dashboard/organization' element={<OrganizationManagement />} />
+          <Route path='/dashboard/billing' element={<ProfileBilling />} />
           <Route path='/dashboard/valuations/:propertyReference' element={<ValuationPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/roi-v1/properties/:propertyReference/new" element={<Navigate to="/dashboard" replace />} />
@@ -314,6 +318,7 @@ const AppRoutes = () => {
             <Route path="/admin/proxy-inspectors/:profileId" element={adminPage('verification.read', <AdminInspectorDetailPage />)} />
             <Route path="/admin/proxy-inspections" element={adminPage('network.read', <AdminProxyInspections />)} />
             <Route path="/admin/proxy-inspections/:requestId" element={adminPage('network.read', <AdminProxyWorkspace />)} />
+            <Route path="/dashboard/admin/finance/proxy-inspections/:requestId" element={adminPage('finance.read', <ProxyFinanceExecution />)} />
             <Route path="/dashboard/admin/proxy-inspectors" element={adminPage(['network.read', 'search.proxy_inspector.read'], <Navigate to="/admin/proxy-inspectors" replace />)} />
             <Route path="/dashboard/admin/proxy-inspections" element={adminPage('network.read', <Navigate to="/admin/proxy-inspections" replace />)} />
             <Route path="/dashboard/admin" element={adminPage('dashboard.read', <AdminDashboard />, true)} />
@@ -349,6 +354,7 @@ const AppRoutes = () => {
             <Route path="/dashboard/admin/roi-assumptions" element={adminPage('roi.manage', <ROIAssumptions />)} />
             <Route path="/dashboard/admin/settings" element={adminPage('dashboard.read', <AdminSettings />)} />
             <Route path="/dashboard/admin/policies" element={adminPage('policies.read', <AdminPolicies />, true)} />
+            <Route path="/dashboard/admin/revenue" element={adminPage('finance.read', <FinanceRevenue />)} />
             <Route path="/dashboard/admin/virtual-tours" element={adminPage(['search.virtual_tour.read', 'virtual_tours.manage'], <AdminVirtualTours />)} />
             <Route path="/dashboard/admin/virtual-tours/:propertyId" element={adminPage(['search.virtual_tour.read', 'virtual_tours.manage'], <AdminVirtualTourDetail />)} />
             <Route path="/dashboard/admin/wallet" element={adminPage('finance.read', <AdminWallet />)} />

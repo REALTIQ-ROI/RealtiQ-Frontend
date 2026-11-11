@@ -162,7 +162,6 @@ const AdminPolicyValueEditor = ({ fields, value, onChange, disabled = false }: A
         required={field.required !== false}
         minLength={field.minLength}
         maxLength={field.maxLength}
-        pattern={field.pattern}
         rows={4}
         value={valueText}
         onChange={(event) => onChange(path, event.target.value)}

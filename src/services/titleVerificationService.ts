@@ -18,7 +18,41 @@ export interface SubmitTitleVerificationInput {
   propertyId: string;
   documentId: string;
   documentType: TitleDocumentType;
+  feeOrderId: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface TitleFeeQuote {
+  state: string;
+  payable: boolean;
+  propertyId: string;
+  stateLocation: { id: string; name: string } | null;
+  stateBand: string | Record<string, unknown> | null;
+  currency: 'NGN';
+  policyRevisions: { stateBands: number; feeSchedule: number };
+  serviceFeeQuote: Record<string, unknown> | null;
+  passThrough: { registryAndSearchMinor: number | null; travelMode: string | null; travelMinor: number | null; totalMinor: number | null };
+  serviceFee: { collectionMode: string; netMinor: number | null; vatMinor: number | null; grossMinor: number | null; dueNowMinor: number | null; dueOnSaleRelease: boolean };
+  dueNowMinor: number | null;
+  unavailableReason: string | null;
+  quotedAt: string;
+}
+
+export interface TitleFeeOrder {
+  id: string;
+  propertyId: string;
+  ownerProfileId: string;
+  state: string;
+  currency: 'NGN';
+  amountMinor: number;
+  serviceFeeMode: 'upfront' | 'deferred';
+  paymentId: string | null;
+  paymentReference: string | null;
+  providerSettlementState: string;
+  verificationId: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ListTitleVerificationsParams {
@@ -49,6 +83,22 @@ export interface TitleVerificationConflictDetails {
 }
 
 export const titleVerificationService = {
+  async quoteFee(body: { propertyId: string; serviceFeeMode: 'upfront' | 'deferred' }): Promise<TitleFeeQuote> {
+    const { data } = await api.post<{ quote: TitleFeeQuote }>('/title-verifications/fee-quotes', body);
+    return data.quote;
+  },
+
+  async createFeeOrder(body: { propertyId: string; serviceFeeMode: 'upfront' | 'deferred'; operationKey: string }, challengeId: string): Promise<{ order: TitleFeeOrder; payment: { id: string; reference: string; state: string; redirectUrl: string | null }; idempotent: boolean }> {
+    const { data } = await api.post<{ order: TitleFeeOrder; payment: { id: string; reference: string; state: string; redirectUrl: string | null }; idempotent: boolean }>(
+      '/title-verifications/fee-orders', body, { headers: { 'X-Step-Up-Challenge': challengeId } },
+    );
+    return data;
+  },
+
+  async getFeeOrder(orderId: string): Promise<TitleFeeOrder> {
+    const { data } = await api.get<{ order: TitleFeeOrder }>(`/title-verifications/fee-orders/${encodeURIComponent(orderId)}`);
+    return data.order;
+  },
   async submitTitleVerification(input: SubmitTitleVerificationInput): Promise<SubmitTitleVerificationResponse> {
     const { data } = await api.post<SubmitTitleVerificationResponse>('/title-verifications', input);
     return data;

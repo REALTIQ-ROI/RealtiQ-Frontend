@@ -17,6 +17,8 @@ import BuyerRefundAccountForm from '../../../components/escrow/BuyerRefundAccoun
 import EscrowStatusBadge from '../../../components/escrow/EscrowStatusBadge';
 import RefundAdminPanel from '../../../components/escrow/RefundAdminPanel';
 import RefundChat from '../../../components/escrow/RefundChat';
+import EscrowFinanceSettlement from '../../../components/escrow/EscrowFinanceSettlement';
+import FinanceExecutionPanel from '../../../components/escrow/FinanceExecutionPanel';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
 import MediaPreview from '../../../components/property/MediaPreview';
 import ErrorState from '../../../components/ui/ErrorState';
@@ -899,6 +901,8 @@ const EscrowDetails = () => {
       </aside>
       <StepUpDialog challenge={escrowPaymentStepUp.challenge} busy={escrowPaymentStepUp.busy || pending === 'payment'} error={escrowPaymentStepUp.error} onCancel={() => { escrowPaymentStepUp.cancel(); setPending(null); }} onSubmit={completeEscrowStepUp} />
       </div>
+      {user?.role === 'admin' && displayedEscrow._id ? <EscrowFinanceSettlement key={`${activeProfile?.id ?? ''}:${displayedEscrow._id}`} escrowId={displayedEscrow._id} /> : null}
+      {user?.role === 'admin' && displayedEscrow._id ? <FinanceExecutionPanel key={`refund:${activeProfile?.id ?? ''}:${displayedEscrow._id}`} kind="escrow_refund" resourceId={displayedEscrow._id} /> : null}
     </EscrowRoleLayout>
   );
 };

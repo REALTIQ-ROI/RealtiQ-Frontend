@@ -1,9 +1,7 @@
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
-import { useAsync } from '../../../hooks/useAsync';
-import { paymentService } from '../../../services/paymentService';
-
-const formatNGN = (amount: number) =>
-  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(amount);
+import { LoaderCircle } from 'lucide-react';
+import { usePaymentPage } from '../../../hooks/usePaymentPage';
+import { formatPaymentMajor } from '../../../utils/moneyMinor';
 
 const formatDate = (dateStr: string) =>
   new Date(dateStr).toLocaleString('en-NG', {
@@ -11,9 +9,9 @@ const formatDate = (dateStr: string) =>
   });
 
 const LandlordPaymentHistory = () => {
-  const { data, loading, error, execute } = useAsync(() => paymentService.getPayments(), true);
+  const { data, loading, error, execute, page, setPage } = usePaymentPage();
 
-  const payments = data ?? [];
+  const payments = data?.payments ?? [];
   const paidCount = payments.filter((p) => p.status === 'paid').length;
   const pendingCount = payments.filter((p) => p.status === 'pending').length;
 
@@ -91,7 +89,7 @@ const LandlordPaymentHistory = () => {
                         <span className="text-xs font-mono text-secondary">{payment.reference}</span>
                       </td>
                       <td className="px-8 py-6 text-sm font-medium text-slate-600">{formatDate(payment.createdAt)}</td>
-                      <td className="px-8 py-6 text-right font-bold text-slate-900">{formatNGN(payment.amount)}</td>
+                      <td className="px-8 py-6 text-right font-bold text-slate-900">{formatPaymentMajor(payment.amount, payment.currency)}</td>
                       <td className="px-8 py-6 text-center">
                         <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${
                           payment.status === 'paid'
@@ -109,6 +107,13 @@ const LandlordPaymentHistory = () => {
               </table>
             </div>
           )}
+          {data && (page > 1 || (data.total !== null ? page * data.limit < data.total : payments.length === data.limit)) ? (
+            <div className="flex items-center justify-between gap-4 border-t border-surface-container-low p-6 text-sm">
+              <button type="button" disabled={page <= 1 || loading} onClick={() => setPage((current) => current - 1)} className="rounded-lg border px-4 py-2 disabled:opacity-50">Previous</button>
+              <span>Page {data.page}{data.total !== null ? ` · ${data.total} total records` : ''}</span>
+              <button type="button" disabled={loading || (data.total !== null ? page * data.limit >= data.total : payments.length < data.limit)} onClick={() => setPage((current) => current + 1)} className="rounded-lg border px-4 py-2 disabled:opacity-50">Next</button>
+            </div>
+          ) : null}
         </div>
       </div>
     </LandlordPortalLayout>
@@ -116,4 +121,3 @@ const LandlordPaymentHistory = () => {
 };
 
 export default LandlordPaymentHistory;
-import { LoaderCircle } from 'lucide-react';

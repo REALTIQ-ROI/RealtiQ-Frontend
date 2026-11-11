@@ -4,12 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
-import { useAsync } from '../../../hooks/useAsync';
+import { usePaymentPage } from '../../../hooks/usePaymentPage';
 import { paymentService } from '../../../services/paymentService';
 import type { ApiPayment } from '../../../types';
-
-const formatNGN = (amount: number) =>
-  new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(amount);
+import { formatPaymentMajor } from '../../../utils/moneyMinor';
 
 const formatDate = (dateStr: string) =>
   new Date(dateStr).toLocaleString('en-NG', {
@@ -39,12 +37,12 @@ type FilterTab = 'all' | 'paid' | 'pending' | 'failed' | 'canceled';
 
 const PaymentHistory = () => {
   const navigate = useNavigate();
-  const { data, loading, error, execute } = useAsync(() => paymentService.getPayments(), true);
+  const { data, loading, error, execute, page, setPage } = usePaymentPage();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [query, setQuery] = useState('');
   const [verifying, setVerifying] = useState<string | null>(null);
 
-  const payments = data ?? [];
+  const payments = data?.payments ?? [];
   const filtered = payments.filter((payment) => {
     const matchesTab = activeTab === 'all' || payment.status === activeTab;
     const needle = query.trim().toLowerCase();
@@ -60,7 +58,7 @@ const PaymentHistory = () => {
   const handleVerify = async (payment: ApiPayment) => {
     const confirmed = await Swal.fire({
       title: 'Verify Payment?',
-      text: 'This will check payment status with Paystack',
+      text: 'This will check the existing payment reference with its provider.',
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'Verify',
@@ -210,7 +208,7 @@ const PaymentHistory = () => {
                         <span className="font-mono text-xs text-secondary">{payment.reference}</span>
                       </td>
                       <td className="px-8 py-6">
-                        <p className="font-bold text-primary">{formatNGN(payment.amount)}</p>
+                        <p className="font-bold text-primary">{formatPaymentMajor(payment.amount, payment.currency)}</p>
                       </td>
                       <td className="px-8 py-6">
                         <p className="text-sm font-medium text-on-surface">{formatDate(payment.createdAt)}</p>
@@ -266,8 +264,12 @@ const PaymentHistory = () => {
 
         <div className="px-8 py-6 flex justify-between items-center bg-surface-container-low/30">
           <p className="text-sm text-secondary font-medium">
-            Showing {filtered.length} of {payments.length} transactions
+            Showing {filtered.length} matching records on page {data?.page ?? page}{data?.total !== null && data?.total !== undefined ? ` · ${data.total} total records` : ''}
           </p>
+          {data && (page > 1 || (data.total !== null ? page * data.limit < data.total : payments.length === data.limit)) ? <div className="flex gap-2">
+            <button type="button" disabled={page <= 1 || loading} onClick={() => setPage((current) => current - 1)} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50">Previous</button>
+            <button type="button" disabled={loading || (data.total !== null ? page * data.limit >= data.total : payments.length < data.limit)} onClick={() => setPage((current) => current + 1)} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50">Next</button>
+          </div> : null}
         </div>
       </div>
 
@@ -281,8 +283,8 @@ const PaymentHistory = () => {
               verified_user
             </span>
             <div>
-              <p className="font-bold text-primary">PCI-DSS Compliant</p>
-              <p className="text-sm text-secondary">Secure payment processing via Paystack</p>
+              <p className="font-bold text-primary">Payment status</p>
+              <p className="text-sm text-secondary">The provider confirms each payment through its original reference.</p>
             </div>
           </div>
         </div>
@@ -293,7 +295,7 @@ const PaymentHistory = () => {
               account_balance_wallet
             </span>
             <h4 className="text-white text-xl font-bold mb-2">Transaction Security</h4>
-            <p className="text-on-primary-container text-sm max-w-xs mx-auto">All payments processed securely through Paystack.</p>
+            <p className="text-on-primary-container text-sm max-w-xs mx-auto">A provider return does not confirm a payment until the server records it.</p>
           </div>
         </div>
       </section>

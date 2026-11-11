@@ -30,7 +30,7 @@ const CartCheckoutDetail = () => {
 
   useEffect(() => {
     if (!data || pollCount >= 6) return;
-    const needsRefresh = ['paid', 'allocation_processing'].includes(data.status) || ['pending', 'outcome_unknown'].includes(data.initializationState ?? '');
+    const needsRefresh = ['pending', 'payment_initialized', 'partially_paid', 'reconciliation_required', 'paid', 'allocation_processing'].includes(data.status) || ['pending', 'outcome_unknown'].includes(data.initializationState ?? '') || data.paymentParts?.some((part) => ['reserved', 'initializing', 'outcome_unknown'].includes(part.state));
     if (!needsRefresh) return;
     const timer = window.setTimeout(() => {
       void execute({ silent: true }).then((next) => { if (next) setPollCount((count) => count + 1); });
@@ -38,11 +38,11 @@ const CartCheckoutDetail = () => {
     return () => window.clearTimeout(timer);
   }, [data, execute, pollCount]);
 
-  const verifyAndRefresh = async () => {
-    if (!data?.paymentReference || verifying) return;
+  const verifyAndRefresh = async (reference: string) => {
+    if (!reference || verifying) return;
     setVerifying(true); setVerifyMessage(null);
     try {
-      const result = await paymentService.verifyPayment(data.paymentReference);
+      const result = await paymentService.verifyPayment(reference);
       if (!result.verified) setVerifyMessage('The payment is not yet verified. The provider callback/webhook remains authoritative; refresh again later.');
       else { setVerifyMessage('Payment verification returned confirmed. Refreshing checkout allocations.'); toast.success('Payment verification completed; refreshing service allocations.'); }
       const refreshed = await execute();
@@ -56,7 +56,7 @@ const CartCheckoutDetail = () => {
 
   return (
     <BuyerPortalLayout
-      pageTitle="Service Receipt"
+      pageTitle="Service Checkout"
       pageSubtitle="Unified checkout payment and service allocation breakdown."
       topbarRight={<Link className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold" to="/dashboard/buyer/cart-checkouts">Checkout history</Link>}
     >
@@ -80,9 +80,21 @@ const CartCheckoutDetail = () => {
             </section>
             <section className="flex flex-wrap items-center gap-3 rounded-xl border border-outline-variant/10 bg-white p-4">
               <Button type="button" variant="secondary" disabled={loading} onClick={() => { setPollCount(0); void execute(); }}>Refresh checkout status</Button>
-              {data.paymentReference && !['completed', 'partially_failed'].includes(data.status) ? <Button type="button" disabled={verifying || loading} loading={verifying} loadingLabel="Checking payment…" onClick={() => void verifyAndRefresh()}>Verify payment then refresh allocations</Button> : null}
+              {data.paymentReference && !data.paymentParts?.length && !['completed', 'partially_failed'].includes(data.status) ? <Button type="button" disabled={verifying || loading} loading={verifying} loadingLabel="Checking payment…" onClick={() => void verifyAndRefresh(data.paymentReference!)}>Verify payment then refresh allocations</Button> : null}
               {verifyMessage ? <p role="status" className="text-sm text-secondary">{verifyMessage}</p> : null}
               {pollCount >= 6 ? <p className="text-xs text-secondary">Automatic status refresh paused after six checks. Use Refresh checkout status to continue.</p> : null}
+            </section>
+            <section className="rounded-xl border border-outline-variant/10 bg-white p-5" aria-labelledby="payment-parts-heading">
+              <h3 id="payment-parts-heading" className="text-xl font-black">Payment parts</h3>
+              <p className="mt-1 text-sm text-secondary">Each part has its own reference. A paid part does not complete the checkout until every dependent allocation is confirmed.</p>
+              {data.paymentParts?.length ? <ul className="mt-3 space-y-3">{data.paymentParts.map((part) => <li key={part.key} className="rounded-lg bg-surface-container-low p-3 text-sm">
+                <strong>{part.custody === 'segregated_escrow' ? 'Service escrow' : 'Merchant collection'}</strong> · {formatNgn(part.amount)} · {part.state.replaceAll('_', ' ')}
+                <p className="mt-1 text-xs text-secondary">Reference {part.reference}</p>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  {part.state === 'initialized' && part.redirectUrl && /^https:\/\//i.test(part.redirectUrl) ? <a className="font-bold text-primary underline" href={part.redirectUrl}>Continue this payment</a> : null}
+                  {['initialized', 'outcome_unknown', 'paid'].includes(part.state) ? <Button type="button" variant="secondary" disabled={verifying || loading} onClick={() => void verifyAndRefresh(part.reference)}>Check this reference</Button> : null}
+                </div>
+              </li>)}</ul> : <p className="mt-3 text-sm text-secondary">No payment-part details returned. Refresh this checkout before paying.</p>}
             </section>
             <section className="rounded-xl border border-outline-variant/10 bg-white">
               <div className="border-b border-outline-variant/10 p-5">

@@ -65,18 +65,21 @@ const PostPaymentRedirect = () => {
       if (paymentPurpose === "multi_service_cart") {
         const pendingCheckout = cartService.getPendingCheckout();
         let checkout: CartCheckoutDetail | null = null;
-        if (pendingCheckout.checkoutId && (!pendingCheckout.reference || pendingCheckout.reference === reference)) {
+        if (pendingCheckout.checkoutId) {
           checkout = await cartService.getCartCheckout(pendingCheckout.checkoutId);
-        } else {
-          const recent = await cartService.listCartCheckouts({ page: 1, limit: 10 });
-          checkout = recent.checkouts.find((item) => item.paymentReference === reference) ?? null;
+          if (checkout.paymentReference !== reference && !checkout.paymentParts?.some((part) => part.reference === reference)) checkout = null;
         }
+        if (!checkout) {
+          const recent = await cartService.listCartCheckouts({ page: 1, limit: 10 });
+          checkout = recent.checkouts.find((item) => item.paymentReference === reference || item.paymentParts?.some((part) => part.reference === reference)) ?? null;
+        }
+        if (!checkout) throw new Error('The payment reference was verified, but its checkout could not be loaded. Refresh checkout history before taking another payment action.');
         setCartCheckout(checkout);
-        cartService.clearPendingCheckout();
+        if (checkout && ['completed', 'failed', 'expired', 'refunded'].includes(checkout.status)) cartService.clearPendingCheckout();
         setCartFromResponse(null);
         window.setTimeout(() => void refreshCart().catch(() => undefined), 1000);
         if (!sessionStorage.getItem(`realtiq.cartPaymentNotified.${reference}`)) {
-          toast.success("Cart payment verified.");
+          toast.info("A cart payment reference was verified. Review every payment part and service allocation.");
           sessionStorage.setItem(`realtiq.cartPaymentNotified.${reference}`, "1");
         }
         setStatus("success");
@@ -103,7 +106,7 @@ const PostPaymentRedirect = () => {
         setTitleAccessReady(ready);
         titleDocumentService.clearPendingPayment();
         if (!sessionStorage.getItem(`realtiq.titlePaymentNotified.${reference}`)) {
-          toast.success("Payment successful — your document access is ready.");
+          toast.success(ready ? "Payment verified and document access is ready." : "Payment verified. Document access is still processing.");
           sessionStorage.setItem(`realtiq.titlePaymentNotified.${reference}`, "1");
         }
       } else if (isEscrow && escrowId) {
@@ -187,7 +190,7 @@ const PostPaymentRedirect = () => {
               </span>
             </div>
             <h1 className="text-3xl font-extrabold">
-              {cartCheckout ? "Service checkout received" : isEscrow ? "Payment secured in escrow" : isTitleDocumentPayment ? "Document access ready" : "Payment verified"}
+              {cartCheckout ? "Service checkout update" : isEscrow ? "Payment secured in escrow" : isTitleDocumentPayment ? titleAccessReady ? "Document access ready" : "Document access pending" : "Payment verified"}
             </h1>
             <p className="mt-3 text-secondary">
               {cartCheckout
@@ -198,8 +201,8 @@ const PostPaymentRedirect = () => {
                     : cartCheckout.status === "partially_failed"
                       ? "Payment succeeded, but one or more services are still being activated. No additional payment is required."
                       : cartCheckout.status === "failed"
-                        ? "Payment succeeded, but service activation needs support review. No additional payment is required."
-                        : "Payment has been verified. Allocation status is shown on your receipt."
+                        ? "A payment reference was verified, but checkout failed. Review all payment parts before another attempt."
+                        : "A payment reference was verified. Other parts or service allocations may still be pending."
                 : isEscrow
                 ? "Your payment is locked while the agreed conditions are completed. This is not yet a completed property purchase."
                 : isTitleDocumentPayment
@@ -222,7 +225,7 @@ const PostPaymentRedirect = () => {
                   to={isBuyer ? `/dashboard/buyer/cart-checkouts/${cartCheckout.checkoutId}` : "/cart"}
                   className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary"
                 >
-                  {isBuyer ? "View Service Receipt" : "Back to Service Cart"}
+                  {isBuyer ? "View Service Checkout" : "Back to Service Cart"}
                 </Link>
               ) : isTitleDocumentPayment && titleAccessReady && titleDocumentId ? (
                 <button
