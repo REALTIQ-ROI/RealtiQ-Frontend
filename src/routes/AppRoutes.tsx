@@ -43,6 +43,7 @@ import AccountSecuritySettingsPage from '../pages/proxyNetwork/AccountSecuritySe
 
 import Dashboard from '../pages/dashboard/Dashboard';
 import Tours from '../pages/dashboard/Tours';
+import DocumentManager from '../pages/dashboard/DocumentManager';
 import Installments from '../pages/dashboard/Installments';
 import NotificationDigest from '../pages/dashboard/NotificationDigest';
 import AdminDashboard from '../pages/dashboard/Admin/AdminDashboard';
@@ -226,6 +227,7 @@ const AppRoutes = () => {
           <Route path='/dashboard/trust' element={<TrustAccount />} />
           <Route path='/dashboard/organization' element={<OrganizationManagement />} />
           <Route path='/dashboard/billing' element={<ProfileBilling />} />
+          <Route path='/dashboard/documents' element={<DocumentManager />} />
           <Route path='/dashboard/valuations/:propertyReference' element={<ValuationPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/roi-v1/properties/:propertyReference/new" element={<Navigate to="/dashboard" replace />} />

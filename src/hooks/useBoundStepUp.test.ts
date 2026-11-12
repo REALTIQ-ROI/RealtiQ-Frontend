@@ -29,7 +29,13 @@ describe('useBoundStepUp', () => {
       status: 429,
       code: 'AUTH_FACTOR_RATE_LIMITED',
       retryAfter: '12',
+      requestId: 'support-ref-1',
     }))).toContain('Wait at least 12 seconds');
+    expect(stepUpErrorMessage(new ApiRequestError('Request failed', {
+      status: 503,
+      code: 'FEATURE_UNAVAILABLE',
+      requestId: 'support-ref-2',
+    }))).toContain('Support reference: support-ref-2');
   });
 
   it('sends the exact frozen JSON body to initiation and the protected action after TOTP', async () => {

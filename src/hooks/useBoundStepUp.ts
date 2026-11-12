@@ -35,19 +35,21 @@ export const stepUpErrorMessage = (error: unknown): string => {
     const delay = retryAfterDelayMs(error.retryAfter);
     return delay && delay > 0 ? `${message} Wait at least ${Math.ceil(delay / 1000)} seconds before trying again.` : message;
   };
+  let message: string;
   switch (error.code) {
-    case 'AUTH_FACTOR_REQUIRED': return 'An authenticator is required. Enable it in Account Security before continuing.';
-    case 'AUTH_FACTOR_CODE_INVALID': return 'That authenticator code was not accepted. Enter the current code and try again.';
-    case 'AUTH_FACTOR_RATE_LIMITED': return waitMessage('Authenticator verification is temporarily locked.');
-    case 'AUTH_CHALLENGE_RATE_LIMITED': return waitMessage('Too many security challenges were requested.');
-    case 'AUTH_CHALLENGE_INVALID': return 'This security challenge expired or is no longer valid. Start a new request.';
+    case 'AUTH_FACTOR_REQUIRED': message = 'An authenticator is required. Enable it in Account Security before continuing.'; break;
+    case 'AUTH_FACTOR_CODE_INVALID': message = 'That authenticator code was not accepted. Enter the current code and try again.'; break;
+    case 'AUTH_FACTOR_RATE_LIMITED': message = waitMessage('Authenticator verification is temporarily locked.'); break;
+    case 'AUTH_CHALLENGE_RATE_LIMITED': message = waitMessage('Too many security challenges were requested.'); break;
+    case 'AUTH_CHALLENGE_INVALID': message = 'This security challenge expired or is no longer valid. Start a new request.'; break;
     case 'AUTH_CHALLENGE_REVOKED':
-    case 'AUTH_SESSION_REVOKED': return 'Your session was revoked. Sign in again before continuing.';
+    case 'AUTH_SESSION_REVOKED': message = 'Your session was revoked. Sign in again before continuing.'; break;
     case 'AUTH_CHALLENGE_FORBIDDEN':
-    case 'AUTH_STEP_UP_REQUIRED': return 'The security challenge does not match the current session or request. Start again.';
-    case 'AUTH_CHALLENGE_SCOPE_INVALID': return 'The protected request scope is invalid. Refresh the page and try again.';
-    default: return error.code ? `${error.message} (${error.code})` : error.message;
+    case 'AUTH_STEP_UP_REQUIRED': message = 'The security challenge does not match the current session or request. Start again.'; break;
+    case 'AUTH_CHALLENGE_SCOPE_INVALID': message = 'The protected request scope is invalid. Refresh the page and try again.'; break;
+    default: message = error.code ? `${error.message} (${error.code})` : error.message;
   }
+  return error.requestId ? `${message} Support reference: ${error.requestId}.` : message;
 };
 
 export const useBoundStepUp = <T,>() => {

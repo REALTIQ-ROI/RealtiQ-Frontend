@@ -17,18 +17,14 @@ describe('titleDocumentService', () => {
     sessionStorage.clear();
   });
 
-  it('initializes guest payment with email and credentials without client price or identity metadata', async () => {
-    vi.mocked(api.post).mockResolvedValue({
-      data: { existing: false, redirectUrl: 'https://pay.test', reference: 'RTQ-DOC-PAY-1', access: { id: 'a1', mode: 'view_once', status: 'payment_pending', viewCount: 0 } },
-    });
-    await titleDocumentService.initializePayment('doc1', 'guest@example.com');
+  it('initializes title payment with empty body and request-bound step-up', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    await titleDocumentService.initializePayment('doc1', 'challenge-1');
     expect(api.post).toHaveBeenCalledWith(
       '/title-documents/doc1/initialize-view-payment',
-      { email: 'guest@example.com' },
-      { withCredentials: true },
+      {},
+      { headers: { 'X-Step-Up-Challenge': 'challenge-1', 'Cache-Control': 'no-store' } },
     );
-    expect(vi.mocked(api.post).mock.calls[0]?.[1]).not.toHaveProperty('price');
-    expect(vi.mocked(api.post).mock.calls[0]?.[1]).not.toHaveProperty('guestIdentityId');
   });
 
   it('uses the property-scoped title upload route and sends the exact bound multipart metadata', async () => {
@@ -44,32 +40,34 @@ describe('titleDocumentService', () => {
     expect(form.get('title')).toBe('Survey');
   });
 
-  it('checks access without opening the viewer and sends credentials', async () => {
+  it('checks access without opening the viewer and disables caching', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { hasAccess: true, paymentRequired: false, price: 5000 } });
     await titleDocumentService.accessStatus('doc1');
-    expect(api.get).toHaveBeenCalledWith('/title-documents/doc1/access-status', { withCredentials: true });
+    expect(api.get).toHaveBeenCalledWith('/title-documents/doc1/access-status', { headers: { 'Cache-Control': 'no-store' } });
     expect(api.post).not.toHaveBeenCalled();
   });
 
-  it('updates policy without sending a price', async () => {
+  it('updates policy with expected version, step-up and no client price', async () => {
     vi.mocked(api.patch).mockResolvedValue({
-      data: { documentId: 'doc1', accessPolicy: { enabled: true, mode: 'paid_view_multiple', price: 5000 } },
+      data: { documentId: 'doc1', version: 3, accessPolicy: { enabled: true, mode: 'paid_view_multiple', price: 5000 } },
     });
-    await titleDocumentService.updatePolicy('doc1', 'paid_view_multiple');
+    await titleDocumentService.updatePolicy('doc1', { expectedVersion: 2, accessPolicy: { enabled: true, mode: 'paid_view_multiple', buyerPassEnabled: true } }, 'challenge-2');
     expect(api.patch).toHaveBeenCalledWith('/title-documents/doc1/access-policy', {
-      accessPolicy: { enabled: true, mode: 'paid_view_multiple' },
-    });
+      expectedVersion: 2,
+      accessPolicy: { enabled: true, mode: 'paid_view_multiple', buyerPassEnabled: true },
+    }, { headers: { 'X-Step-Up-Challenge': 'challenge-2' } });
   });
 
   it('fetches protected content as a blob and resolves the backend /api route safely', async () => {
     const blob = new Blob(['pdf'], { type: 'application/pdf' });
-    vi.mocked(api.get).mockResolvedValue({ data: blob, headers: { 'content-type': 'application/pdf' } });
+    vi.mocked(api.get).mockResolvedValue({ data: blob, headers: { 'content-type': 'application/pdf', 'x-document-version-id': 'version-1', 'x-document-submission-version': '1', 'x-document-content-sha256': 'a'.repeat(64) } });
     const result = await titleDocumentService.fetchViewerContent('/api/title-document-viewer/token/content');
     expect(api.get).toHaveBeenCalledWith('/title-document-viewer/token/content', {
       responseType: 'blob',
-      withCredentials: true,
+      headers: { 'Cache-Control': 'no-store' },
     });
     expect(result.blob).toBe(blob);
+    expect(result).toMatchObject({ documentVersionId: 'version-1', submissionVersion: 1, contentSha256: 'a'.repeat(64) });
   });
 
   it('rejects an absolute viewer URL so permanent/external storage URLs are never followed', async () => {

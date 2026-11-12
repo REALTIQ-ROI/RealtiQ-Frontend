@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -40,6 +40,12 @@ const property: Property = {
 
 let currentProperty = property;
 const dictionaryMocks = vi.hoisted(() => ({ dictionary: null as CanonicalFieldDictionary | null }));
+const authMocks = vi.hoisted(() => ({
+  user: null as { role: string } | null,
+  isAuthenticated: false,
+  activeProfile: null as { id: string; kind: string } | null,
+}));
+const tourMocks = vi.hoisted(() => ({ getAvailability: vi.fn(), requestTour: vi.fn() }));
 
 vi.mock('../../hooks/useCanonicalFieldDictionary', () => ({ useCanonicalFieldDictionary: () => ({ dictionary: dictionaryMocks.dictionary, loading: false, error: null, refresh: vi.fn() }) }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -53,8 +59,9 @@ vi.mock('../../components/property/PropertyMeta', () => ({ default: () => null }
 vi.mock('../../components/title/PublicTitleDocuments', () => ({ default: () => null }));
 vi.mock('../../components/title/TitleVerificationBadge', () => ({ default: () => null }));
 vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: () => ({ user: null, isAuthenticated: false }),
+  useAuth: () => authMocks,
 }));
+vi.mock('../../services/tourService', () => ({ tourService: tourMocks }));
 vi.mock('../../contexts/PropertiesContext', () => ({
   useProperties: () => ({
     buyProperty: vi.fn(),
@@ -78,6 +85,11 @@ describe('public property escrow action for guests', () => {
     vi.restoreAllMocks();
     currentProperty = property;
     dictionaryMocks.dictionary = createCanonicalFieldDictionaryFixture();
+    authMocks.user = null;
+    authMocks.isAuthenticated = false;
+    authMocks.activeProfile = null;
+    tourMocks.getAvailability.mockReset().mockResolvedValue({ state: 'not_offered', slots: [] });
+    tourMocks.requestTour.mockReset();
   });
 
   it('uses mobile-safe Nearby Properties cards and full-width touch actions', async () => {
@@ -119,7 +131,7 @@ describe('public property escrow action for guests', () => {
     )).toBeInTheDocument();
   });
 
-  it('offers ordinary viewings with a selectable mode and no paid branch', async () => {
+  it('does not expose appointment booking to a guest', () => {
     render(
       <MemoryRouter initialEntries={['/properties/RTQ-PROP-1']}>
         <Routes>
@@ -128,19 +140,42 @@ describe('public property escrow action for guests', () => {
       </MemoryRouter>,
     );
 
-    const tourType = screen.getByLabelText('Tour Type');
-    const tourMode = screen.getByLabelText('Mode');
-    expect(tourMode).toHaveValue('physical');
-    expect(tourMode).toBeEnabled();
-
+    expect(screen.getByText('Sign in with a buyer profile to see current appointment availability for this property.')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Appointment type')).not.toBeInTheDocument();
     expect(screen.queryByRole('option', { name: /Virtual Paid/ })).not.toBeInTheDocument();
-    await userEvent.selectOptions(tourType, 'staging_view');
-    await userEvent.selectOptions(tourMode, 'virtual');
-    expect(tourMode).toHaveValue('virtual');
-    expect(tourMode).toBeEnabled();
+  });
 
-    await userEvent.selectOptions(tourType, 'open_house');
-    expect(tourMode).toBeEnabled();
+  it('loads viewing availability for the selected buyer profile even if the account role differs', async () => {
+    authMocks.user = { role: 'owner' };
+    authMocks.isAuthenticated = true;
+    authMocks.activeProfile = { id: 'buyer-profile', kind: 'buyer' };
+
+    render(
+      <MemoryRouter initialEntries={['/properties/RTQ-PROP-1']}>
+        <Routes>
+          <Route path="/properties/:id" element={<PropertyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(tourMocks.getAvailability).toHaveBeenCalledTimes(3));
+  });
+
+  it('does not load viewing availability for a non-buyer profile on a buyer account', async () => {
+    authMocks.user = { role: 'buyer' };
+    authMocks.isAuthenticated = true;
+    authMocks.activeProfile = { id: 'owner-profile', kind: 'owner' };
+
+    render(
+      <MemoryRouter initialEntries={['/properties/RTQ-PROP-1']}>
+        <Routes>
+          <Route path="/properties/:id" element={<PropertyDetails />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Select a buyer profile to see current appointment availability for this property.')).toBeInTheDocument();
+    expect(tourMocks.getAvailability).not.toHaveBeenCalled();
   });
 
   it('keeps paid viewing unavailable regardless of the property virtual tour', () => {
@@ -163,7 +198,7 @@ describe('public property escrow action for guests', () => {
     );
 
     expect(screen.queryByRole('option', { name: /Virtual Paid/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Open House' })).toBeInTheDocument();
+    expect(screen.getByText('Sign in with a buyer profile to see current appointment availability for this property.')).toBeInTheDocument();
   });
 
   it('renders the public property page without inventing an area when no canonical area is returned', () => {

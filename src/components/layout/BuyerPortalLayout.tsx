@@ -26,6 +26,7 @@ const navItems = [
   { to: '/dashboard/verification', icon: 'fact_check', label: 'KYC & Verification' },
   { to: '/dashboard/organization', icon: 'groups', label: 'Organization Team' },
   { to: '/dashboard/billing', icon: 'receipt_long', label: 'Billing' },
+  { to: '/dashboard/documents', icon: 'description', label: 'Document Manager' },
   { to: '/buyer/proxy-inspections', icon: 'fact_check', label: 'Proxy Inspections' },
   { to: '/dashboard/buyer/tours', icon: 'tour', label: 'Tours' },
   { to: '/dashboard/buyer/installments', icon: 'schedule', label: 'Installments' },

@@ -24,7 +24,8 @@ type LandlordNavKey =
   | 'settings'
   | 'trust'
   | 'organization'
-  | 'billing';
+  | 'billing'
+  | 'documents';
 
 interface LandlordPortalLayoutProps {
   active: LandlordNavKey;
@@ -45,6 +46,7 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
   { key: 'trust', to: '/dashboard/trust', icon: 'workspace_premium', label: 'Trust & Badge' },
   { key: 'organization', to: '/dashboard/organization', icon: 'groups', label: 'Organization Team' },
   { key: 'billing', to: '/dashboard/billing', icon: 'receipt_long', label: 'Billing' },
+  { key: 'documents', to: '/dashboard/documents', icon: 'description', label: 'Document Manager' },
   { key: 'verification', to: '/dashboard/landlord/settings/verification', icon: 'verified_user', label: 'Verification' },
   { key: 'title-verifications', to: '/dashboard/landlord/title-verifications', icon: 'verified', label: 'Title Verification' },
   { key: 'tours', to: '/dashboard/landlord/tours', icon: 'tour', label: 'Tours' },

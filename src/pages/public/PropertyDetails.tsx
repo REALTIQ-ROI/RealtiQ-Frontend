@@ -20,6 +20,7 @@ import PaymentTypeBadges from '../../components/property/PaymentTypeBadges';
 import OffPlanBadges from '../../components/property/OffPlanBadges';
 import TitleVerificationBadge from '../../components/title/TitleVerificationBadge';
 import PublicTitleDocuments from '../../components/title/PublicTitleDocuments';
+import ProtectedMediaSection from '../../components/media/ProtectedMediaSection';
 import VirtualTourExperience from '../../components/virtualTour/VirtualTourExperience';
 import PublicLayout from '../../components/layout/PublicLayout';
 import Button from '../../components/ui/Button';
@@ -74,14 +75,10 @@ const formatCurrency = (value: number | undefined, currency?: string) => {
   } catch { return 'Price unavailable'; }
 };
 
-const PROPERTY_TOUR_TYPES = [
-  { value: 'open_house', label: 'Open House' },
-  { value: 'staging_view', label: 'Staging View' },
-] as const;
-
-const PROPERTY_TOUR_MODES = [
-  { value: 'physical', label: 'Physical' },
-  { value: 'virtual', label: 'Virtual' },
+const BOOKABLE_TOUR_TYPES = [
+  { value: 'private_showing', label: 'Private showing' },
+  { value: 'show_home', label: 'Show-home appointment' },
+  { value: 'live_guided_video_tour', label: 'Live guided video tour' },
 ] as const;
 
 const INSTALLMENT_FREQUENCIES = [
@@ -101,6 +98,7 @@ const PropertyDetails = () => {
     ? (location.state as { from: string }).from
     : '/properties';
   const { user, isAuthenticated, activeProfile } = useAuth();
+  const isBuyerProfile = Boolean(isAuthenticated && activeProfile?.kind === 'buyer');
   const { dictionary } = useCanonicalFieldDictionary();
   const { refreshProperties } = useProperties();
   const propertyPaymentStepUp = useBoundStepUp<InitializePaymentResponse>();
@@ -137,18 +135,19 @@ const PropertyDetails = () => {
     error: installmentError,
   } = useAsync(
     () => installmentService.getInstallments(),
-    Boolean(isAuthenticated && user?.role === 'buyer'),
+    isBuyerProfile,
   );
   const hasMounted = useRef(false);
+  const tourAvailabilityRequest = useRef(0);
   const [requestingTour, setRequestingTour] = useState(false);
   const [creatingInstallment, setCreatingInstallment] = useState(false);
   const [nearby, setNearby] = useState<NearbyPropertySummary[]>([]);
   const [loadingNearby, setLoadingNearby] = useState(false);
-  const [tourType, setTourType] =
-    useState<(typeof PROPERTY_TOUR_TYPES)[number]['value']>('open_house');
-  const [tourMode, setTourMode] =
-    useState<(typeof PROPERTY_TOUR_MODES)[number]['value']>('physical');
-  const [tourDate, setTourDate] = useState('');
+  const [availabilityByType, setAvailabilityByType] = useState<Record<string, import('../../types').TourAvailability>>({});
+  const [availabilityErrors, setAvailabilityErrors] = useState<Record<string, string>>({});
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [tourType, setTourType] = useState<(typeof BOOKABLE_TOUR_TYPES)[number]['value']>('private_showing');
+  const [selectedSlotId, setSelectedSlotId] = useState('');
   const [tourNotes, setTourNotes] = useState('');
   const [installmentFrequency, setInstallmentFrequency] =
     useState<(typeof INSTALLMENT_FREQUENCIES)[number]['value']>('monthly');
@@ -206,6 +205,64 @@ const PropertyDetails = () => {
       propertyService.getPropertyById(propertyRouteReference(nearbyProperty)),
     [],
   );
+
+  const refreshTourAvailability = useCallback(async () => {
+    const requestId = ++tourAvailabilityRequest.current;
+    if (!property?._id || !isBuyerProfile || !activeProfile?.id) {
+      setAvailabilityByType({});
+      setAvailabilityErrors({});
+      setAvailabilityLoading(false);
+      return;
+    }
+    const from = new Date();
+    const to = new Date(from.getTime() + 30 * 24 * 60 * 60 * 1000);
+    setAvailabilityLoading(true);
+    setAvailabilityErrors({});
+    const types = BOOKABLE_TOUR_TYPES.map((item) => item.value);
+    const results = await Promise.allSettled(types.map((type) => tourService.getAvailability({ propertyId: property._id, type, from: from.toISOString(), to: to.toISOString(), page: 1, limit: 50 })));
+    if (requestId !== tourAvailabilityRequest.current) return;
+    const next: Record<string, import('../../types').TourAvailability> = {};
+    const errors: Record<string, string> = {};
+    results.forEach((result, index) => {
+      const type = types[index];
+      if (result.status === 'fulfilled') next[type] = result.value;
+      else errors[type] = result.reason instanceof Error ? result.reason.message : 'Availability is unavailable right now.';
+    });
+    const canPrivate = effectiveCanonicalValue(property, 'privateShowingsByAppointment') === true;
+    const showHome = effectiveCanonicalValue(property, 'showHome');
+    const canShowHome = Boolean(showHome && typeof showHome === 'object' && (showHome as { appointmentRequired?: unknown }).appointmentRequired === true);
+    const firstAvailable = BOOKABLE_TOUR_TYPES.find((item) => (item.value !== 'private_showing' || canPrivate) && (item.value !== 'show_home' || canShowHome) && next[item.value]?.state === 'available' && (item.value !== 'live_guided_video_tour' || next[item.value]?.liveVideoReadiness?.state === 'ready'));
+    setAvailabilityByType(next);
+    setAvailabilityErrors(errors);
+    if (!firstAvailable || !next[tourType] || next[tourType].state !== 'available' || (tourType === 'private_showing' && !canPrivate) || (tourType === 'show_home' && !canShowHome)) {
+      setTourType(firstAvailable?.value ?? 'private_showing');
+      setSelectedSlotId('');
+    }
+    setAvailabilityLoading(false);
+  }, [activeProfile?.id, isBuyerProfile, property?._id, tourType]);
+
+  useEffect(() => {
+    tourAvailabilityRequest.current += 1;
+    setAvailabilityByType({});
+    setAvailabilityErrors({});
+    setSelectedSlotId('');
+    setAvailabilityLoading(false);
+  }, [activeProfile?.id, isBuyerProfile]);
+
+  useEffect(() => { void refreshTourAvailability(); }, [refreshTourAvailability]);
+
+  const showHomeValue = effectiveCanonicalValue(property, 'showHome');
+  const canShowHomeBooking = Boolean(showHomeValue && typeof showHomeValue === 'object' && (showHomeValue as { appointmentRequired?: unknown }).appointmentRequired === true);
+  const canPrivateShow = effectiveCanonicalValue(property, 'privateShowingsByAppointment') === true;
+  const availableTourTypes = BOOKABLE_TOUR_TYPES.filter((item) => {
+    if (item.value === 'private_showing' && !canPrivateShow) return false;
+    if (item.value === 'show_home' && !canShowHomeBooking) return false;
+    if (availabilityByType[item.value]?.state !== 'available') return false;
+    if (item.value === 'live_guided_video_tour') return availabilityByType[item.value]?.liveVideoReadiness?.state === 'ready';
+    return true;
+  });
+  const selectedAvailability = availabilityByType[tourType];
+  const selectedSlot = selectedAvailability?.slots.find((slot) => slot.slotId === selectedSlotId);
 
   useEffect(() => {
     const mediaSection = mediaSectionRef.current;
@@ -467,36 +524,37 @@ const PropertyDetails = () => {
 
   const handleTourRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!propertyReference) return;
-
-    if (!tourDate || Number.isNaN(new Date(tourDate).getTime())) {
-      toast.error('Choose a valid viewing time.');
-      return;
-    }
+    if (!property?._id || !selectedAvailability?.calendarId || !Number.isInteger(selectedAvailability.calendarVersion) || !selectedSlot) { toast.error('Choose a current available slot returned for this property.'); return; }
 
     if (!user) {
       navigate('/login');
       return;
     }
-    if (user.role !== 'buyer') {
+    if (!isBuyerProfile) {
       toast.error('Only buyers can request tours.');
       return;
     }
+    if (!activeProfile?.id) { toast.error('Select your current buyer profile before booking.'); return; }
 
     setRequestingTour(true);
     try {
-      await tourService.requestTour({
-        propertyId: propertyReference,
+      const { tour } = await tourService.requestTour({
+        propertyId: property._id,
         type: tourType,
-        mode: tourMode,
-        scheduledAt: new Date(tourDate).toISOString(),
+        mode: tourType === 'live_guided_video_tour' ? 'virtual' : 'physical',
+        scheduledAt: selectedSlot.startsAt,
+        calendarId: selectedAvailability.calendarId,
+        calendarVersion: selectedAvailability.calendarVersion!,
+        slotId: selectedSlot.slotId,
         notes: tourNotes.trim() || undefined,
       });
 
-      toast.success('Tour request submitted successfully.');
+      toast.success(`Viewing request submitted: ${tour.status}.`);
       setTourNotes('');
-      setTourDate('');
+      setSelectedSlotId('');
+      await refreshTourAvailability();
     } catch (err) {
+      if (err instanceof ApiRequestError && err.status === 409) await refreshTourAvailability();
       toast.error(
         err instanceof Error ? err.message : 'Unable to request tour.',
       );
@@ -770,7 +828,7 @@ const PropertyDetails = () => {
                 {property.location}
               </p>
               <PropertyMeta property={property} />
-              {user?.role === 'buyer' && (
+                {isBuyerProfile && (
                 <div className='mt-5 flex flex-wrap gap-3'>
                   <FavouriteButton propertyReference={propertyReference} />
                   <Button onClick={() => void startConversation()}>
@@ -1027,6 +1085,9 @@ const PropertyDetails = () => {
                 onDocumentsLoaded={setPublicTitleDocuments}
                 registryReferences={property.titleDocumentReferences}
               />
+              <div className="mt-8">
+                <ProtectedMediaSection resourceKind="property" resourceId={property._id} title={property.title ?? 'This property'} />
+              </div>
             </div>
 
             <div className='min-w-0'>
@@ -1121,98 +1182,17 @@ const PropertyDetails = () => {
             </div>
 
             <div>
-              <h2 className='text-2xl font-bold mb-4'>Tour Request</h2>
+              <h2 className='text-2xl font-bold mb-4'>Viewing appointments</h2>
               <Card className='p-5'>
-                <form
-                  className='grid grid-cols-1 md:grid-cols-2 gap-4'
-                  onSubmit={(event) => void handleTourRequest(event)}
-                >
-                  <div>
-                    <label
-                      htmlFor='tour-request-type'
-                      className='block text-xs font-bold uppercase tracking-widest text-secondary mb-2'
-                    >
-                      Tour Type
-                    </label>
-                    <select
-                      id='tour-request-type'
-                      className='w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm'
-                      value={tourType}
-                      onChange={(event) => {
-                        const nextType = event.target
-                          .value as (typeof PROPERTY_TOUR_TYPES)[number]['value'];
-                        setTourType(nextType);
-                      }}
-                    >
-                      {PROPERTY_TOUR_TYPES.map((option) => (
-                        <option
-                          key={option.value}
-                          value={option.value}
-                        >
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label
-                      htmlFor='tour-request-mode'
-                      className='block text-xs font-bold uppercase tracking-widest text-secondary mb-2'
-                    >
-                      Mode
-                    </label>
-                    <select
-                      id='tour-request-mode'
-                      className='w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm'
-                      value={tourMode}
-                      onChange={(e) =>
-                        setTourMode(
-                          e.target
-                            .value as (typeof PROPERTY_TOUR_MODES)[number]['value'],
-                        )
-                      }
-                    >
-                      {PROPERTY_TOUR_MODES.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className='block text-xs font-bold uppercase tracking-widest text-secondary mb-2'>
-                      Scheduled At
-                    </label>
-                    <input
-                      type='datetime-local'
-                      required
-                      value={tourDate}
-                      onChange={(e) => setTourDate(e.target.value)}
-                      className='w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm'
-                    />
-                  </div>
-                  <div>
-                    <label className='block text-xs font-bold uppercase tracking-widest text-secondary mb-2'>
-                      Notes
-                    </label>
-                    <input
-                      type='text'
-                      value={tourNotes}
-                      onChange={(e) => setTourNotes(e.target.value)}
-                      placeholder='Need a virtual walkthrough'
-                      className='w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm'
-                    />
-                  </div>
-                  <div className='md:col-span-2'>
-                    <Button
-                      type='submit'
-                      disabled={requestingTour}
-                      className='w-full'
-                    >
-                      {requestingTour ? 'Submitting...' : 'Request Tour'}
-                    </Button>
-                  </div>
-                </form>
+                {typeof effectiveCanonicalValue(property, 'openHouseSchedule') === 'string' || Array.isArray(effectiveCanonicalValue(property, 'openHouseSchedule')) ? <p role='status' className='mb-4 rounded-lg bg-surface-container-low p-3 text-sm'>Open House: {typeof effectiveCanonicalValue(property, 'openHouseSchedule') === 'string' ? String(effectiveCanonicalValue(property, 'openHouseSchedule')) : (effectiveCanonicalValue(property, 'openHouseSchedule') as string[]).filter((value) => typeof value === 'string').join(' · ')} · Open House is walk-in and does not require an appointment.</p> : null}
+                {!isAuthenticated ? <p className='text-sm text-secondary'>Sign in with a buyer profile to see current appointment availability for this property.</p> : !activeProfile ? <p role='status' className='text-sm text-secondary'>Select your buyer profile to check viewing availability.</p> : !isBuyerProfile ? <p className='text-sm text-secondary'>Select a buyer profile to see current appointment availability for this property.</p> : availabilityLoading ? <LoadingState label='Checking current viewing availability…' /> : availableTourTypes.length === 0 ? <div role='status' className='space-y-2 text-sm text-secondary'><p>Appointment booking is not currently available for this listing.</p>{BOOKABLE_TOUR_TYPES.map((item) => { const response = availabilityByType[item.value]; const readiness = response?.liveVideoReadiness; return availabilityErrors[item.value] || response?.reasonCode || item.value === 'live_guided_video_tour' && readiness?.state && readiness.state !== 'ready' ? <p key={item.value}>{item.label}: {availabilityErrors[item.value] ?? (readiness?.reasonCode ? readiness.reasonCode.replaceAll('_', ' ') : readiness ? `service ${readiness.state.replaceAll('_', ' ')}` : response?.reasonCode)}</p> : null; })}<Button type='button' variant='secondary' onClick={() => void refreshTourAvailability()}>Refresh availability</Button></div> : <form className='grid grid-cols-1 gap-4 md:grid-cols-2' onSubmit={(event) => void handleTourRequest(event)}>
+                  <label htmlFor='tour-request-type' className='block text-xs font-bold uppercase tracking-widest text-secondary'>Appointment type<select id='tour-request-type' className='mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm' value={tourType} onChange={(event) => { setTourType(event.target.value as (typeof BOOKABLE_TOUR_TYPES)[number]['value']); setSelectedSlotId(''); }}><option value=''>Choose appointment type</option>{availableTourTypes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+                  <label htmlFor='tour-request-slot' className='block text-xs font-bold uppercase tracking-widest text-secondary'>Available time<select id='tour-request-slot' className='mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm' value={selectedSlotId} onChange={(event) => setSelectedSlotId(event.target.value)} disabled={!selectedAvailability?.slots.length}><option value=''>Choose an available time</option>{selectedAvailability?.slots.map((slot) => <option key={slot.slotId} value={slot.slotId}>{new Date(slot.startsAt).toLocaleString()} – {new Date(slot.endsAt).toLocaleTimeString()}</option>)}</select>{selectedAvailability?.state === 'available' && selectedAvailability.slots.length === 0 ? <span className='mt-1 block text-xs normal-case text-secondary'>There are no free time slots in the current availability window.</span> : null}</label>
+                  {tourType === 'live_guided_video_tour' && selectedAvailability?.liveVideoReadiness ? <p role='status' className='text-xs text-secondary md:col-span-2'>Live-video service: {selectedAvailability.liveVideoReadiness.state.replaceAll('_', ' ')}{selectedAvailability.liveVideoReadiness.reasonCode ? ` · ${selectedAvailability.liveVideoReadiness.reasonCode.replaceAll('_', ' ')}` : ''}. Booking is available only while the service reports ready.</p> : null}
+                  <label className='block text-xs font-bold uppercase tracking-widest text-secondary md:col-span-2'>On-platform note <input type='text' maxLength={1000} value={tourNotes} onChange={(event) => setTourNotes(event.target.value)} placeholder='Add an optional note' className='mt-2 w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm normal-case' /></label>
+                  {availabilityErrors[tourType] ? <p role='alert' className='text-sm text-error md:col-span-2'>{availabilityErrors[tourType]}</p> : null}
+                  <div className='md:col-span-2'><Button type='submit' disabled={requestingTour || !selectedSlotId || !selectedAvailability?.calendarId || typeof selectedAvailability.calendarVersion !== 'number'} className='w-full'>{requestingTour ? 'Submitting…' : 'Request this viewing'}</Button><p className='mt-2 text-xs text-secondary'>Your request is pending until the seller confirms it. The selected slot and current calendar version are checked again by the server.</p></div>
+                </form>}
               </Card>
             </div>
 

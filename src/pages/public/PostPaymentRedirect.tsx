@@ -8,18 +8,20 @@ import { cartService } from "../../services/cartService";
 import { escrowService } from "../../services/escrowService";
 import { paymentService } from "../../services/paymentService";
 import { titleDocumentService } from "../../services/titleDocumentService";
+import { protectedMediaService, type ProtectedMediaOrder } from "../../services/protectedMediaService";
 import type { CartCheckoutDetail } from "../../types";
 import { checkoutStatusClasses, checkoutStatusLabel } from "../../utils/cartFormatters";
 
-type VerifyStatus = "verifying" | "success" | "failed";
+type VerifyStatus = "verifying" | "pending" | "success" | "failed";
 const wait = (milliseconds: number) =>
   new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
 const PostPaymentRedirect = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, activeProfile } = useAuth();
   const pendingTitlePayment = titleDocumentService.getPendingPayment();
+  const pendingMediaOrder = protectedMediaService.getPendingOrder();
   const queryReference =
     searchParams.get("reference") ?? searchParams.get("trxref");
   const escrowId = escrowService.getPendingId();
@@ -31,19 +33,21 @@ const PostPaymentRedirect = () => {
   );
   const reference =
     queryReference ??
-    (isEscrow ? escrowReference : paymentService.getPendingPaymentReference());
+    (isEscrow ? escrowReference : pendingTitlePayment.reference ?? paymentService.getPendingPaymentReference());
   const fired = useRef(false);
   const [status, setStatus] = useState<VerifyStatus>(
-    reference ? "verifying" : "failed",
+    reference || pendingMediaOrder.id || pendingTitlePayment.documentId ? "verifying" : "failed",
   );
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [cartCheckout, setCartCheckout] = useState<CartCheckoutDetail | null>(null);
+  const [protectedMediaOrder, setProtectedMediaOrder] = useState<{ order: ProtectedMediaOrder; paymentStatus: string } | null>(null);
   const [titleDocumentId, setTitleDocumentId] = useState<string | null>(pendingTitlePayment.documentId);
   const [titlePropertyId, setTitlePropertyId] = useState<string | null>(pendingTitlePayment.propertyId);
   const [titleAccessReady, setTitleAccessReady] = useState(false);
+  const [titlePurchaseState, setTitlePurchaseState] = useState<string | null>(null);
   const [openingViewer, setOpeningViewer] = useState(false);
   const [isTitleDocumentPayment, setIsTitleDocumentPayment] = useState(
-    Boolean(reference && (reference.startsWith("RTQ-DOC-PAY-") || reference === pendingTitlePayment.reference)),
+    Boolean(pendingTitlePayment.documentId || reference && (reference.startsWith("RTQ-DOC-PAY-") || reference === pendingTitlePayment.reference)),
   );
   const [errorMessage, setErrorMessage] = useState(
     reference
@@ -51,13 +55,53 @@ const PostPaymentRedirect = () => {
       : "No payment reference was found. Return to your escrow or payment history to retry.",
   );
   const { refreshCart, setCartFromResponse } = useCart();
-  const isBuyer = isAuthenticated && user?.role === "buyer";
+  const isBuyer = isAuthenticated && activeProfile?.kind === "buyer";
 
   const verify = useCallback(async () => {
-    if (!reference) return;
+    const pendingOrder = protectedMediaService.getPendingOrder();
+    if (!reference && !pendingOrder.id && !pendingTitlePayment.documentId) return;
     setStatus("verifying");
     setErrorMessage(null);
     try {
+      const titleReturn = Boolean(pendingTitlePayment.documentId && (!queryReference || !pendingTitlePayment.reference || queryReference === pendingTitlePayment.reference));
+      if (titleReturn || reference?.startsWith('RTQ-DOC-')) {
+        setIsTitleDocumentPayment(true);
+        if (activeProfile?.kind !== 'buyer') throw new Error('Select an eligible Buyer profile to check this title-document access status.');
+        if (pendingTitlePayment.profileId && pendingTitlePayment.profileId !== activeProfile?.id) throw new Error('Select the Buyer profile that started this document checkout, then check its status again.');
+        if (queryReference && pendingTitlePayment.reference && queryReference !== pendingTitlePayment.reference) throw new Error('This provider return does not match the current title-document checkout. Check the saved checkout status before taking another action.');
+        const documentId = pendingTitlePayment.documentId;
+        if (!documentId) throw new Error('The title-document checkout reference is present, but its document cannot be identified from the saved request. Contact support; do not start another checkout.');
+        setTitleDocumentId(documentId); setTitlePropertyId(pendingTitlePayment.propertyId);
+        const access = await titleDocumentService.accessStatus(documentId);
+        setTitlePurchaseState(access.purchaseState ?? 'unknown');
+        const ready = access.hasAccess && access.purchaseState === 'active';
+        setTitleAccessReady(ready);
+        if (ready) titleDocumentService.clearPendingPayment();
+        if (access.purchaseState === 'failed' || access.purchaseState === 'consumed' && !access.hasAccess) {
+          setStatus('failed');
+          setErrorMessage(access.message ?? (access.purchaseState === 'failed' ? 'The server reports that this checkout failed. Review its current status before starting another request.' : 'This document access has been consumed and is not currently available.'));
+        } else {
+          setStatus(ready ? 'success' : 'pending');
+          if (!sessionStorage.getItem(`realtiq.titlePaymentNotified.${pendingTitlePayment.reference ?? 'unknown'}`)) {
+            toast.info(ready ? 'The server confirms that document access is active.' : 'The provider returned, but the server has not confirmed document access yet.');
+            sessionStorage.setItem(`realtiq.titlePaymentNotified.${pendingTitlePayment.reference ?? 'unknown'}`, '1');
+          }
+        }
+        return;
+      }
+      if (pendingOrder.id && (!reference || pendingOrder.paymentReference === reference)) {
+        if (pendingOrder.profileId && pendingOrder.profileId !== activeProfile?.id) {
+          throw new Error('Select the Buyer profile that started this media order, then check its status again.');
+        }
+        const current = await protectedMediaService.getOrder(pendingOrder.id);
+        if (!reference || current.order.paymentReference === reference) {
+          setProtectedMediaOrder(current);
+          if (current.order.state === 'active' || current.order.state === 'failed') protectedMediaService.clearPendingOrder();
+          setStatus(current.order.state === 'pending' || current.order.state === 'held' ? 'pending' : 'success');
+          return;
+        }
+      }
+      if (!reference) throw new Error('No payment reference was returned. Check the existing order status before trying another payment.');
       const result = await paymentService.verifyPayment(reference);
       if (!result.verified) throw new Error("The provider has not confirmed this payment yet. No payment success or failure is assumed. Check the status again later and do not start another payment while the outcome is unresolved.");
       setPaymentId(result.payment._id);
@@ -85,31 +129,7 @@ const PostPaymentRedirect = () => {
         setStatus("success");
         return;
       }
-      const verifiedTitlePayment =
-        paymentPurpose === "title_document_view" ||
-        result.payment.metadata?.paymentPurpose === "title_document_view" ||
-        reference.startsWith("RTQ-DOC-PAY-");
-      if (verifiedTitlePayment) {
-        const documentId = result.payment.metadata?.documentId ?? pendingTitlePayment.documentId;
-        const propertyId = result.payment.metadata?.propertyId ?? pendingTitlePayment.propertyId;
-        setIsTitleDocumentPayment(true);
-        setTitleDocumentId(documentId);
-        setTitlePropertyId(propertyId);
-        if (!documentId) throw new Error("Payment was verified, but its title document could not be identified.");
-        let ready = false;
-        for (let attempt = 0; attempt < 4 && !ready; attempt += 1) {
-          if (attempt > 0) await wait(750 * attempt);
-          const access = await titleDocumentService.accessStatus(documentId);
-          ready = access.hasAccess;
-          if (!ready && !access.paymentRequired && access.message) break;
-        }
-        setTitleAccessReady(ready);
-        titleDocumentService.clearPendingPayment();
-        if (!sessionStorage.getItem(`realtiq.titlePaymentNotified.${reference}`)) {
-          toast.success(ready ? "Payment verified and document access is ready." : "Payment verified. Document access is still processing.");
-          sessionStorage.setItem(`realtiq.titlePaymentNotified.${reference}`, "1");
-        }
-      } else if (isEscrow && escrowId) {
+      if (isEscrow && escrowId) {
         let escrow = await escrowService.get(escrowId);
         for (
           let attempt = 0;
@@ -136,15 +156,36 @@ const PostPaymentRedirect = () => {
         error instanceof Error ? error.message : "Unable to verify payment.",
       );
     }
-  }, [escrowId, isEscrow, pendingTitlePayment.documentId, pendingTitlePayment.propertyId, reference, refreshCart, setCartFromResponse]);
+  }, [activeProfile?.id, escrowId, isEscrow, pendingTitlePayment.documentId, pendingTitlePayment.profileId, pendingTitlePayment.propertyId, pendingTitlePayment.reference, queryReference, reference, refreshCart, setCartFromResponse]);
+
+  const refreshProtectedMediaOrder = async () => {
+    const pendingOrder = protectedMediaService.getPendingOrder();
+    const orderId = protectedMediaOrder?.order.id ?? pendingOrder.id;
+    if (!orderId) return;
+    setStatus('verifying'); setErrorMessage(null);
+    try {
+      if (pendingOrder.profileId && pendingOrder.profileId !== activeProfile?.id) throw new Error('Select the Buyer profile that started this media order, then check its status again.');
+      const current = await protectedMediaService.getOrder(orderId);
+      setProtectedMediaOrder(current);
+      if (current.order.state === 'active' || current.order.state === 'failed') protectedMediaService.clearPendingOrder();
+      setStatus(current.order.state === 'pending' || current.order.state === 'held' ? 'pending' : 'success');
+    } catch (raw) {
+      setStatus('failed');
+      setErrorMessage(raw instanceof Error ? raw.message : 'The protected media order could not be checked.');
+    }
+  };
 
   const openTitleViewer = async () => {
     if (!titleDocumentId || openingViewer) return;
     setOpeningViewer(true);
     try {
+      if (pendingTitlePayment.profileId && pendingTitlePayment.profileId !== activeProfile?.id) throw new Error('Select the Buyer profile that received this access before opening the document.');
+      const access = await titleDocumentService.accessStatus(titleDocumentId);
+      setTitlePurchaseState(access.purchaseState ?? 'unknown');
+      if (!access.hasAccess || access.purchaseState !== 'active') throw new Error('The server has not confirmed current access for this document.');
       const session = await titleDocumentService.openViewer(titleDocumentId);
       navigate("/protected-title-viewer", {
-        state: { session, documentId: titleDocumentId, propertyId: titlePropertyId ?? "" },
+        state: { session, documentId: titleDocumentId, propertyId: titlePropertyId ?? "", mode: access.mode },
       });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to open the protected viewer.");
@@ -182,6 +223,27 @@ const PostPaymentRedirect = () => {
             ) : null}
           </>
         ) : null}
+        {status === "pending" && protectedMediaOrder ? (
+          <>
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-amber-100">
+              <span className="material-symbols-outlined text-4xl text-amber-800">hourglass_top</span>
+            </div>
+            <h1 className="text-3xl font-extrabold">Protected media order pending</h1>
+            <p role="status" className="mt-3 text-secondary">Order {protectedMediaOrder.order.state.replaceAll('_', ' ')} · payment {protectedMediaOrder.paymentStatus.replaceAll('_', ' ')}. The server has not confirmed access yet. Refresh this same order; do not start another payment while its result is pending.</p>
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+              <button type="button" onClick={() => void refreshProtectedMediaOrder()} className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary">Refresh order status</button>
+              <Link to="/dashboard/buyer" className="rounded-xl bg-surface-container-low px-8 py-3 text-sm font-bold">Return to Buyer dashboard</Link>
+            </div>
+          </>
+        ) : null}
+        {status === "pending" && isTitleDocumentPayment ? (
+          <>
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-amber-100"><span className="material-symbols-outlined text-4xl text-amber-800">hourglass_top</span></div>
+            <h1 className="text-3xl font-extrabold">Checking document access</h1>
+            <p role="status" className="mt-3 text-secondary">The provider return is not confirmation of payment. The server currently reports {titlePurchaseState?.replaceAll('_', ' ') ?? 'an unresolved status'}. Refresh this same access status; do not start another checkout while the result is pending.</p>
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><button type="button" onClick={() => void verify()} className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary">Refresh access status</button><Link to={titlePropertyId ? `/properties/${titlePropertyId}` : '/dashboard/buyer'} className="rounded-xl bg-surface-container-low px-8 py-3 text-sm font-bold">Return to property</Link></div>
+          </>
+        ) : null}
         {status === "success" ? (
           <>
             <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100">
@@ -190,10 +252,16 @@ const PostPaymentRedirect = () => {
               </span>
             </div>
             <h1 className="text-3xl font-extrabold">
-              {cartCheckout ? "Service checkout update" : isEscrow ? "Payment secured in escrow" : isTitleDocumentPayment ? titleAccessReady ? "Document access ready" : "Document access pending" : "Payment verified"}
+              {protectedMediaOrder ? "Protected media order update" : cartCheckout ? "Service checkout update" : isEscrow ? "Payment secured in escrow" : isTitleDocumentPayment ? titleAccessReady ? "Document access ready" : "Document access pending" : "Payment verified"}
             </h1>
             <p className="mt-3 text-secondary">
-              {cartCheckout
+              {protectedMediaOrder
+                ? protectedMediaOrder.order.state === 'active'
+                  ? 'The backend confirms active access for this purchase profile. Return to the listing to open the protected viewer; no viewer session has been started.'
+                  : protectedMediaOrder.order.state === 'failed'
+                    ? 'The backend reports that this order failed. Review the order before starting a new purchase.'
+                    : 'The order is not active yet. Refresh the same order to check its current payment and access state.'
+                : cartCheckout
                 ? cartCheckout.status === "completed"
                   ? "Payment received and all services are active."
                   : cartCheckout.status === "allocation_processing"
@@ -207,8 +275,8 @@ const PostPaymentRedirect = () => {
                 ? "Your payment is locked while the agreed conditions are completed. This is not yet a completed property purchase."
                 : isTitleDocumentPayment
                   ? titleAccessReady
-                    ? "Payment successful — your document access is ready. Payment did not start or consume a viewer session."
-                    : "Payment was verified. Access activation is still processing; return to the property shortly and check access again."
+                    ? "The server confirms that this Buyer profile has document access. Opening the viewer starts a separate protected viewing session."
+                    : "The server has not confirmed document access. Refresh the current access status before taking another action."
                 : "The backend verified this payment. Check the related ownership or allocation record for its current status."}
             </p>
             {cartCheckout ? (
@@ -220,7 +288,9 @@ const PostPaymentRedirect = () => {
               </div>
             ) : null}
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-              {cartCheckout ? (
+              {protectedMediaOrder ? (
+                <Link to="/dashboard/buyer" className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary">Return to Buyer dashboard</Link>
+              ) : cartCheckout ? (
                 <Link
                   to={isBuyer ? `/dashboard/buyer/cart-checkouts/${cartCheckout.checkoutId}` : "/cart"}
                   className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary"
@@ -274,13 +344,13 @@ const PostPaymentRedirect = () => {
               {errorMessage}
             </p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-              {reference ? (
+              {reference || pendingMediaOrder.id ? (
                 <button
                   type="button"
-                  onClick={() => void verify()}
+                  onClick={() => pendingMediaOrder.id ? void refreshProtectedMediaOrder() : void verify()}
                   className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary"
                 >
-                  Check payment status again
+                  {pendingMediaOrder.id ? 'Check order status again' : isTitleDocumentPayment ? 'Check document access status again' : 'Check payment status again'}
                 </button>
               ) : null}
               {isEscrow && escrowId ? (

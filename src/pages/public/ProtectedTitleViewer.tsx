@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
 import { titleDocumentService } from '../../services/titleDocumentService';
@@ -21,6 +21,12 @@ const ProtectedTitleViewer = () => {
   const [expired, setExpired] = useState(() =>
     state?.session.expiresAt ? new Date(state.session.expiresAt).getTime() <= Date.now() : false,
   );
+  const endedSessionToken = useRef<string | null>(null);
+  const endSession = useCallback((token?: string) => {
+    if (!token || endedSessionToken.current === token) return;
+    endedSessionToken.current = token;
+    void titleDocumentService.endViewer(token).catch(() => undefined);
+  }, []);
   const expiresAt = state?.session.expiresAt;
   const watermark = state?.session.watermark;
   const watermarkText = useMemo(
@@ -33,8 +39,9 @@ const ProtectedTitleViewer = () => {
     let active = true;
     let currentUrl: string | null = null;
     titleDocumentService.fetchViewerContent(state.session.contentUrl)
-      .then(({ blob, contentType: responseType }) => {
+      .then(({ blob, contentType: responseType, submissionVersion }) => {
         if (!active) return;
+        if (typeof state.session.documentVersion === 'number' && state.session.documentVersion !== submissionVersion) throw new Error('The protected document changed before the viewer loaded. Return to the property and refresh access status.');
         if (responseType !== 'application/pdf' && !responseType.startsWith('image/')) {
           throw new Error('This protected file type cannot be displayed.');
         }
@@ -48,8 +55,9 @@ const ProtectedTitleViewer = () => {
     return () => {
       active = false;
       if (currentUrl) URL.revokeObjectURL(currentUrl);
+      endSession(state.session.sessionToken);
     };
-  }, [state?.session]);
+  }, [endSession, state?.session]);
 
   useEffect(() => {
     if (!expiresAt) return;
@@ -60,9 +68,10 @@ const ProtectedTitleViewer = () => {
         if (current) URL.revokeObjectURL(current);
         return null;
       });
+      endSession(state?.session.sessionToken);
     }, Math.max(0, delay));
     return () => window.clearTimeout(timer);
-  }, [expiresAt]);
+  }, [endSession, expiresAt, state?.session.sessionToken]);
 
   const propertyPath = state?.returnPath || (state?.propertyId ? `/properties/${state.propertyId}` : '/properties');
 

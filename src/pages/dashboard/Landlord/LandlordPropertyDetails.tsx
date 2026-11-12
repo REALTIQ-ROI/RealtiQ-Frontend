@@ -3,6 +3,7 @@ import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayou
 import MediaPreview from '../../../components/property/MediaPreview';
 import TitleVerificationBadge from '../../../components/title/TitleVerificationBadge';
 import TitleDocumentManagement from '../../../components/title/TitleDocumentManagement';
+import ProtectedMediaSection from '../../../components/media/ProtectedMediaSection';
 import PaymentTypeBadges from '../../../components/property/PaymentTypeBadges';
 import ConstructionUpdateManager from '../../../components/property/ConstructionUpdateManager';
 import VirtualTourManagement from '../../../components/virtualTour/VirtualTourManagement';
@@ -259,6 +260,7 @@ const LandlordPropertyDetails = () => {
         {property ? <ConstructionUpdateManager property={property} /> : null}
         {property ? <VirtualTourManagement propertyId={propertyReference} summary={property.virtualTour} providerOverride={property.virtualTourProviderOverride} version={property.version} onUpdated={() => { void refreshProperty(); }} /> : null}
         {property ? <TitleDocumentManagement propertyId={propertyReference} sold={property.status === 'sold'} /> : null}
+        {property ? <ProtectedMediaSection resourceKind="property" resourceId={property._id} title={property.title ?? 'This property'} sellerMode property={property} onPropertyUpdated={() => { void refreshProperty(); }} /> : null}
       </div>
     </LandlordPortalLayout>
   );

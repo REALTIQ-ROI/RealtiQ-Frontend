@@ -7,7 +7,7 @@ import ProtectedTitleViewer from './ProtectedTitleViewer';
 
 vi.mock('../../components/layout/PublicLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('../../services/titleDocumentService', () => ({
-  titleDocumentService: { fetchViewerContent: vi.fn() },
+  titleDocumentService: { fetchViewerContent: vi.fn(), endViewer: vi.fn().mockResolvedValue(undefined) },
 }));
 
 const session: ViewerSession = {
@@ -33,6 +33,9 @@ describe('ProtectedTitleViewer', () => {
     vi.mocked(titleDocumentService.fetchViewerContent).mockResolvedValue({
       blob: new Blob(['image'], { type: 'image/png' }),
       contentType: 'image/png',
+      documentVersionId: 'version-1',
+      submissionVersion: 1,
+      contentSha256: 'a'.repeat(64),
     });
   });
 

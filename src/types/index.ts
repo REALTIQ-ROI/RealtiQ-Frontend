@@ -35,7 +35,7 @@ export type OffPlanDevelopmentStatus =
   | 'roofing'
   | 'finishing'
   | 'completed';
-export type TourType = 'open_house' | 'virtual_paid' | 'staging_view';
+export type TourType = 'open_house' | 'private_showing' | 'show_home' | 'live_guided_video_tour' | 'virtual_paid' | 'staging_view';
 export type TourMode = 'physical' | 'virtual';
 export type TourStatus = 'pending' | 'approved' | 'rejected' | 'completed' | 'cancelled';
 export type CartItemType =
@@ -743,19 +743,79 @@ export interface Tour {
   type: TourType;
   mode: TourMode;
   scheduledAt: string;
+  startsAt?: string;
+  endsAt?: string;
   notes?: string;
   status: TourStatus;
   version: number;
+  calendarId?: string;
+  calendarVersion?: number;
+  slotId?: string;
+  video?: { state: string; provider?: string; joinPath?: string | null };
   createdAt: string;
   updatedAt: string;
 }
 
 export interface TourRequestPayload {
   propertyId: string;
-  type: Exclude<TourType, 'virtual_paid'>;
+  type: Exclude<TourType, 'open_house' | 'virtual_paid' | 'staging_view'>;
   mode: TourMode;
   scheduledAt: string;
+  calendarId: string;
+  calendarVersion: number;
+  slotId: string;
   notes?: string;
+}
+
+export type TourCalendarScopeKind = 'profile' | 'project' | 'unit_type' | 'property';
+export interface TourCalendarSlot {
+  slotId?: string;
+  startsAt: string;
+  endsAt: string;
+  assignedToIdentityId?: string | null;
+}
+export interface TourCalendarDto {
+  id: string;
+  scopeKind: TourCalendarScopeKind;
+  scopeId: string;
+  version: number;
+  liveGuidedEnabled: boolean;
+  slots: TourCalendarSlot[];
+  updatedAt: string;
+}
+export interface TourCalendarEnvelope {
+  calendar: TourCalendarDto | null;
+  inheritedFrom: TourCalendarScopeKind | null;
+  inheritedCalendar: TourCalendarDto | null;
+  effectiveCalendarId: string | null;
+  liveVideoReadiness?: LiveVideoReadiness;
+}
+export interface LiveVideoReadiness {
+  state: 'seller_not_enabled' | 'provider_unavailable' | 'provider_unhealthy' | 'provider_stale' | 'scheduler_disabled' | 'scheduler_unhealthy' | 'scheduler_not_running' | 'scheduler_starting' | 'provider_unverified' | 'ready' | string;
+  sellerOption?: 'enabled' | 'disabled' | string;
+  provider?: { state: 'unavailable' | 'configured_unverified' | 'unhealthy' | 'stale' | 'healthy' | string; reasonCode?: string | null; lastSuccessAt?: string | null };
+  scheduler?: { state: 'disabled' | 'not_running' | 'unhealthy' | 'stale' | 'starting' | 'running' | 'healthy' | string; lastAttemptAt?: string | null; lastSuccessAt?: string | null; reasonCode?: string | null };
+  reasonCode?: string | null;
+}
+export interface TourAvailability {
+  state: 'available' | 'not_offered' | 'not_configured' | string;
+  reasonCode?: string;
+  property?: { id: string; publicReference?: string };
+  calendarId?: string;
+  calendarVersion?: number;
+  slots: Array<{ slotId: string; startsAt: string; endsAt: string }>;
+  pagination?: { page: number; limit: number; total: number; pages: number };
+  liveVideoReadiness?: LiveVideoReadiness;
+}
+export interface TourVideoSession {
+  tourId: string;
+  joinAvailable?: boolean;
+  state: 'queued' | 'processing' | 'ready' | 'reconciliation_required' | 'ended' | string;
+  provider?: 'zoom' | string;
+  joinPath?: string | null;
+  readiness?: LiveVideoReadiness;
+  lastErrorCode?: string | null;
+  version?: number;
 }
 
 export interface CartItemResponse {
@@ -975,7 +1035,7 @@ export type TitleDocumentType =
   | 'allocation_letter'
   | 'excision_document';
 
-export type TitleDocumentPolicyMode = 'private' | 'paid_view_once' | 'paid_view_multiple';
+export type TitleDocumentPolicyMode = 'private' | 'paid_view_once' | 'paid_view_multiple' | 'on_request';
 export type PaidAccessMode = 'view_once' | 'view_multiple';
 
 export interface PublicTitleDocument {
@@ -991,12 +1051,14 @@ export interface PublicTitleDocument {
 }
 
 export interface ManagedTitleDocument extends PublicTitleDocument {
+  version?: number;
   submissionVersion: number;
   previousDocument?: string | null;
   accessPolicy: {
     enabled: boolean;
     mode: TitleDocumentPolicyMode;
     price: number;
+    buyerPassEnabled?: boolean;
   };
   submittedAt?: string;
   rejectionReason?: string | null;
@@ -1007,18 +1069,39 @@ export interface TitleDocumentAccessStatus {
   hasAccess: boolean;
   paymentRequired: boolean;
   price: number | null;
+  canRequest?: boolean;
+  requestState?: 'none' | 'pending' | 'approved' | 'declined' | 'revoked' | 'expired' | string;
+  pricingState?: 'configured' | 'unavailable' | string;
+  pricingErrorCode?: string | null;
   mode?: PaidAccessMode;
   verificationStatus?: TitleVerificationStatus;
   viewed?: boolean;
   remainingViews?: number;
   viewCount?: number;
   message?: string;
+  purchaseState?: 'not_started' | 'pending' | 'processing' | 'checkout_ready' | 'reconciliation_required' | 'active' | 'consumed' | 'failed' | 'unknown' | string;
+  documentVersion?: { documentId?: string; versionId?: string; submissionVersion?: number; current?: boolean } | null;
+  checkout?: {
+    id?: string;
+    state?: string;
+    jobState?: string;
+    paymentState?: string;
+    reference?: string;
+    amountMinor?: number;
+    currency?: string;
+    checkoutUrl?: string | null;
+    expiresAt?: string | null;
+    attempts?: number;
+    nextAttemptAt?: string | null;
+    errorCode?: string | null;
+  } | null;
 }
 
 export interface ViewerSession {
   sessionToken: string;
   contentUrl: string;
   expiresAt: string;
+  documentVersion?: number;
   watermark: {
     heading: string;
     viewer: string;

@@ -21,6 +21,7 @@ vi.mock('../../utils/titleUploadStepUp', async (importOriginal) => {
 vi.mock('../../services/titleDocumentService', () => ({
   titleDocumentService: {
     listManaged: vi.fn(),
+    listAccessRequests: vi.fn(),
     updatePolicy: vi.fn(),
     analytics: vi.fn(),
     upload: vi.fn(),
@@ -50,6 +51,10 @@ describe('TitleDocumentManagement', () => {
     dictionaryMocks.dictionary = createCanonicalFieldDictionaryFixture();
     mocks.stepUp.begin.mockReset().mockResolvedValue(true);
     vi.mocked(titleDocumentService.listManaged).mockResolvedValue([rejected]);
+    vi.mocked(titleDocumentService.listAccessRequests).mockResolvedValue({
+      requests: [],
+      pagination: { page: 1, limit: 50, total: 0, pages: 0 },
+    });
   });
 
   it('binds a rejected document resubmission to its file and metadata before upload', async () => {

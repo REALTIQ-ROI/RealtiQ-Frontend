@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { titleDocumentService } from '../../services/titleDocumentService';
+import { titleDocumentService, type TitleDocumentAccessRequest } from '../../services/titleDocumentService';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
 import StepUpDialog from '../auth/StepUpDialog';
@@ -28,6 +28,8 @@ const formatNaira = (amount: number) =>
 const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementProps) => {
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<ManagedTitleDocument[]>([]);
+  const [accessRequests, setAccessRequests] = useState<TitleDocumentAccessRequest[]>([]);
+  const [accessRequestError, setAccessRequestError] = useState('');
   const [analytics, setAnalytics] = useState<Record<string, TitleDocumentAnalytics>>({});
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -38,20 +40,23 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
   const [mode, setMode] = useState<TitleDocumentPolicyMode>('private');
   const [uploadOutcomeUnknown, setUploadOutcomeUnknown] = useState(false);
   const uploadStepUp = useBoundStepUp<Awaited<ReturnType<typeof titleDocumentService.upload>>>();
+  const policyStepUp = useBoundStepUp<Awaited<ReturnType<typeof titleDocumentService.updatePolicy>>>();
+  const accessDecisionStepUp = useBoundStepUp<TitleDocumentAccessRequest>();
   const { dictionary, loading: dictionaryLoading } = useCanonicalFieldDictionary();
   const documentTypeOptions = currentTitleDocumentTypeOptions(dictionary);
 
   const refresh = useCallback(async () => {
     if (!propertyId) return;
     setLoading(true);
-    try {
-      const result = await titleDocumentService.listManaged(propertyId);
-      setDocuments(result);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to load title-document management.');
-    } finally {
-      setLoading(false);
-    }
+    const [documentResult, requestResult] = await Promise.allSettled([
+      titleDocumentService.listManaged(propertyId),
+      titleDocumentService.listAccessRequests(propertyId, { page: 1, limit: 50 }),
+    ]);
+    if (documentResult.status === 'fulfilled') setDocuments(documentResult.value);
+    else toast.error(documentResult.reason instanceof Error ? documentResult.reason.message : 'Unable to load title-document management.');
+    if (requestResult.status === 'fulfilled') { setAccessRequests(requestResult.value.requests); setAccessRequestError(''); }
+    else { setAccessRequests([]); setAccessRequestError(requestResult.reason instanceof Error ? requestResult.reason.message : 'Access-request review is unavailable for this profile.'); }
+    setLoading(false);
   }, [propertyId]);
 
   useEffect(() => {
@@ -106,18 +111,44 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
     return result.ok;
   };
 
-  const updatePolicy = async (document: ManagedTitleDocument, nextMode: TitleDocumentPolicyMode) => {
-    if (sold) return;
+  const updatePolicy = async (document: ManagedTitleDocument, nextMode: TitleDocumentPolicyMode, passOverride?: boolean) => {
+    if (sold || policyStepUp.busy || policyStepUp.challenge) return;
+    if (!Number.isInteger(document.version)) { toast.error('The current document version was not returned. Refresh the vault before changing access.'); return; }
     setBusyId(document.id);
-    try {
-      await titleDocumentService.updatePolicy(document.id, nextMode);
-      toast.success('Access policy updated. Verified document bytes and legal history were not changed.');
-      await refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to update access policy.');
-    } finally {
-      setBusyId(null);
-    }
+    const isPaid = nextMode === 'paid_view_once' || nextMode === 'paid_view_multiple';
+    const body = { expectedVersion: document.version!, accessPolicy: { enabled: nextMode !== 'private', mode: nextMode, ...(isPaid ? { buyerPassEnabled: passOverride ?? document.accessPolicy.buyerPassEnabled ?? false } : {}) } };
+    const started = await policyStepUp.begin({ method: 'PATCH', path: `/api/title-documents/${encodeURIComponent(document.id)}/access-policy`, body, label: 'Change title-document access policy', execute: (challengeId, exactBody) => titleDocumentService.updatePolicy(document.id, exactBody, challengeId) });
+    if (!started) { setBusyId(null); toast.error(policyStepUp.error ?? 'Authenticator confirmation could not start.'); }
+  };
+
+  const completePolicyStepUp = async (code: string): Promise<boolean> => {
+    const result = await policyStepUp.complete(code);
+    if (!result.ok) { toast.error(result.error ?? 'Access policy was not changed.'); return false; }
+    setBusyId(null);
+    toast.success('Access policy updated. The server still controls price and every access decision.');
+    await refresh();
+    return true;
+  };
+
+  const decideAccessRequest = async (request: TitleDocumentAccessRequest, decision: 'approve' | 'decline' | 'revoke') => {
+    if (busyId || accessDecisionStepUp.busy || accessDecisionStepUp.challenge || !Number.isInteger(request.version)) return;
+    setBusyId(`request-${request.id}`);
+    const body = { requestId: request.id, decision, expectedVersion: request.version };
+    const started = await accessDecisionStepUp.begin({
+      method: 'POST', path: `/api/documents/${encodeURIComponent(request.documentId)}/grant`, body,
+      label: `${decision === 'approve' ? 'Approve' : decision === 'decline' ? 'Decline' : 'Revoke'} document access request`,
+      execute: (challengeId, exactBody) => titleDocumentService.decideAccessRequest(request.documentId, exactBody, challengeId),
+    });
+    if (!started) { setBusyId(null); toast.error(accessDecisionStepUp.error ?? 'Authenticator confirmation could not start.'); }
+  };
+
+  const completeAccessDecision = async (code: string): Promise<boolean> => {
+    const result = await accessDecisionStepUp.complete(code);
+    if (!result.ok) { toast.error(result.error ?? 'The access request was not changed.'); return false; }
+    setBusyId(null);
+    toast.success(`Document access request ${result.value.state}.`);
+    await refresh();
+    return true;
   };
 
   const loadAnalytics = async (documentId: string) => {
@@ -159,6 +190,20 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
       {sold ? <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">This property has been sold. Upload, resubmission, and seller policy changes are unavailable; existing history and permitted protected viewing remain available.</p> : null}
       {!sold ? <p className="mt-4 text-sm text-secondary">New title documents are uploaded to the private property vault after a one-use authenticator check bound to the selected file and metadata.</p> : null}
 
+      <div className="mt-6 rounded-xl border border-outline-variant/20 p-4">
+        <h3 className="font-bold">On-request access reviews</h3>
+        <p className="mt-1 text-xs text-secondary">Review current requests for this property. The server rechecks buyer eligibility, publication and document version for every decision.</p>
+        {accessRequestError ? <p role="status" className="mt-3 text-xs text-secondary">Access-request review is unavailable for this profile: {accessRequestError}</p> : null}
+        {!accessRequestError && accessRequests.length === 0 ? <p className="mt-3 text-sm text-secondary">There are no access requests on this page.</p> : null}
+        <div className="mt-3 space-y-3">{accessRequests.map((request) => {
+          const requestDocument = documents.find((document) => document.id === request.documentId);
+          return <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-container-low p-3">
+            <div><p className="text-sm font-semibold">{requestDocument?.title ?? 'Title document'}</p><p className="text-xs text-secondary">Requested {formatDateTime(request.requestedAt)} · {request.state.replaceAll('_', ' ')}</p></div>
+            <div className="flex flex-wrap gap-2">{request.state === 'pending' ? <><Button type="button" disabled={sold || busyId !== null || accessDecisionStepUp.busy} onClick={() => void decideAccessRequest(request, 'approve')}>Approve</Button><Button type="button" variant="secondary" disabled={busyId !== null || accessDecisionStepUp.busy} onClick={() => void decideAccessRequest(request, 'decline')}>Decline</Button></> : null}{request.state === 'approved' ? <Button type="button" variant="secondary" disabled={busyId !== null || accessDecisionStepUp.busy} onClick={() => void decideAccessRequest(request, 'revoke')}>Revoke access</Button> : null}</div>
+          </div>;
+        })}</div>
+      </div>
+
       {showUpload && !sold ? (
         <form onSubmit={(event) => void submitDocument(event)} className="mt-5 grid gap-4 rounded-xl bg-surface-container-low p-4 md:grid-cols-2">
           <div>
@@ -196,6 +241,7 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
               <option value="private">Private</option>
               <option value="paid_view_once">Paid — one view</option>
               <option value="paid_view_multiple">Paid — multiple views</option>
+              <option value="on_request">On request</option>
             </select>
             {mode !== 'private' ? <p className="mt-2 text-xs text-secondary">The server controls the current viewing price and policy.</p> : null}
           </div>
@@ -238,7 +284,7 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
                 <div><p className="text-xs text-secondary">Viewer sessions</p><p className="text-sm font-bold">{stats?.totalViews ?? 'Load analytics'}</p></div>
               </div>
               {stats ? <p className="mt-3 text-xs text-secondary">Unique viewers: {stats.uniqueViewers} • Consumed one-time access: {stats.consumedViewOnce} • Revenue: {formatNaira(stats.revenue)}</p> : null}
-              <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-3">
                 <select
                   aria-label={`Access policy for ${document.title}`}
                   value={document.accessPolicy.mode}
@@ -249,7 +295,9 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
                   <option value="private">Private</option>
                   <option value="paid_view_once">Paid — one view</option>
                   <option value="paid_view_multiple">Paid — multiple views</option>
+                  <option value="on_request">On request</option>
                 </select>
+                {document.accessPolicy.mode === 'paid_view_once' || document.accessPolicy.mode === 'paid_view_multiple' ? <label className="inline-flex items-center gap-2 text-xs"><input type="checkbox" checked={document.accessPolicy.buyerPassEnabled ?? false} disabled={sold || busyId === document.id} onChange={(event) => void updatePolicy(document, document.accessPolicy.mode, event.target.checked)} /><span>Allow Buyer Pass</span></label> : null}
                 <Button type="button" variant="secondary" loading={busyId === document.id} loadingLabel="Loading analytics..." onClick={() => void loadAnalytics(document.id)}>Inspect analytics</Button>
                 <Button type="button" variant="secondary" loading={busyId === document.id} loadingLabel="Opening..." disabled={document.verificationStatus === 'revoked'} onClick={() => void openPrivilegedViewer(document)}>Open protected viewer</Button>
                 {document.publicVerificationId ? <Link className="text-xs font-bold text-primary underline" to={`/title-verification/${document.publicVerificationId}`}>Registry record</Link> : null}
@@ -272,6 +320,8 @@ const TitleDocumentManagement = ({ propertyId, sold }: TitleDocumentManagementPr
         })}
       </div>
       <StepUpDialog challenge={uploadStepUp.challenge} busy={uploadStepUp.busy || busyId === 'upload'} error={uploadStepUp.error} onCancel={uploadStepUp.cancel} onSubmit={submitUploadStepUp} />
+      <StepUpDialog challenge={policyStepUp.challenge} busy={policyStepUp.busy} error={policyStepUp.error} onCancel={() => { policyStepUp.cancel(); setBusyId(null); }} onSubmit={completePolicyStepUp} />
+      <StepUpDialog challenge={accessDecisionStepUp.challenge} busy={accessDecisionStepUp.busy} error={accessDecisionStepUp.error} onCancel={() => { accessDecisionStepUp.cancel(); setBusyId(null); }} onSubmit={completeAccessDecision} />
     </section>
   );
 };

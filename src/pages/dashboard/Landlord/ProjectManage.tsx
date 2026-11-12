@@ -18,7 +18,10 @@ import { formatPriceRange, labelize } from '../../../utils/projectFormatters';
 import { downloadBlob } from '../../../utils/download';
 import UnitGridPanel from '../../../components/project/UnitGridPanel';
 import UnitTypeManagement from '../../../components/project/UnitTypeManagement';
+import ProtectedMediaSection from '../../../components/media/ProtectedMediaSection';
+import ProjectRegisteredSurvey from '../../../components/title/ProjectRegisteredSurvey';
 import { useAuth } from '../../../contexts/AuthContext';
+import type { UnitTypeDto } from '../../../services/projectService';
 
 interface LandlordProjectManageData {
   project: ProjectDetail;
@@ -57,6 +60,7 @@ const ProjectManage = () => {
   const [publicationReadiness, setPublicationReadiness] = useState<ApiRequestError['publicationReadiness']>(undefined);
   const [publishing, setPublishing] = useState(false);
   const [unitGridEpoch, setUnitGridEpoch] = useState(0);
+  const [protectedUnitTypes, setProtectedUnitTypes] = useState<UnitTypeDto[]>([]);
   const publicationStepUp = useBoundStepUp<{ project: ProjectDetail }>();
   const cancelPublicationStepUp = publicationStepUp.cancel;
   const [extraUnits, setExtraUnits] = useState<Property[]>([]);
@@ -77,6 +81,14 @@ const ProjectManage = () => {
   };
   const hasMoreUnits = !unitPagesExhausted && units.length < (data?.totalUnits ?? 0);
   const [tourPreference, setTourPreference] = useState<VirtualTourProvider | ''>('');
+  useEffect(() => {
+    let current = true;
+    if (!project?._id) { setProtectedUnitTypes([]); return () => { current = false; }; }
+    void projectService.listUnitTypes(project._id)
+      .then((response) => { if (current) setProtectedUnitTypes(response.unitTypes); })
+      .catch(() => { if (current) setProtectedUnitTypes([]); });
+    return () => { current = false; };
+  }, [project?._id, unitGridEpoch]);
   useEffect(() => setTourPreference(project?.virtualTourProviderOverride ?? ''), [project?.virtualTourProviderOverride]);
   useEffect(() => {
     if (location.hash === '#project-publication') setPublicationOpen(true);
@@ -316,6 +328,16 @@ const ProjectManage = () => {
             <div id="unit-grid"><UnitGridPanel key={`${project._id}:${activeProfile?.id ?? 'none'}:${unitGridEpoch}`} projectId={project._id} /></div>
 
             <UnitTypeManagement project={project} onChanged={async () => { await refreshProject(); }} />
+
+            <section className="space-y-5 rounded-xl border border-outline-variant/10 bg-white p-5">
+              <div><h2 className="text-xl font-black">Protected project and unit media</h2><p className="mt-1 text-sm text-secondary">Project and unit-type files stay private until the server confirms their access policy and canonical association.</p></div>
+              <ProtectedMediaSection resourceKind="project" resourceId={project._id} title={project.name} sellerMode project={project} onProjectUpdated={() => { void refreshProject(); }} />
+              {protectedUnitTypes.map((unitType, index) => {
+                const unitTypeName = String(unitType.effectiveFields.unitTypeName ?? unitType.canonicalFields.unitTypeName ?? `Unit type ${index + 1}`);
+                return <ProtectedMediaSection key={unitType.id} resourceKind="unit_type" resourceId={project._id} unitTypeId={unitType.id} title={unitTypeName} sellerMode project={project} unitType={unitType} onUnitTypeUpdated={(updated) => { setProtectedUnitTypes((current) => current.map((item) => item.id === updated.id ? updated : item)); void refreshProject(); }} />;
+              })}
+            </section>
+            <ProjectRegisteredSurvey projectId={project._id} projectVersion={project.version} sellerMode onProjectChanged={refreshProject} />
 
             <section className="rounded-xl border border-outline-variant/10 bg-white p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

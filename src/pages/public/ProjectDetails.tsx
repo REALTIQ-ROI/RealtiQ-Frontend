@@ -1,6 +1,8 @@
 import { Link, useLocation, useParams } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
 import ProjectMediaGallery from '../../components/project/ProjectMediaGallery';
+import ProtectedMediaSection from '../../components/media/ProtectedMediaSection';
+import ProjectRegisteredSurvey from '../../components/title/ProjectRegisteredSurvey';
 import PropertyCard from '../../components/property/PropertyCard';
 import LocationMap from '../../components/property/map/LocationMap';
 import ErrorState from '../../components/ui/ErrorState';
@@ -56,6 +58,8 @@ const ProjectDetails = () => {
             </header>
 
             <ProjectMediaGallery media={project.media} title={project.name} />
+            <ProtectedMediaSection resourceKind="project" resourceId={project._id} title={project.name} />
+            <ProjectRegisteredSurvey projectId={project._id} />
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {[

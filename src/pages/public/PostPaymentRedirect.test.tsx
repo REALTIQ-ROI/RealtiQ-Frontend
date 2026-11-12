@@ -6,12 +6,13 @@ import { escrowService } from '../../services/escrowService';
 import { paymentService } from '../../services/paymentService';
 import { titleDocumentService } from '../../services/titleDocumentService';
 import { cartService } from '../../services/cartService';
+import { protectedMediaService } from '../../services/protectedMediaService';
 import { useAuth } from '../../contexts/AuthContext';
 
 vi.mock('../../components/layout/PublicLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), info: vi.fn() } }));
 vi.mock('../../contexts/AuthContext', () => ({
-  useAuth: vi.fn(() => ({ isAuthenticated: true, user: { _id: 'buyer1', role: 'buyer' } })),
+  useAuth: vi.fn(() => ({ isAuthenticated: true, user: { _id: 'buyer1', role: 'buyer' }, activeProfile: { id: 'buyer-profile', kind: 'buyer' } })),
 }));
 vi.mock('../../services/paymentService', () => ({ paymentService: { getPendingPaymentReference: vi.fn(), verifyPayment: vi.fn(), clearPendingPayment: vi.fn() } }));
 vi.mock('../../services/escrowService', () => ({ escrowService: { getPendingId: vi.fn(), getPendingReference: vi.fn(), get: vi.fn(), clearPending: vi.fn() } }));
@@ -25,52 +26,51 @@ vi.mock('../../services/cartService', () => ({
 }));
 vi.mock('../../services/titleDocumentService', () => ({
   titleDocumentService: {
-    getPendingPayment: vi.fn(() => ({ documentId: null, propertyId: null, reference: null })),
+    getPendingPayment: vi.fn(() => ({ documentId: null, propertyId: null, reference: null, profileId: null })),
     accessStatus: vi.fn(),
     clearPendingPayment: vi.fn(),
     openViewer: vi.fn(),
+  },
+}));
+vi.mock('../../services/protectedMediaService', () => ({
+  protectedMediaService: {
+    getPendingOrder: vi.fn(() => ({ id: null, paymentReference: null, profileId: null })),
+    getOrder: vi.fn(), clearPendingOrder: vi.fn(), persistPendingOrder: vi.fn(),
   },
 }));
 
 describe('PostPaymentRedirect', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, user: { _id: 'buyer1', role: 'buyer' } } as ReturnType<typeof useAuth>);
-    vi.mocked(titleDocumentService.getPendingPayment).mockReturnValue({ documentId: null, propertyId: null, reference: null });
+    vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, user: { _id: 'buyer1', role: 'buyer' }, activeProfile: { id: 'buyer-profile', kind: 'buyer' } } as ReturnType<typeof useAuth>);
+    vi.mocked(titleDocumentService.getPendingPayment).mockReturnValue({ documentId: null, propertyId: null, reference: null, profileId: null });
+    vi.mocked(protectedMediaService.getPendingOrder).mockReturnValue({ id: null, paymentReference: null, profileId: null });
     vi.mocked(paymentService.verifyPayment).mockResolvedValue({ verified: true, payment: { _id: 'pay1', status: 'paid', reference: 'ref1' } });
     vi.mocked(escrowService.getPendingId).mockReturnValue('e1'); vi.mocked(escrowService.getPendingReference).mockReturnValue('ref1');
     vi.mocked(escrowService.get).mockResolvedValue({ _id: 'e1', amount: 10, status: 'locked', createdAt: '', logs: [], rules: [] });
   });
-  it('verifies title-document payment and exposes access without opening or consuming the viewer', async () => {
+  it('checks title-document access status and exposes confirmed access without verifying a provider return', async () => {
     vi.mocked(escrowService.getPendingId).mockReturnValue(null);
     vi.mocked(escrowService.getPendingReference).mockReturnValue(null);
-    vi.mocked(titleDocumentService.getPendingPayment).mockReturnValue({ documentId: 'doc1', propertyId: 'prop1', reference: 'RTQ-DOC-PAY-1' });
-    vi.mocked(paymentService.verifyPayment).mockResolvedValue({
-      verified: true,
-      payment: {
-        _id: 'pay1',
-        status: 'paid',
-        reference: 'RTQ-DOC-PAY-1',
-        purpose: 'title_document_view',
-        metadata: { paymentPurpose: 'title_document_view', documentId: 'doc1', propertyId: 'prop1' },
-      },
-    });
-    vi.mocked(titleDocumentService.accessStatus).mockResolvedValue({ hasAccess: true, paymentRequired: false, price: 5000, mode: 'view_once', remainingViews: 1 });
+    vi.mocked(titleDocumentService.getPendingPayment).mockReturnValue({ documentId: 'doc1', propertyId: 'prop1', reference: 'RTQ-DOC-PAY-1', profileId: 'buyer-profile' });
+    vi.mocked(titleDocumentService.accessStatus).mockResolvedValue({ hasAccess: true, purchaseState: 'active', paymentRequired: false, price: 5000, mode: 'view_once', remainingViews: 1 });
     render(<MemoryRouter initialEntries={['/post-payment-redirect?reference=RTQ-DOC-PAY-1']}><PostPaymentRedirect /></MemoryRouter>);
     expect(await screen.findByRole('heading', { name: 'Document access ready' })).toBeInTheDocument();
-    expect(screen.getByText(/Payment did not start or consume a viewer session/i)).toBeInTheDocument();
+    expect(screen.getByText(/server confirms that this Buyer profile has document access/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open protected viewer' })).toBeInTheDocument();
     expect(titleDocumentService.openViewer).not.toHaveBeenCalled();
+    expect(titleDocumentService.accessStatus).toHaveBeenCalledWith('doc1');
+    expect(paymentService.verifyPayment).not.toHaveBeenCalled();
   });
-  it('keeps document access pending when payment is verified but protected access is unavailable', async () => {
+  it('keeps document access pending when the current server status has not activated access', async () => {
     vi.mocked(escrowService.getPendingId).mockReturnValue(null);
     vi.mocked(escrowService.getPendingReference).mockReturnValue(null);
-    vi.mocked(titleDocumentService.getPendingPayment).mockReturnValue({ documentId: 'doc1', propertyId: 'prop1', reference: 'RTQ-DOC-PAY-1' });
-    vi.mocked(paymentService.verifyPayment).mockResolvedValue({ verified: true, payment: { _id: 'pay1', status: 'paid', reference: 'RTQ-DOC-PAY-1', purpose: 'title_document_view', metadata: { documentId: 'doc1', propertyId: 'prop1' } } });
-    vi.mocked(titleDocumentService.accessStatus).mockResolvedValue({ hasAccess: false, paymentRequired: false, price: 5000, mode: 'view_once', remainingViews: 0, message: 'Activation pending' });
+    vi.mocked(titleDocumentService.getPendingPayment).mockReturnValue({ documentId: 'doc1', propertyId: 'prop1', reference: 'RTQ-DOC-PAY-1', profileId: 'buyer-profile' });
+    vi.mocked(titleDocumentService.accessStatus).mockResolvedValue({ hasAccess: false, purchaseState: 'processing', paymentRequired: false, price: 5000, mode: 'view_once', remainingViews: 0, message: 'Activation pending' });
     render(<MemoryRouter initialEntries={['/post-payment-redirect?reference=RTQ-DOC-PAY-1']}><PostPaymentRedirect /></MemoryRouter>);
-    expect(await screen.findByRole('heading', { name: 'Document access pending' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Checking document access' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Open protected viewer' })).not.toBeInTheDocument();
+    expect(paymentService.verifyPayment).not.toHaveBeenCalled();
   });
   it('shows escrow-specific success and does not claim property purchase completion', async () => {
     render(<MemoryRouter initialEntries={['/post-payment-redirect?reference=ref1']}><PostPaymentRedirect /></MemoryRouter>);
@@ -122,7 +122,7 @@ describe('PostPaymentRedirect', () => {
     expect(cartService.listCartCheckouts).not.toHaveBeenCalled();
   });
   it('keeps guest cart payment returns on a public cart path', async () => {
-    vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false, user: null } as ReturnType<typeof useAuth>);
+    vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false, user: null, activeProfile: null } as ReturnType<typeof useAuth>);
     vi.mocked(escrowService.getPendingId).mockReturnValue(null);
     vi.mocked(escrowService.getPendingReference).mockReturnValue(null);
     vi.mocked(cartService.getPendingCheckout).mockReturnValue({ checkoutId: 'checkout1', reference: 'cart-ref-1' });
@@ -160,5 +160,28 @@ describe('PostPaymentRedirect', () => {
     expect(await screen.findByRole('heading', { name: 'Service checkout update' })).toBeInTheDocument();
     expect(screen.getByText(/Other parts or service allocations may still be pending/)).toBeInTheDocument();
     expect(cartService.clearPendingCheckout).not.toHaveBeenCalled();
+  });
+
+  it('checks the same protected media order and waits while the backend reports pending', async () => {
+    vi.mocked(escrowService.getPendingId).mockReturnValue(null);
+    vi.mocked(escrowService.getPendingReference).mockReturnValue(null);
+    vi.mocked(protectedMediaService.getPendingOrder).mockReturnValue({ id: 'order-1', paymentReference: 'media-ref', profileId: 'buyer-profile' });
+    vi.mocked(protectedMediaService.getOrder).mockResolvedValue({ order: { id: 'order-1', kind: 'purchase', itemId: 'item-1', paymentReference: 'media-ref', amountMinor: 400000, currency: 'NGN', state: 'pending', checkoutUrl: null, expiresAt: null, lastErrorCode: null, createdAt: '', updatedAt: '' }, paymentStatus: 'pending' });
+    render(<MemoryRouter initialEntries={['/post-payment-redirect?reference=media-ref']}><PostPaymentRedirect /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: 'Protected media order pending' })).toBeInTheDocument();
+    expect(screen.getByText(/server has not confirmed access yet/i)).toBeInTheDocument();
+    expect(protectedMediaService.getOrder).toHaveBeenCalledWith('order-1');
+    expect(protectedMediaService.clearPendingOrder).not.toHaveBeenCalled();
+    expect(paymentService.verifyPayment).not.toHaveBeenCalled();
+  });
+
+  it('does not load a protected media order under a different selected profile', async () => {
+    vi.mocked(escrowService.getPendingId).mockReturnValue(null);
+    vi.mocked(escrowService.getPendingReference).mockReturnValue(null);
+    vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, user: { _id: 'buyer1', role: 'buyer' }, activeProfile: { id: 'another-profile', kind: 'buyer' } } as ReturnType<typeof useAuth>);
+    vi.mocked(protectedMediaService.getPendingOrder).mockReturnValue({ id: 'order-1', paymentReference: 'media-ref', profileId: 'buyer-profile' });
+    render(<MemoryRouter initialEntries={['/post-payment-redirect?reference=media-ref']}><PostPaymentRedirect /></MemoryRouter>);
+    expect(await screen.findByText(/Select the Buyer profile that started this media order/i)).toBeInTheDocument();
+    expect(protectedMediaService.getOrder).not.toHaveBeenCalled();
   });
 });
