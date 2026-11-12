@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../../../lib/axios';
+import { sha256File } from '../../../utils/profileEvidenceUpload';
 import LandlordVerification from './LandlordVerification';
 
 const mocks = vi.hoisted(() => ({
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   onboarding: vi.fn(),
   updateOnboarding: vi.fn(),
   evidence: vi.fn(),
+  allEvidence: vi.fn(),
   cases: vi.fn(),
   contract: vi.fn(),
   createHolderCase: vi.fn(),
@@ -35,6 +37,7 @@ vi.mock('../../../services/profileService', () => ({ profileService: {
 
 vi.mock('../../../services/verificationCaseService', () => ({ verificationCaseService: {
   listEvidence: mocks.evidence,
+  listAllEvidence: mocks.allEvidence,
   listHolderCases: mocks.cases,
   getEvidenceContract: mocks.contract,
   getEvidence: vi.fn(),
@@ -84,6 +87,17 @@ const contract = {
   subjects: { fixed: ['self'], personFields: [] },
 };
 
+const submitSelectedPrivateEvidence = async () => {
+  await userEvent.click(screen.getByRole('button', { name: 'Upload a document' }));
+  await userEvent.selectOptions(screen.getByLabelText('Purpose'), 'nin');
+  await userEvent.selectOptions(screen.getByLabelText('Subject'), 'self');
+  const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!fileInput) throw new Error('Evidence file input was not rendered.');
+  await userEvent.upload(fileInput, new File(['valid supported file bytes'], 'nin.pdf', { type: 'application/pdf' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Verify and continue' }));
+};
+
 describe('landlord profile verification loading', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -97,6 +111,16 @@ describe('landlord profile verification loading', () => {
     mocks.current.mockImplementation((id: string) => Promise.resolve({ profile: { ...profile, id, kind: mocks.profileKind, structure: mocks.profileStructure } }));
     mocks.onboarding.mockResolvedValue(draft);
     mocks.evidence.mockResolvedValue({ evidence: [], nextCursor: null });
+    mocks.allEvidence.mockImplementation(async () => {
+      const records: unknown[] = [];
+      let before: string | undefined;
+      do {
+        const page = await mocks.evidence({ limit: 100, ...(before ? { before } : {}) });
+        records.push(...page.evidence);
+        before = page.nextCursor ?? undefined;
+      } while (before);
+      return records;
+    });
     mocks.cases.mockResolvedValue({ cases: [], nextCursor: null });
     mocks.contract.mockResolvedValue(contract);
     mocks.updateOnboarding.mockReset();
@@ -127,7 +151,7 @@ describe('landlord profile verification loading', () => {
     await waitFor(() => expect(mocks.evidence).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('No evidence records returned for this profile.')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Example Landlord' })).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('ignores a late profile response after the active profile changes', async () => {
     let resolveFirstProfile: ((value: { profile: typeof profile }) => void) | undefined;
@@ -250,18 +274,24 @@ describe('landlord profile verification loading', () => {
     expect(screen.getByRole('button', { name: 'Submit saved draft for verification' })).toBeDisabled();
   });
 
-  it('shows an explicit success toast when private evidence is returned as available', async () => {
+  it('replaces a deleted tombstone with its record ID, not its version or prior link', async () => {
     mocks.uploadEvidence.mockResolvedValue({
       id: 'evidence-uploaded', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin',
-      version: 2, previousEvidenceId: 'evidence-old', mimeType: 'application/pdf', size: 100, state: 'available',
+      version: 5, previousEvidenceId: 'evidence-tombstone', mimeType: 'application/pdf', size: 100, state: 'available',
       errorCode: null, contentValidatedAt: '2026-11-11T10:00:00.000Z', createdAt: '2026-11-11T10:00:00.000Z',
     });
     mocks.evidence.mockResolvedValue({
-      evidence: [{
-        id: 'evidence-old', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin', version: 1,
-        previousEvidenceId: null, mimeType: 'application/pdf', size: 100, state: 'available', errorCode: null,
-        contentValidatedAt: '2026-11-10T10:00:00.000Z', createdAt: '2026-11-10T10:00:00.000Z',
-      }],
+      evidence: [
+        { id: 'evidence-tombstone', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin', version: 4,
+          previousEvidenceId: 'older-record-must-not-be-used', mimeType: 'application/pdf', size: 100, state: 'deleted', errorCode: null,
+          contentValidatedAt: null, createdAt: '2026-11-11T09:00:00.000Z' },
+        { id: 'wrong-purpose', profileId: 'profile-1', purpose: 'bvn', subject: 'self', documentKind: 'bvn', version: 99,
+          previousEvidenceId: null, mimeType: 'application/pdf', size: 100, state: 'available', errorCode: null,
+          contentValidatedAt: null, createdAt: '2026-11-11T09:30:00.000Z' },
+        { id: 'wrong-profile', profileId: 'profile-2', purpose: 'nin', subject: 'self', documentKind: 'nin', version: 100,
+          previousEvidenceId: null, mimeType: 'application/pdf', size: 100, state: 'available', errorCode: null,
+          contentValidatedAt: null, createdAt: '2026-11-11T09:45:00.000Z' },
+      ],
       nextCursor: null,
     });
     render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
@@ -270,24 +300,280 @@ describe('landlord profile verification loading', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Upload a document' }));
     await userEvent.selectOptions(screen.getByLabelText('Purpose'), 'nin');
     await userEvent.selectOptions(screen.getByLabelText('Subject'), 'self');
-    await userEvent.selectOptions(screen.getByLabelText(/Replace existing evidence version/), 'evidence-old');
+    expect(screen.getByText(/Replacing the latest evidence record · Version 4/i)).toBeInTheDocument();
+    expect(screen.getByText(/Current file state: Deleted/i)).toBeInTheDocument();
     const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
     if (!fileInput) throw new Error('Evidence file input was not rendered.');
-    await userEvent.upload(fileInput, new File(['private evidence'], 'nin.pdf', { type: 'application/pdf' }));
+    const selectedFile = new File(['private evidence'], 'nin.pdf', { type: 'application/pdf' });
+    await userEvent.upload(fileInput, selectedFile);
     await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Verify and continue' }));
+    const digest = await sha256File(selectedFile);
+    const verifyButton = await screen.findByRole('button', { name: 'Verify and continue' });
+    expect(mocks.uploadEvidence).not.toHaveBeenCalled();
+    expect(mocks.stepUpStart).toHaveBeenCalledWith('POST', '/api/profiles/current/onboarding/evidence', {
+      purpose: 'nin', subject: 'self', operationKey: expect.any(String), previousEvidenceId: 'evidence-tombstone',
+      __stepUpFileSha256: digest,
+    });
+    await userEvent.click(verifyButton);
 
     await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith(
       'Private evidence uploaded successfully and is available for selection. KYC approval is a separate step.',
     ));
     expect(mocks.uploadEvidence).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/Not Submitted/i)).toBeInTheDocument();
+    const stepUpBody = mocks.stepUpStart.mock.calls[0][2] as Record<string, unknown>;
+    expect(stepUpBody).toMatchObject({ purpose: 'nin', subject: 'self', previousEvidenceId: 'evidence-tombstone' });
+    expect(stepUpBody.__stepUpFileSha256).toBe(digest);
+    expect(stepUpBody).not.toHaveProperty('documentKind');
+    expect(stepUpBody).not.toHaveProperty('version');
+    expect(stepUpBody).not.toHaveProperty('previousEvidenceId', 'older-record-must-not-be-used');
+    const uploadForm = mocks.uploadEvidence.mock.calls[0][0] as FormData;
+    expect(uploadForm.get('previousEvidenceId')).toBe('evidence-tombstone');
+    expect(uploadForm.get('previousEvidenceId')).not.toBe('4');
+    expect(uploadForm.get('__stepUpFileSha256')).toBe(digest);
+    expect(uploadForm.get('documentKind')).toBeNull();
+    expect(uploadForm.getAll('file')).toHaveLength(1);
     expect(screen.queryByRole('dialog', { name: 'Upload private evidence' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Upload a document' }));
     expect(screen.getByLabelText('Purpose')).toHaveValue('');
     expect(screen.getByLabelText('Subject')).toHaveValue('');
     expect(screen.getByLabelText('Document kind')).toHaveValue('');
-    expect(screen.getByLabelText(/Replace existing evidence version/)).toHaveValue('');
     expect(document.querySelector<HTMLInputElement>('input[type="file"]')).toHaveValue('');
+  }, 15000);
+
+  it('omits previousEvidenceId for the first upload of a purpose and subject', async () => {
+    mocks.uploadEvidence.mockResolvedValue({
+      id: 'first-nin', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin', version: 1,
+      previousEvidenceId: null, mimeType: 'application/pdf', size: 100, state: 'available', errorCode: null,
+      contentValidatedAt: null, createdAt: '2026-11-11T10:00:00.000Z',
+    });
+    render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Example Landlord' });
+    await userEvent.click(screen.getByRole('button', { name: 'Upload a document' }));
+    await userEvent.selectOptions(screen.getByLabelText('Purpose'), 'nin');
+    await userEvent.selectOptions(screen.getByLabelText('Subject'), 'self');
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!fileInput) throw new Error('Evidence file input was not rendered.');
+    await userEvent.upload(fileInput, new File(['first private evidence'], 'nin.pdf', { type: 'application/pdf' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Verify and continue' }));
+
+    await waitFor(() => expect(mocks.uploadEvidence).toHaveBeenCalledTimes(1));
+    expect(mocks.stepUpStart.mock.calls[0][2]).not.toHaveProperty('previousEvidenceId');
+    expect((mocks.uploadEvidence.mock.calls[0][0] as FormData).has('previousEvidenceId')).toBe(false);
+  }, 15000);
+
+  it('blocks a six-text-field replacement without omitting a required field or creating a challenge', async () => {
+    mocks.contract.mockResolvedValue({ ...contract, documentKinds: { nin: ['nin_slip', 'nin_card'] } });
+    mocks.evidence.mockResolvedValue({ evidence: [{
+      id: 'latest-nin', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin_slip', version: 3,
+      previousEvidenceId: 'older-nin', mimeType: 'application/pdf', size: 100, state: 'deleted', errorCode: null,
+      contentValidatedAt: null, createdAt: '2026-11-11T09:00:00.000Z',
+    }], nextCursor: null });
+    render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Example Landlord' });
+    await userEvent.click(screen.getByRole('button', { name: 'Upload a document' }));
+    await userEvent.selectOptions(screen.getByLabelText('Purpose'), 'nin');
+    await userEvent.selectOptions(screen.getByLabelText('Subject'), 'self');
+    await userEvent.selectOptions(screen.getByLabelText('Document kind'), 'nin_slip');
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!fileInput) throw new Error('Evidence file input was not rendered.');
+    await userEvent.upload(fileInput, new File(['replacement evidence'], 'nin.pdf', { type: 'application/pdf' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Example profile (owner · individual) nin evidence needs 6 text fields');
+    expect(alert).toHaveTextContent('purpose, subject, documentKind, operationKey, previousEvidenceId, __stepUpFileSha256');
+    expect(mocks.stepUpStart).not.toHaveBeenCalled();
+    expect(mocks.uploadEvidence).not.toHaveBeenCalled();
+  }, 15000);
+
+  it('refreshes a version conflict and requires confirmation before rebasing with a new operation key', async () => {
+    const oldRecord = { id: 'old-record', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin', version: 1,
+      previousEvidenceId: null, mimeType: 'application/pdf', size: 100, state: 'available', errorCode: null, contentValidatedAt: null, createdAt: '2026-11-10T10:00:00.000Z' };
+    const newestTombstone = { ...oldRecord, id: 'newest-tombstone', version: 2, previousEvidenceId: 'old-record', state: 'deleted', createdAt: '2026-11-11T09:00:00.000Z' };
+    mocks.evidence.mockResolvedValueOnce({ evidence: [oldRecord], nextCursor: null }).mockResolvedValueOnce({ evidence: [newestTombstone], nextCursor: null });
+    mocks.uploadEvidence
+      .mockRejectedValueOnce(new ApiRequestError('Confirm the current evidence version before replacing it.', { status: 409, code: 'CONFLICT_EVIDENCE_VERSION' }))
+      .mockResolvedValueOnce({ ...newestTombstone, id: 'replacement', version: 3, previousEvidenceId: 'newest-tombstone', state: 'available' });
+    render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Example Landlord' });
+    await userEvent.click(screen.getByRole('button', { name: 'Upload a document' }));
+    await userEvent.selectOptions(screen.getByLabelText('Purpose'), 'nin');
+    await userEvent.selectOptions(screen.getByLabelText('Subject'), 'self');
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!fileInput) throw new Error('Evidence file input was not rendered.');
+    await userEvent.upload(fileInput, new File(['same private evidence'], 'nin.pdf', { type: 'application/pdf' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Verify and continue' }));
+
+    expect(await screen.findByRole('button', { name: 'Confirm current version' })).toBeInTheDocument();
+    expect(mocks.uploadEvidence).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm current version' }));
+    expect(document.querySelector<HTMLInputElement>('input[type="file"]')?.files?.[0]?.name).toBe('nin.pdf');
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Verify and continue' }));
+
+    await waitFor(() => expect(mocks.uploadEvidence).toHaveBeenCalledTimes(2));
+    const firstBody = mocks.stepUpStart.mock.calls[0][2] as Record<string, unknown>;
+    const rebasedBody = mocks.stepUpStart.mock.calls[1][2] as Record<string, unknown>;
+    expect(firstBody.previousEvidenceId).toBe('old-record');
+    expect(rebasedBody.previousEvidenceId).toBe('newest-tombstone');
+    expect(rebasedBody.operationKey).not.toBe(firstBody.operationKey);
+    expect((mocks.uploadEvidence.mock.calls[1][0] as FormData).get('previousEvidenceId')).toBe('newest-tombstone');
+  }, 15000);
+
+  it('reuses the same operation key and exact replacement metadata after an ambiguous upload result', async () => {
+    mocks.evidence.mockResolvedValue({ evidence: [{
+      id: 'current-record', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin', version: 3,
+      previousEvidenceId: null, mimeType: 'application/pdf', size: 100, state: 'available', errorCode: null,
+      contentValidatedAt: null, createdAt: '2026-11-11T09:00:00.000Z',
+    }], nextCursor: null });
+    mocks.uploadEvidence
+      .mockRejectedValueOnce(new ApiRequestError('The request timed out. Check the latest server status before retrying; the request may have been processed.'))
+      .mockResolvedValueOnce({ id: 'replacement-record', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin', version: 4,
+        previousEvidenceId: 'current-record', mimeType: 'application/pdf', size: 100, state: 'available', errorCode: null,
+        contentValidatedAt: null, createdAt: '2026-11-11T10:00:00.000Z' });
+    render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Example Landlord' });
+    await userEvent.click(screen.getByRole('button', { name: 'Upload a document' }));
+    await userEvent.selectOptions(screen.getByLabelText('Purpose'), 'nin');
+    await userEvent.selectOptions(screen.getByLabelText('Subject'), 'self');
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!fileInput) throw new Error('Evidence file input was not rendered.');
+    await userEvent.upload(fileInput, new File(['unchanged payload'], 'nin.pdf', { type: 'application/pdf' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Verify and continue' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/retry only with the same file and details/i);
+    expect(mocks.uploadEvidence).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Verify and continue' }));
+    await waitFor(() => expect(mocks.uploadEvidence).toHaveBeenCalledTimes(2));
+    const firstBody = mocks.stepUpStart.mock.calls[0][2] as Record<string, unknown>;
+    const retryBody = mocks.stepUpStart.mock.calls[1][2] as Record<string, unknown>;
+    expect(retryBody).toEqual(firstBody);
+    expect(retryBody.previousEvidenceId).toBe('current-record');
+    const firstForm = mocks.uploadEvidence.mock.calls[0][0] as FormData;
+    const retryForm = mocks.uploadEvidence.mock.calls[1][0] as FormData;
+    expect(retryForm.get('operationKey')).toBe(firstForm.get('operationKey'));
+    expect(retryForm.get('previousEvidenceId')).toBe(firstForm.get('previousEvidenceId'));
+  }, 15000);
+
+  it.each([
+    { code: 'INPUT_EVIDENCE_UPLOAD_INVALID', status: 422, expected: /upload request could not be parsed/i },
+    { code: 'DOCUMENT_CONTENT_INVALID', status: 422, expected: /file content or format was rejected.*PDF/i },
+    { code: 'DOCUMENT_SIZE_INVALID', status: 413, expected: /file exceeds the allowed size.*976\.56 KiB/i },
+  ])('shows safe, code-specific feedback for $code', async ({ code, status, expected }) => {
+    mocks.uploadEvidence.mockRejectedValueOnce(new ApiRequestError('Raw multipart parser internals must not be displayed.', { status, code, requestId: 'evidence-request-1' }));
+    render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Example Landlord' });
+    await submitSelectedPrivateEvidence();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(expected);
+    expect(alert).toHaveTextContent('Support reference: evidence-request-1');
+    expect(alert).not.toHaveTextContent('Raw multipart parser internals');
+  }, 15000);
+
+  it('keeps the KYC form and retryable challenge after an invalid authenticator code', async () => {
+    mocks.stepUpVerify.mockRejectedValueOnce(new ApiRequestError('The verification code is invalid.', { status: 403, code: 'AUTH_FACTOR_CODE_INVALID' }));
+    mocks.uploadEvidence.mockResolvedValue({
+      id: 'verified-upload', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin', version: 1,
+      previousEvidenceId: null, mimeType: 'application/pdf', size: 100, state: 'available', errorCode: null,
+      contentValidatedAt: null, createdAt: '2026-11-11T10:00:00.000Z',
+    });
+    render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Example Landlord' });
+    await userEvent.click(screen.getByRole('button', { name: 'Upload a document' }));
+    await userEvent.selectOptions(screen.getByLabelText('Purpose'), 'nin');
+    await userEvent.selectOptions(screen.getByLabelText('Subject'), 'self');
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!fileInput) throw new Error('Evidence file input was not rendered.');
+    await userEvent.upload(fileInput, new File(['valid supported file bytes'], 'nin.pdf', { type: 'application/pdf' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Verify and continue' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/authenticator code was not accepted/i);
+    expect(screen.getByRole('heading', { name: 'Example Landlord' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Upload private profile evidence' })).toBeInTheDocument();
+    expect(fileInput.files?.[0]?.name).toBe('nin.pdf');
+    expect(mocks.uploadEvidence).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Verify and continue' }));
+    await waitFor(() => expect(mocks.uploadEvidence).toHaveBeenCalledTimes(1));
+    expect(mocks.stepUpVerify).toHaveBeenCalledTimes(2);
+  }, 15000);
+
+  it('requires a new file-bound challenge after AUTH_STEP_UP_REQUIRED without an automatic resubmit', async () => {
+    mocks.uploadEvidence
+      .mockRejectedValueOnce(new ApiRequestError('Confirm this uploaded file with two-step verification.', { status: 403, code: 'AUTH_STEP_UP_REQUIRED' }))
+      .mockResolvedValueOnce({
+        id: 'verified-after-fresh-challenge', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin', version: 1,
+        previousEvidenceId: null, mimeType: 'application/pdf', size: 100, state: 'available', errorCode: null,
+        contentValidatedAt: null, createdAt: '2026-11-11T10:00:00.000Z',
+      });
+    render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Example Landlord' });
+    await submitSelectedPrivateEvidence();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/did not match this exact file and its details.*fresh authenticator challenge/i);
+    expect(mocks.uploadEvidence).toHaveBeenCalledTimes(1);
+    expect(mocks.stepUpStart).toHaveBeenCalledTimes(1);
+    const firstBody = mocks.stepUpStart.mock.calls[0][2] as Record<string, unknown>;
+    const firstForm = mocks.uploadEvidence.mock.calls[0][0] as FormData;
+    expect(firstForm.get('__stepUpFileSha256')).toBe(firstBody.__stepUpFileSha256);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Verify and continue' }));
+    await waitFor(() => expect(mocks.uploadEvidence).toHaveBeenCalledTimes(2));
+    expect(mocks.stepUpStart).toHaveBeenCalledTimes(2);
+    expect(mocks.stepUpStart.mock.calls[1][2]).toEqual(firstBody);
+  }, 15000);
+
+  it('starts a fresh challenge and operation key when the file or purpose changes', async () => {
+    mocks.contract.mockResolvedValue({ ...contract, purposes: ['nin', 'bvn'], documentKinds: {} });
+    render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Example Landlord' });
+    await userEvent.click(screen.getByRole('button', { name: 'Upload a document' }));
+    await userEvent.selectOptions(screen.getByLabelText('Purpose'), 'nin');
+    await userEvent.selectOptions(screen.getByLabelText('Subject'), 'self');
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!fileInput) throw new Error('Evidence file input was not rendered.');
+    const firstFile = new File(['first file bytes'], 'nin.pdf', { type: 'application/pdf' });
+    await userEvent.upload(fileInput, firstFile);
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
+    await screen.findByRole('dialog', { name: 'Upload private profile evidence' });
+    const firstBody = mocks.stepUpStart.mock.calls[0][2] as Record<string, unknown>;
+
+    const changedFile = new File(['different file bytes'], 'nin-replacement.pdf', { type: 'application/pdf' });
+    await userEvent.upload(fileInput, changedFile);
+    await userEvent.selectOptions(screen.getByLabelText('Purpose'), 'bvn');
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
+    await waitFor(() => expect(mocks.stepUpStart).toHaveBeenCalledTimes(2));
+    const changedBody = mocks.stepUpStart.mock.calls[1][2] as Record<string, unknown>;
+
+    expect(changedBody.purpose).toBe('bvn');
+    expect(changedBody.operationKey).not.toBe(firstBody.operationKey);
+    expect(changedBody.__stepUpFileSha256).toBe(await sha256File(changedFile));
+    expect(changedBody.__stepUpFileSha256).not.toBe(firstBody.__stepUpFileSha256);
+    expect(mocks.uploadEvidence).not.toHaveBeenCalled();
+  }, 15000);
+
+  it('clears the prior profile evidence list when the selected profile changes', async () => {
+    const firstProfileRecord = { id: 'profile-one-evidence', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'profile_one_marker', version: 1,
+      previousEvidenceId: null, mimeType: 'application/pdf', size: 100, state: 'available', errorCode: null, contentValidatedAt: null, createdAt: '2026-11-11T09:00:00.000Z' };
+    mocks.evidence.mockImplementation(async () => ({ evidence: mocks.profileId === 'profile-1' ? [firstProfileRecord] : [], nextCursor: null }));
+    const view = render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+    expect(await screen.findByText('nin · profile one marker')).toBeInTheDocument();
+
+    mocks.profileId = 'profile-2';
+    localStorage.setItem('activeProfileId', 'profile-2');
+    mocks.current.mockImplementation((id: string) => Promise.resolve({ profile: { ...profile, id, name: 'Second profile' } }));
+    view.rerender(<MemoryRouter><LandlordVerification /></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { name: 'Second profile' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('nin · profile one marker')).not.toBeInTheDocument());
   }, 15000);
 
   it('shows a normal input for a missing field and saves the first draft using the server version', async () => {
@@ -311,7 +597,7 @@ describe('landlord profile verification loading', () => {
       'profile-1',
     ));
     expect(await screen.findByText('Saved · version 1')).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('saves edits with PATCH-bound step-up, blocks submission while saving, then submits the returned version with a separate POST challenge', async () => {
     mocks.profileKind = 'buyer';

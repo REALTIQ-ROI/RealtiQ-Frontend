@@ -137,8 +137,28 @@ export const verificationCaseService = {
     return data;
   },
 
+  async listAllEvidence(shouldContinue: () => boolean = () => true): Promise<ProfileEvidence[]> {
+    const records: ProfileEvidence[] = [];
+    const seenCursors = new Set<string>();
+    let before: string | undefined;
+    while (shouldContinue()) {
+      const page = await this.listEvidence({ limit: 100, ...(before ? { before } : {}) });
+      records.push(...page.evidence);
+      if (!shouldContinue()) break;
+      if (!page.nextCursor) break;
+      if (seenCursors.has(page.nextCursor)) throw new Error('The evidence history returned a repeated page cursor. Refresh the page before replacing evidence.');
+      seenCursors.add(page.nextCursor);
+      before = page.nextCursor;
+    }
+    return records;
+  },
+
   async uploadEvidence(form: FormData, challengeId: string): Promise<ProfileEvidence> {
-    const { data } = await api.post<ProfileEvidence>(`${holderBase}/onboarding/evidence`, form, { headers: { 'X-Step-Up-Challenge': challengeId } });
+    const { data } = await api.post<ProfileEvidence>(`${holderBase}/onboarding/evidence`, form, {
+      // Clear Axios's URL-encoded POST default. The browser must add the
+      // multipart content type together with the matching boundary.
+      headers: { 'X-Step-Up-Challenge': challengeId, 'Content-Type': null },
+    });
     return data;
   },
 

@@ -14,14 +14,15 @@ import ModalPortal from '../../../components/ui/ModalPortal';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ApiRequestError, type ApiFieldError } from '../../../lib/axios';
 import { hasAdminCapability } from '../../../services/adminAccessService';
-import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
+import { stepUpErrorMessage, useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import type { BoundStepUpChallenge } from '../../../hooks/useBoundStepUp';
 import { stepUpService } from '../../../services/stepUpService';
 import { profileService, type AccountProfileSummary, type ProfileOnboardingDraft } from '../../../services/profileService';
 import { verificationCaseService, type ProfileEvidence, type ProfileEvidenceContract, type VerificationCase, type VerificationCaseHistoryPage, type VerificationCasePersonRoute, type VerificationCaseSubmission } from '../../../services/verificationCaseService';
-import { buildBoundEvidenceFormData, buildEvidenceStepUpBody, isProfileEvidenceAvailable, isProfileEvidenceProcessing, sha256File, validateEvidenceUpload, type BoundEvidenceMetadata } from '../../../utils/profileEvidenceUpload';
+import { buildBoundEvidenceFormData, buildEvidenceStepUpBody, evidenceUploadFieldLimitMessage, formatEvidenceFileSize, formatEvidenceUploadError, isProfileEvidenceAvailable, isProfileEvidenceProcessing, profileEvidenceUploadLimitBytes, sha256File, validateEvidenceUpload, withEvidenceSupportReference, type BoundEvidenceMetadata } from '../../../utils/profileEvidenceUpload';
 import { buildLandlordKycProgress } from '../../../utils/landlordKycProgress';
 import { availableIndividualEvidence, identityRouteContractIssue, internationalIdentityUnavailable } from '../../../utils/individualKycEvidence';
+import { latestProfileEvidence, mergeProfileEvidence, profileEvidenceFor } from '../../../utils/profileEvidenceVersions';
 import { declaredVerificationPersonPaths, validateVerificationPersonRoutes } from '../../../utils/verificationCaseSubmission';
 import { isUndescribedDeclaredPersonPath, onboardingDraftFieldDisplayValue, onboardingDraftFields, updateOnboardingDraftField } from '../../../utils/onboardingDraftFields';
 import { isStaffKycProfile, isSupportedApplicantKycProfile } from '../../../utils/supportedKycProfile';
@@ -30,6 +31,11 @@ const formatStatus = (value?: string) => value ? value.replaceAll('_', ' ').repl
 const formatDate = (date?: string | null) => date ? new Date(date).toLocaleString('en-NG') : 'Not recorded';
 const statusClass = (state: string) => ['available', 'approved'].includes(state) ? 'text-emerald-700' : ['rejected', 'expired', 'deleted'].includes(state) ? 'text-error' : 'text-amber-800';
 const stepUpCodeCanRetryWithSameChallenge = (code?: string) => ['AUTH_FACTOR_CODE_INVALID', 'AUTH_FACTOR_RATE_LIMITED', 'AUTH_CHALLENGE_RATE_LIMITED'].includes(code ?? '');
+const boundStepUpFailureCodes = new Set([
+  'AUTH_FACTOR_REQUIRED', 'AUTH_CHALLENGE_INVALID', 'AUTH_CHALLENGE_FORBIDDEN', 'AUTH_CHALLENGE_REVOKED',
+  'AUTH_FACTOR_CODE_INVALID', 'AUTH_FACTOR_RATE_LIMITED', 'AUTH_CHALLENGE_RATE_LIMITED',
+  'AUTH_CHALLENGE_SCOPE_INVALID', 'AUTH_STEP_UP_REQUIRED',
+]);
 const serializeDraftValues = (values: Record<string, unknown>) => JSON.stringify(values, null, 2);
 const parseDraftValues = (text: string): { values?: Record<string, unknown>; error?: string } => {
   try {
@@ -93,6 +99,7 @@ const LandlordVerification = () => {
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploadFromRequirement, setUploadFromRequirement] = useState(false);
+  const [evidenceVersionConflict, setEvidenceVersionConflict] = useState<{ purpose: string; subject: string; latest: ProfileEvidence | null; refreshError?: boolean } | null>(null);
   const [evidenceToRemove, setEvidenceToRemove] = useState<ProfileEvidence | null>(null);
   const [personRoutes, setPersonRoutes] = useState<Record<string, { route: 'nigerian' | 'international' | ''; country: string }>>({});
   const [identityRoute, setIdentityRoute] = useState<'nigerian' | 'international' | ''>('');
@@ -166,6 +173,7 @@ const LandlordVerification = () => {
     setUploadBusy(false);
     setUploadDialogOpen(false);
     setUploadFromRequirement(false);
+    setEvidenceVersionConflict(null);
     setEvidenceToRemove(null);
     setBusy(false);
     setLoading(false);
@@ -255,6 +263,7 @@ const LandlordVerification = () => {
       setUploadDocumentKind('');
       setUploadDialogOpen(false);
       setUploadFromRequirement(false);
+      setEvidenceVersionConflict(null);
       setEvidenceToRemove(null);
       setPersonRoutes({});
       setIdentityRoute('');
@@ -382,11 +391,11 @@ const LandlordVerification = () => {
       })
       .finally(() => markSectionLoading('draft', false));
 
-    const evidenceRequest = verificationCaseService.listEvidence({ limit: 25 })
-      .then((page) => {
+    const evidenceRequest = verificationCaseService.listAllEvidence(() => isSectionRequestCurrent('evidence'))
+      .then((records) => {
         if (!isSectionRequestCurrent('evidence')) return;
-        setEvidence(page.evidence);
-        setEvidenceCursor(page.nextCursor);
+        setEvidence(profileEvidenceFor(records, requestedProfileId));
+        setEvidenceCursor(null);
         setLoadedProfileId(requestedProfileId);
         setSectionError('evidence', null);
       })
@@ -443,9 +452,9 @@ const LandlordVerification = () => {
         setDraftSaveError(null);
         setDraftSaveFieldErrors([]);
       } else if (section === 'evidence') {
-        const page = await verificationCaseService.listEvidence({ limit: 25 });
+        const records = await verificationCaseService.listAllEvidence(isCurrentRequest);
         if (!isCurrentRequest()) return;
-        setEvidence(page.evidence); setEvidenceCursor(page.nextCursor);
+        setEvidence(profileEvidenceFor(records, requestedProfileId)); setEvidenceCursor(null);
       } else if (section === 'cases') {
         const page = await verificationCaseService.listHolderCases({ limit: 25 });
         if (!isCurrentRequest()) return;
@@ -480,6 +489,22 @@ const LandlordVerification = () => {
   const pendingEvidenceIds = useMemo(() => evidence.filter((item) => isProfileEvidenceProcessing(item.state)).map((item) => item.id).join(','), [evidence]);
 
   useEffect(() => {
+    if (!profileId) return;
+    setIdentityEvidence((current) => {
+      let changed = false;
+      const next = { ...current };
+      Object.entries(current).forEach(([purpose, evidenceId]) => {
+        const latest = latestProfileEvidence(evidence, profileId, purpose, 'self');
+        if (!latest || latest.id !== evidenceId || latest.state !== 'available') {
+          delete next[purpose];
+          changed = true;
+        }
+      });
+      return changed ? next : current;
+    });
+  }, [evidence, profileId]);
+
+  useEffect(() => {
     if (!profileId || !pendingEvidenceIds) return;
     const ids = pendingEvidenceIds.split(',');
     let cancelled = false;
@@ -507,7 +532,7 @@ const LandlordVerification = () => {
     const requestedProfileId = profileId;
     setBusy(true);
     setSectionErrors((current) => ({ ...current, evidence: null }));
-    try { const page = await verificationCaseService.listEvidence({ limit: 25, before: evidenceCursor }); if (currentProfileIdRef.current !== requestedProfileId) return; setEvidence((current) => [...current, ...page.evidence]); setEvidenceCursor(page.nextCursor); }
+    try { const page = await verificationCaseService.listEvidence({ limit: 100, before: evidenceCursor }); if (currentProfileIdRef.current !== requestedProfileId) return; setEvidence((current) => mergeProfileEvidence(current, profileEvidenceFor(page.evidence, requestedProfileId ?? ''))); setEvidenceCursor(page.nextCursor); }
     catch (raw) { if (currentProfileIdRef.current === requestedProfileId) handleKycAuthorizationError(raw, 'evidence', 'More private evidence'); }
     finally { if (currentProfileIdRef.current === requestedProfileId) setBusy(false); }
   };
@@ -632,17 +657,22 @@ const LandlordVerification = () => {
   const beginEvidenceUpload = async () => {
     if (!profileId || !token || !contract || !uploadFile || uploadBusy || pendingUpload) return;
     const allowedKinds = contract.documentKinds[uploadPurpose] ?? [];
-    const documentKind = uploadDocumentKind || (allowedKinds.length ? '' : uploadPurpose);
-    const signature = [uploadFile.name, uploadFile.size, uploadFile.type, uploadFile.lastModified, uploadPurpose, uploadSubject, documentKind, uploadPreviousEvidenceId].join('|');
+    const documentKind = uploadDocumentKind || (allowedKinds.length ? '' : undefined);
+    const signature = [uploadFile.name, uploadFile.size, uploadFile.type, uploadFile.lastModified, uploadPurpose, uploadSubject, documentKind ?? '', uploadPreviousEvidenceId].join('|');
     const operationKey = operationKeyRef.current?.signature === signature ? operationKeyRef.current.key : crypto.randomUUID();
     operationKeyRef.current = { signature, key: operationKey };
     const metadata: BoundEvidenceMetadata = {
       purpose: uploadPurpose,
       subject: uploadSubject,
-      documentKind,
       operationKey,
+      ...(documentKind ? { documentKind } : {}),
       ...(uploadPreviousEvidenceId ? { previousEvidenceId: uploadPreviousEvidenceId } : {}),
     };
+    const profileLabel = activeProfile
+      ? `${activeProfile.name} (${activeProfile.kind}${activeProfile.structure ? ` · ${activeProfile.structure}` : ''})`
+      : 'Selected profile';
+    const fieldLimitMessage = evidenceUploadFieldLimitMessage(metadata, profileLabel);
+    if (fieldLimitMessage) { setUploadError(fieldLimitMessage); return; }
     const invalid = validateEvidenceUpload(uploadFile, metadata, contract);
     if (invalid) { setUploadError(invalid); return; }
     setUploadBusy(true); setUploadError(null);
@@ -677,9 +707,23 @@ const LandlordVerification = () => {
       const form = buildBoundEvidenceFormData(pending.file, pending.metadata, pending.digest);
       const created = await verificationCaseService.uploadEvidence(form, pending.challenge.challengeId);
       if (currentProfileIdRef.current !== pending.profileId) return false;
-      setEvidence((current) => [created, ...current.filter((item) => item.id !== created.id)]);
-      if (created.state === 'available' && created.subject === 'self' && created.profileId === pending.profileId) {
-        setIdentityEvidence((current) => ({ ...current, [created.purpose]: created.id }));
+      if (created.profileId !== pending.profileId || created.purpose !== pending.metadata.purpose || created.subject !== pending.metadata.subject) {
+        setPendingUpload(null);
+        setUploadError('The server response did not match the selected profile and evidence details. Refresh the evidence list before continuing.');
+        try {
+          const records = await verificationCaseService.listAllEvidence(() => currentProfileScopeRef.current === `${pending.profileId}:${pending.token}`);
+          if (currentProfileIdRef.current === pending.profileId && currentProfileScopeRef.current === `${pending.profileId}:${pending.token}`) setEvidence(profileEvidenceFor(records, pending.profileId));
+        } catch { /* Keep the safe contract mismatch visible for manual refresh. */ }
+        return false;
+      }
+      setEvidence((current) => mergeProfileEvidence(current, [created]));
+      if (created.subject === 'self') {
+        setIdentityEvidence((current) => {
+          const next = { ...current };
+          delete next[created.purpose];
+          if (created.state === 'available') next[created.purpose] = created.id;
+          return next;
+        });
       }
       setUploadFile(null);
       setUploadPurpose('');
@@ -700,21 +744,63 @@ const LandlordVerification = () => {
       if (currentProfileIdRef.current !== pending.profileId) return false;
       const codeValue = raw instanceof ApiRequestError ? raw.code : undefined;
       if (handleKycMutationGate(codeValue)) return false;
-      if (raw instanceof ApiRequestError && (raw.status === 401 || raw.status === 403) && codeValue !== 'AUTH_CONTACT_VERIFICATION_REQUIRED') {
+      if (raw instanceof ApiRequestError && (raw.status === 401 || raw.status === 403) && codeValue !== 'AUTH_CONTACT_VERIFICATION_REQUIRED' && !boundStepUpFailureCodes.has(codeValue ?? '')) {
         clearSensitiveKycState(`${raw.message} Verification information was cleared. Confirm the selected profile and access, then refresh.`);
         return false;
       }
-      if (codeValue === 'AUTH_FACTOR_CODE_INVALID' || codeValue === 'AUTH_FACTOR_RATE_LIMITED') {
-        setUploadError(raw instanceof Error ? raw.message : 'Authenticator verification was not accepted.');
+      if (codeValue && boundStepUpFailureCodes.has(codeValue)) {
+        if (!stepUpCodeCanRetryWithSameChallenge(codeValue)) setPendingUpload(null);
+        const message = codeValue === 'AUTH_STEP_UP_REQUIRED'
+          ? 'Security confirmation did not match this exact file and its details. Start a fresh authenticator challenge for the selected file.'
+          : stepUpErrorMessage(raw);
+        setUploadError(withEvidenceSupportReference(message, raw));
+      } else if (codeValue === 'CONFLICT_EVIDENCE_VERSION') {
+        setPendingUpload(null);
+        operationKeyRef.current = null;
+        try {
+          const expectedScope = `${pending.profileId}:${pending.token}`;
+          const records = await verificationCaseService.listAllEvidence(() => currentProfileIdRef.current === pending.profileId && currentProfileScopeRef.current === expectedScope);
+          if (currentProfileIdRef.current !== pending.profileId) return false;
+          setEvidence(profileEvidenceFor(records, pending.profileId));
+          setEvidenceCursor(null);
+          const latest = latestProfileEvidence(records, pending.profileId, pending.metadata.purpose, pending.metadata.subject);
+          setUploadPreviousEvidenceId(latest?.id ?? '');
+          setEvidenceVersionConflict({ purpose: pending.metadata.purpose, subject: pending.metadata.subject, latest });
+          setUploadError(withEvidenceSupportReference('Evidence history changed before the upload. Review the latest record and confirm it before starting a new upload challenge.', raw));
+        } catch {
+          setEvidenceVersionConflict({ purpose: pending.metadata.purpose, subject: pending.metadata.subject, latest: null, refreshError: true });
+          setUploadError(withEvidenceSupportReference('The evidence history changed, but the current version could not be refreshed. Retry the evidence list before replacing this file.', raw));
+        }
+      } else if (codeValue === 'CONFLICT_EVIDENCE_OPERATION') {
+        setPendingUpload(null);
+        operationKeyRef.current = null;
+        setUploadError(formatEvidenceUploadError(raw, contract));
+      } else if (codeValue === 'CONFLICT_EVIDENCE_STATE') {
+        setPendingUpload(null);
+        try {
+          const expectedScope = `${pending.profileId}:${pending.token}`;
+          const records = await verificationCaseService.listAllEvidence(() => currentProfileIdRef.current === pending.profileId && currentProfileScopeRef.current === expectedScope);
+          if (currentProfileIdRef.current !== pending.profileId) return false;
+          setEvidence(profileEvidenceFor(records, pending.profileId));
+          setEvidenceCursor(null);
+        } catch { /* Keep the state conflict visible and allow a manual evidence refresh. */ }
+        setUploadError(formatEvidenceUploadError(raw, contract));
+      } else if (codeValue === 'CONFLICT_ONBOARDING_VERSION') {
+        setPendingUpload(null);
+        setUploadError(withEvidenceSupportReference(raw instanceof ApiRequestError ? raw.message : 'The profile draft changed. Review the latest draft before continuing.', raw));
+        await refreshDraftAfterConflict(pending.profileId, 'The onboarding draft changed while evidence was being uploaded. Review the latest saved draft before continuing.');
       } else {
         setPendingUpload(null);
         if (raw instanceof ApiRequestError && raw.status === 409) {
-          try { setContract(await verificationCaseService.getEvidenceContract()); } catch { /* Preserve the original conflict and require a manual refresh. */ }
+          try {
+            const expectedScope = `${pending.profileId}:${pending.token}`;
+            const records = await verificationCaseService.listAllEvidence(() => currentProfileIdRef.current === pending.profileId && currentProfileScopeRef.current === expectedScope);
+            if (currentProfileIdRef.current === pending.profileId) { setEvidence(profileEvidenceFor(records, pending.profileId)); setEvidenceCursor(null); }
+          } catch { /* Preserve the original safe error and allow a manual refresh. */ }
         }
-        setUploadError(raw instanceof ApiRequestError && raw.code
-          ? `${raw.message} (${raw.code}). Evidence status was refreshed; review the list before another upload attempt.`
-          : 'The upload result could not be confirmed. Evidence status was refreshed; review the list before another upload attempt.');
-        await load();
+        setUploadError(raw instanceof ApiRequestError && (raw.code || raw.status)
+          ? formatEvidenceUploadError(raw, contract)
+          : withEvidenceSupportReference('The upload result could not be confirmed. Retry only with the same file and details; the same operation key will be reused.', raw));
       }
       return false;
     } finally { setUploadBusy(false); }
@@ -725,13 +811,38 @@ const LandlordVerification = () => {
     setUploadPurpose(purpose);
     setUploadSubject(purpose ? 'self' : '');
     setUploadDocumentKind(purpose && contract?.documentKinds[purpose]?.length === 1 ? contract.documentKinds[purpose][0] : '');
-    setUploadPreviousEvidenceId('');
+    setUploadPreviousEvidenceId(purpose && profileId
+      ? latestProfileEvidence(evidence, profileId, purpose, 'self')?.id ?? ''
+      : '');
     setUploadFile(null);
     setUploadError(null);
+    setEvidenceVersionConflict(null);
     setPendingUpload(null);
     operationKeyRef.current = null;
     if (uploadFileInputRef.current) uploadFileInputRef.current.value = '';
     setUploadDialogOpen(true);
+  };
+
+  const retryEvidenceConflictRefresh = async () => {
+    const conflict = evidenceVersionConflict;
+    const requestedProfileId = profileId;
+    const requestedScope = profileScope;
+    if (!conflict || !requestedProfileId) return;
+    setSectionLoading((current) => ({ ...current, evidence: true }));
+    try {
+      const records = await verificationCaseService.listAllEvidence(() => currentProfileScopeRef.current === requestedScope);
+      if (currentProfileIdRef.current !== requestedProfileId || currentProfileScopeRef.current !== requestedScope) return;
+      const latest = latestProfileEvidence(records, requestedProfileId, conflict.purpose, conflict.subject);
+      setEvidence(profileEvidenceFor(records, requestedProfileId));
+      setEvidenceCursor(null);
+      setUploadPreviousEvidenceId(latest?.id ?? '');
+      setEvidenceVersionConflict({ ...conflict, latest, refreshError: false });
+      setUploadError('Evidence history refreshed. Review and confirm the current version before starting a new upload challenge.');
+    } catch {
+      if (currentProfileScopeRef.current === requestedScope) setUploadError('Evidence history still could not be refreshed. Retry the evidence list before replacing this file.');
+    } finally {
+      if (currentProfileScopeRef.current === requestedScope) setSectionLoading((current) => ({ ...current, evidence: false }));
+    }
   };
 
   const declaredPersonPaths = useMemo(
@@ -744,6 +855,10 @@ const LandlordVerification = () => {
     !parsedDraftValues.values || JSON.stringify(parsedDraftValues.values) !== JSON.stringify(onboardingDraft.values)
   ));
   const profileDetailsReady = Boolean(onboardingDraft && !draftValuesDirty && !missingDraftFields.length && !draftSavePending);
+  const latestUploadEvidence = useMemo(
+    () => profileId && uploadPurpose && uploadSubject ? latestProfileEvidence(evidence, profileId, uploadPurpose, uploadSubject) : null,
+    [evidence, profileId, uploadPurpose, uploadSubject],
+  );
   const draftFields = useMemo(
     () => onboardingDraftFields(parsedDraftValues.values ?? onboardingDraft?.values ?? {}, missingDraftFields),
     [missingDraftFields, onboardingDraft?.values, parsedDraftValues.values],
@@ -954,7 +1069,7 @@ const LandlordVerification = () => {
           ? 'International KYC submission is unavailable because the accepted international identity document list has not been configured. Please contact support.'
           : result.error ?? 'The verification submission could not be confirmed. Review the latest case and draft status before retrying.');
         if (currentProfileIdRef.current === requestedProfileId) {
-          if (result.code === 'CONFLICT_ONBOARDING_VERSION') {
+          if (result.code === 'CONFLICT_ONBOARDING_VERSION' && requestedProfileId) {
             await refreshDraftAfterConflict(requestedProfileId, 'The onboarding draft changed before submission. Review the latest saved version; the case was not submitted against a stale draft.');
           }
           await retrySection('cases');
@@ -1089,7 +1204,7 @@ const LandlordVerification = () => {
                 <label className="text-xs font-bold">Individual identity route<select disabled={protectedCaseSubmissionLocked || !profileDetailsReady} className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={identityRoute} onChange={(event) => { setIdentityRoute(event.target.value as 'nigerian' | 'international' | ''); setIdentityEvidence({}); }}><option value="">Choose configured route</option>{(['nigerian', 'international'] as const).filter((route) => Object.prototype.hasOwnProperty.call(contract?.individualRoutes ?? {}, route)).map((route) => <option key={route} value={route}>{route === 'nigerian' ? 'Nigerian' : 'International'}</option>)}</select></label>
                 <label className="text-xs font-bold">Identity country<input disabled={protectedCaseSubmissionLocked || !profileDetailsReady} className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal uppercase" maxLength={2} value={identityCountry} onChange={(event) => setIdentityCountry(event.target.value.toUpperCase())} placeholder="NG" /></label>
                 {(identityRoute ? contract?.individualRoutes[identityRoute] ?? [] : []).map((purpose) => {
-                  const purposeEvidence = evidence.filter((item) => item.profileId === profileId && item.subject === 'self' && item.purpose === purpose);
+                  const latestPurposeEvidence = profileId ? latestProfileEvidence(evidence, profileId, purpose, 'self') : null;
                   const availablePurposeEvidence = availableIndividualEvidence(evidence, profileId ?? '', purpose);
 
                   if (availablePurposeEvidence.length) {
@@ -1097,7 +1212,7 @@ const LandlordVerification = () => {
                   }
 
                   const purposeLabel = evidencePurposeLabel(purpose);
-                  const latestState = purposeEvidence[0]?.state;
+                  const latestState = latestPurposeEvidence?.state;
                   const unavailableMessage = sectionLoading.evidence
                     ? `Checking available ${purposeLabel} evidence…`
                     : sectionErrors.evidence
@@ -1136,13 +1251,13 @@ const LandlordVerification = () => {
             <p className="text-sm text-secondary">Choose the file type and select your document. You will confirm this upload with your authenticator. An uploaded file is reviewed separately for KYC.</p>
             {contract.policies.upload?.state !== 'configured' ? <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">The evidence upload policy is {formatStatus(contract.policies.upload?.state)}. Submission is unavailable until the backend policy is configured.</p> : <div className="mt-3 grid gap-3 md:grid-cols-2">
               {uploadFromRequirement ? <p className="text-sm font-semibold md:col-span-2">Document: {evidencePurposeLabel(uploadPurpose)} · For you</p> : <>
-                <label className="text-xs font-bold">Purpose<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadPurpose} onChange={(event) => { setUploadPurpose(event.target.value); setUploadDocumentKind(''); setUploadPreviousEvidenceId(''); setPendingUpload(null); operationKeyRef.current = null; }}><option value="">Choose purpose</option>{contract.purposes.map((purpose) => <option key={purpose} value={purpose}>{purpose.replaceAll('_', ' ')}</option>)}</select></label>
-                <label className="text-xs font-bold">Subject<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadSubject} onChange={(event) => { setUploadSubject(event.target.value); setUploadPreviousEvidenceId(''); setPendingUpload(null); operationKeyRef.current = null; }}><option value="">Choose subject</option>{[...contract.subjects.fixed, ...contract.subjects.personFields].map((subject) => <option key={subject} value={subject}>{subject}</option>)}</select></label>
+                <label className="text-xs font-bold">Purpose<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadPurpose} onChange={(event) => { const purpose = event.target.value; setUploadPurpose(purpose); setUploadDocumentKind(''); setUploadPreviousEvidenceId(profileId && uploadSubject ? latestProfileEvidence(evidence, profileId, purpose, uploadSubject)?.id ?? '' : ''); setPendingUpload(null); setEvidenceVersionConflict(null); operationKeyRef.current = null; }}><option value="">Choose purpose</option>{contract.purposes.map((purpose) => <option key={purpose} value={purpose}>{purpose.replaceAll('_', ' ')}</option>)}</select></label>
+                <label className="text-xs font-bold">Subject<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadSubject} onChange={(event) => { const subject = event.target.value; setUploadSubject(subject); setUploadPreviousEvidenceId(profileId && uploadPurpose ? latestProfileEvidence(evidence, profileId, uploadPurpose, subject)?.id ?? '' : ''); setPendingUpload(null); setEvidenceVersionConflict(null); operationKeyRef.current = null; }}><option value="">Choose subject</option>{[...contract.subjects.fixed, ...contract.subjects.personFields].map((subject) => <option key={subject} value={subject}>{subject}</option>)}</select></label>
               </>}
-              {(!uploadFromRequirement || (contract.documentKinds[uploadPurpose]?.length ?? 0) > 1) ? <label className="text-xs font-bold">Document kind<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadDocumentKind || (contract.documentKinds[uploadPurpose]?.length || uploadPurpose === 'residence_national_id' ? '' : uploadPurpose)} onChange={(event) => { setUploadDocumentKind(event.target.value); setPendingUpload(null); operationKeyRef.current = null; }}><option value={contract.documentKinds[uploadPurpose]?.length || uploadPurpose === 'residence_national_id' ? '' : uploadPurpose}>{contract.documentKinds[uploadPurpose]?.length ? 'Choose document kind' : uploadPurpose === 'residence_national_id' ? 'Document choices unavailable' : `Use documented default: ${uploadPurpose || 'purpose'}`}</option>{(contract.documentKinds[uploadPurpose] ?? []).map((kind) => <option key={kind} value={kind}>{kind.replaceAll('_', ' ')}</option>)}</select></label> : null}
-              <label className="text-xs font-bold">File<input ref={uploadFileInputRef} type="file" accept={contract.formats.join(',')} className="mt-1 block w-full text-sm font-normal" onChange={(event) => { setUploadFile(event.target.files?.[0] ?? null); setPendingUpload(null); operationKeyRef.current = null; setUploadError(null); }} /><span className="mt-1 block font-normal text-secondary">Maximum {Math.ceil(Math.min(contract.maxBytes, 50 * 1024 * 1024) / 1024 / 1024)} MB</span></label>
-              <label className="text-xs font-bold">Replace existing evidence version (optional)<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadPreviousEvidenceId} onChange={(event) => { setUploadPreviousEvidenceId(event.target.value); setPendingUpload(null); operationKeyRef.current = null; }}><option value="">Submit as a new evidence record</option>{evidence.filter((item) => item.purpose === uploadPurpose && item.subject === uploadSubject && !['deleted', 'deleting', 'privacy_deleting'].includes(item.state)).map((item) => <option key={item.id} value={item.id}>{formatStatus(item.state)} · v{item.version} · {item.id}</option>)}</select><span className="mt-1 block font-normal text-secondary">The server verifies that the selected record is the current version for this purpose and subject.</span></label>
-              <div className="md:col-span-2"><Button type="button" disabled={uploadBusy || Boolean(pendingUpload) || !uploadFile || !uploadPurpose || !uploadSubject || !profileId || (uploadPurpose === 'residence_national_id' && Boolean(internationalIdentityUnavailable(contract) || !contract.documentKinds.residence_national_id?.length))} onClick={() => void beginEvidenceUpload()}>{uploadBusy ? 'Preparing secure upload…' : 'Continue with authenticator'}</Button>{uploadError ? <p role="alert" className="mt-2 text-sm text-error">{uploadError}</p> : null}</div>
+              {(!uploadFromRequirement || (contract.documentKinds[uploadPurpose]?.length ?? 0) > 1) ? <label className="text-xs font-bold">Document kind<select className="mt-1 w-full rounded-lg border border-outline-variant/20 p-2 text-sm font-normal" value={uploadDocumentKind || (contract.documentKinds[uploadPurpose]?.length || uploadPurpose === 'residence_national_id' ? '' : uploadPurpose)} onChange={(event) => { const selectedKind = event.target.value; setUploadDocumentKind(selectedKind === uploadPurpose && !contract.documentKinds[uploadPurpose]?.length ? '' : selectedKind); setPendingUpload(null); operationKeyRef.current = null; }}><option value={contract.documentKinds[uploadPurpose]?.length || uploadPurpose === 'residence_national_id' ? '' : uploadPurpose}>{contract.documentKinds[uploadPurpose]?.length ? 'Choose document kind' : uploadPurpose === 'residence_national_id' ? 'Document choices unavailable' : `Use documented default: ${uploadPurpose || 'purpose'}`}</option>{(contract.documentKinds[uploadPurpose] ?? []).map((kind) => <option key={kind} value={kind}>{kind.replaceAll('_', ' ')}</option>)}</select></label> : null}
+              <label className="text-xs font-bold">File<input ref={uploadFileInputRef} type="file" accept={contract.formats.join(',')} className="mt-1 block w-full text-sm font-normal" onChange={(event) => { const file = event.target.files?.[0] ?? null; setUploadFile(file); setPendingUpload(null); operationKeyRef.current = null; setUploadError(file && file.size > profileEvidenceUploadLimitBytes(contract) ? `This file is too large. Choose a file no larger than ${formatEvidenceFileSize(profileEvidenceUploadLimitBytes(contract))}.` : null); }} /><span className="mt-1 block font-normal text-secondary">Maximum {formatEvidenceFileSize(profileEvidenceUploadLimitBytes(contract))}</span></label>
+              <div className="rounded-lg bg-white p-3 text-sm md:col-span-2">{latestUploadEvidence ? <><p className="font-semibold">Replacing the latest evidence record · Version {latestUploadEvidence.version}</p><p className="mt-1 text-secondary">Current file state: {formatStatus(latestUploadEvidence.state)}. The uploaded file will be checked separately for KYC.</p></> : <p className="text-secondary">No evidence history exists for this purpose and subject. This will be a first upload.</p>}</div>
+              <div className="md:col-span-2">{evidenceVersionConflict ? <div role="alert" className="mb-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">{evidenceVersionConflict.refreshError ? <><p>The evidence history changed, but the latest version could not be confirmed. Do not retry the upload until the current list has loaded.</p><Button type="button" variant="secondary" className="mt-2" disabled={sectionLoading.evidence} onClick={() => void retryEvidenceConflictRefresh()}>{sectionLoading.evidence ? 'Refreshing evidence…' : 'Retry evidence refresh'}</Button></> : <><p>The evidence history changed. {evidenceVersionConflict.latest ? `The latest record is version ${evidenceVersionConflict.latest.version} (${formatStatus(evidenceVersionConflict.latest.state)}).` : 'No matching current record was returned.'} Confirm the current history before starting a new upload challenge.</p><Button type="button" variant="secondary" className="mt-2" onClick={() => { setUploadPreviousEvidenceId(evidenceVersionConflict.latest?.id ?? ''); setEvidenceVersionConflict(null); operationKeyRef.current = null; setUploadError('Current evidence history confirmed. Start a fresh authenticator challenge to continue.'); }}>Confirm current version</Button></>}</div> : null}<Button type="button" disabled={uploadBusy || Boolean(pendingUpload) || Boolean(evidenceVersionConflict) || !uploadFile || !uploadPurpose || !uploadSubject || !profileId || (uploadPurpose === 'residence_national_id' && Boolean(internationalIdentityUnavailable(contract) || !contract.documentKinds.residence_national_id?.length))} onClick={() => void beginEvidenceUpload()}>{uploadBusy ? 'Preparing secure upload…' : 'Continue with authenticator'}</Button>{uploadError ? <p role="alert" className="mt-2 text-sm text-error">{uploadError}</p> : null}</div>
             </div>}
           </div>
           </> : <div className="rounded-lg border border-outline-variant/10 bg-surface-container-low p-4"><h2 className="text-xl font-extrabold">Evidence requirements</h2>{sectionErrors.contract ? <p role="alert" className="mt-2 text-sm text-error">{sectionErrors.contract}</p> : <p role="status" className="mt-2 text-sm text-secondary">{sectionLoading.contract ? 'Loading evidence requirements…' : 'Evidence requirements are unavailable.'}</p>}<Button type="button" variant="secondary" className="mt-3" disabled={sectionLoading.contract} onClick={() => void retrySection('contract')}>Retry requirements</Button></div>}

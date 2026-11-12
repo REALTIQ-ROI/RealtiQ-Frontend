@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InternalAxiosRequestConfig } from 'axios';
 import api from '../lib/axios';
+import { stepUpService } from './stepUpService';
 import { verificationCaseService } from './verificationCaseService';
 
 describe('verificationCaseService evidence mutations', () => {
@@ -34,6 +35,26 @@ describe('verificationCaseService evidence mutations', () => {
 
     await expect(verificationCaseService.getEvidence('evidence-available')).resolves.toEqual(evidence);
     expect(api.get).toHaveBeenCalledWith('/profiles/current/onboarding/evidence/evidence-available');
+  });
+
+  it('loads every evidence page at 100 records so replacement can find the newest tombstone', async () => {
+    const older = { id: 'older', profileId: 'profile-1', purpose: 'bvn', subject: 'self', version: 1, state: 'available' };
+    const tombstone = { id: 'newest-tombstone', profileId: 'profile-1', purpose: 'bvn', subject: 'self', version: 2, state: 'deleted' };
+    vi.mocked(api.get)
+      .mockResolvedValueOnce({ data: { evidence: [older], nextCursor: 'opaque-page-2' } })
+      .mockResolvedValueOnce({ data: { evidence: [tombstone], nextCursor: null } });
+
+    await expect(verificationCaseService.listAllEvidence()).resolves.toEqual([older, tombstone]);
+    expect(api.get).toHaveBeenNthCalledWith(1, '/profiles/current/onboarding/evidence', { params: { limit: 100 } });
+    expect(api.get).toHaveBeenNthCalledWith(2, '/profiles/current/onboarding/evidence', { params: { limit: 100, before: 'opaque-page-2' } });
+  });
+
+  it('stops requesting evidence pages as soon as the active profile changes', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { evidence: [{ id: 'profile-one-only' }], nextCursor: 'opaque-page-2' } });
+    const shouldContinue = vi.fn().mockReturnValueOnce(true).mockReturnValueOnce(false);
+    await expect(verificationCaseService.listAllEvidence(shouldContinue)).resolves.toEqual([{ id: 'profile-one-only' }]);
+    expect(api.get).toHaveBeenCalledTimes(1);
+    expect(shouldContinue).toHaveBeenCalledTimes(2);
   });
 
   it('requests versioned evidence removal without putting private identifiers in a query string', async () => {
@@ -98,6 +119,52 @@ describe('verificationCaseService private transport and history', () => {
     await verificationCaseService.listHolderCases({ limit: 25 });
     expect(requests[1].headers.get('X-Profile-ID')).toBe('second-profile');
     expect(requests[1].headers.get('X-Step-Up-Challenge')).toBeUndefined();
+  });
+
+  it('sends the bound file digest through authenticated challenge and verification requests', async () => {
+    const body = {
+      purpose: 'nin', subject: 'self', documentKind: 'nin_slip', operationKey: 'evidence_nin_2026_a1b2',
+      previousEvidenceId: 'latest-evidence', __stepUpFileSha256: 'a'.repeat(64),
+    };
+    response = { challengeId: 'evidence-challenge', expiresAt: '2026-11-12T12:05:00.000Z', method: 'totp' };
+    await stepUpService.start('POST', '/api/profiles/current/onboarding/evidence', body);
+    expect(requests[0].url).toBe('/auth/step-up');
+    expect(JSON.parse(requests[0].data)).toEqual({ method: 'POST', path: '/api/profiles/current/onboarding/evidence', body });
+    expect(requests[0].headers.get('Authorization')).toBe('Bearer test-session');
+    expect(requests[0].headers.get('X-Profile-ID')).toBe('buyer-profile');
+
+    response = { challengeId: 'evidence-challenge', verified: true };
+    await stepUpService.verify('evidence-challenge', '123456');
+    expect(requests[1].url).toBe('/auth/step-up/evidence-challenge/verify');
+    expect(JSON.parse(requests[1].data)).toEqual({ code: '123456' });
+    expect(requests[1].headers.get('Authorization')).toBe('Bearer test-session');
+    expect(requests[1].headers.get('X-Profile-ID')).toBe('buyer-profile');
+  });
+
+  it('passes evidence FormData through unchanged and leaves multipart boundary selection to the browser', async () => {
+    const form = new FormData();
+    const file = new File(['private bytes'], 'nin.pdf', { type: 'application/pdf' });
+    form.append('file', file);
+    form.append('purpose', 'nin');
+    form.append('subject', 'self');
+    form.append('documentKind', 'nin_slip');
+    form.append('operationKey', 'evidence_operation_123');
+    form.append('__stepUpFileSha256', 'a'.repeat(64));
+    response = { id: 'evidence-1', profileId: 'buyer-profile', purpose: 'nin', subject: 'self', state: 'available' };
+
+    await verificationCaseService.uploadEvidence(form, 'evidence-challenge');
+
+    expect(requests[0].url).toBe('/profiles/current/onboarding/evidence');
+    expect(requests[0].method).toBe('post');
+    expect(requests[0].data).toBe(form);
+    expect(requests[0].headers.get('Authorization')).toBe('Bearer test-session');
+    expect(requests[0].headers.get('X-Profile-ID')).toBe('buyer-profile');
+    expect(requests[0].headers.get('X-Step-Up-Challenge')).toBe('evidence-challenge');
+    expect(requests[0].headers.get('Content-Type')).toBeNull();
+    expect([...form.keys()]).toEqual(['file', 'purpose', 'subject', 'documentKind', 'operationKey', '__stepUpFileSha256']);
+    expect(form.getAll('file')).toHaveLength(1);
+    expect(form.get('profileId')).toBeNull();
+    expect(form.get('X-Step-Up-Challenge')).toBeNull();
   });
 
   it('retrieves private evidence only as authenticated content bytes without public URLs or persistence', async () => {

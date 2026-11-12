@@ -48,8 +48,16 @@ describe('individual buyer KYC evidence contract', () => {
       evidence({ id: 'new', version: 2, previousEvidenceId: 'old' }),
       evidence({ id: 'other-profile', profileId: 'profile-2' }),
       evidence({ id: 'other-person', subject: 'directors[0]' }),
-      evidence({ id: 'pending', state: 'validating' }),
+      evidence({ id: 'pending', version: 1, state: 'validating' }),
     ];
     expect(availableIndividualEvidence(items, 'profile-1', 'nin').map(({ id }) => id)).toEqual(['new']);
+  });
+
+  it('does not fall back to an older available file when the latest matching record is a deleted tombstone', () => {
+    const items = [
+      evidence({ id: 'older-available', version: 1 }),
+      evidence({ id: 'newest-deleted', version: 2, previousEvidenceId: 'older-available', state: 'deleted' }),
+    ];
+    expect(availableIndividualEvidence(items, 'profile-1', 'nin')).toEqual([]);
   });
 });

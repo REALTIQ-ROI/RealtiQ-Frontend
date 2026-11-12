@@ -1,4 +1,5 @@
 import type { ProfileEvidence, ProfileEvidenceContract } from '../services/verificationCaseService';
+import { latestProfileEvidence } from './profileEvidenceVersions';
 
 const requiredPurposes: Record<'nigerian' | 'international', string[]> = {
   nigerian: ['bvn', 'nin', 'additional_government_id', 'proof_of_address'],
@@ -32,7 +33,6 @@ export const identityRouteContractIssue = (
 export const availableIndividualEvidence = (
   evidence: readonly ProfileEvidence[], profileId: string, purpose: string,
 ): ProfileEvidence[] => {
-  const profileEvidence = evidence.filter((item) => item.profileId === profileId);
-  const replacedIds = new Set(profileEvidence.flatMap((item) => item.previousEvidenceId ? [item.previousEvidenceId] : []));
-  return profileEvidence.filter((item) => item.subject === 'self' && item.purpose === purpose && item.state === 'available' && !replacedIds.has(item.id));
+  const latest = latestProfileEvidence(evidence, profileId, purpose, 'self');
+  return latest?.state === 'available' ? [latest] : [];
 };
