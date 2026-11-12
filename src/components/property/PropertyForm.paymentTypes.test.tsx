@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanonicalFieldDictionary } from '../../services/canonicalFieldService';
 import type { CreatePropertyPayload } from '../../services/propertyService';
 import type { Property } from '../../types';
-import PropertyForm from './PropertyForm';
+import PropertyForm, { type PropertyFormPayload } from './PropertyForm';
 import { createCanonicalFieldDictionaryFixture } from '../../test/canonicalFieldDictionaryFixture';
 
 const mocks = vi.hoisted(() => ({ dictionary: null as CanonicalFieldDictionary | null }));
@@ -34,14 +34,23 @@ const initialData: CreatePropertyPayload & { status: string } = {
   status: 'available',
 };
 
-const savedProperty = (payload: CreatePropertyPayload): Property => ({
-  _id: 'prop1',
-  ...payload,
-  price: payload.price ?? initialData.price!,
-  bedrooms: payload.bedrooms ?? 0,
-  bathrooms: payload.bathrooms ?? 0,
-  status: 'available',
-});
+const savedProperty = (payload: PropertyFormPayload): Property => {
+  const { publicationAction: _publicationAction, ...fields } = payload;
+  return {
+    _id: 'prop1',
+    ...fields,
+    title: fields.title ?? initialData.title!,
+    price: fields.price ?? initialData.price!,
+    location: fields.location ?? initialData.location!,
+    propertyType: fields.propertyType ?? initialData.propertyType!,
+    bedrooms: fields.bedrooms ?? 0,
+    bathrooms: fields.bathrooms ?? 0,
+    description: fields.description ?? initialData.description!,
+    paymentTypes: fields.paymentTypes ?? [],
+    media: fields.media ?? [],
+    status: 'available',
+  };
+};
 
 describe('PropertyForm payment types', () => {
   beforeEach(() => {
@@ -59,7 +68,7 @@ describe('PropertyForm payment types', () => {
   });
 
   it('submits combinations as a canonical array', async () => {
-    const onSubmit = vi.fn(async (payload: CreatePropertyPayload) => savedProperty(payload));
+    const onSubmit = vi.fn(async (payload: PropertyFormPayload) => savedProperty(payload));
     render(<PropertyForm mode="edit" initialData={initialData} onSubmit={onSubmit} />);
     await userEvent.click(screen.getByRole('checkbox', { name: /Installment plan/i }));
     await userEvent.click(screen.getByRole('checkbox', { name: /Escrow available/i }));
@@ -83,7 +92,7 @@ describe('PropertyForm payment types', () => {
   });
 
   it('submits explicit price-on-application without sending the previous numeric asking price', async () => {
-    const onSubmit = vi.fn(async (payload: CreatePropertyPayload) => { void payload; });
+    const onSubmit = vi.fn(async (payload: PropertyFormPayload) => { void payload; });
     render(<PropertyForm mode="edit" initialData={{ ...initialData, canonicalFields: { askingPrice: 45_000_000 } }} onSubmit={onSubmit} />);
     await userEvent.click(screen.getByRole('checkbox', { name: 'Price on application' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save Property' }));
@@ -123,7 +132,7 @@ describe('PropertyForm payment types', () => {
   });
 
   it('keeps an existing empty canonical value without inventing a clear operation', async () => {
-    const onSubmit = vi.fn(async (payload: CreatePropertyPayload) => { void payload; return undefined; });
+    const onSubmit = vi.fn(async (payload: PropertyFormPayload) => { void payload; return undefined; });
     render(<PropertyForm mode="edit" initialData={{ ...initialData, canonicalFields: { gatedEstate: false, streetAddress: '' } }} onSubmit={onSubmit} />);
     await userEvent.click(screen.getByRole('button', { name: 'Save Property' }));
     expect(onSubmit).toHaveBeenCalled();
@@ -133,7 +142,7 @@ describe('PropertyForm payment types', () => {
   });
 
   it('shows canonical headline/description without rewriting different legacy values on an unrelated edit', async () => {
-    const onSubmit = vi.fn(async (payload: CreatePropertyPayload) => { void payload; return undefined; });
+    const onSubmit = vi.fn(async (payload: PropertyFormPayload) => { void payload; return undefined; });
     render(<PropertyForm mode="edit" initialData={{ ...initialData, title: 'Legacy title', description: 'Legacy description', canonicalFields: { headline: 'Canonical headline', description: 'Canonical description' } }} onSubmit={onSubmit} />);
     expect(screen.getByDisplayValue('Canonical headline')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Canonical description')).toBeInTheDocument();

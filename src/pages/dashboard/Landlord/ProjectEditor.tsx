@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
+import ActionConfirmModal from '../../../components/proxyNetwork/ActionConfirmModal';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import ProjectForm from '../../../components/project/ProjectForm';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
+import { useAuth } from '../../../contexts/AuthContext';
 import { ApiRequestError } from '../../../lib/axios';
 import { projectService, type CreateProjectRequest, type UpdateProjectRequest } from '../../../services/projectService';
 import type { ProjectDetail } from '../../../types';
@@ -23,12 +25,15 @@ const projectFieldErrors = (raw: unknown): Record<string, string> => raw instanc
 
 const ProjectEditor = () => {
   const navigate = useNavigate();
+  const { activeProfile } = useAuth();
+  const canManageProjects = activeProfile?.kind === 'developer';
   const { id } = useParams();
   const isEdit = Boolean(id);
   const { data, loading, error, execute } = useAsync(() => projectService.getProjectManage(id!), isEdit);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [versionConflict, setVersionConflict] = useState(false);
+  const [confirmReload, setConfirmReload] = useState(false);
   const stepUp = useBoundStepUp<{ project: ProjectDetail }>();
 
   const finishSave = (project: ProjectDetail) => {
@@ -110,15 +115,16 @@ const ProjectEditor = () => {
       <main className="mx-auto max-w-6xl p-8 lg:p-12">
         <header className="mb-8">
           <h1 className="text-4xl font-black tracking-tight">{isEdit ? 'Edit Project' : 'Create Project'}</h1>
-          <p className="mt-2 text-sm text-secondary">RealtIQ automatically assigns this project to your signed-in owner account.</p>
+          <p className="mt-2 text-sm text-secondary">This project is managed under the currently selected Developer profile. You can save an incomplete draft and complete its inventory and readiness later.</p>
         </header>
+        {!canManageProjects ? <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950"><h2 className="font-bold">Select a Developer profile</h2><p className="mt-1">Project creation and management require a selected Developer profile. The server checks current profile eligibility and permissions on every request.</p><Link to="/dashboard/landlord/settings" className="mt-3 inline-block font-bold underline">Open profile settings</Link></section> : null}
         {loading ? <LoadingState label="Loading project..." /> : null}
-        {error ? <ErrorState message={error} onRetry={() => void execute()} /> : null}
-        {!loading && !error ? (
+        {error && canManageProjects ? <ErrorState message={error} onRetry={() => void execute()} /> : null}
+        {canManageProjects && !loading && !error ? (
           <>
             {isEdit ? <p className="mb-4 text-sm text-secondary">Changes are saved against the current project version. If the server requires additional verification, the same request is protected by a one-use authenticator challenge.</p> : null}
             {submitError || (!stepUp.challenge && stepUp.error) ? <p role="alert" className="mb-4 rounded-lg bg-error-container p-4 text-sm text-on-error-container">{submitError ?? stepUp.error}</p> : null}
-            {versionConflict ? <button type="button" className="mb-4 text-sm font-bold text-primary underline" onClick={() => { if (window.confirm('Reload the latest project version and discard this unsaved form draft?')) window.location.reload(); }}>Reload latest project and discard draft</button> : null}
+            {versionConflict ? <button type="button" className="mb-4 text-sm font-bold text-primary underline" onClick={() => setConfirmReload(true)}>Reload latest project and discard draft</button> : null}
             {submitError?.includes('current project version') ? <button type="button" className="mb-4 text-sm font-bold text-primary underline" onClick={() => void execute()}>Refresh project data</button> : null}
             <ProjectForm initialData={data?.project} onSubmit={handleSubmit} submitLabel={isEdit ? 'Save Project' : 'Create Project'} preserveEmptyValues={isEdit} isLoading={stepUp.busy || Boolean(stepUp.challenge)} serverErrors={serverErrors} />
           </>
@@ -129,6 +135,7 @@ const ProjectEditor = () => {
         if (!result.ok) return false;
         return true;
       }} />
+      {confirmReload ? <ActionConfirmModal title="Discard this unsaved project draft?" description="Reload the latest project version from the server. Changes you have not saved on this screen will be lost." confirmLabel="Reload latest project" tone="danger" onClose={() => setConfirmReload(false)} onConfirm={() => window.location.reload()} /> : null}
     </LandlordPortalLayout>
   );
 };

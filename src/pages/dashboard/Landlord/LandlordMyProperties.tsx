@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
@@ -8,42 +8,80 @@ import MapListLayout from '../../../components/property/map/MapListLayout';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useProperties } from '../../../contexts/PropertiesContext';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
+import { propertyService, type PropertiesResponse } from '../../../services/propertyService';
 import type { Property } from '../../../types';
-import { propertyDisplayReference, propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
+import { propertyDisplayReference, propertyRouteReference } from '../../../types';
 import { isVerifiedOwner } from '../../../utils/landlordPropertyAccess';
 
 const statusConfig = {
-  available: { label: 'Active', className: 'bg-emerald-100 text-emerald-800' },
+  available: { label: 'Available', className: 'bg-emerald-100 text-emerald-800' },
   under_offer: { label: 'Under offer', className: 'bg-amber-100 text-amber-800' },
   sold: { label: 'Sold', className: 'bg-slate-100 text-slate-800' },
   not_released: { label: 'Not released', className: 'bg-slate-100 text-slate-800' },
 };
 
 const approvalLabel = (status?: string) => {
-  if (!status || status === 'approved') return 'Approved';
+  if (!status) return 'Review status unavailable';
+  if (status === 'approved') return 'Approved';
   if (status === 'pending_review') return 'Pending admin approval';
   if (status === 'rejected') return 'Listing rejected';
   return status.replace('_', ' ');
 };
 
+const askingPriceLabel = (property: Property) => {
+  if (property.canonicalFields?.priceOnApplication === true) return 'Price on application';
+  if (typeof property.price !== 'number' || !Number.isFinite(property.price) || !property.currency) return 'Asking price unavailable';
+  try {
+    return new Intl.NumberFormat('en-NG', { style: 'currency', currency: property.currency, maximumFractionDigits: 0 }).format(property.price);
+  } catch {
+    return 'Asking price unavailable';
+  }
+};
+
 const LandlordMyProperties = () => {
-  const { user } = useAuth();
+  const { user, token, activeProfile } = useAuth();
   const canAddProperty = isVerifiedOwner(user);
-  const { properties, deleteProperty } = useProperties();
+  const { deleteProperty } = useProperties();
   const archiveStepUp = useBoundStepUp<void>();
+  const [page, setPage] = useState(1);
+  const [pageResponse, setPageResponse] = useState<PropertiesResponse>({ properties: [], page: 1, limit: 20, total: 0 });
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const pageRequest = useRef(0);
   const [activeFilter, setActiveFilter] = useState<'all' | 'available' | 'sold'>('all');
   const [query, setQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
+  useEffect(() => {
+    const requestId = ++pageRequest.current;
+    setListLoading(true);
+    setListError(null);
+    if (!user || !activeProfile || !token) {
+      setPageResponse({ properties: [], page, limit: 20, total: 0 });
+      setListLoading(false);
+      return;
+    }
+    void propertyService.getMyProperties(page, 20)
+      .then((response) => { if (requestId === pageRequest.current) setPageResponse(response); })
+      .catch((raw: unknown) => { if (requestId === pageRequest.current) setListError(raw instanceof Error ? raw.message : 'Unable to load your property inventory.'); })
+      .finally(() => { if (requestId === pageRequest.current) setListLoading(false); });
+    return () => { pageRequest.current += 1; };
+  }, [activeProfile?.id, page, refreshKey, token, user?._id]);
+
+  const pageCount = Math.max(1, pageResponse.pages ?? Math.ceil(pageResponse.total / Math.max(pageResponse.limit, 1)));
+  useEffect(() => {
+    if (!listLoading && page > pageCount) setPage(pageCount);
+  }, [listLoading, page, pageCount]);
+
   const myProperties = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return properties.filter((item) => {
-      const matchesOwner = resolvePropertyOwnerId(item) === user?._id;
+    return pageResponse.properties.filter((item) => {
       const matchesStatus = activeFilter === 'all' || item.status === activeFilter;
       const matchesQuery = !needle || `${item.title} ${item.location} ${item.propertyType}`.toLowerCase().includes(needle);
-      return matchesOwner && matchesStatus && matchesQuery;
+      return matchesStatus && matchesQuery;
     });
-  }, [activeFilter, properties, query, user?._id]);
+  }, [activeFilter, pageResponse.properties, query]);
 
   const handleArchive = async (property: Property) => {
     const id = propertyRouteReference(property);
@@ -74,15 +112,9 @@ const LandlordMyProperties = () => {
     const result = await archiveStepUp.complete(code);
     if (!result.ok) return false;
     Swal.fire({ title: 'Property archived', text: 'The listing was archived. Historical references remain available where authorized.', icon: 'success' });
+    setRefreshKey((value) => value + 1);
     return true;
   };
-
-  const totalValue = myProperties.reduce((sum, p) => sum + p.price, 0);
-  const portfolioValue =
-    totalValue >= 1_000_000 ? `₦${(totalValue / 1_000_000).toFixed(1)}M` : `₦${totalValue.toLocaleString()}`;
-  const occupancyRate = myProperties.length > 0
-    ? Math.round((myProperties.filter((property) => property.status === 'sold').length / myProperties.length) * 100)
-    : 0;
 
   return (
     <>
@@ -96,7 +128,7 @@ const LandlordMyProperties = () => {
           </span>
           <input
             className="bg-surface-container-low border-none rounded-full pl-10 pr-4 py-1.5 text-sm w-64 focus:ring-2 focus:ring-surface-tint/20 transition-all outline-none"
-            placeholder="Search properties..."
+            placeholder="Search this page..."
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -153,23 +185,11 @@ const LandlordMyProperties = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <div className="bg-surface-container-lowest p-6 rounded-xl border-l-4 border-primary">
-            <p className="text-label text-secondary font-medium uppercase tracking-tighter text-xs mb-1">Total Assets</p>
-            <p className="text-3xl font-black text-slate-900">{myProperties.length}</p>
-            <p className="mt-4 text-xs text-secondary">Portfolio values pulled from the live property API.</p>
-          </div>
-          <div className="bg-surface-container-low p-6 rounded-xl">
-            <p className="text-label text-secondary font-medium uppercase tracking-tighter text-xs mb-1">Portfolio Value</p>
-            <p className="text-3xl font-black text-slate-900">{portfolioValue}</p>
-            <p className="mt-4 text-xs text-secondary">Estimated market valuation</p>
-          </div>
-          <div className="bg-surface-container-low p-6 rounded-xl">
-            <p className="text-label text-secondary font-medium uppercase tracking-tighter text-xs mb-1">Occupancy</p>
-            <p className="text-3xl font-black text-slate-900">{occupancyRate}%</p>
-            <p className="mt-4 text-xs text-secondary">Sold properties as a share of the filtered portfolio</p>
-          </div>
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-container-lowest p-4 text-sm">
+          <p className="text-secondary">{pageResponse.total} listing{pageResponse.total === 1 ? '' : 's'} in this profile · page {pageResponse.page} of {pageCount}</p>
+          {listLoading ? <span role="status" className="text-secondary">Loading inventory…</span> : null}
         </div>
+        {listError ? <div role="alert" className="mb-5 rounded-lg bg-error-container p-4 text-sm text-on-error-container">{listError}<button type="button" className="ml-3 font-bold underline" onClick={() => setRefreshKey((value) => value + 1)}>Retry</button></div> : null}
 
         <div className="bg-white p-4 rounded-xl mb-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2">
@@ -179,7 +199,7 @@ const LandlordMyProperties = () => {
                 activeFilter === 'all' ? 'bg-secondary-fixed text-on-secondary-fixed' : 'hover:bg-surface-container-low text-secondary'
               }`}
             >
-              All <span className="bg-white/40 px-2 rounded-full text-[10px]">{myProperties.length}</span>
+              All <span className="bg-white/40 px-2 rounded-full text-[10px]">{pageResponse.total}</span>
             </button>
             <button
               onClick={() => setActiveFilter('available')}
@@ -227,7 +247,7 @@ const LandlordMyProperties = () => {
           </div>
         </div>
 
-        <MapListLayout
+        {!listError ? <MapListLayout
           properties={myProperties}
           detailsPath={(property) => {
             const reference = propertyRouteReference(property);
@@ -247,17 +267,16 @@ const LandlordMyProperties = () => {
               <thead>
                 <tr className="bg-surface-container-low">
                   <th className="px-6 py-4 text-label text-secondary font-bold text-[11px] uppercase tracking-widest">Property Details</th>
-                  <th className="px-6 py-4 text-label text-secondary font-bold text-[11px] uppercase tracking-widest">Status</th>
+                  <th className="px-6 py-4 text-label text-secondary font-bold text-[11px] uppercase tracking-widest">Availability & Review</th>
                   <th className="px-6 py-4 text-label text-secondary font-bold text-[11px] uppercase tracking-widest">Asking Price</th>
-                  <th className="px-6 py-4 text-label text-secondary font-bold text-[11px] uppercase tracking-widest">Performance</th>
                   <th className="px-6 py-4 text-label text-secondary font-bold text-[11px] uppercase tracking-widest text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-container">
                 {visibleProperties.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-16 text-center text-secondary text-sm">
-                      {myProperties.length ? 'No properties are visible in the current map view.' : 'No properties match the current filters.'}
+                    <td colSpan={4} className="px-6 py-16 text-center text-secondary text-sm">
+                      {myProperties.length ? 'No properties are visible in the current map view.' : 'No listings on this page match the current filters.'}
                     </td>
                   </tr>
                 ) : (
@@ -286,16 +305,8 @@ const LandlordMyProperties = () => {
                           </div>
                         </td>
                         <td className="px-6 py-5">
-                          <span className="font-black text-slate-900">₦{property.price.toLocaleString()}</span>
-                          <p className="text-[10px] text-secondary font-medium uppercase mt-0.5">Total sale price</p>
-                        </td>
-                        <td className="px-6 py-5">
-                          <div className="w-24 bg-surface-container h-1.5 rounded-full overflow-hidden">
-                            <div className={`h-full ${property.status === 'available' ? 'bg-primary w-[90%]' : 'bg-primary-container w-[0%]'}`} />
-                          </div>
-                          <p className="text-[10px] text-secondary font-medium uppercase mt-1">
-                            {property.status === 'available' ? 'Active Listing' : 'Sold Listing'}
-                          </p>
+                          <span className="font-black text-slate-900">{askingPriceLabel(property)}</span>
+                          <p className="text-[10px] text-secondary font-medium uppercase mt-0.5">Asking price</p>
                         </td>
                         <td className="px-6 py-5 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -334,7 +345,7 @@ const LandlordMyProperties = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 p-6">
               {visibleProperties.length === 0 ? (
                 <div className="md:col-span-2 xl:col-span-3 py-16 text-center text-secondary text-sm">
-                  {myProperties.length ? 'No properties are visible in the current map view.' : 'No properties match the current filters.'}
+                          {myProperties.length ? 'No properties are visible in the current map view.' : 'No listings on this page match the current filters.'}
                 </div>
               ) : (
                 visibleProperties.map((property) => {
@@ -359,7 +370,7 @@ const LandlordMyProperties = () => {
                         <div className="flex items-center justify-between text-sm text-secondary">
                           <span>{property.bedrooms} Beds</span>
                           <span>{property.bathrooms} Baths</span>
-                          <span>₦{property.price.toLocaleString()}</span>
+                          <span>{askingPriceLabel(property)}</span>
                         </div>
                         <div className="flex items-center justify-end gap-2 pt-2">
                           <Link
@@ -394,31 +405,17 @@ const LandlordMyProperties = () => {
             </div>
           )}
 
-          <div className="px-6 py-6 border-t border-surface-container flex items-center justify-between">
-            <p className="text-xs text-secondary font-medium">
-              Showing <span className="text-primary font-bold">1 to {Math.min(visibleProperties.length, 4)}</span> of {visibleProperties.length} visible properties
-            </p>
-            <div className="flex items-center gap-1">
-              <button className="p-2 text-slate-400 hover:text-primary transition-colors disabled:opacity-50" disabled type="button">
-                <span className="material-symbols-outlined">navigate_before</span>
-              </button>
-              <button className="w-8 h-8 flex items-center justify-center rounded bg-primary text-on-primary text-xs font-bold" type="button">
-                1
-              </button>
-              <button className="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container text-xs font-bold text-secondary transition-colors" type="button">
-                2
-              </button>
-              <button className="w-8 h-8 flex items-center justify-center rounded hover:bg-surface-container text-xs font-bold text-secondary transition-colors" type="button">
-                3
-              </button>
-              <button className="p-2 text-slate-400 hover:text-primary transition-colors" type="button">
-                <span className="material-symbols-outlined">navigate_next</span>
-              </button>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-surface-container px-6 py-5">
+            <p className="text-xs font-medium text-secondary">Showing {pageResponse.total ? (pageResponse.page - 1) * pageResponse.limit + 1 : 0}–{Math.min(pageResponse.page * pageResponse.limit, pageResponse.total)} of {pageResponse.total} listings</p>
+            <div className="flex items-center gap-3">
+              <label className="text-xs text-secondary">Page <input aria-label="Inventory page" type="number" min={1} max={pageCount} value={page} onChange={(event) => { const next = Number(event.target.value); if (Number.isInteger(next) && next >= 1 && next <= pageCount) setPage(next); }} className="ml-1 w-16 rounded border border-outline-variant/30 px-2 py-1 text-center text-sm text-on-surface" /></label>
+              <button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={listLoading || page <= 1} className="rounded-lg border border-outline-variant/30 px-3 py-2 text-sm font-bold disabled:opacity-50">Previous</button>
+              <button type="button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={listLoading || page >= pageCount} className="rounded-lg border border-outline-variant/30 px-3 py-2 text-sm font-bold disabled:opacity-50">Next</button>
             </div>
           </div>
         </div>
         )}
-        </MapListLayout>
+        </MapListLayout> : null}
       </main>
 
       <footer className="mt-auto p-8 text-center">

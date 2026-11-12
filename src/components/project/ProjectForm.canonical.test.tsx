@@ -1,9 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { toast } from 'sonner';
 import type { CanonicalFieldDictionary } from '../../services/canonicalFieldService';
 import { createCanonicalFieldDictionaryFixture } from '../../test/canonicalFieldDictionaryFixture';
 import type { ProjectDetail } from '../../types';
+import type { CreateProjectRequest } from '../../services/projectService';
 import ProjectForm from './ProjectForm';
 
 const mocks = vi.hoisted(() => ({ dictionary: null as CanonicalFieldDictionary | null }));
@@ -19,7 +21,7 @@ describe('ProjectForm canonical fields', () => {
   beforeEach(() => { mocks.dictionary = createCanonicalFieldDictionaryFixture(); });
 
   it('serializes supported project enums and explicit false values', async () => {
-    const onSubmit = vi.fn(async () => undefined);
+    const onSubmit = vi.fn(async (_payload: CreateProjectRequest) => undefined);
     render(<ProjectForm onSubmit={onSubmit} />);
     await userEvent.type(screen.getByLabelText('Project name'), 'Lekki Gardens');
     await userEvent.selectOptions(screen.getByLabelText('Project type'), 'estate');
@@ -31,6 +33,7 @@ describe('ProjectForm canonical fields', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save Project' }));
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      publicationAction: 'save_draft',
       canonicalFields: expect.objectContaining({
         projectName: 'Lekki Gardens',
         servicedStatus: 'Not Serviced',
@@ -40,7 +43,8 @@ describe('ProjectForm canonical fields', () => {
         liveVideoTourAvailable: false,
       }),
     }));
-  });
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('country', 'Nigeria');
+  }, 15_000);
 
   it('hides the configuration-gated mortgage option', () => {
     render(<ProjectForm onSubmit={vi.fn(async () => undefined)} />);
@@ -65,6 +69,7 @@ describe('ProjectForm canonical fields', () => {
     await userEvent.clear(canonicalAddress);
     await userEvent.type(canonicalAddress, 'Updated canonical address');
     await userEvent.click(screen.getByRole('button', { name: 'Save Project' }));
+    expect(toast.error).not.toHaveBeenCalled();
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       address: 'Legacy street address',

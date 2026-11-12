@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import StepUpDialog from '../../../components/auth/StepUpDialog';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
-import PropertyForm from '../../../components/property/PropertyForm';
+import PropertyForm, { type PropertyFormPayload } from '../../../components/property/PropertyForm';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../../lib/axios';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -13,13 +13,25 @@ import { isVerifiedOwner } from '../../../utils/landlordPropertyAccess';
 
 const AddProperty = () => {
   const { user, activeProfile } = useAuth();
-  const canAddProperty = isVerifiedOwner(user);
+  const requestedProjectId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('projectId') : null;
+  const isProjectUnit = Boolean(requestedProjectId);
+  const canAddProperty = isProjectUnit ? activeProfile?.kind === 'developer' : isVerifiedOwner(user);
   const { addProperty } = useProperties();
   const navigate = useNavigate();
   const stepUp = useBoundStepUp<CreatePropertyResponse>();
 
-  const finishCreation = (response: CreatePropertyResponse): Property => {
-    toast.success(response.message || 'Property saved. Publication depends on the server readiness and approval workflow.');
+  const toCreateRequest = (payload: PropertyFormPayload & { status?: string }): CreatePropertyPayload => {
+    const { publicationAction, status: _status, ...fields } = payload;
+    return {
+      ...fields,
+      ...(publicationAction === 'save_draft' ? { publicationAction } : {}),
+    };
+  };
+
+  const finishCreation = (response: CreatePropertyResponse, isDraft: boolean): Property => {
+    toast.success(response.message || (isDraft
+      ? 'Draft saved. Review the listing and submit it when it is ready.'
+      : 'Listing submitted for review. It will not appear publicly until the review and publication workflow is complete.'));
     if (response.riskDetected) {
       toast.warning('Title document risk signals were detected. Legal review is required before title verification can be published.');
     }
@@ -27,7 +39,7 @@ const AddProperty = () => {
     return response.property;
   };
 
-  const handleSubmit = async (payload: CreatePropertyPayload & { status?: string }) => {
+  const handleSubmit = async (payload: PropertyFormPayload & { status?: string }) => {
     if (!canAddProperty) {
       toast.error('Complete owner verification before adding a property.');
       return undefined;
@@ -39,18 +51,20 @@ const AddProperty = () => {
     }
 
     try {
-      const response = await addProperty(user._id, payload);
-      return response.property ? finishCreation(response) : undefined;
+      const createPayload = toCreateRequest(payload);
+      const response = await addProperty(user._id, createPayload);
+      return response.property ? finishCreation(response, createPayload.publicationAction === 'save_draft') : undefined;
     } catch (raw) {
       if (raw instanceof ApiRequestError && raw.code === 'AUTH_STEP_UP_REQUIRED') {
         await stepUp.begin({
           method: 'POST',
           path: '/api/properties',
-          body: payload,
-          label: 'Create this property listing',
+          body: toCreateRequest(payload),
+          label: isProjectUnit ? 'Create this project unit' : payload.publicationAction === 'save_draft' ? 'Save this property draft' : 'Submit this listing for review',
           execute: async (challengeId, exactBody) => {
-            const created = await addProperty(user._id, exactBody as CreatePropertyPayload, challengeId);
-            finishCreation(created);
+            const submitted = exactBody as CreatePropertyPayload;
+            const created = await addProperty(user._id, submitted, challengeId);
+            finishCreation(created, submitted.publicationAction === 'save_draft');
             return created;
           },
         });
@@ -80,23 +94,25 @@ const AddProperty = () => {
               </div>
               <h3 className="text-3xl font-extrabold tracking-tight">Owner verification required</h3>
               <p className="text-sm text-secondary">
-                Your Owner account must be verified before you can add a property. Complete KYC to submit your verification.
+                {isProjectUnit
+                  ? 'Select an authorized Developer profile before creating units for a project.'
+                  : 'Your Owner account must be verified before you can add a property. Complete KYC to submit your verification.'}
               </p>
               <div className="flex justify-center pt-2">
                 <Link
-                  to="/dashboard/landlord/settings/verification"
+                  to={isProjectUnit ? '/dashboard/landlord/settings' : '/dashboard/landlord/settings/verification'}
                   className="rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-on-primary hover:opacity-90"
                 >
-                  Go to verification
+                  {isProjectUnit ? 'Choose a Developer profile' : 'Go to verification'}
                 </Link>
               </div>
             </div>
           </section>
         ) : activeProfile ? (
           <>
-            <p className="mb-5 rounded-lg bg-surface-container-low p-4 text-sm text-secondary">The server checks the selected profile's current verification, permission and publication eligibility when you submit.</p>
+            <p className="mb-5 rounded-lg bg-surface-container-low p-4 text-sm text-secondary">{isProjectUnit ? 'This unit is saved as unpublished inventory. Manage unit readiness and publication from its project.' : 'Save an incomplete private draft at any time, or submit a completed listing for staff review. The server remains authoritative for profile eligibility, readiness and publication.'}</p>
             {stepUp.error && !stepUp.challenge ? <p role="alert" className="mb-4 rounded-lg bg-error-container p-4 text-sm text-on-error-container">{stepUp.error}</p> : null}
-            <PropertyForm onSubmit={handleSubmit} submitLabel="Save Listing" isLoading={stepUp.busy || Boolean(stepUp.challenge)} />
+            <PropertyForm onSubmit={handleSubmit} submitLabel={isProjectUnit ? 'Save unit' : 'Save draft'} allowSubmitForReview={!isProjectUnit} isLoading={stepUp.busy || Boolean(stepUp.challenge)} />
           </>
         ) : (
           <section className="rounded-2xl border border-dashed border-outline-variant/20 bg-surface-container-lowest p-8 lg:p-12 text-center">

@@ -8,8 +8,9 @@ import { reconcileCanonicalFieldRegistry, serializeCanonicalMutationDrafts, type
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
 import CanonicalFieldMutationsEditor from '../canonical/CanonicalFieldMutationsEditor';
 import StepUpDialog from '../auth/StepUpDialog';
+import ActionConfirmModal from '../proxyNetwork/ActionConfirmModal';
 import Button from '../ui/Button';
-import { dictionaryVocabularyOptions, propertyTypesForCategory } from '../../utils/propertyVocabulary';
+import { dictionaryVocabularyOptions, fieldVocabularyLabel, propertyTypesForCategory } from '../../utils/propertyVocabulary';
 
 interface UnitTypeManagementProps {
   project: ProjectDetail;
@@ -31,6 +32,12 @@ const UnitTypeManagement = ({ project, onChanged }: UnitTypeManagementProps) => 
   const [impactById, setImpactById] = useState<Record<string, { affectedUnits: number; fields: Record<string, { inheritingUnits: number; overriddenUnits: number }> }>>({});
   const [savingTypeId, setSavingTypeId] = useState<string | null>(null);
   const [protectedAction, setProtectedAction] = useState<'create' | 'update' | 'delete' | null>(null);
+  const [typePendingRemoval, setTypePendingRemoval] = useState<UnitTypeDto | null>(null);
+  const [impactConfirmation, setImpactConfirmation] = useState<{
+    unitType: UnitTypeDto;
+    body: { expectedVersion: number; expectedTypeVersion: number; canonicalFieldMutations: Array<{ field: string; operation: string; value?: unknown }> };
+    impact: { affectedUnits: number; fields: Record<string, { inheritingUnits: number; overriddenUnits: number }> };
+  } | null>(null);
   const stepUp = useBoundStepUp<unknown>();
   const { dictionary } = useCanonicalFieldDictionary();
   const registry = useMemo(() => dictionary ? reconcileCanonicalFieldRegistry(dictionary) : [], [dictionary]);
@@ -38,6 +45,29 @@ const UnitTypeManagement = ({ project, onChanged }: UnitTypeManagementProps) => 
   const allPropertyTypeOptions = useMemo(() => dictionaryVocabularyOptions(dictionary, 'propertyTypes', dictionary?.fields.find((field) => field.key === 'propertyType')), [dictionary]);
   const selectedCategoryKey = categoryOptions.find((option) => option.value === category)?.key ?? category;
   const propertyTypeOptions = useMemo(() => propertyTypesForCategory(allPropertyTypeOptions, selectedCategoryKey), [allPropertyTypeOptions, selectedCategoryKey]);
+
+  const fieldLabel = (key: string) => {
+    const field = dictionary?.fields.find((item) => item.key === key);
+    return typeof field?.label === 'string' ? field.label : key.replace(/([a-z])([A-Z])/g, '$1 $2');
+  };
+  const formatValue = (key: string, value: unknown): string => {
+    if (value === null) return 'Null (explicit)';
+    if (value === false) return 'No';
+    if (value === true) return 'Yes';
+    if (typeof value === 'number') {
+      const unit = dictionary?.fields.find((item) => item.key === key)?.unit;
+      return `${value.toLocaleString()}${typeof unit === 'string' && unit ? ` ${unit}` : ''}`;
+    }
+    if (typeof value === 'string') return fieldVocabularyLabel(dictionary, key, value) ?? value;
+    if (Array.isArray(value)) return value.map((item) => typeof item === 'string' ? fieldVocabularyLabel(dictionary, key, item) ?? item : formatValue(key, item)).join(', ');
+    if (value && typeof value === 'object') return Object.entries(value as Record<string, unknown>).map(([childKey, childValue]) => `${fieldLabel(childKey)}: ${formatValue(childKey, childValue)}`).join(' · ');
+    return 'Not set';
+  };
+  const displayTypeName = (unitType: UnitTypeDto, index: number): string => {
+    const name = unitType.canonicalFields.unitTypeName;
+    if (typeof name === 'string' && name.trim()) return name.trim();
+    return fieldVocabularyLabel(dictionary, 'propertyType', unitType.canonicalFields.propertyType) ?? `Unit type ${index + 1}`;
+  };
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -107,12 +137,27 @@ const UnitTypeManagement = ({ project, onChanged }: UnitTypeManagementProps) => 
     try {
       const versions = await freshVersions(unitType.id);
       const body = { expectedVersion: versions.projectVersion, expectedTypeVersion: versions.unitType!.version, canonicalFieldMutations: serialized.mutations };
-      const path = `/api/projects/${encodeURIComponent(project._id)}/unit-types/${encodeURIComponent(unitType.id)}`;
+      const currentImpact = await projectService.unitTypeImpact(project._id, unitType.id);
+      if (currentImpact.unitType.version !== versions.unitType!.version) throw new Error('This unit type changed while impact was loading. Refresh the list and review the values again.');
+      setImpactById((current) => ({ ...current, [unitType.id]: currentImpact.impact }));
+      setImpactConfirmation({ unitType: versions.unitType!, body, impact: currentImpact.impact });
+    } catch (raw) {
+      if (raw instanceof ApiRequestError && raw.status === 409) {
+        await load(); await onChanged();
+        setError('The project or unit type changed. Latest values and impact are reloaded; review the saved draft before submitting again.');
+      } else setError(raw instanceof Error ? raw.message : 'Unable to update unit type.');
+    }
+    finally { setSavingTypeId(null); }
+  };
+
+  const applyTypeChanges = async (unitType: UnitTypeDto, body: { expectedVersion: number; expectedTypeVersion: number; canonicalFieldMutations: Array<{ field: string; operation: string; value?: unknown }> }) => {
+    setSavingTypeId(unitType.id); setError(null);
+    const path = `/api/projects/${encodeURIComponent(project._id)}/unit-types/${encodeURIComponent(unitType.id)}`;
+    try {
       try {
         const result = await projectService.updateUnitType(project._id, unitType.id, body);
         setImpactById((current) => ({ ...current, [unitType.id]: result.impact as { affectedUnits: number; fields: Record<string, { inheritingUnits: number; overriddenUnits: number }> } }));
-      }
-      catch (raw) {
+      } catch (raw) {
         if (!(raw instanceof ApiRequestError && raw.code === 'AUTH_STEP_UP_REQUIRED')) throw raw;
         setProtectedAction('update');
         const started = await stepUp.begin({ method: 'PATCH', path, body, label: 'Update this project unit type', execute: (challengeId, exactBody) => projectService.updateUnitType(project._id, unitType.id, exactBody, challengeId) });
@@ -123,12 +168,16 @@ const UnitTypeManagement = ({ project, onChanged }: UnitTypeManagementProps) => 
       setDrafts((current) => ({ ...current, [unitType.id]: [] }));
       toast.success('Unit type updated; inherited values and affected units were recalculated.');
       await load(); await onChanged();
-    } catch (raw) { setError(raw instanceof Error ? raw.message : 'Unable to update unit type.'); }
+    } catch (raw) {
+      if (raw instanceof ApiRequestError && raw.status === 409) {
+        await load(); await onChanged();
+        setError('The project or unit type changed. Latest values are reloaded; review your draft before submitting again.');
+      } else setError(raw instanceof Error ? raw.message : 'Unable to update unit type.');
+    }
     finally { setSavingTypeId(null); }
   };
 
   const removeType = async (unitType: UnitTypeDto) => {
-    if (!window.confirm('Remove this unit type? Removal is allowed only when no current or historical unit references it.')) return;
     try {
       const versions = await freshVersions(unitType.id);
       const body = { expectedVersion: versions.projectVersion, expectedTypeVersion: versions.unitType!.version };
@@ -163,11 +212,12 @@ const UnitTypeManagement = ({ project, onChanged }: UnitTypeManagementProps) => 
     {loading ? <p className="text-sm text-secondary">Loading unit types…</p> : null}
     {error ? <p role="alert" className="rounded-lg bg-error-container p-3 text-sm text-on-error-container">{error}</p> : null}
     {stepUp.error ? <p role="alert" className="rounded-lg bg-error-container p-3 text-sm text-on-error-container">{stepUp.error}</p> : null}
-    {types.map((unitType) => <details key={unitType.id} className="rounded-lg border border-outline-variant/20 p-4">
-      <summary className="cursor-pointer font-bold">{String(unitType.canonicalFields.unitTypeName ?? unitType.id)} · {unitType.id} · version {unitType.version}</summary>
-      <details className="mt-2 rounded bg-surface-container-low p-3 text-xs"><summary className="cursor-pointer font-bold">Stored type values, effective values and source</summary><p className="mt-2 font-semibold">Raw type values</p><dl className="mt-1 grid gap-1 sm:grid-cols-2">{Object.entries(unitType.canonicalFields).map(([key, value]) => <div key={`raw:${key}`}><dt className="inline font-semibold">{key}: </dt><dd className="inline">{JSON.stringify(value)}</dd></div>)}</dl><p className="mt-3 font-semibold">Effective values</p><dl className="mt-1 grid gap-1 sm:grid-cols-2">{Object.entries(unitType.effectiveFields).map(([key, value]) => <div key={`effective:${key}`}><dt className="inline font-semibold">{key}: </dt><dd className="inline">{JSON.stringify(value)} · {unitType.fieldSources[key]?.sourceLevel ?? 'source unavailable'} ({unitType.fieldSources[key]?.state ?? 'state unavailable'})</dd></div>)}</dl>{impactById[unitType.id] ? <p className="mt-3 font-semibold">Update impact: {impactById[unitType.id].affectedUnits} affected unit(s) · {Object.entries(impactById[unitType.id].fields).map(([field, impact]) => `${field}: ${impact.inheritingUnits} inherit, ${impact.overriddenUnits} override`).join(' · ')}</p> : null}</details>
+    {types.map((unitType, index) => <details key={unitType.id} className="rounded-lg border border-outline-variant/20 p-4">
+      <summary className="cursor-pointer font-bold">{displayTypeName(unitType, index)} · version {unitType.version}</summary>
+      <details className="mt-2 rounded bg-surface-container-low p-3 text-xs"><summary className="cursor-pointer font-bold">Saved values and values inherited by units</summary><p className="mt-2 text-secondary">Saved values are explicit on this type. Effective values include inherited values returned by the server.</p><dl className="mt-2 grid gap-2 sm:grid-cols-2">{[...new Set([...Object.keys(unitType.canonicalFields), ...Object.keys(unitType.effectiveFields)])].map((key) => <div key={key} className="rounded bg-white p-2"><dt className="font-semibold">{fieldLabel(key)}</dt><dd className="mt-1">Saved value: {Object.prototype.hasOwnProperty.call(unitType.canonicalFields, key) ? formatValue(key, unitType.canonicalFields[key]) : 'No explicit value saved'}</dd><dd>Effective value: {Object.prototype.hasOwnProperty.call(unitType.effectiveFields, key) ? formatValue(key, unitType.effectiveFields[key]) : 'Not returned'}</dd><dd className="text-secondary">Source: {unitType.fieldSources[key]?.sourceLevel ?? 'Not returned'} · {unitType.fieldSources[key]?.state ?? 'state not returned'}</dd></div>)}</dl>{impactById[unitType.id] ? <p className="mt-3 font-semibold">Update impact: {impactById[unitType.id].affectedUnits} affected unit(s) · {Object.entries(impactById[unitType.id].fields).map(([field, impact]) => `${fieldLabel(field)}: ${impact.inheritingUnits} inherit, ${impact.overriddenUnits} override`).join(' · ')}</p> : null}</details>
       <CanonicalFieldMutationsEditor target="unit_type" title="Edit type defaults" value={drafts[unitType.id] ?? []} onChange={(value) => setDrafts((current) => ({ ...current, [unitType.id]: value }))} canonicalFields={unitType.canonicalFields} effectiveFields={unitType.effectiveFields} fieldSources={unitType.fieldSources} />
-      <div className="mt-3 flex flex-wrap gap-2"><Button type="button" disabled={savingTypeId === unitType.id || !(drafts[unitType.id]?.length)} onClick={() => void saveType(unitType)}>{savingTypeId === unitType.id ? 'Saving…' : 'Save type fields'}</Button><Button type="button" variant="secondary" disabled={Boolean(stepUp.challenge) || stepUp.busy} onClick={() => void removeType(unitType)}>Remove unused type</Button></div>
+      <div className="mt-3 flex flex-wrap gap-2"><Button type="button" disabled={savingTypeId === unitType.id || !(drafts[unitType.id]?.length)} onClick={() => void saveType(unitType)}>{savingTypeId === unitType.id ? 'Saving…' : 'Save type fields'}</Button></div>
+      <details className="mt-3 border-t border-outline-variant/20 pt-3"><summary className="cursor-pointer text-xs font-bold text-secondary">Advanced type actions</summary><p className="mt-2 text-xs text-secondary">Removal is available only when the server confirms there are no current or historical units linked to this type.</p><Button type="button" variant="secondary" className="mt-2" disabled={Boolean(stepUp.challenge) || stepUp.busy} onClick={() => setTypePendingRemoval(unitType)}>Remove unused type</Button></details>
     </details>)}
     {!loading && !types.length ? <p className="rounded-lg border border-dashed p-4 text-sm text-secondary">No unit types are configured for this project yet.</p> : null}
     <div className="grid gap-3 rounded-lg bg-surface-container-low p-4 md:grid-cols-4">
@@ -179,6 +229,8 @@ const UnitTypeManagement = ({ project, onChanged }: UnitTypeManagementProps) => 
       <div className="md:col-span-4"><Button type="button" disabled={loading || stepUp.busy || Boolean(stepUp.challenge) || projectVersion === null} onClick={() => void create()}>Create unit type</Button>{createError ? <p role="alert" className="mt-2 text-sm text-error">{createError}</p> : null}</div>
     </div>
     <p className="text-xs text-secondary">Price and media defaults require the corresponding profile permissions and, when requested by the backend, a bound security challenge. Unit types cannot be archived; removal is available only with the documented versioned, step-up-protected DELETE route.</p>
+    {impactConfirmation ? <ActionConfirmModal title="Review the effect on project units" description={`${impactConfirmation.impact.affectedUnits} unit(s) use this type. ${Object.entries(impactConfirmation.impact.fields).map(([field, impact]) => `${fieldLabel(field)}: ${impact.inheritingUnits} inherit this value and ${impact.overriddenUnits} have their own value.`).join(' ') || 'The server returned no field-level impact.'} The server recalculates effective values and readiness after the update.`} confirmLabel="Continue with update" onClose={() => setImpactConfirmation(null)} onConfirm={() => { const pending = impactConfirmation; setImpactConfirmation(null); void applyTypeChanges(pending.unitType, pending.body); }} /> : null}
+    {typePendingRemoval ? <ActionConfirmModal title="Remove this unused unit type?" description="Removal is allowed only when no current or historical unit refers to this type. The server checks the latest versions before it removes the type." confirmLabel="Continue to authenticator" tone="danger" onClose={() => setTypePendingRemoval(null)} onConfirm={() => { const selectedType = typePendingRemoval; setTypePendingRemoval(null); void removeType(selectedType); }} /> : null}
     <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy} error={stepUp.error} onCancel={() => { setProtectedAction(null); stepUp.cancel(); }} onSubmit={finishStepUp} />
   </section>;
 };

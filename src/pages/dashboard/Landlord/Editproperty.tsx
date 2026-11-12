@@ -55,7 +55,7 @@ const Editproperty = () => {
             method: 'PATCH',
             path: `/api/properties/${encodeURIComponent(propertyId)}`,
             body: requestBody,
-            label: 'Save these property listing changes',
+            label: requestBody.publicationAction === 'submit_for_review' ? 'Submit these listing changes for review' : 'Save these property changes as a draft',
             execute: async (challengeId, exactBody) => {
               const updated = await updateProperty(propertyId, exactBody, challengeId);
               toast.success('Property updated successfully.');
@@ -118,7 +118,8 @@ const Editproperty = () => {
               key={`${property._id}:${property.version ?? 'unversioned'}`}
               initialData={property}
               mode="edit"
-              submitLabel="Save Changes"
+              submitLabel="Save draft"
+              allowSubmitForReview={!property.project}
               onSubmit={handleSubmit}
             />
             <PropertyProjectAssociation property={property} onChanged={async () => { await execute(); }} />

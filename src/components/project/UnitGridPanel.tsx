@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiRequestError } from '../../lib/axios';
 import { useAsync } from '../../hooks/useAsync';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
-import { projectService, type UnitGridEditRequest, type UnitGridExportQuery, type UnitGridJob, type UnitGridJobRequest, type UnitGridMutation, type UnitGridOperation, type UnitGridQuery, type UnitGridRow } from '../../services/projectService';
+import { projectService, type UnitGridEditRequest, type UnitGridExportQuery, type UnitGridJob, type UnitGridJobRequest, type UnitGridMutation, type UnitGridOperation, type UnitGridQuery, type UnitGridRow, type UnitTypeDto } from '../../services/projectService';
 import { stepUpService } from '../../services/stepUpService';
 import { canonicalMutationAllowed, parseCanonicalInput, reconcileCanonicalFieldRegistry, serializeCanonicalMutationDrafts, type CanonicalMutationDraft } from '../../utils/canonicalFieldRegistry';
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
@@ -20,28 +20,45 @@ type GridReview =
   | { kind: 'edit'; request: UnitGridEditRequest; summary: string; rowCount: number; targets: ReviewedTarget[] }
   | { kind: 'job'; request: UnitGridJobRequest; summary: string; rowCount: number; targets: ReviewedTarget[] };
 const terminalJobStates = new Set(['completed', 'partially_completed', 'failed', 'cancelled']);
-const sourceValue = (fieldsValue: Record<string, unknown>, key: string, dictionary?: ReturnType<typeof useCanonicalFieldDictionary>['dictionary']): string => {
-  if (!Object.prototype.hasOwnProperty.call(fieldsValue, key)) return 'Missing';
-  const value = fieldsValue[key];
-  if (value === null) return 'Null';
+const displayValue = (value: unknown, key: string, dictionary?: ReturnType<typeof useCanonicalFieldDictionary>['dictionary']): string => {
+  if (value === null) return 'Null (explicit)';
   if (value === false) return 'No (explicit)';
   if (value === true) return 'Yes (explicit)';
   if (value === 0) return '0 (explicit)';
   if (value === '') return 'Empty (explicit)';
   if (typeof value === 'string') return fieldVocabularyLabel(dictionary, key, value) ?? (key === 'propertyType' ? vocabularyLabel(dictionary, 'propertyTypes', value) : undefined) ?? value;
   if (typeof value === 'number') return String(value);
-  if (Array.isArray(value)) return value.map((item) => typeof item === 'string' ? vocabularyLabel(dictionary, 'amenities', item) ?? item : JSON.stringify(item)).join(', ');
-  return JSON.stringify(value);
+  if (Array.isArray(value)) return value.map((item) => typeof item === 'string' ? fieldVocabularyLabel(dictionary, key, item) ?? vocabularyLabel(dictionary, 'amenities', item) ?? item : displayValue(item, key, dictionary)).join(', ');
+  if (value && typeof value === 'object') return Object.entries(value as Record<string, unknown>).map(([childKey, childValue]) => `${String(dictionary?.fields.find((item) => item.key === childKey)?.label ?? childKey.replace(/([a-z])([A-Z])/g, '$1 $2'))}: ${displayValue(childValue, childKey, dictionary)}`).join(' · ');
+  return 'Not set';
+};
+
+const sourceValue = (fieldsValue: Record<string, unknown>, key: string, dictionary?: ReturnType<typeof useCanonicalFieldDictionary>['dictionary']): string => {
+  if (!Object.prototype.hasOwnProperty.call(fieldsValue, key)) return 'Missing';
+  return displayValue(fieldsValue[key], key, dictionary);
 };
 
 const errorText = (raw: unknown): string => raw instanceof ApiRequestError && raw.code ? `${raw.message} (${raw.code})` : raw instanceof Error ? raw.message : 'Request failed.';
+
+const unitTypeName = (unitType: UnitTypeDto, index: number, dictionary?: ReturnType<typeof useCanonicalFieldDictionary>['dictionary']): string => {
+  const name = unitType.canonicalFields.unitTypeName;
+  if (typeof name === 'string' && name.trim()) return name.trim();
+  const propertyType = fieldVocabularyLabel(dictionary, 'propertyType', unitType.canonicalFields.propertyType);
+  return propertyType ? `${propertyType} type` : `Unit type ${index + 1}`;
+};
+
+const unitName = (row: UnitGridRow): string => {
+  if (row.publicReference?.trim()) return row.publicReference;
+  const identifier = row.effectiveFields.unitIdentifier;
+  return typeof identifier === 'string' && identifier.trim() ? identifier : 'Unit without an identifier';
+};
 
 const UnitGridPanel = ({ projectId }: { projectId: string }) => {
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<UnitGridQuery['sort']>('newest');
-  const [currency, setCurrency] = useState<'NGN' | 'USD'>('NGN');
+  const [currency, setCurrency] = useState<'' | 'NGN' | 'USD'>('');
   const [availabilityFilter, setAvailabilityFilter] = useState<UnitGridQuery['availability']>();
   const [publicationFilter, setPublicationFilter] = useState<UnitGridQuery['publicationState']>();
   const [problemsOnly, setProblemsOnly] = useState(false);
@@ -56,10 +73,13 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     availability: availabilityFilter, publicationState: publicationFilter, problemsOnly: problemsOnly || undefined,
     unitTypeId: unitTypeFilter.trim() || undefined, propertyType: propertyTypeFilter.trim() || undefined,
     ...priceBounds,
-    currency: sort?.startsWith('price_') || priceBounds.minPrice !== undefined || priceBounds.maxPrice !== undefined ? currency : undefined,
+    currency: (sort?.startsWith('price_') || priceBounds.minPrice !== undefined || priceBounds.maxPrice !== undefined) && currency ? currency : undefined,
   };
   const { data: grid, loading, error, execute } = useAsync(() => projectService.getUnitGrid(projectId, gridQuery), true, `${projectId}:${JSON.stringify(gridQuery)}:${refreshKey}`);
   const { dictionary } = useCanonicalFieldDictionary();
+  const [unitTypes, setUnitTypes] = useState<UnitTypeDto[]>([]);
+  const [unitTypesLoading, setUnitTypesLoading] = useState(false);
+  const [unitTypesError, setUnitTypesError] = useState<string | null>(null);
   const fields = useMemo(() => dictionary
     ? reconcileCanonicalFieldRegistry(dictionary).filter((item) => item.entities.includes('unit') && canonicalMutationAllowed(item, 'project_unit', 'set'))
     : [], [dictionary]);
@@ -71,7 +91,7 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
   const [field, setField] = useState<EditableField>('bedrooms');
   const selectedField = fields.find((item) => item.key === field) ?? fields[0];
   const fieldOptions: readonly string[] = selectedField.options ?? [];
-  const [operation, setOperation] = useState<'set' | 'reset_to_inherited'>('set');
+  const [operation, setOperation] = useState<'set' | 'reset_to_inherit'>('set');
   const [fieldValue, setFieldValue] = useState('');
   const [runtimeDrafts, setRuntimeDrafts] = useState<CanonicalMutationDraft[]>([]);
   const [targetUnitTypeId, setTargetUnitTypeId] = useState('');
@@ -96,6 +116,20 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
   const jobKeyRef = useRef<{ signature: string; key: string } | null>(null);
   const jobStatusRequestRef = useRef<{ key: string; promise: Promise<UnitGridJob> } | null>(null);
   const jobStorageKey = `realtiq:unit-grid-job:${projectId}`;
+
+  useEffect(() => {
+    let active = true;
+    setUnitTypesLoading(true);
+    setUnitTypesError(null);
+    void projectService.listUnitTypes(projectId).then((result) => {
+      if (active) setUnitTypes(result.unitTypes ?? []);
+    }).catch((raw: unknown) => {
+      if (active) setUnitTypesError(errorText(raw));
+    }).finally(() => {
+      if (active) setUnitTypesLoading(false);
+    });
+    return () => { active = false; };
+  }, [projectId, refreshKey]);
 
   const readJobStatus = useCallback((jobId: string): Promise<UnitGridJob> => {
     const key = `${projectId}:${jobId}`;
@@ -167,6 +201,10 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
   const applyPriceBounds = () => {
     const min = minimumPriceInput.trim() === '' ? undefined : Number(minimumPriceInput);
     const max = maximumPriceInput.trim() === '' ? undefined : Number(maximumPriceInput);
+    if ((min !== undefined || max !== undefined) && !currency) {
+      setActionError('Choose a currency before filtering prices.');
+      return;
+    }
     if ((min !== undefined && (!Number.isFinite(min) || min < 0)) || (max !== undefined && (!Number.isFinite(max) || max < 0)) || (min !== undefined && max !== undefined && min > max)) {
       setActionError('Enter valid non-negative price bounds with minimum no higher than maximum.');
       return;
@@ -179,6 +217,11 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
 
   const exportGrid = async () => {
     if (exporting) return;
+    const usesPrice = Boolean(sort?.startsWith('price_') || priceBounds.minPrice !== undefined || priceBounds.maxPrice !== undefined);
+    if (usesPrice && !currency) {
+      setActionError('Choose a currency before exporting a price-sorted or price-filtered grid.');
+      return;
+    }
     const query: UnitGridExportQuery = {
       sort,
       search: search || undefined,
@@ -188,7 +231,7 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       unitTypeId: unitTypeFilter.trim() || undefined,
       propertyType: propertyTypeFilter.trim() || undefined,
       ...priceBounds,
-      currency: sort?.startsWith('price_') || priceBounds.minPrice !== undefined || priceBounds.maxPrice !== undefined ? currency : undefined,
+      currency: usesPrice ? currency as 'NGN' | 'USD' : undefined,
     };
     setExporting(true);
     setExportStatus('');
@@ -209,7 +252,7 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
   const currentMutation = (): UnitGridMutation | null => {
     const config = fields.find((item) => item.key === field);
     if (!config) { setActionError('Canonical field options are unavailable. Refresh the dictionary before editing.'); return null; }
-    if (operation === 'reset_to_inherited') {
+    if (operation === 'reset_to_inherit') {
       if (!config.inherits) { setActionError('The selected canonical field does not inherit from its project or unit type.'); return null; }
       return { field, operation };
     }
@@ -238,17 +281,18 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       }
       mutations = serialized.mutations;
     }
-    if (operation === 'reset_to_inherited' || fieldValue.trim() !== '') {
+    if (operation === 'reset_to_inherit' || fieldValue.trim() !== '') {
       const mutation = currentMutation();
       if (!mutation) return null;
       mutations = [...mutations, mutation];
     }
     if (!mutations.length) { setActionError('Enter a value or choose an allowed inheritance operation.'); return null; }
     if (new Set(mutations.map((mutation) => mutation.field)).size !== mutations.length) { setActionError('The same canonical field cannot be edited twice in one grid operation.'); return null; }
-    return mutations.map((mutation) => {
-      const operation: UnitGridMutation['operation'] = mutation.operation === 'reset_to_inherit' ? 'reset_to_inherited' : mutation.operation as UnitGridMutation['operation'];
-      return { field: mutation.field, operation, ...(Object.prototype.hasOwnProperty.call(mutation, 'value') ? { value: mutation.value } : {}) };
-    });
+    return mutations.map((mutation) => ({
+      field: mutation.field,
+      operation: mutation.operation as UnitGridMutation['operation'],
+      ...(Object.prototype.hasOwnProperty.call(mutation, 'value') ? { value: mutation.value } : {}),
+    }));
   };
 
   const selectedRows = (): UnitGridRow[] | null => {
@@ -278,7 +322,7 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       kind: 'edit',
       request: { ...unsigned, operationKey: keyFor(operationKeyRef, signature) },
       rowCount: targets.length,
-      targets: targets.map((row) => ({ id: row._id, label: row.publicReference || row._id, version: row.version })),
+      targets: targets.map((row) => ({ id: row._id, label: unitName(row), version: row.version })),
       summary: mutations.map((mutation) => `${mutation.field} ${mutation.operation}${Object.prototype.hasOwnProperty.call(mutation, 'value') ? `: ${JSON.stringify(mutation.value)}` : ''}`).join(' · '),
     });
   };
@@ -288,10 +332,12 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     setActionError(null);
     const targets = selectedRows();
     if (!targets) return;
-    if (!/^[a-f\d]{24}$/i.test(targetUnitTypeId.trim())) { setActionError('Enter a valid same-project unit type ID.'); return; }
-    const unsigned = { expectedProjectVersion: grid.projectVersion, rows: targets.map((row) => ({ unitId: row._id, expectedVersion: row.version, unitTypeId: targetUnitTypeId.trim() })) };
+    const targetType = unitTypes.find((item) => item.id === targetUnitTypeId);
+    if (!targetType) { setActionError('Choose a current unit type from this project.'); return; }
+    const unsigned = { expectedProjectVersion: grid.projectVersion, rows: targets.map((row) => ({ unitId: row._id, expectedVersion: row.version, unitTypeId: targetType.id })) };
     const signature = JSON.stringify(unsigned);
-    setReview({ kind: 'edit', request: { ...unsigned, operationKey: keyFor(operationKeyRef, signature) }, rowCount: targets.length, targets: targets.map((row) => ({ id: row._id, label: row.publicReference || row._id, version: row.version })), summary: `Move selected units to type ${targetUnitTypeId.trim()}` });
+    const typeIndex = unitTypes.findIndex((item) => item.id === targetType.id);
+    setReview({ kind: 'edit', request: { ...unsigned, operationKey: keyFor(operationKeyRef, signature) }, rowCount: targets.length, targets: targets.map((row) => ({ id: row._id, label: unitName(row), version: row.version })), summary: `Move selected units to ${unitTypeName(targetType, typeIndex, dictionary)}` });
   };
 
   const submitJob = async () => {
@@ -334,7 +380,7 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       kind: 'job',
       request: { ...unsigned, operationKey: keyFor(jobKeyRef, signature) },
       rowCount: targets.length,
-      targets: targets.map((row) => ({ id: row._id, label: row.publicReference || row._id, version: row.version })),
+      targets: targets.map((row) => ({ id: row._id, label: unitName(row), version: row.version })),
       summary: `${jobAction.replaceAll('_', ' ')}${options}${mutations ? ` · ${mutations.length} canonical field mutation(s)` : ''}`,
     });
   };
@@ -477,15 +523,15 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       <input aria-label="Search grid units" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} className="min-w-[180px] flex-1 rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="Search units" />
       <Button type="button" variant="secondary" onClick={() => { setPage(1); setSelected([]); setSearch(searchInput.trim()); }}>Search</Button>
       <Button type="button" variant="secondary" loading={exporting} loadingLabel="Exporting..." title="Exports all project units matching the active server filters, not only the current page or selected rows." onClick={() => void exportGrid()}>Export filtered units (CSV)</Button>
-      <select aria-label="Sort grid" value={sort} onChange={(event) => { setSort(event.target.value as UnitGridQuery['sort']); setPage(1); setSelected([]); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{[['newest', 'Newest'], ['price_asc', 'Price low to high'], ['price_desc', 'Price high to low'], ['availability', 'Availability'], ['publication', 'Publication'], ['unit_type', 'Unit type']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-      <Button type="button" variant="secondary" disabled={loading} onClick={() => void execute()}>Refresh grid</Button>
+      <select aria-label="Sort grid" value={sort} onChange={(event) => { const next = event.target.value as UnitGridQuery['sort']; if (next?.startsWith('price_') && !currency) { setActionError('Choose a currency before sorting by price.'); return; } setActionError(null); setSort(next); setPage(1); setSelected([]); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{[['newest', 'Newest'], ['price_asc', 'Price low to high'], ['price_desc', 'Price high to low'], ['availability', 'Availability'], ['publication', 'Publication'], ['unit_type', 'Unit type']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+      <Button type="button" variant="secondary" disabled={loading || unitTypesLoading} onClick={() => { setRefreshKey((value) => value + 1); void execute(); }}>Refresh grid</Button>
     </div>
     <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-      <select aria-label="Grid currency" value={currency} onChange={(event) => { setCurrency(event.target.value as 'NGN' | 'USD'); setPage(1); setSelected([]); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" disabled={!currencyOptions.length}><option value="">Choose currency for price sort and bounds</option>{currency && !currencyOptions.some((option) => option.value === currency) ? <option value={currency}>Unavailable option: {currency}</option> : null}{currencyOptions.map((option) => <option key={option.value} value={option.value}>{option.label} for price sort and bounds</option>)}</select>
+      <select aria-label="Grid currency" value={currency} onChange={(event) => { const next = event.target.value as '' | 'NGN' | 'USD'; if (!next && (sort?.startsWith('price_') || priceBounds.minPrice !== undefined || priceBounds.maxPrice !== undefined)) { setActionError('Clear price sorting and bounds before removing the currency.'); return; } setCurrency(next); setActionError(null); setPage(1); setSelected([]); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" disabled={!currencyOptions.length}><option value="">Choose currency for price sort and bounds</option>{currency && !currencyOptions.some((option) => option.value === currency) ? <option value={currency}>Unavailable option: {currency}</option> : null}{currencyOptions.map((option) => <option key={option.value} value={option.value}>{option.label} for price sort and bounds</option>)}</select>
       <select aria-label="Grid availability filter" value={availabilityFilter ?? ''} onChange={(event) => { setAvailabilityFilter(event.target.value || undefined); setPage(1); setSelected([]); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" disabled={!availabilityOptions.length}><option value="">All availability</option>{availabilityFilter && !availabilityOptions.some((option) => option.value === availabilityFilter) ? <option value={availabilityFilter}>Unavailable option: {availabilityFilter}</option> : null}{availabilityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
       <select aria-label="Grid publication filter" value={publicationFilter ?? ''} onChange={(event) => { setPublicationFilter((event.target.value || undefined) as UnitGridQuery['publicationState']); setPage(1); setSelected([]); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">All publication states</option>{['published', 'unpublished', 'blocked', 'needs_review', 'archived'].map((value) => <option key={value} value={value}>{value.replace('_', ' ')}</option>)}</select>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={problemsOnly} onChange={(event) => { setProblemsOnly(event.target.checked); setPage(1); setSelected([]); }} />Problems only</label>
-      <input aria-label="Grid unit type ID filter" value={unitTypeFilter} onChange={(event) => setUnitTypeFilter(event.target.value)} onBlur={() => { setPage(1); setSelected([]); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="Unit type ID filter" />
+      <select aria-label="Grid unit type filter" value={unitTypeFilter} onChange={(event) => { setUnitTypeFilter(event.target.value); setPage(1); setSelected([]); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" disabled={unitTypesLoading || Boolean(unitTypesError)}><option value="">All unit types</option>{unitTypeFilter && !unitTypes.some((item) => item.id === unitTypeFilter) ? <option value={unitTypeFilter}>Previously selected unit type unavailable</option> : null}{unitTypes.map((item, index) => <option key={item.id} value={item.id}>{unitTypeName(item, index, dictionary)}</option>)}</select>
       <select aria-label="Grid property type filter" value={propertyTypeFilter} onChange={(event) => { setPropertyTypeFilter(event.target.value); setPage(1); setSelected([]); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" disabled={!dictionary}><option value="">All property types</option>{propertyTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
       <input aria-label="Grid minimum price" type="number" min={0} value={minimumPriceInput} onChange={(event) => setMinimumPriceInput(event.target.value)} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="Minimum price" />
       <input aria-label="Grid maximum price" type="number" min={0} value={maximumPriceInput} onChange={(event) => setMaximumPriceInput(event.target.value)} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="Maximum price" />
@@ -493,14 +539,15 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
     </div>
     {loading ? <p className="mt-3 text-sm text-secondary">Loading grid…</p> : null}
     {error ? <p role="alert" className="mt-3 text-sm text-error">{error}</p> : null}
+    {unitTypesError ? <div role="alert" className="mt-3 flex flex-wrap items-center gap-3 text-sm text-error"><span>Unit type choices could not be loaded: {unitTypesError}</span><Button type="button" variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>Retry unit types</Button></div> : null}
     {exportStatus ? <p role="status" className="mt-3 text-sm text-secondary">{exportStatus}</p> : null}
     {grid ? <>
       <p className="mt-3 text-xs font-semibold text-secondary">{grid.pagination.total} units · Page {grid.pagination.page} of {grid.pagination.pages} · Project version {grid.projectVersion}</p>
       <div className="mt-3 flex items-center gap-3 text-xs font-semibold text-secondary"><label className="flex items-center gap-2"><input type="checkbox" checked={grid.items.length > 0 && grid.items.every((row) => selected.includes(row._id))} onChange={(event) => setSelected(event.target.checked ? grid.items.map((row) => row._id) : [])} />Select this page</label><span>{selected.length} selected</span></div>
       <div className="mt-3 max-h-[520px] space-y-3 overflow-y-auto">
         {grid.items.map((row) => <div key={row._id} className="rounded-lg border border-outline-variant/20 p-3 text-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2"><label className="flex items-center gap-2 font-bold"><input type="checkbox" checked={selected.includes(row._id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, row._id] : current.filter((id) => id !== row._id))} />{row.publicReference || row._id}</label><span className="text-xs text-secondary">Version {row.version} · {row.readiness.publicationState}</span></div>
-          <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">{['unitIdentifier', 'propertyType', 'bedrooms', 'fullBathrooms', 'powderRooms', 'allBedroomsEnSuite', 'parkingSpaces', 'negotiable', 'internalFloorArea', 'unitFootprint', 'wholeBuildingFootprint', 'plotSize', 'terraceFloors', 'furnishing', 'occupancy', 'unitFeatures', 'buildStage', 'completedBeforeHandover', 'projectedHandoverMonth', 'askingPrice', 'currency', 'availability'].map((key) => <div key={key}><span className="font-bold text-secondary">{key.replace(/([a-z])([A-Z])/g, '$1 $2')}: </span>{sourceValue(row.effectiveFields, key, dictionary)}<span className="ml-1 text-secondary">{row.fieldSources[key] ? `(${row.fieldSources[key].sourceLevel}, ${row.fieldSources[key].state})` : '(source not returned)'}</span>{Object.prototype.hasOwnProperty.call(row.rawOverrides, key) ? <span className="ml-1 text-primary">Override: {sourceValue(row.rawOverrides, key, dictionary)}</span> : null}</div>)}</div>
+          <div className="flex flex-wrap items-center justify-between gap-2"><label className="flex items-center gap-2 font-bold"><input type="checkbox" checked={selected.includes(row._id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, row._id] : current.filter((id) => id !== row._id))} />{unitName(row)}</label><span className="text-xs text-secondary">Version {row.version} · {row.readiness.publicationState}</span></div>
+          <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">{['unitIdentifier', 'propertyType', 'bedrooms', 'fullBathrooms', 'powderRooms', 'allBedroomsEnSuite', 'parkingSpaces', 'negotiable', 'internalFloorArea', 'unitFootprint', 'wholeBuildingFootprint', 'plotSize', 'terraceFloors', 'furnishing', 'occupancy', 'unitFeatures', 'buildStage', 'completedBeforeHandover', 'projectedHandoverMonth', 'askingPrice', 'currency', 'availability'].map((key) => <div key={key}><span className="font-bold text-secondary">{String(dictionary?.fields.find((item) => item.key === key)?.label ?? key.replace(/([a-z])([A-Z])/g, '$1 $2'))}: </span>{sourceValue(row.effectiveFields, key, dictionary)}<span className="ml-1 text-secondary">{row.fieldSources[key] ? `(${row.fieldSources[key].sourceLevel}, ${row.fieldSources[key].state})` : '(source not returned)'}</span>{Object.prototype.hasOwnProperty.call(row.rawOverrides, key) ? <span className="ml-1 text-primary">Override: {sourceValue(row.rawOverrides, key, dictionary)}</span> : null}</div>)}</div>
           {row.readiness.blockers?.length ? <p className="mt-2 text-xs text-amber-800">Readiness: {row.readiness.blockers.map((item) => `${item.field ?? 'workflow'} ${item.code ?? 'blocked'}`).join(' · ')}</p> : null}
           {row.readiness.problems ? <p className="mt-1 text-xs font-semibold text-amber-800">This unit has readiness problems.</p> : null}
         </div>)}
@@ -509,11 +556,11 @@ const UnitGridPanel = ({ projectId }: { projectId: string }) => {
       <div className="mt-3 flex items-center gap-2"><Button type="button" variant="secondary" disabled={page <= 1 || loading} onClick={() => { setPage((value) => value - 1); setSelected([]); }}>Previous</Button><Button type="button" variant="secondary" disabled={page >= grid.pagination.pages || loading} onClick={() => { setPage((value) => value + 1); setSelected([]); }}>Next</Button></div>
     </> : null}
     <div className="mt-6 grid gap-4 border-t border-outline-variant/20 pt-5 lg:grid-cols-2">
-      <div className="space-y-3"><h3 className="font-black">Canonical field edit</h3>{selectedField ? <><div className="grid gap-2 sm:grid-cols-2"><select aria-label="Grid field" value={selectedField.key} onChange={(event) => { const nextField = event.target.value; setField(nextField); setFieldValue(''); if (!fields.find((item) => item.key === nextField)?.inherits) setOperation('set'); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{fields.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select><select aria-label="Grid mutation" value={operation} onChange={(event) => setOperation(event.target.value as 'set' | 'reset_to_inherited')} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="set">Set explicit override</option><option value="reset_to_inherited" disabled={!selectedField.inherits}>Reset to inherited</option></select></div>
+      <div className="space-y-3"><h3 className="font-black">Canonical field edit</h3>{selectedField ? <><div className="grid gap-2 sm:grid-cols-2"><select aria-label="Grid field" value={selectedField.key} onChange={(event) => { const nextField = event.target.value; setField(nextField); setFieldValue(''); if (!fields.find((item) => item.key === nextField)?.inherits) setOperation('set'); }} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{fields.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select><select aria-label="Grid mutation" value={operation} onChange={(event) => setOperation(event.target.value as 'set' | 'reset_to_inherit')} className="rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="set">Set explicit override</option><option value="reset_to_inherit" disabled={!selectedField.inherits}>Reset to inherited</option></select></div>
         {operation === 'set' ? selectedField.kind === 'boolean' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose Yes or No</option><option value="true">Yes</option><option value="false">No</option></select> : selectedField.kind === 'enum' ? <select aria-label="Grid field value" value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm"><option value="">Choose a value</option>{fieldOptions.map((item) => <option key={item} value={item}>{selectedField.optionLabels?.[item] ?? item}</option>)}</select> : <input aria-label="Grid field value" type={selectedField.kind === 'text' ? 'text' : selectedField.kind === 'month' ? 'month' : 'number'} min={selectedField.min} max={selectedField.max} step={selectedField.kind === 'integer' ? 1 : 'any'} value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder={selectedField.kind === 'text' ? 'Enter a value' : 'Enter a value, including 0'} /> : <p className="text-xs text-secondary">The selected field will inherit from its unit type or project where the canonical dictionary allows inheritance.</p>}</> : <p role="status" className="text-sm text-secondary">Load the current field dictionary before editing unit fields.</p>}
         <Button type="button" disabled={!rows.length || working || conflict} onClick={() => void submitDirectEdit()}>Apply to selected units</Button>
         <CanonicalFieldMutationsEditor target="project_unit" title="Runtime canonical fields" value={runtimeDrafts} onChange={setRuntimeDrafts} canonicalFields={rows.length === 1 ? rows[0].rawOverrides : undefined} effectiveFields={rows.length === 1 ? rows[0].effectiveFields : undefined} fieldSources={rows.length === 1 ? rows[0].fieldSources : undefined} allowedOperations={['set', 'unset', 'reset_to_inherit']} />
-        <div className="border-t border-outline-variant/20 pt-3"><label className="text-xs font-bold text-secondary" htmlFor="unit-grid-target-type">Move to same-project unit type ID</label><input id="unit-grid-target-type" value={targetUnitTypeId} onChange={(event) => setTargetUnitTypeId(event.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" placeholder="24-character unit type ID" /><Button type="button" variant="secondary" disabled={!rows.length || working || conflict} onClick={() => void submitTypeMove()}>Move selected units</Button></div>
+        <div className="border-t border-outline-variant/20 pt-3"><label className="text-xs font-bold text-secondary" htmlFor="unit-grid-target-type">Move selected units to unit type</label><select id="unit-grid-target-type" value={targetUnitTypeId} onChange={(event) => setTargetUnitTypeId(event.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" disabled={unitTypesLoading || Boolean(unitTypesError)}><option value="">Choose a unit type</option>{unitTypes.map((item, index) => <option key={item.id} value={item.id}>{unitTypeName(item, index, dictionary)}</option>)}</select><Button type="button" variant="secondary" disabled={!rows.length || !targetUnitTypeId || working || conflict || unitTypesLoading || Boolean(unitTypesError)} onClick={() => void submitTypeMove()}>Move selected units</Button></div>
       </div>
       <div className="space-y-3"><h3 className="font-black">Durable bulk job</h3><select aria-label="Grid job action" value={jobAction} onChange={(event) => setJobAction(event.target.value as JobAction)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm">{[['availability', 'Set availability'], ['field_edit', 'Edit selected field'], ['price_adjustment', 'Adjust asking price'], ['publish', 'Publish ready units'], ['unpublish', 'Unpublish'], ['archive', 'Archive']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><p className="text-xs text-secondary">Freshness confirmation is unavailable until the backend freshness policy is approved and active.</p>
         {jobAction === 'availability' ? <select aria-label="Target availability" value={availability} onChange={(event) => setAvailability(event.target.value)} className="w-full rounded-lg border border-outline-variant/20 px-3 py-2 text-sm" disabled={!targetAvailabilityOptions.length}><option value="">Choose target availability</option>{availability && !targetAvailabilityOptions.some((option) => option.value === availability) ? <option value={availability}>Unavailable option: {availability}</option> : null}{targetAvailabilityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : null}

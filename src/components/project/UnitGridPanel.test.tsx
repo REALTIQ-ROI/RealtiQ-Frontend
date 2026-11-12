@@ -11,7 +11,7 @@ import UnitGridPanel from './UnitGridPanel';
 
 const dictionaryMocks = vi.hoisted(() => ({ dictionary: null as CanonicalFieldDictionary | null }));
 vi.mock('../../hooks/useCanonicalFieldDictionary', () => ({ useCanonicalFieldDictionary: () => ({ dictionary: dictionaryMocks.dictionary, loading: false, error: null, refresh: vi.fn() }) }));
-vi.mock('../../services/projectService', () => ({ projectService: { getUnitGrid: vi.fn(), editUnitGrid: vi.fn(), createUnitGridJob: vi.fn(), getUnitGridJob: vi.fn(), cancelUnitGridJob: vi.fn() } }));
+vi.mock('../../services/projectService', () => ({ projectService: { getUnitGrid: vi.fn(), listUnitTypes: vi.fn(), editUnitGrid: vi.fn(), createUnitGridJob: vi.fn(), getUnitGridJob: vi.fn(), cancelUnitGridJob: vi.fn() } }));
 vi.mock('../../services/stepUpService', () => ({ stepUpService: { start: vi.fn(), verify: vi.fn(), undoUnitGridOperation: vi.fn() } }));
 vi.mock('../../contexts/AuthContext', () => ({ useAuth: vi.fn() }));
 
@@ -28,6 +28,7 @@ describe('canonical unit grid', () => {
     dictionaryMocks.dictionary = createCanonicalFieldDictionaryFixture();
     vi.mocked(useAuth).mockReturnValue({ activeProfile: { id: 'profile-1' }, token: 'session-1' } as ReturnType<typeof useAuth>);
     vi.mocked(projectService.getUnitGrid).mockResolvedValue(grid);
+    vi.mocked(projectService.listUnitTypes).mockResolvedValue({ projectVersion: 8, unitTypes: [{ id: 'private-type-id', version: 1, projectVersion: 8, canonicalFields: { unitTypeName: 'Two-bedroom apartments', propertyType: 'two_bedroom_flat' }, effectiveFields: { unitTypeName: 'Two-bedroom apartments' }, fieldSources: {} }] });
     vi.mocked(projectService.editUnitGrid).mockResolvedValue({ operation: { id: 'op', state: 'applied', action: 'field_edit', undoAvailable: false, rowCount: 1, createdAt: '', rows: [] }, projectVersion: 9, replayed: false });
     vi.mocked(projectService.createUnitGridJob).mockResolvedValue({ id: 'job-1', projectId: 'p', action: 'availability', state: 'queued', operationKey: 'grid_job_12345678', createdAt: '', startedAt: null, completedAt: null, progress: { total: 1, completed: 0, failed: 0, cancelled: 0, remaining: 1 }, cancellationRequested: false, rows: [] });
     vi.mocked(stepUpService.start).mockResolvedValue({ challengeId: 'challenge-1', expiresAt: new Date(Date.now() + 60_000).toISOString(), method: 'totp' });
@@ -50,6 +51,20 @@ describe('canonical unit grid', () => {
       rows: [{ unitId: 'unit-1', expectedVersion: 4, canonicalFieldMutations: [{ field: 'bedrooms', operation: 'set', value: 0 }] }] });
   });
 
+  it('sends the documented reset_to_inherit operation for an inherited unit field', async () => {
+    render(<UnitGridPanel projectId="p" />);
+    await screen.findByText(/RTQ-UNIT-1/);
+    await userEvent.click(screen.getByRole('checkbox', { name: /RTQ-UNIT-1/ }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Grid field' }), 'bedrooms');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Grid mutation' }), 'reset_to_inherit');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply to selected units' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Apply changes' }));
+    await waitFor(() => expect(projectService.editUnitGrid).toHaveBeenCalledWith('p', expect.objectContaining({
+      expectedProjectVersion: 8,
+      rows: [{ unitId: 'unit-1', expectedVersion: 4, canonicalFieldMutations: [{ field: 'bedrooms', operation: 'reset_to_inherit' }] }],
+    })));
+  });
+
   it('sends currency with price sorting and retains supported grid filters', async () => {
     render(<UnitGridPanel projectId="p" />);
     await screen.findByText(/RTQ-UNIT-1/);
@@ -60,6 +75,18 @@ describe('canonical unit grid', () => {
     await waitFor(() => expect(projectService.getUnitGrid).toHaveBeenLastCalledWith('p', expect.objectContaining({
       page: 1, sort: 'price_asc', currency: 'USD', availability: 'Under Offer', problemsOnly: true,
     })));
+  });
+
+  it('does not assume a currency and uses readable unit type choices instead of asking for IDs', async () => {
+    render(<UnitGridPanel projectId="p" />);
+    await screen.findByText(/RTQ-UNIT-1/);
+    expect(screen.getByRole('combobox', { name: 'Grid currency' })).toHaveValue('');
+    const unitTypeFilter = screen.getByRole('combobox', { name: 'Grid unit type filter' });
+    expect(await within(unitTypeFilter).findByRole('option', { name: 'Two-bedroom apartments' })).toBeInTheDocument();
+    expect(screen.queryByText('private-type-id')).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sort grid' }), 'price_asc');
+    expect(screen.getByRole('combobox', { name: 'Sort grid' })).toHaveValue('newest');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Choose a currency before sorting by price.');
   });
 
   it('keeps a conflicting edit blocked until fresh grid versions load', async () => {

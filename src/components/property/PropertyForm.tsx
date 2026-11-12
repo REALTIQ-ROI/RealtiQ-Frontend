@@ -25,11 +25,16 @@ import {
 } from '../../utils/propertyPaymentTypes';
 import { amenityGroupsForField, dictionaryVocabularyOptions, fieldVocabularyOptions, propertyTypesForCategory } from '../../utils/propertyVocabulary';
 
+export type PropertyFormPayload = Omit<CreatePropertyPayload, 'publicationAction'> & {
+  publicationAction?: 'save_draft' | 'submit_for_review';
+};
+
 interface PropertyFormProps {
   initialData?: Partial<Property & CreatePropertyPayload & { status: string }>;
-  onSubmit: (data: CreatePropertyPayload & { status?: string }) => Promise<Property | void>;
+  onSubmit: (data: PropertyFormPayload & { status?: string }) => Promise<Property | void>;
   isLoading?: boolean;
   submitLabel?: string;
+  allowSubmitForReview?: boolean;
   mode?: 'create' | 'edit';
 }
 
@@ -113,21 +118,21 @@ const savedCanonicalValue = (fields: Record<string, unknown>, key: string): stri
 };
 
 // An empty control is unanswered. Zero and false are explicit answers, never defaults.
-const validate = (data: CreatePropertyPayload & { status?: string }, mode: 'create' | 'edit', hadPaymentTypes: boolean, priceOnApplication: boolean): Record<string, string> => {
+const validate = (data: PropertyFormPayload & { status?: string }, mode: 'create' | 'edit', hadPaymentTypes: boolean, priceOnApplication: boolean, submittingForReview: boolean): Record<string, string> => {
   const errs: Record<string, string> = {};
-  if (mode === 'create' && !data.title.trim()) errs.title = 'Title is required';
-  if (!priceOnApplication && data.price === undefined && mode === 'create') errs.price = 'Enter an asking price or select Price on application.';
+  if (mode === 'create' && submittingForReview && !data.title?.trim()) errs.title = 'Title is required';
+  if (!priceOnApplication && data.price === undefined && mode === 'create' && submittingForReview) errs.price = 'Enter an asking price or select Price on application.';
   if (data.price !== undefined && data.price < 0) errs.price = 'Price cannot be negative';
   if (data.price !== undefined && !Number.isFinite(data.price)) errs.price = 'Price must be a valid number';
-  if (mode === 'create' && !data.location.trim()) errs.location = 'Location is required';
-  if (!data.propertyType && mode === 'create') errs.propertyType = 'Property type is required';
+  if (mode === 'create' && submittingForReview && !data.location?.trim()) errs.location = 'Location is required';
+  if (!data.propertyType && mode === 'create' && submittingForReview) errs.propertyType = 'Property type is required';
   if (data.bedrooms !== undefined && (!Number.isInteger(data.bedrooms) || data.bedrooms < 0)) errs.bedrooms = 'Bedrooms must be a non-negative whole number';
   if (data.bathrooms !== undefined && (!Number.isInteger(data.bathrooms) || data.bathrooms < 0)) errs.bathrooms = 'Bathrooms must be a non-negative whole number';
-  if (!data.description.trim() && mode === 'create') errs.description = 'Description is required';
-  if ((!data.media || data.media.length === 0) && mode === 'create') errs.media = 'At least one media file is required';
-  if (!data.category && mode === 'create') errs.category = 'Category is required';
-  if (!data.currency && mode === 'create') errs.currency = 'Currency is required';
-  if (!data.paymentTypes.length && (mode === 'create' || hadPaymentTypes)) errs.paymentTypes = 'Select at least one property payment type';
+  if (!data.description?.trim() && mode === 'create' && submittingForReview) errs.description = 'Description is required';
+  if ((!data.media || data.media.length === 0) && mode === 'create' && submittingForReview) errs.media = 'At least one media file is required';
+  if (!data.category && mode === 'create' && submittingForReview) errs.category = 'Category is required';
+  if (!data.currency && mode === 'create' && submittingForReview) errs.currency = 'Currency is required';
+  if (!data.paymentTypes?.length && (mode === 'create' && submittingForReview || hadPaymentTypes)) errs.paymentTypes = 'Select at least one property payment type';
   if (data.coordinates) {
     if (!Number.isFinite(data.coordinates.lat) || data.coordinates.lat < -90 || data.coordinates.lat > 90) {
       errs.coordinatesLat = 'Latitude must be between -90 and 90';
@@ -142,13 +147,13 @@ const validate = (data: CreatePropertyPayload & { status?: string }, mode: 'crea
   if (data.offPlan) {
     const progress = Number(data.offPlan.constructionProgress ?? 0);
     if (progress < 0 || progress > 100) errs.constructionProgress = 'Progress must be between 0 and 100';
-    if (mode === 'create' && !data.offPlan.expectedCompletionDate) errs.expectedCompletionDate = 'Expected completion date is required';
+    if (mode === 'create' && submittingForReview && !data.offPlan.expectedCompletionDate) errs.expectedCompletionDate = 'Expected completion date is required';
     if ((data.offPlan.reservationAmount ?? 0) < 0) errs.reservationAmount = 'Reservation cannot be negative';
     if ((data.offPlan.minimumInitialDeposit ?? 0) < 0) errs.minimumInitialDeposit = 'Deposit cannot be negative';
     if (typeof data.price === 'number' && (data.offPlan.reservationAmount ?? 0) > data.price) errs.reservationAmount = 'Reservation cannot exceed property price';
     if (typeof data.price === 'number' && (data.offPlan.minimumInitialDeposit ?? 0) > data.price) errs.minimumInitialDeposit = 'Deposit cannot exceed property price';
     if ((data.offPlan.unitsAvailable ?? 0) > (data.offPlan.totalUnitsPlanned ?? Number.MAX_SAFE_INTEGER)) errs.unitsAvailable = 'Available units cannot exceed planned units';
-    if (mode === 'create' && !data.offPlan.riskDisclosure?.trim()) errs.riskDisclosure = 'Risk disclosure is required for off-plan listings';
+    if (mode === 'create' && submittingForReview && !data.offPlan.riskDisclosure?.trim()) errs.riskDisclosure = 'Risk disclosure is required for off-plan listings';
     const milestones = data.offPlan.paymentMilestones ?? [];
     const sequences = new Set(milestones.map((item) => item.sequence));
     if (sequences.size !== milestones.length) errs.paymentMilestones = 'Milestone sequence values must be unique';
@@ -171,6 +176,7 @@ const PropertyForm = ({
   onSubmit,
   isLoading = false,
   submitLabel = 'Save Property',
+  allowSubmitForReview = false,
   mode = 'create',
 }: PropertyFormProps) => {
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
@@ -352,7 +358,12 @@ const PropertyForm = ({
     e.preventDefault();
     if (saving) return;
 
-    if (!priceOnApplication && price.trim() === '') {
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const canSubmitForReview = allowSubmitForReview && !projectId;
+    const submittingForReview = canSubmitForReview && submitter?.value === 'submit_for_review';
+    const requestedAction = submittingForReview ? 'submit_for_review' : 'save_draft';
+
+    if (submittingForReview && !priceOnApplication && price.trim() === '') {
       setErrors((current) => ({ ...current, price: 'Enter an asking price, including 0 when explicitly intended.' }));
       return;
     }
@@ -537,19 +548,19 @@ const PropertyForm = ({
 
     const latProvided = coordinatesLat.trim() !== '';
     const lngProvided = coordinatesLng.trim() !== '';
-    const basePayload: CreatePropertyPayload & { status?: string } = {
-      title: mode === 'edit' && title === initialFormTitle ? initialData?.title ?? title.trim() : title.trim(),
+    const basePayload: PropertyFormPayload & { status?: string } = {
+      ...(title.trim() ? { title: mode === 'edit' && title === initialFormTitle ? initialData?.title ?? title.trim() : title.trim() } : {}),
       ...(!priceOnApplication && price.trim() !== '' ? { price: Number(price) } : {}),
-      paymentTypes: normalizePaymentTypesForForm(parsedPrice, paymentTypes),
-      location: location.trim(),
-      propertyType,
+      ...(paymentTypes.length || (mode === 'edit' && Boolean(initialData?.paymentTypes?.length)) ? { paymentTypes: normalizePaymentTypesForForm(parsedPrice, paymentTypes) } : {}),
+      ...(location.trim() ? { location: location.trim() } : {}),
+      ...(propertyType ? { propertyType } : {}),
       ...(mode === 'create' || structuredFactsTouched ? { structuredFacts: sellerStructuredFacts(structuredFacts) } : {}),
-      description: mode === 'edit' && description === initialFormDescription ? initialData?.description ?? description.trim() : description.trim(),
-      amenities,
-      media,
+      ...(description.trim() ? { description: mode === 'edit' && description === initialFormDescription ? initialData?.description ?? description.trim() : description.trim() } : {}),
+      ...(amenities.length ? { amenities } : {}),
+      ...(media.length || (mode === 'edit' && Boolean(initialData?.media?.length)) ? { media } : {}),
       ...(category ? { category } : {}),
       ...(currency ? { currency } : {}),
-      ...(Object.keys(canonicalFields).length ? { canonicalFields } : {}),
+      ...(mode === 'create' || Object.keys(canonicalFields).length ? { canonicalFields } : {}),
       ...(canonicalFieldMutations.length ? { canonicalFieldMutations } : {}),
       coordinates:
         latProvided && lngProvided
@@ -563,7 +574,9 @@ const PropertyForm = ({
         projectId,
         canonicalUnitTypeId,
         projectUnit: { unitNumber: unitNumber.trim() },
-      } : {}),
+      } : mode === 'create' && requestedAction === 'save_draft'
+        ? { publicationAction: 'save_draft' as const }
+        : mode === 'edit' && !projectId ? { publicationAction: requestedAction } : {}),
       ...(listingType ? { listingType } : {}),
       ...(listingType === 'off_plan' && (mode === 'create' || offPlanTouched) ? {
         offPlan: {
@@ -597,13 +610,14 @@ const PropertyForm = ({
       return;
     }
     if (mode === 'create' && dictionaryLoading) { setErrors({ dictionary: 'Wait for the current property vocabulary to load before creating a listing.' }); return; }
-    if (mode === 'create' && (!category || !categoryOptions.some((option) => option.value === category))) canonicalErrors.category = 'Choose a current property category from the field dictionary.';
-    if (!category || !categoryOptions.some((option) => option.value === category)) canonicalErrors.category = 'Choose a category from the current backend dictionary.';
-    if (!propertyType || !propertyTypeOptions.some((option) => option.value === propertyType)) canonicalErrors.propertyType = 'Choose a property type in the selected category from the current backend dictionary.';
-    if (mode === 'create' && dictionary && dictionary.fields.some((field) => field.key === 'buildStage' && field.requiredness === 'required') && !completionStage) canonicalErrors.buildStage = 'Choose a build stage.';
+    if (submittingForReview && !category) canonicalErrors.category = 'Choose a current property category from the field dictionary.';
+    if (category && !categoryOptions.some((option) => option.value === category)) canonicalErrors.category = 'Choose a category from the current backend dictionary.';
+    if (submittingForReview && !propertyType) canonicalErrors.propertyType = 'Choose a property type in the selected category from the current backend dictionary.';
+    if (propertyType && !propertyTypeOptions.some((option) => option.value === propertyType)) canonicalErrors.propertyType = 'Choose a property type in the selected category from the current backend dictionary.';
+    if (submittingForReview && dictionary && dictionary.fields.some((field) => field.key === 'buildStage' && field.requiredness === 'required') && !completionStage) canonicalErrors.buildStage = 'Choose a build stage.';
     if (!priceOnApplication && price.trim() !== '' && (!Number.isInteger(Number(price)) || !Number.isFinite(Number(price)))) canonicalErrors.price = 'Asking price must be a whole-number amount.';
     if (Object.keys(canonicalErrors).length) { setErrors(canonicalErrors); return; }
-    const errs = { ...validate(basePayload, mode, Boolean(initialData?.paymentTypes?.length), priceOnApplication), ...validateStructuredFacts(basePayload.structuredFacts) };
+    const errs = { ...validate(basePayload, mode, Boolean(initialData?.paymentTypes?.length), priceOnApplication, submittingForReview), ...validateStructuredFacts(basePayload.structuredFacts) };
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
@@ -1389,14 +1403,27 @@ const PropertyForm = ({
         </div>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={saving}
-        className="w-full py-4 rounded-xl text-white font-bold text-sm tracking-tight hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
-        style={{ background: 'linear-gradient(135deg, #000000 0%, #111c2d 100%)' }}
-      >
-        {saving ? 'Saving...' : submitLabel}
-      </button>
+      {allowSubmitForReview && !projectId ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button type="submit" value="save_draft" disabled={saving} className="w-full rounded-xl border border-outline-variant/30 bg-white py-4 text-sm font-bold text-primary hover:bg-surface-container-low disabled:cursor-not-allowed disabled:opacity-60">
+            {saving ? 'Saving…' : submitLabel}
+          </button>
+          <button type="submit" value="submit_for_review" disabled={saving} className="w-full rounded-xl py-4 text-sm font-bold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60" style={{ background: 'linear-gradient(135deg, #000000 0%, #111c2d 100%)' }}>
+            {saving ? 'Submitting…' : mode === 'edit' ? 'Submit changes for review' : 'Submit for review'}
+          </button>
+          <p className="text-xs text-secondary sm:col-span-2">Drafts remain private. Submitting sends this listing to the server’s review workflow; it does not publish the listing directly.</p>
+        </div>
+      ) : (
+        <button
+          type="submit"
+          value="save_draft"
+          disabled={saving}
+          className="w-full py-4 rounded-xl text-white font-bold text-sm tracking-tight hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
+          style={{ background: 'linear-gradient(135deg, #000000 0%, #111c2d 100%)' }}
+        >
+          {saving ? 'Saving...' : submitLabel}
+        </button>
+      )}
     </form>
   );
 };

@@ -271,6 +271,7 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
     setSaving(true);
     try {
       await onSubmit({
+        ...(!isEdit ? { publicationAction: 'save_draft' as const } : {}),
         canonicalFields,
         ...(canonicalFieldMutations.length ? { canonicalFieldMutations } : {}),
         name: name.trim(),
@@ -278,7 +279,6 @@ const ProjectForm = ({ initialData, onSubmit, submitLabel = 'Save Project', pres
         shortDescription: shortDescription.trim() || (preserveEmptyValues ? '' : undefined),
         description: description.trim(),
         address: address.trim() || (preserveEmptyValues ? '' : undefined),
-        country: 'Nigeria',
         state: resolvedLocations.state?.name,
         area: resolvedLocations.area?.name || (preserveEmptyValues ? '' : undefined),
         coordinates,

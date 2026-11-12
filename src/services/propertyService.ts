@@ -42,18 +42,18 @@ export interface CreatePropertyPayload {
   canonicalFieldMutations?: Array<{ field: string; operation: 'set' | 'set_null' | 'unset' | 'reset_to_inherit'; value?: unknown }>;
   canonicalUnitTypeId?: string;
   publicationAction?: 'save_draft';
-  title: string;
+  title?: string;
   price?: number;
-  paymentTypes: PropertyPaymentType[];
-  location: string;
-  propertyType: PropertyType | string;
+  paymentTypes?: PropertyPaymentType[];
+  location?: string;
+  propertyType?: PropertyType | string;
   bedrooms?: number;
   bathrooms?: number;
   squareFeet?: number;
   structuredFacts?: StructuredPropertyFacts;
-  description: string;
+  description?: string;
   amenities?: string[];
-  media: MediaItem[];
+  media?: MediaItem[];
   category?: PropertyCategory;
   completionStage?: PropertyCompletionStage;
   currency?: PropertyCurrency;
@@ -67,7 +67,8 @@ export interface CreatePropertyPayload {
   offPlan?: OffPlan;
 }
 
-export interface UpdatePropertyPayload extends Partial<CreatePropertyPayload> {
+export interface UpdatePropertyPayload extends Omit<Partial<CreatePropertyPayload>, 'publicationAction'> {
+  publicationAction?: 'save_draft' | 'submit_for_review';
   status?: PropertyStatus;
   featured?: boolean;
   expectedVersion?: number;
@@ -82,6 +83,7 @@ export interface PropertiesResponse {
   total: number;
   page: number;
   limit: number;
+  pages?: number;
   sort?: string;
   facets?: unknown;
   normalization?: { queryVersion: string; query: unknown; notices?: unknown[] };
@@ -99,6 +101,11 @@ export interface CreatePropertyResponse {
   titleVerifications?: TitleVerification[];
   riskDetected?: boolean;
   message?: string;
+}
+
+interface OwnedPropertiesResponse {
+  properties: Property[];
+  pagination: { page: number; limit: number; total: number; pages: number };
 }
 
 export type PropertyFiltersQuery = PropertyFilters;
@@ -367,10 +374,21 @@ export const propertyService = {
   },
 
   async getMyProperties(page = 1, limit = 20): Promise<PropertiesResponse> {
-    const { data } = await api.get<PropertiesResponse | Property[]>('/properties/mine', { params: { page, limit } });
-    return normalizePropertiesResponse(Array.isArray(data)
-      ? { properties: data, total: data.length, page: 1, limit: data.length }
-      : data);
+    const { data } = await api.get<PropertiesResponse | OwnedPropertiesResponse | Property[]>('/properties/mine', { params: { page, limit } });
+    if (Array.isArray(data)) {
+      return normalizePropertiesResponse({ properties: data, total: data.length, page: 1, limit: data.length });
+    }
+    const ownerResponse = data as OwnedPropertiesResponse & Partial<PropertiesResponse>;
+    if (ownerResponse.pagination) {
+      return normalizePropertiesResponse({
+        ...ownerResponse,
+        page: ownerResponse.pagination.page,
+        limit: ownerResponse.pagination.limit,
+        total: ownerResponse.pagination.total,
+        pages: ownerResponse.pagination.pages,
+      });
+    }
+    return normalizePropertiesResponse(ownerResponse as PropertiesResponse);
   },
 
   async updateProperty(id: string, payload: UpdatePropertyPayload, challengeId?: string): Promise<Property> {

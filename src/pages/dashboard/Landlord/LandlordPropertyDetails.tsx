@@ -6,12 +6,11 @@ import TitleDocumentManagement from '../../../components/title/TitleDocumentMana
 import PaymentTypeBadges from '../../../components/property/PaymentTypeBadges';
 import ConstructionUpdateManager from '../../../components/property/ConstructionUpdateManager';
 import VirtualTourManagement from '../../../components/virtualTour/VirtualTourManagement';
-import { useAuth } from '../../../contexts/AuthContext';
-import { useProperties } from '../../../contexts/PropertiesContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
 import { paymentService } from '../../../services/paymentService';
-import { propertyRouteReference, resolvePropertyOwnerId } from '../../../types';
+import { propertyService } from '../../../services/propertyService';
+import { propertyRouteReference } from '../../../types';
 import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
 import { effectiveCanonicalValue, formatCanonicalArea } from '../../../utils/propertyVocabulary';
 
@@ -24,15 +23,16 @@ const formatRelativeDate = (date?: string) => {
 };
 
 const LandlordPropertyDetails = () => {
-  const { user } = useAuth();
-  const { properties, refreshProperties } = useProperties();
   const { id } = useParams<{ id: string }>();
+  const { data: ownerDetail, loading: propertyLoading, error: propertyError, execute: refreshProperty } = useAsync(
+    () => id ? propertyService.getPropertyOwnerDetail(id) : Promise.reject(new Error('Missing property reference.')),
+    Boolean(id),
+    id,
+  );
   const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
   const { data: payments } = useAsync(() => paymentService.getPayments(), true);
 
-  const property = id
-    ? (properties.find((item) => propertyRouteReference(item) === id || item._id === id || item.id === id) ?? null)
-    : (properties.find((item) => resolvePropertyOwnerId(item) === user?._id) ?? null);
+  const property = ownerDetail?.property ?? null;
   const propertyReference = property ? propertyRouteReference(property) : '';
 
   const relatedInquiries = (inquiries ?? []).filter((item) => {
@@ -61,13 +61,15 @@ const LandlordPropertyDetails = () => {
       }
     >
       <div className="p-8 max-w-7xl mx-auto">
+        {propertyLoading ? <p role="status" className="mb-5 rounded-lg bg-surface-container-low p-4 text-sm text-secondary">Loading private property details…</p> : null}
+        {propertyError ? <p role="alert" className="mb-5 rounded-lg bg-error-container p-4 text-sm text-on-error-container">{propertyError}<button type="button" onClick={() => void refreshProperty()} className="ml-3 font-bold underline">Retry</button></p> : null}
         <div className="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
           <div>
             <div className="flex items-center gap-3 mb-2">
               <span className="px-3 py-1 bg-green-100 text-green-700 text-[10px] font-black tracking-widest uppercase rounded-full">
                 {property?.status === 'available' ? 'Active' : property?.status ?? 'Not Found'}
               </span>
-              <span className="text-secondary text-sm font-medium">Live API data</span>
+              <span className="text-secondary text-sm font-medium">Private owner details</span>
               <TitleVerificationBadge summary={property?.titleVerification} context="owner" />
             </div>
             <h1 className="text-4xl font-extrabold tracking-tighter text-slate-900 mb-2">
@@ -80,13 +82,13 @@ const LandlordPropertyDetails = () => {
             {property ? <div className="mt-3"><PaymentTypeBadges paymentTypes={normalizePropertyPaymentTypes(property.paymentTypes, property.price)} /></div> : null}
           </div>
           <div className="flex gap-3 flex-wrap">
-            <Link
+            {property?.approvalStatus === 'approved' && property.status !== 'not_released' ? <Link
               to={propertyReference ? `/properties/${propertyReference}` : '/properties'}
               className="px-6 py-3 bg-white border-2 border-slate-100 text-slate-900 font-bold rounded-lg hover:bg-slate-50 transition-all flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-lg">visibility</span>
               Preview Listing
-            </Link>
+            </Link> : <span className="rounded-lg bg-surface-container-low px-5 py-3 text-sm font-semibold text-secondary">Public preview becomes available after the listing is approved and released.</span>}
             <Link
               to={propertyReference ? `/dashboard/landlord/edit-property/${propertyReference}` : '/dashboard/landlord/my-properties'}
               className="px-6 py-3 bg-primary text-white font-bold rounded-lg hover:opacity-90 transition-all flex items-center gap-2"
@@ -255,7 +257,7 @@ const LandlordPropertyDetails = () => {
           </div>
         </div>
         {property ? <ConstructionUpdateManager property={property} /> : null}
-        {property ? <VirtualTourManagement propertyId={propertyReference} summary={property.virtualTour} providerOverride={property.virtualTourProviderOverride} version={property.version} onUpdated={() => refreshProperties()} /> : null}
+        {property ? <VirtualTourManagement propertyId={propertyReference} summary={property.virtualTour} providerOverride={property.virtualTourProviderOverride} version={property.version} onUpdated={() => { void refreshProperty(); }} /> : null}
         {property ? <TitleDocumentManagement propertyId={propertyReference} sold={property.status === 'sold'} /> : null}
       </div>
     </LandlordPortalLayout>

@@ -177,6 +177,7 @@ export interface UnitGridQuery {
 export type UnitGridExportQuery = Omit<UnitGridQuery, 'page' | 'limit'>;
 
 export interface CreateProjectRequest {
+  publicationAction?: 'save_draft';
   canonicalFields?: Record<string, unknown>;
   canonicalFieldMutations?: Array<{ field: string; operation: 'set' | 'set_null' | 'unset' | 'reset_to_inherit'; value?: unknown }>;
   name: string;
@@ -237,7 +238,7 @@ export interface UnitGridResponse {
 
 export interface UnitGridMutation {
   field: string;
-  operation: 'set' | 'unset' | 'reset_to_inherited';
+  operation: 'set' | 'unset' | 'reset_to_inherit';
   value?: unknown;
 }
 
