@@ -26,7 +26,7 @@ describe('profile evidence byte-bound multipart request', () => {
     expect(form.get('expectedVersion')).toBeNull();
   });
 
-  it('binds the exact previous evidence reference for a replacement upload', () => {
+  it('binds the exact six text fields for a replacement upload', () => {
     const file = new File(['replacement'], 'id.pdf', { type: 'application/pdf' });
     const metadata = { purpose: 'nin', subject: 'self', documentKind: 'nin_slip', operationKey: 'evidence_nin_2026_b2c3', previousEvidenceId: 'evidence-current' };
     const digest = 'a'.repeat(64);
@@ -35,21 +35,21 @@ describe('profile evidence byte-bound multipart request', () => {
 
     expect(body).toEqual({ ...metadata, __stepUpFileSha256: digest });
     expect([...form.keys()]).toEqual(['file', 'purpose', 'subject', 'documentKind', 'operationKey', 'previousEvidenceId', '__stepUpFileSha256']);
+    expect(evidenceUploadTextFieldNames(metadata)).toEqual(['purpose', 'subject', 'documentKind', 'operationKey', 'previousEvidenceId', '__stepUpFileSha256']);
+    expect(evidenceUploadFieldLimitMessage(metadata)).toBeNull();
     expect(form.get('previousEvidenceId')).toBe('evidence-current');
     expect(form.get('__stepUpFileSha256')).toBe(digest);
     expect(form.getAll('file')).toHaveLength(1);
   });
 
-  it('reports replacement requests that exceed five text fields without dropping required values', () => {
+  it('allows a complete six-text-field replacement request without dropping required values', () => {
     const initial = { purpose: 'nin', subject: 'self', documentKind: 'nin_slip', operationKey: 'evidence_nin_2026_a1b2' };
     const replacement = { ...initial, previousEvidenceId: 'latest-evidence-id' };
 
     expect(evidenceUploadTextFieldNames(initial)).toEqual(['purpose', 'subject', 'documentKind', 'operationKey', '__stepUpFileSha256']);
     expect(evidenceUploadFieldLimitMessage(initial, 'Buyer profile (buyer · individual)')).toBeNull();
     expect(evidenceUploadTextFieldNames(replacement)).toHaveLength(6);
-    expect(evidenceUploadFieldLimitMessage(replacement, 'Buyer profile (buyer · individual)'))
-      .toContain('Buyer profile (buyer · individual) nin evidence needs 6 text fields (purpose, subject, documentKind, operationKey, previousEvidenceId, __stepUpFileSha256)');
-    expect(evidenceUploadFieldLimitMessage(replacement, 'Buyer profile (buyer · individual)')).toContain('no required fields were removed');
+    expect(evidenceUploadFieldLimitMessage(replacement, 'Buyer profile (buyer · individual)')).toBeNull();
   });
 
   it('omits optional documentKind only when the current contract has no explicit kind choices', () => {
@@ -69,6 +69,7 @@ describe('profile evidence byte-bound multipart request', () => {
     expect(validateEvidenceUpload(new File(['abc'], 'id.pdf', { type: 'application/pdf' }), { ...metadata, purpose: 'other' }, contract)).toContain('purpose');
     expect(validateEvidenceUpload(new File(['abc'], 'id.pdf', { type: 'application/pdf' }), { ...metadata, subject: 'someone' }, contract)).toContain('subject');
     expect(validateEvidenceUpload(new File(['abc'], 'id.pdf', { type: 'application/pdf' }), { ...metadata, documentKind: 'wrong' }, contract)).toContain('document kind');
+    expect(validateEvidenceUpload(new File(['abc'], 'id.pdf', { type: 'application/pdf' }), { ...metadata, operationKey: 'invalid:key' }, contract)).toContain('underscores or hyphens');
     expect(validateEvidenceUpload(new File(['x'], 'bad.txt', { type: 'text/plain' }), metadata, contract)).toContain('PDF');
     expect(validateEvidenceUpload(new File(['x'.repeat(2048)], 'large.pdf', { type: 'application/pdf' }), metadata, contract)).toContain('no larger');
     expect(profileEvidenceUploadLimitBytes(contract)).toBe(1024);
@@ -89,6 +90,7 @@ describe('profile evidence byte-bound multipart request', () => {
     const malformed = formatEvidenceUploadError(new ApiRequestError('Raw parser detail must not be shown.', { status: 422, code: 'INPUT_EVIDENCE_UPLOAD_INVALID', requestId: 'req-upload-1' }), contract);
     expect(malformed).toMatch(/upload request could not be parsed/i);
     expect(malformed).toMatch(/one file/i);
+    expect(malformed).toMatch(/up to 6 text fields/i);
     expect(malformed).toContain('req-upload-1');
     expect(malformed).not.toMatch(/corrupt|raw parser detail/i);
 

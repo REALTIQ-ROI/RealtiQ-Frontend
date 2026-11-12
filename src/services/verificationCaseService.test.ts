@@ -149,6 +149,7 @@ describe('verificationCaseService private transport and history', () => {
     form.append('subject', 'self');
     form.append('documentKind', 'nin_slip');
     form.append('operationKey', 'evidence_operation_123');
+    form.append('previousEvidenceId', 'latest-matching-evidence');
     form.append('__stepUpFileSha256', 'a'.repeat(64));
     response = { id: 'evidence-1', profileId: 'buyer-profile', purpose: 'nin', subject: 'self', state: 'available' };
 
@@ -161,7 +162,7 @@ describe('verificationCaseService private transport and history', () => {
     expect(requests[0].headers.get('X-Profile-ID')).toBe('buyer-profile');
     expect(requests[0].headers.get('X-Step-Up-Challenge')).toBe('evidence-challenge');
     expect(requests[0].headers.get('Content-Type')).toBeNull();
-    expect([...form.keys()]).toEqual(['file', 'purpose', 'subject', 'documentKind', 'operationKey', '__stepUpFileSha256']);
+    expect([...form.keys()]).toEqual(['file', 'purpose', 'subject', 'documentKind', 'operationKey', 'previousEvidenceId', '__stepUpFileSha256']);
     expect(form.getAll('file')).toHaveLength(1);
     expect(form.get('profileId')).toBeNull();
     expect(form.get('X-Step-Up-Challenge')).toBeNull();

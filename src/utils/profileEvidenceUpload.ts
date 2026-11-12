@@ -3,7 +3,7 @@ import { internationalIdentityUnavailable } from './individualKycEvidence';
 import { ApiRequestError } from '../lib/axios';
 
 export const HARD_EVIDENCE_UPLOAD_LIMIT = 50 * 1024 * 1024;
-export const MAX_EVIDENCE_UPLOAD_TEXT_FIELDS = 5;
+export const MAX_EVIDENCE_UPLOAD_TEXT_FIELDS = 6;
 export const STEP_UP_FILE_DIGEST_FIELD = '__stepUpFileSha256';
 const processingEvidenceStates = new Set(['migration_pending', 'awaiting_upload', 'quarantined', 'validating', 'activation_pending', 'deleting', 'privacy_deleting']);
 
@@ -74,7 +74,7 @@ export const evidenceUploadFieldLimitMessage = (metadata: BoundEvidenceMetadata,
   const fields = evidenceUploadTextFieldNames(metadata);
   if (fields.length <= MAX_EVIDENCE_UPLOAD_TEXT_FIELDS) return null;
   const profile = profileLabel ? `${profileLabel} ` : 'This profile ';
-  return `${profile}${metadata.purpose} evidence needs ${fields.length} text fields (${fields.join(', ')}), including its file digest. The backend accepts at most ${MAX_EVIDENCE_UPLOAD_TEXT_FIELDS}; no required fields were removed, so this upload is blocked until the backend contract supports the complete request.`;
+  return `${profile}${metadata.purpose} evidence needs ${fields.length} text fields (${fields.join(', ')}), including its file digest. The backend accepts at most ${MAX_EVIDENCE_UPLOAD_TEXT_FIELDS}; review the current evidence contract before continuing.`;
 };
 
 export const sha256File = async (file: File): Promise<string> => {
@@ -94,7 +94,7 @@ export const validateEvidenceUpload = (file: File, metadata: BoundEvidenceMetada
     if (!allowedKinds?.length) return 'Accepted residence national ID document kinds are unavailable. Contact support before uploading this evidence.';
   }
   if (allowedKinds?.length ? !metadata.documentKind || !allowedKinds.includes(metadata.documentKind) : Boolean(metadata.documentKind && metadata.documentKind !== metadata.purpose)) return 'Choose a document kind allowed by the current evidence policy.';
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,99}$/.test(metadata.operationKey) || metadata.operationKey.startsWith('legacy_')) return 'The upload operation key must contain 8–100 allowed characters.';
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{7,99}$/.test(metadata.operationKey)) return 'The upload operation key must contain 8–100 letters, numbers, underscores or hyphens.';
   if (!contract.formats.includes(file.type)) return 'Choose a PDF, JPEG, PNG or WebP file accepted by the current policy.';
   if (!Number.isFinite(file.size) || file.size <= 0 || file.size > profileEvidenceUploadLimitBytes(contract)) return `The file must be no larger than ${formatEvidenceFileSize(profileEvidenceUploadLimitBytes(contract))}.`;
   return null;

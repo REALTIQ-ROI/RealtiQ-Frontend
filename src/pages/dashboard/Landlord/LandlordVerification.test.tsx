@@ -247,7 +247,7 @@ describe('landlord profile verification loading', () => {
     expect(screen.getByRole('dialog', { name: 'Upload private evidence' }).parentElement?.parentElement).toBe(document.body);
     expect(screen.getByText('Document: BVN · For you')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(screen.getByRole('option', { name: /nin slip · v1/ })).toHaveValue('evidence-nin-1');
+    expect(screen.getByRole('option', { name: /nin slip · version 1/i })).toHaveValue('evidence-nin-1');
 
     await userEvent.selectOptions(screen.getByLabelText('Evidence for nin'), 'evidence-nin-1');
     await userEvent.type(screen.getByLabelText('Identity country'), 'NG');
@@ -363,13 +363,18 @@ describe('landlord profile verification loading', () => {
     expect((mocks.uploadEvidence.mock.calls[0][0] as FormData).has('previousEvidenceId')).toBe(false);
   }, 15000);
 
-  it('blocks a six-text-field replacement without omitting a required field or creating a challenge', async () => {
+  it('uploads a complete six-text-field replacement with a matching file-bound challenge', async () => {
     mocks.contract.mockResolvedValue({ ...contract, documentKinds: { nin: ['nin_slip', 'nin_card'] } });
     mocks.evidence.mockResolvedValue({ evidence: [{
       id: 'latest-nin', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin_slip', version: 3,
       previousEvidenceId: 'older-nin', mimeType: 'application/pdf', size: 100, state: 'deleted', errorCode: null,
       contentValidatedAt: null, createdAt: '2026-11-11T09:00:00.000Z',
     }], nextCursor: null });
+    mocks.uploadEvidence.mockResolvedValue({
+      id: 'replacement-nin', profileId: 'profile-1', purpose: 'nin', subject: 'self', documentKind: 'nin_slip', version: 4,
+      previousEvidenceId: 'latest-nin', mimeType: 'application/pdf', size: 100, state: 'available', errorCode: null,
+      contentValidatedAt: '2026-11-12T09:00:00.000Z', createdAt: '2026-11-12T09:00:00.000Z',
+    });
     render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
     await screen.findByRole('heading', { name: 'Example Landlord' });
     await userEvent.click(screen.getByRole('button', { name: 'Upload a document' }));
@@ -378,14 +383,28 @@ describe('landlord profile verification loading', () => {
     await userEvent.selectOptions(screen.getByLabelText('Document kind'), 'nin_slip');
     const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
     if (!fileInput) throw new Error('Evidence file input was not rendered.');
-    await userEvent.upload(fileInput, new File(['replacement evidence'], 'nin.pdf', { type: 'application/pdf' }));
+    const selectedFile = new File(['replacement evidence'], 'nin.pdf', { type: 'application/pdf' });
+    await userEvent.upload(fileInput, selectedFile);
     await userEvent.click(screen.getByRole('button', { name: 'Continue with authenticator' }));
 
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Example profile (owner · individual) nin evidence needs 6 text fields');
-    expect(alert).toHaveTextContent('purpose, subject, documentKind, operationKey, previousEvidenceId, __stepUpFileSha256');
-    expect(mocks.stepUpStart).not.toHaveBeenCalled();
+    const digest = await sha256File(selectedFile);
+    expect(mocks.stepUpStart).toHaveBeenCalledWith('POST', '/api/profiles/current/onboarding/evidence', {
+      purpose: 'nin', subject: 'self', documentKind: 'nin_slip', operationKey: expect.any(String),
+      previousEvidenceId: 'latest-nin', __stepUpFileSha256: digest,
+    });
     expect(mocks.uploadEvidence).not.toHaveBeenCalled();
+    await userEvent.click(await screen.findByRole('button', { name: 'Verify and continue' }));
+
+    await waitFor(() => expect(mocks.uploadEvidence).toHaveBeenCalledTimes(1));
+    const upload = mocks.uploadEvidence.mock.calls[0][0] as FormData;
+    expect([...upload.keys()]).toEqual(['file', 'purpose', 'subject', 'documentKind', 'operationKey', 'previousEvidenceId', '__stepUpFileSha256']);
+    expect(upload.get('file')).toBe(selectedFile);
+    expect(upload.get('purpose')).toBe('nin');
+    expect(upload.get('subject')).toBe('self');
+    expect(upload.get('documentKind')).toBe('nin_slip');
+    expect(upload.get('previousEvidenceId')).toBe('latest-nin');
+    expect(upload.get('__stepUpFileSha256')).toBe(digest);
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(expect.stringContaining('uploaded successfully'));
   }, 15000);
 
   it('refreshes a version conflict and requires confirmation before rebasing with a new operation key', async () => {
@@ -565,7 +584,7 @@ describe('landlord profile verification loading', () => {
       previousEvidenceId: null, mimeType: 'application/pdf', size: 100, state: 'available', errorCode: null, contentValidatedAt: null, createdAt: '2026-11-11T09:00:00.000Z' };
     mocks.evidence.mockImplementation(async () => ({ evidence: mocks.profileId === 'profile-1' ? [firstProfileRecord] : [], nextCursor: null }));
     const view = render(<MemoryRouter><LandlordVerification /></MemoryRouter>);
-    expect(await screen.findByText('nin · profile one marker')).toBeInTheDocument();
+    expect(await screen.findByText('NIN · Profile One Marker')).toBeInTheDocument();
 
     mocks.profileId = 'profile-2';
     localStorage.setItem('activeProfileId', 'profile-2');
@@ -573,7 +592,7 @@ describe('landlord profile verification loading', () => {
     view.rerender(<MemoryRouter><LandlordVerification /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: 'Second profile' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText('nin · profile one marker')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('NIN · Profile One Marker')).not.toBeInTheDocument());
   }, 15000);
 
   it('shows a normal input for a missing field and saves the first draft using the server version', async () => {
