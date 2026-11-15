@@ -40,4 +40,9 @@ export const inquiryService = {
     const { data } = await api.patch<ApiInquiry>(`/inquiries/${id}`, { status });
     return data;
   },
+
+  async updateLeadUpdatesConsent(id: string, body: { optIn: boolean; expectedVersion: number }): Promise<ApiInquiry> {
+    const { data } = await api.patch<ApiInquiry>(`/inquiries/${encodeURIComponent(id)}/lead-updates-consent`, body, { headers: { 'Cache-Control': 'no-store' } });
+    return data;
+  },
 };

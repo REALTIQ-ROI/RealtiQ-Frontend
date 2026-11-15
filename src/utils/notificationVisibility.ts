@@ -1,7 +1,16 @@
 import type { RealtiqNotification } from '../types';
-const allowedCategories = new Set(['messages', 'saved_searches', 'listing_changes', 'inquiries', 'marketplace', 'security', 'payments', 'legal']);
+const allowedCategories = new Set(['messages', 'saved_searches', 'listing_changes', 'inquiries', 'marketplace', 'followed_updates', 'security', 'payments', 'legal']);
+const followedUpdateTypes = new Set([
+  'following.new_listing',
+  'following.price_change',
+  'following.project_progress',
+  'following.open_house',
+  'following.show_home',
+  'following.social_post',
+]);
 export const isDisplayableNotification = (notification: RealtiqNotification) =>
   allowedCategories.has(notification.category)
+  && (notification.category !== 'followed_updates' || followedUpdateTypes.has(notification.type))
   && Boolean(notification.id && notification.title?.trim() && notification.body?.trim());
 
 export const mergeNotifications = (

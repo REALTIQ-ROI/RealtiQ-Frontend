@@ -4,11 +4,13 @@ import PublicLayout from '../../components/layout/PublicLayout';
 import InquiryFormComponent from '../../components/forms/InquiryForm';
 import { inquiryService } from '../../services/inquiryService';
 import type { CreateInquiryPayload } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
 const InquiryForm = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const propertyId = searchParams.get('propertyId') ?? '';
+  const { activeProfile } = useAuth();
 
   const submitInquiry = async (payload: CreateInquiryPayload) => {
     await inquiryService.createInquiry(payload);
@@ -22,7 +24,7 @@ const InquiryForm = () => {
         <h1 className="text-4xl font-headline font-extrabold mb-4">Property Inquiry</h1>
         <p className="text-secondary mb-6">Send us your details and we will contact you shortly.</p>
         <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-xl p-6">
-          <InquiryFormComponent propertyId={propertyId} onSubmitInquiry={submitInquiry} />
+        <InquiryFormComponent propertyId={propertyId} onSubmitInquiry={submitInquiry} allowLeadUpdatesOptIn={activeProfile?.kind === 'buyer'} />
         </div>
       </section>
     </PublicLayout>

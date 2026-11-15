@@ -20,6 +20,7 @@ export interface ManagedDocumentDto {
   issuerProfileId: string;
   issuerIdentityId?: string;
   recipientProfileIds: string[];
+  subjectPropertyId?: string | null;
   templateId?: string | null;
   templateVersion?: number | null;
   previousDocumentId?: string | null;

@@ -8,6 +8,9 @@ import PropertyCard from './PropertyCard';
 vi.mock('../../services/titleDocumentService', () => ({
   titleDocumentService: { listPublic: vi.fn() },
 }));
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: () => ({ isAuthenticated: true, activeProfile: { id: 'buyer-profile', kind: 'buyer' } }),
+}));
 
 const property: Property = {
   _id: 'property-1',

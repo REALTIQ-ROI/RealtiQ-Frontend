@@ -6,13 +6,15 @@ import type { CreateInquiryPayload } from '../../types';
 interface InquiryFormProps {
   propertyId: string;
   onSubmitInquiry: (payload: CreateInquiryPayload) => Promise<unknown>;
+  allowLeadUpdatesOptIn?: boolean;
 }
 
-const InquiryForm = ({ propertyId, onSubmitInquiry }: InquiryFormProps) => {
+const InquiryForm = ({ propertyId, onSubmitInquiry, allowLeadUpdatesOptIn = false }: InquiryFormProps) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [inquiryType, setInquiryType] = useState('Schedule a Private Viewing');
   const [message, setMessage] = useState('');
+  const [leadUpdatesOptIn, setLeadUpdatesOptIn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,10 +51,12 @@ const InquiryForm = ({ propertyId, onSubmitInquiry }: InquiryFormProps) => {
         email: email.trim(),
         message: message.trim(),
         inquiryType,
+        ...(allowLeadUpdatesOptIn ? { leadUpdatesOptIn } : {}),
       });
       setFullName('');
       setEmail('');
       setMessage('');
+      setLeadUpdatesOptIn(false);
     } catch {
       setError('Unable to send inquiry right now.');
     } finally {
@@ -89,6 +93,8 @@ const InquiryForm = ({ propertyId, onSubmitInquiry }: InquiryFormProps) => {
         onChange={(event) => setMessage(event.target.value)}
         required
       />
+
+      {allowLeadUpdatesOptIn ? <label className="flex items-start gap-2 text-sm text-secondary"><input type="checkbox" checked={leadUpdatesOptIn} onChange={(event) => setLeadUpdatesOptIn(event.target.checked)} className="mt-1" /><span>Send me occasional REALTIQ updates about this property. I can change this choice later from my inquiry details.</span></label> : null}
 
       {error ? <p className="text-error text-sm">{error}</p> : null}
 

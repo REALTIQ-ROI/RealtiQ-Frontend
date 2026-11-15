@@ -31,7 +31,7 @@ const PublicTitleDocuments = ({
   onDocumentsLoaded,
   registryReferences,
 }: PublicTitleDocumentsProps) => {
-  const { activeProfile } = useAuth();
+  const { activeProfile, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<PublicTitleDocument[]>([]);
   const [statuses, setStatuses] = useState<Record<string, TitleDocumentAccessStatus>>({});
@@ -70,6 +70,12 @@ const PublicTitleDocuments = ({
     setLoadError(null);
     setDocuments([]);
     setStatuses({});
+    if (!isAuthenticated || activeProfile?.kind !== 'buyer') {
+      setLoading(false);
+      setLoadError('Sign in with a buyer profile to view buyer-available title-document information.');
+      onDocumentsLoaded?.([]);
+      return () => { active = false; };
+    }
     titleDocumentService.listPublic(propertyId)
       .then(async (result) => {
         if (!active) return;
@@ -97,7 +103,7 @@ const PublicTitleDocuments = ({
     return () => {
       active = false;
     };
-  }, [activeProfile?.id, onDocumentsLoaded, propertyId]);
+  }, [activeProfile?.id, activeProfile?.kind, isAuthenticated, onDocumentsLoaded, propertyId]);
 
   const openViewer = async (document: PublicTitleDocument) => {
     if (busyId) return;

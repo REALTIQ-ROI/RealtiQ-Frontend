@@ -115,9 +115,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return null;
     }
     const requestVersion = ++accessRequestVersion.current;
-    // Remove the old projection while the server checks the current profile.
-    // A permission failure must not leave stale department actions enabled.
-    setAdminAccess(null);
+    // Keep a projection for this same selected profile while revalidating it.
+    // AdminAccessBoundary uses the profile ID to avoid showing another profile's
+    // capabilities, and clears this projection if the authoritative read fails.
+    // Keeping the current route mounted prevents a permission response from
+    // unmounting and immediately reissuing the request that caused revalidation.
     setAdminAccessLoading(true);
     setAdminAccessError(null);
     try {

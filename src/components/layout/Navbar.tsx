@@ -10,6 +10,8 @@ const navItems = [
   { to: '/properties', label: 'Properties' },
   { to: '/projects', label: 'Projects' },
   { to: '/proxy-inspectors', label: 'Inspection Partners' },
+  { to: '/partners', label: 'Partner Network' },
+  { to: '/community', label: 'Community' },
   { to: '/about', label: 'About' },
   { to: '/contact', label: 'Contact' },
 ];

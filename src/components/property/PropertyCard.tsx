@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { titleDocumentService } from '../../services/titleDocumentService';
 import {
   propertyPublicReference,
@@ -36,6 +37,7 @@ const PropertyCard = ({
   onSave?: (property: Property) => void;
 }) => {
   const location = useLocation();
+  const { isAuthenticated, activeProfile } = useAuth();
   const { dictionary } = useCanonicalFieldDictionary();
   const cover = property.media?.[0];
   const coverUrl = cover?.url;
@@ -64,6 +66,10 @@ const PropertyCard = ({
 
   useEffect(() => {
     if (property.titleDocumentReferences?.length || !routeReference) return;
+    if (!isAuthenticated || activeProfile?.kind !== 'buyer') {
+      setFetchedTitleDocuments(null);
+      return;
+    }
 
     let active = true;
     titleDocumentService
@@ -78,7 +84,7 @@ const PropertyCard = ({
     return () => {
       active = false;
     };
-  }, [property.titleDocumentReferences, routeReference]);
+  }, [activeProfile?.id, activeProfile?.kind, isAuthenticated, property.titleDocumentReferences, routeReference]);
 
   return (
     <article className="group bg-surface-container-lowest rounded-xl overflow-hidden border border-outline-variant/10 hover:shadow-lg transition-shadow duration-300">

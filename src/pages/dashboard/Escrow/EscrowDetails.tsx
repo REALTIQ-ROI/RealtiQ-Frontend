@@ -13,6 +13,7 @@ import {
 } from '../../../components/escrow/escrowConfig';
 import EscrowRoleLayout from '../../../components/escrow/EscrowRoleLayout';
 import EscrowDisputePanel from '../../../components/escrow/EscrowDisputePanel';
+import BuyerRelationshipTrust from '../../../components/trust/BuyerRelationshipTrust';
 import BuyerRefundAccountForm from '../../../components/escrow/BuyerRefundAccountForm';
 import EscrowStatusBadge from '../../../components/escrow/EscrowStatusBadge';
 import RefundAdminPanel from '../../../components/escrow/RefundAdminPanel';
@@ -179,6 +180,8 @@ const EscrowDetails = () => {
     () => (escrow ? { ...escrow, rules: displayedRules } : null),
     [displayedRules, escrow],
   );
+  const trustBuyerProfileId = displayedEscrow?.participants?.buyer?.profileId;
+  const trustSellerProfileId = displayedEscrow?.participants?.seller?.profileId;
   const firstUnsatisfiedMilestoneIndex = displayedRules.findIndex(
     (rule) => !isRuleSatisfied(rule),
   );
@@ -584,6 +587,15 @@ const EscrowDetails = () => {
               </div>
             </dl>
           </section>
+
+          {trustSellerProfileId === activeProfile?.id &&
+            ['owner', 'agency', 'developer'].includes(String(activeProfile?.kind)) &&
+            trustBuyerProfileId ? <BuyerRelationshipTrust
+              buyerProfileId={trustBuyerProfileId}
+              sourceKind="escrow"
+              sourceId={displayedEscrow._id}
+              eligibleSource={displayedEscrow.status === 'released' && displayedEscrow.refundStatus !== 'completed'}
+            /> : null}
 
           {refundEscrow ? (
             <section className="rounded-xl bg-white p-5 sm:p-7">

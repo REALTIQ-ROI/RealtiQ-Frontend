@@ -678,6 +678,7 @@ export interface CreateInquiryPayload {
   email: string;
   message: string;
   inquiryType: string;
+  leadUpdatesOptIn?: boolean;
 }
 
 export interface InquiryProperty {
@@ -707,6 +708,8 @@ export interface ApiInquiry {
   status: 'open' | 'closed';
   createdAt: string;
   updatedAt?: string;
+  version?: number;
+  leadUpdatesOptIn?: boolean;
 }
 
 export const resolveInquiryProperty = (property: ApiInquiry['property']): InquiryProperty | null =>

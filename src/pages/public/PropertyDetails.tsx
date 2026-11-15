@@ -1544,6 +1544,7 @@ const PropertyDetails = () => {
               <h3 className='font-bold text-lg'>Send an Inquiry</h3>
               <InquiryForm
                 propertyId={propertyReference}
+                allowLeadUpdatesOptIn={isBuyerProfile}
                 onSubmitInquiry={async (payload) => {
                   await inquiryService.createInquiry(payload);
                   toast.success('Inquiry submitted successfully.');

@@ -11,6 +11,7 @@ import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { useAuth } from '../../../contexts/AuthContext';
 import { hasAdminCapability } from '../../../services/adminAccessService';
 import { escrowService } from '../../../services/escrowService';
+import DisputeTrustImpact from '../../../components/trust/DisputeTrustImpact';
 
 const AdminEscrowDisputeDetails = () => {
   const { disputeId = '' } = useParams();
@@ -113,6 +114,7 @@ const AdminEscrowDisputeDetails = () => {
         </div>
         {notice || stepUp.error ? <p role="status" className="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">{notice ?? stepUp.error}</p> : null}
       </section>
+      {['resolved', 'closed'].includes(dispute.status) ? <DisputeTrustImpact kind="escrow" disputeId={disputeId} canManage={Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'trust.manage'))} /> : null}
       <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy} error={stepUp.error} onCancel={stepUp.cancel} onSubmit={submitStepUp} />
     </main>
   </AdminLayout>;

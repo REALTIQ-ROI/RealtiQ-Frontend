@@ -5,9 +5,10 @@ import LoadingState from '../components/ui/LoadingState';
 import { canManageAdminStaff, hasAnyAdminCapability, hasAdminCapability } from '../services/adminAccessService';
 
 export const AdminAccessBoundary = ({ children }: { children: ReactNode }) => {
-  const { activeProfile, profileError, refreshProfiles, adminAccess, adminAccessNotAssigned, adminAccessError, adminAccessLoading, refreshAdminAccess, logout } = useAuth();
+  const { activeProfile, profileError, refreshProfiles, adminAccess, adminAccessError, adminAccessLoading, refreshAdminAccess, logout } = useAuth();
   const navigate = useNavigate();
   const [checkingOnEntry, setCheckingOnEntry] = useState(true);
+  const currentAccess = activeProfile && adminAccess?.profileId === activeProfile.id ? adminAccess : null;
 
   useEffect(() => {
     if (!activeProfile?.id) return;
@@ -19,7 +20,7 @@ export const AdminAccessBoundary = ({ children }: { children: ReactNode }) => {
     return () => { current = false; };
   }, [activeProfile?.id, refreshAdminAccess]);
 
-  if ((adminAccessNotAssigned && (!adminAccess || (!adminAccess.staffDepartments.length && !adminAccess.capabilities.length))) || (adminAccess && !adminAccess.staffDepartments.length && !adminAccess.capabilities.length)) return <main className="mx-auto max-w-xl p-8">
+  if (currentAccess && !currentAccess.staffDepartments.length && !currentAccess.capabilities.length) return <main className="mx-auto max-w-xl p-8">
     <section className="rounded-2xl border border-amber-200 bg-white p-6 shadow-sm" role="status">
       <p className="text-xs font-bold uppercase tracking-widest text-amber-800">Admin Console</p>
       <h1 className="mt-2 text-2xl font-bold text-primary">Staff access is not assigned</h1>
@@ -36,8 +37,11 @@ export const AdminAccessBoundary = ({ children }: { children: ReactNode }) => {
     </div>
   </main>;
   if (!activeProfile) return <LoadingState label="Checking your staff profile…" />;
-  if (checkingOnEntry || adminAccessLoading) return <LoadingState label="Verifying Admin Console access…" />;
-  if (adminAccessError || !adminAccess) return <main className="mx-auto max-w-xl p-8" role="alert">
+  // Keep a page with a matching server projection mounted during a refresh.
+  // Permission errors trigger revalidation; unmounting here would repeat the
+  // page's initial API request and could create an endless 403/revalidation loop.
+  if (!currentAccess && (checkingOnEntry || adminAccessLoading)) return <LoadingState label="Verifying Admin Console access…" />;
+  if (!currentAccess) return <main className="mx-auto max-w-xl p-8" role="alert">
     <h1 className="text-2xl font-bold text-primary">Admin access could not be verified</h1>
     <p className="mt-3 text-sm text-secondary">{adminAccessError ?? 'The current staff profile has no verified Admin Console access.'}</p>
     <div className="mt-5 flex flex-wrap gap-3">

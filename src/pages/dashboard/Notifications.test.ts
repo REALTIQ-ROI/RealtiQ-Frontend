@@ -8,6 +8,18 @@ describe('notification visibility', () => {
   it('shows backend conversation.created notifications', () => {
     expect(isDisplayableNotification(notification('conversation.created', 'messages'))).toBe(true);
   });
+  it('shows only the six backend-supported followed-update notifications', () => {
+    const types = [
+      'following.new_listing',
+      'following.price_change',
+      'following.project_progress',
+      'following.open_house',
+      'following.show_home',
+      'following.social_post',
+    ];
+    for (const type of types) expect(isDisplayableNotification(notification(type, 'followed_updates'))).toBe(true);
+    expect(isDisplayableNotification(notification('following.unknown', 'followed_updates'))).toBe(false);
+  });
   it('requires a supported server category and safe display fields', () => {
     expect(isDisplayableNotification({ ...notification('unknown', 'messages'), category: 'unknown' as RealtiqNotification['category'] })).toBe(false);
     expect(isDisplayableNotification({ ...notification('message.received', 'messages'), body: '' })).toBe(false);

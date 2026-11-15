@@ -6,7 +6,7 @@ import { titleDocumentService } from '../../services/titleDocumentService';
 import { toast } from 'sonner';
 import PublicTitleDocuments from './PublicTitleDocuments';
 
-vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ user: null }) }));
+vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ isAuthenticated: true, activeProfile: { id: 'buyer-profile', kind: 'buyer' } }) }));
 vi.mock('../../contexts/CartContext', () => ({
   useCart: () => ({ addItem: vi.fn(), refreshCart: vi.fn() }),
 }));

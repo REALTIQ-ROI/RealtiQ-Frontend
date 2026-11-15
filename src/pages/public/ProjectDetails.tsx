@@ -3,6 +3,7 @@ import PublicLayout from '../../components/layout/PublicLayout';
 import ProjectMediaGallery from '../../components/project/ProjectMediaGallery';
 import ProtectedMediaSection from '../../components/media/ProtectedMediaSection';
 import ProjectRegisteredSurvey from '../../components/title/ProjectRegisteredSurvey';
+import ProjectCommunity from '../../components/project/ProjectCommunity';
 import PropertyCard from '../../components/property/PropertyCard';
 import LocationMap from '../../components/property/map/LocationMap';
 import ErrorState from '../../components/ui/ErrorState';
@@ -146,6 +147,7 @@ const ProjectDetails = () => {
                 <div className="rounded-xl border border-dashed border-outline-variant/20 p-8 text-center text-secondary">No units are available yet.</div>
               )}
             </section>
+            <ProjectCommunity projectIdOrSlug={project.slug || project._id} projectId={project._id} />
           </div>
         ) : null}
       </section>

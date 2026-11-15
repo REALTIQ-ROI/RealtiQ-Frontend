@@ -1,4 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
 import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
@@ -6,6 +8,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
 import { resolveInquiryProperty } from '../../../types';
+import { useAuth } from '../../../contexts/AuthContext';
 
 const formatDate = (date: string) =>
   new Date(date).toLocaleString('en-NG', {
@@ -18,11 +21,23 @@ const formatDate = (date: string) =>
 
 const InquiryDetails = () => {
   const { id } = useParams();
+  const { activeProfile } = useAuth();
+  const [consentSaving, setConsentSaving] = useState(false);
   const { data: inquiry, loading, error, execute } = useAsync(
     () => (id ? inquiryService.getInquiryById(id) : Promise.reject(new Error('Missing inquiry id'))),
     Boolean(id),
   );
   const property = inquiry ? resolveInquiryProperty(inquiry.property) : null;
+  const updateLeadConsent = async () => {
+    if (!id || !inquiry || typeof inquiry.version !== 'number' || consentSaving) return;
+    setConsentSaving(true);
+    try {
+      await inquiryService.updateLeadUpdatesConsent(id, { optIn: !inquiry.leadUpdatesOptIn, expectedVersion: inquiry.version });
+      toast.success(!inquiry.leadUpdatesOptIn ? 'Property updates enabled.' : 'Property updates stopped.');
+      await execute();
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Your update choice could not be saved. Refresh the inquiry and try again.'); }
+    finally { setConsentSaving(false); }
+  };
 
   return (
     <BuyerPortalLayout
@@ -72,6 +87,8 @@ const InquiryDetails = () => {
               <p className="text-xs text-secondary uppercase tracking-widest mb-2">Message</p>
               <p className="text-on-surface-variant leading-relaxed whitespace-pre-wrap">{inquiry.message}</p>
             </div>
+
+            {activeProfile?.kind === 'buyer' ? <section className="rounded-xl border p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold">Property updates</h3><p className="mt-1 text-sm text-secondary">{inquiry.leadUpdatesOptIn ? 'You agreed to receive occasional in-app updates about this property.' : 'You are not receiving property updates for this inquiry.'}</p></div><button type="button" disabled={consentSaving || typeof inquiry.version !== 'number'} onClick={() => void updateLeadConsent()} className="rounded-lg border px-4 py-2 font-bold disabled:opacity-50">{consentSaving ? 'Saving…' : inquiry.leadUpdatesOptIn ? 'Stop updates' : 'Allow updates'}</button></div>{typeof inquiry.version !== 'number' ? <p className="mt-2 text-xs text-secondary">This inquiry does not include the current version needed to change the choice. Refresh later to try again.</p> : null}</section> : null}
 
             <Button variant="secondary" onClick={() => window.history.back()}>
               Back

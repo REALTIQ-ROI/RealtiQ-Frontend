@@ -6,6 +6,10 @@ export const messageService = {
     const { data } = await api.post<{ conversation: MarketplaceConversation }>('/messages/conversations', { propertyId, ...(inquiryId ? { inquiryId } : {}) });
     return data.conversation;
   },
+  async startForPartnerJob(partnerJobId: string) {
+    const { data } = await api.post<{ conversation: MarketplaceConversation }>('/messages/conversations', { partnerJobId });
+    return data.conversation;
+  },
   async inbox(params: { page?: number; limit?: number; status?: string; archived?: boolean } = {}) {
     const { data } = await api.get<{ conversations: MarketplaceConversation[]; pagination: Pagination }>('/messages/conversations', { params });
     return data;

@@ -18,11 +18,14 @@ type LandlordNavKey =
   | 'tours'
   | 'installments'
   | 'inquiries'
+  | 'growth'
+  | 'community'
   | 'payment-history'
   | 'escrows'
   | 'roi'
   | 'settings'
   | 'trust'
+  | 'profile-trust'
   | 'organization'
   | 'billing'
   | 'documents';
@@ -41,9 +44,12 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
   { key: 'projects', to: '/dashboard/landlord/projects', icon: 'business', label: 'Projects' },
   { key: 'add-property', to: '/dashboard/landlord/add-property', icon: 'add_circle', label: 'Add Property' },
   { key: 'inquiries', to: '/dashboard/landlord/inquiries', icon: 'chat_bubble', label: 'Inquiries' },
+  { key: 'growth', to: '/dashboard/community-tools', icon: 'campaign', label: 'Sharing & Growth' },
+  { key: 'community', to: '/dashboard/community', icon: 'forum', label: 'Community' },
   { key: 'messages', to: '/messages', icon: 'chat', label: 'Messages' },
   { key: 'notifications', to: '/dashboard/notifications', icon: 'notifications', label: 'Notifications' },
   { key: 'trust', to: '/dashboard/trust', icon: 'workspace_premium', label: 'Trust & Badge' },
+  { key: 'profile-trust', to: '/dashboard/profile-trust', icon: 'workspace_premium', label: 'Profile Trust' },
   { key: 'organization', to: '/dashboard/organization', icon: 'groups', label: 'Organization Team' },
   { key: 'billing', to: '/dashboard/billing', icon: 'receipt_long', label: 'Billing' },
   { key: 'documents', to: '/dashboard/documents', icon: 'description', label: 'Document Manager' },

@@ -21,6 +21,10 @@ import PropertyDetails from '../pages/public/PropertyDetails';
 import PropertyPriceHistory from '../pages/public/PropertyPriceHistory';
 import Projects from '../pages/public/Projects';
 import ProjectDetails from '../pages/public/ProjectDetails';
+import PartnerDirectory from '../pages/public/PartnerDirectory';
+import PublicProfile from '../pages/public/PublicProfile';
+import Community from '../pages/dashboard/Community';
+import PartnerWorkspace from '../pages/dashboard/PartnerWorkspace';
 import ProjectProperties from '../pages/public/ProjectProperties';
 import ProjectsMap from '../pages/public/ProjectsMap';
 import TitleVerificationRegistry from '../pages/public/TitleVerificationRegistry';
@@ -131,7 +135,14 @@ import Personalisation from '../pages/dashboard/Personalisation';
 import Notifications from '../pages/dashboard/Notifications';
 import ValuationPage from '../pages/dashboard/ValuationPage';
 import TrustAccount from '../pages/dashboard/TrustAccount';
+import ProfileTrust from '../pages/dashboard/ProfileTrust';
 import TrustAppeals from '../pages/dashboard/Admin/TrustAppeals';
+import ProfileTrustAppeals from '../pages/dashboard/Admin/ProfileTrustAppeals';
+import Group07PartnerOperations from '../pages/dashboard/Admin/Group07PartnerOperations';
+import SocialModeration from '../pages/dashboard/Admin/SocialModeration';
+import Group07FinanceOperations from '../pages/dashboard/Admin/Group07FinanceOperations';
+import ProjectCommunityModeration from '../pages/dashboard/Admin/ProjectCommunityModeration';
+import CommunityGrowthTools from '../pages/dashboard/CommunityGrowthTools';
 import MessageModeration from '../pages/dashboard/Admin/MessageModeration';
 import NotFound from '../pages/public/NotFound';
 const AuditReader = lazy(() => import('../pages/secure/AuditReader'));
@@ -165,6 +176,10 @@ const AppRoutes = () => {
         <Route path="/projects/map" element={<ProjectsMap />} />
         <Route path="/projects/:slug" element={<ProjectDetails />} />
         <Route path="/projects/:slug/properties" element={<ProjectProperties />} />
+        <Route path="/partners" element={<PartnerDirectory />} />
+        <Route path="/partners/:profileId" element={<PublicProfile />} />
+        <Route path="/profiles/:profileId" element={<PublicProfile />} />
+        <Route path="/community" element={<Community />} />
         <Route path="/proxy-inspectors" element={<PublicInspectorDirectory />} />
         <Route path="/proxy-inspectors/register" element={<InspectorRegistration />} />
         <Route path="/proxy-inspectors/:profileId" element={<PublicInspectorProfile />} />
@@ -223,8 +238,12 @@ const AppRoutes = () => {
           <Route path='/messages' element={<Messages />} />
           <Route path='/messages/:conversationId' element={<Messages />} />
           <Route path='/dashboard/personalisation' element={<Personalisation />} />
+          <Route path='/dashboard/community' element={<Community />} />
+          <Route path='/dashboard/community-tools' element={<CommunityGrowthTools />} />
+          <Route path='/dashboard/partner-workspace' element={<PartnerWorkspace />} />
           <Route path='/dashboard/notifications' element={<Notifications />} />
           <Route path='/dashboard/trust' element={<TrustAccount />} />
+          <Route path='/dashboard/profile-trust' element={<ProfileTrust />} />
           <Route path='/dashboard/organization' element={<OrganizationManagement />} />
           <Route path='/dashboard/billing' element={<ProfileBilling />} />
           <Route path='/dashboard/documents' element={<DocumentManager />} />
@@ -310,6 +329,11 @@ const AppRoutes = () => {
           <Route element={<AdminAccessRoute />}>
             <Route path="/asdfghjkl;mnbvcxz" element={adminPage('audit.read', <Suspense fallback={<div className="p-12 text-center" role="status">Opening audit reader…</div>}><AuditReader /></Suspense>, true)} />
             <Route path='/dashboard/admin/trust-appeals' element={adminPage('trust.read', <TrustAppeals />)} />
+            <Route path='/dashboard/admin/profile-trust-appeals' element={adminPage('trust.read', <ProfileTrustAppeals />, true)} />
+            <Route path='/dashboard/admin/partner-operations' element={adminPage('network.read', <Group07PartnerOperations />)} />
+            <Route path='/dashboard/admin/social-moderation' element={adminPage('moderation.manage', <SocialModeration />)} />
+            <Route path='/dashboard/admin/project-community-moderation' element={adminPage('moderation.manage', <ProjectCommunityModeration />)} />
+            <Route path='/dashboard/admin/partner-finance-operations' element={adminPage('finance.read', <Group07FinanceOperations />)} />
             <Route path='/dashboard/admin/legal-holds' element={adminPage('legal_holds.read', <LegalHolds />)} />
             <Route path='/dashboard/admin/staff-access-changes' element={adminPage('staff.access.manage', <StaffAccessChanges />)} />
             <Route path='/dashboard/admin/notification-deliveries' element={adminPage('notification_delivery.read', <NotificationDeliveryReconciliation />, true)} />

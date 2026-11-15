@@ -28,6 +28,7 @@ const categoryMeta: Record<NotificationCategory, { label: string; icon: string; 
   listing_changes: { label: 'Listing update', icon: 'home_work', tone: 'bg-amber-50 text-amber-700' },
   inquiries: { label: 'Inquiry', icon: 'contact_support', tone: 'bg-cyan-50 text-cyan-700' },
   marketplace: { label: 'Marketplace', icon: 'storefront', tone: 'bg-emerald-50 text-emerald-700' },
+  followed_updates: { label: 'Followed updates', icon: 'notifications_active', tone: 'bg-indigo-50 text-indigo-700' },
   security: { label: 'Security', icon: 'shield', tone: 'bg-red-50 text-red-700' },
   payments: { label: 'Payment', icon: 'payments', tone: 'bg-teal-50 text-teal-700' },
   legal: { label: 'Legal', icon: 'gavel', tone: 'bg-slate-100 text-slate-700' },

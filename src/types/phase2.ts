@@ -145,6 +145,7 @@ export type NotificationCategory =
   | "listing_changes"
   | "inquiries"
   | "marketplace"
+  | "followed_updates"
   | "security"
   | "payments"
   | "legal";
