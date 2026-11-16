@@ -68,7 +68,7 @@ export const isReviewEligible = (ownership: OwnershipRecord) => {
 };
 export const ownershipService = {
   async getMyOwnerships(): Promise<OwnershipRecord[]> {
-    const { data } = await api.get<OwnershipEnvelope>("/ownerships/my");
+    const { data } = await api.get<OwnershipEnvelope>("/ownerships/my", { headers: { "Cache-Control": "no-store" } });
     return extractOwnerships(data);
   },
   async getMyOwnedProperties(): Promise<Property[]> {

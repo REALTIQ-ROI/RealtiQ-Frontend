@@ -8,6 +8,7 @@ import { cartService } from "../../services/cartService";
 import { escrowService } from "../../services/escrowService";
 import { paymentService } from "../../services/paymentService";
 import { titleDocumentService } from "../../services/titleDocumentService";
+import { saleNegotiationService, type SaleCheckout } from "../../services/saleNegotiationService";
 import { protectedMediaService, type ProtectedMediaOrder } from "../../services/protectedMediaService";
 import type { CartCheckoutDetail } from "../../types";
 import { checkoutStatusClasses, checkoutStatusLabel } from "../../utils/cartFormatters";
@@ -24,8 +25,15 @@ const PostPaymentRedirect = () => {
   const pendingMediaOrder = protectedMediaService.getPendingOrder();
   const queryReference =
     searchParams.get("reference") ?? searchParams.get("trxref");
-  const escrowId = escrowService.getPendingId();
-  const escrowReference = escrowService.getPendingReference();
+  const escrowId = escrowService.getPendingId(activeProfile?.id);
+  const escrowReference = escrowService.getPendingReference(activeProfile?.id);
+  const paymentResourceKey = paymentService.getPendingPaymentResourceKey();
+  const saleResource = paymentResourceKey?.match(/^sale:([^:]+):([^:]+):(.+)$/);
+  const installmentProfileId = paymentResourceKey?.startsWith('installment:') ? paymentResourceKey.split(':')[1] ?? null : null;
+  const saleProfileId = saleResource?.[1] ?? null;
+  const saleNegotiationId = saleResource?.[2] ?? null;
+  const saleTermsVersionId = saleResource?.[3] ?? null;
+  const isSaleCheckout = Boolean(saleProfileId && saleNegotiationId && saleTermsVersionId);
   const isEscrow = Boolean(
     escrowId &&
     escrowReference &&
@@ -39,6 +47,7 @@ const PostPaymentRedirect = () => {
     reference || pendingMediaOrder.id || pendingTitlePayment.documentId ? "verifying" : "failed",
   );
   const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [saleCheckout, setSaleCheckout] = useState<SaleCheckout | null>(null);
   const [cartCheckout, setCartCheckout] = useState<CartCheckoutDetail | null>(null);
   const [protectedMediaOrder, setProtectedMediaOrder] = useState<{ order: ProtectedMediaOrder; paymentStatus: string } | null>(null);
   const [titleDocumentId, setTitleDocumentId] = useState<string | null>(pendingTitlePayment.documentId);
@@ -102,6 +111,36 @@ const PostPaymentRedirect = () => {
         }
       }
       if (!reference) throw new Error('No payment reference was returned. Check the existing order status before trying another payment.');
+      if (paymentResourceKey?.startsWith('installment:') && (!installmentProfileId || activeProfile?.kind !== 'buyer' || installmentProfileId !== activeProfile.id)) {
+        throw new Error('Select the same Buyer profile that started this installment payment before checking its status.');
+      }
+      if (isSaleCheckout && saleNegotiationId && saleTermsVersionId && paymentResourceKey) {
+        if (activeProfile?.kind !== 'buyer' || saleProfileId !== activeProfile.id) {
+          throw new Error('Select the Buyer profile that started this purchase checkout, then check its status again.');
+        }
+        const savedReference = paymentService.getPendingPaymentReference(paymentResourceKey);
+        if (!savedReference || savedReference !== reference) {
+          throw new Error('The provider return does not match the saved purchase reference. Check the current negotiation status; do not start another checkout.');
+        }
+        const verification = await paymentService.verifyPayment(savedReference);
+        const current = await saleNegotiationService.getCheckout(saleNegotiationId);
+        if (!current || current.reference !== savedReference || current.termsVersionId !== saleTermsVersionId) {
+          throw new Error('The server checkout does not match the saved purchase reference and terms. Refresh the purchase negotiation or contact support.');
+        }
+        setSaleCheckout(current);
+        if (verification.verified) setPaymentId(verification.payment._id);
+        if (verification.verified && current.state === 'paid') {
+          paymentService.clearPendingPayment(paymentResourceKey);
+          setStatus('success');
+        } else if (current.state === 'failed' || current.state === 'cancelled') {
+          setStatus('failed');
+          setErrorMessage(`The server reports that this purchase checkout is ${current.state}. Review the negotiation before taking another action.`);
+        } else {
+          setStatus('pending');
+          setErrorMessage(`The purchase checkout is ${current.state.replaceAll('_', ' ')}. The provider return is not confirmation; check this same reference again and do not start another checkout.`);
+        }
+        return;
+      }
       const result = await paymentService.verifyPayment(reference);
       if (!result.verified) throw new Error("The provider has not confirmed this payment yet. No payment success or failure is assumed. Check the status again later and do not start another payment while the outcome is unresolved.");
       setPaymentId(result.payment._id);
@@ -143,10 +182,10 @@ const PostPaymentRedirect = () => {
           throw new Error(
             "Payment was verified, but escrow locking is still processing. Retry in a moment.",
           );
-        escrowService.clearPending();
+        escrowService.clearPending(activeProfile?.id);
         toast.success("Payment secured in escrow.");
       } else {
-        paymentService.clearPendingPayment();
+        paymentService.clearPendingPayment(paymentResourceKey?.startsWith('installment:') ? paymentResourceKey : undefined);
         toast.success("Payment verified successfully.");
       }
       setStatus("success");
@@ -156,7 +195,7 @@ const PostPaymentRedirect = () => {
         error instanceof Error ? error.message : "Unable to verify payment.",
       );
     }
-  }, [activeProfile?.id, escrowId, isEscrow, pendingTitlePayment.documentId, pendingTitlePayment.profileId, pendingTitlePayment.propertyId, pendingTitlePayment.reference, queryReference, reference, refreshCart, setCartFromResponse]);
+  }, [activeProfile?.id, activeProfile?.kind, escrowId, isEscrow, isSaleCheckout, installmentProfileId, paymentResourceKey, pendingTitlePayment.documentId, pendingTitlePayment.profileId, pendingTitlePayment.propertyId, pendingTitlePayment.reference, queryReference, reference, refreshCart, saleNegotiationId, saleProfileId, saleTermsVersionId, setCartFromResponse]);
 
   const refreshProtectedMediaOrder = async () => {
     const pendingOrder = protectedMediaService.getPendingOrder();
@@ -244,6 +283,18 @@ const PostPaymentRedirect = () => {
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><button type="button" onClick={() => void verify()} className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary">Refresh access status</button><Link to={titlePropertyId ? `/properties/${titlePropertyId}` : '/dashboard/buyer'} className="rounded-xl bg-surface-container-low px-8 py-3 text-sm font-bold">Return to property</Link></div>
           </>
         ) : null}
+        {status === "pending" && isSaleCheckout && saleCheckout && saleNegotiationId ? (
+          <>
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-amber-100"><span className="material-symbols-outlined text-4xl text-amber-800">hourglass_top</span></div>
+            <h1 className="text-3xl font-extrabold">Purchase checkout pending</h1>
+            <p role="status" className="mt-3 text-secondary">The server reports {saleCheckout.state.replaceAll('_', ' ')} for this checkout. The provider return alone does not confirm payment. Check the same reference again; do not start another checkout.</p>
+            <p className="mt-2 break-all text-xs text-secondary">Reference: {saleCheckout.reference}</p>
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+              <button type="button" onClick={() => void verify()} className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary">Check this checkout again</button>
+              <Link to={`/dashboard/buyer/sale-negotiations/${saleNegotiationId}`} className="rounded-xl bg-surface-container-low px-8 py-3 text-sm font-bold">Return to purchase negotiation</Link>
+            </div>
+          </>
+        ) : null}
         {status === "success" ? (
           <>
             <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100">
@@ -252,7 +303,7 @@ const PostPaymentRedirect = () => {
               </span>
             </div>
             <h1 className="text-3xl font-extrabold">
-              {protectedMediaOrder ? "Protected media order update" : cartCheckout ? "Service checkout update" : isEscrow ? "Payment secured in escrow" : isTitleDocumentPayment ? titleAccessReady ? "Document access ready" : "Document access pending" : "Payment verified"}
+              {protectedMediaOrder ? "Protected media order update" : cartCheckout ? "Service checkout update" : isSaleCheckout ? "Purchase checkout update" : isEscrow ? "Payment secured in escrow" : isTitleDocumentPayment ? titleAccessReady ? "Document access ready" : "Document access pending" : "Payment verified"}
             </h1>
             <p className="mt-3 text-secondary">
               {protectedMediaOrder
@@ -271,6 +322,10 @@ const PostPaymentRedirect = () => {
                       : cartCheckout.status === "failed"
                         ? "A payment reference was verified, but checkout failed. Review all payment parts before another attempt."
                         : "A payment reference was verified. Other parts or service allocations may still be pending."
+                : isSaleCheckout && saleCheckout
+                ? saleCheckout.state === 'paid'
+                  ? 'The server confirms payment for the agreed purchase terms. Legal ownership remains subject to the separate signed handover and any required escrow conditions.'
+                  : `The server payment reference was verified, but the purchase checkout is ${saleCheckout.state.replaceAll('_', ' ')}. Review its current state before taking another action.`
                 : isEscrow
                 ? "Your payment is locked while the agreed conditions are completed. This is not yet a completed property purchase."
                 : isTitleDocumentPayment
@@ -297,6 +352,8 @@ const PostPaymentRedirect = () => {
                 >
                   {isBuyer ? "View Service Checkout" : "Back to Service Cart"}
                 </Link>
+              ) : isSaleCheckout && saleNegotiationId ? (
+                <Link to={`/dashboard/buyer/sale-negotiations/${saleNegotiationId}`} className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary">View purchase negotiation</Link>
               ) : isTitleDocumentPayment && titleAccessReady && titleDocumentId ? (
                 <button
                   type="button"
@@ -322,10 +379,10 @@ const PostPaymentRedirect = () => {
                 </Link>
               ) : null}
               <Link
-                to={isTitleDocumentPayment && titlePropertyId ? `/properties/${titlePropertyId}` : "/dashboard/buyer"}
+                to={isSaleCheckout && saleNegotiationId ? `/dashboard/buyer/sale-negotiations/${saleNegotiationId}` : isTitleDocumentPayment && titlePropertyId ? `/properties/${titlePropertyId}` : "/dashboard/buyer"}
                 className="rounded-xl bg-surface-container-low px-8 py-3 text-sm font-bold"
               >
-                {isTitleDocumentPayment ? "Return to property" : "Go to Dashboard"}
+                {isSaleCheckout ? "Return to purchase negotiation" : isTitleDocumentPayment ? "Return to property" : "Go to Dashboard"}
               </Link>
             </div>
           </>
@@ -350,10 +407,12 @@ const PostPaymentRedirect = () => {
                   onClick={() => pendingMediaOrder.id ? void refreshProtectedMediaOrder() : void verify()}
                   className="rounded-xl bg-primary px-8 py-3 text-sm font-bold text-on-primary"
                 >
-                  {pendingMediaOrder.id ? 'Check order status again' : isTitleDocumentPayment ? 'Check document access status again' : 'Check payment status again'}
+                  {pendingMediaOrder.id ? 'Check order status again' : isSaleCheckout ? 'Check purchase status again' : isTitleDocumentPayment ? 'Check document access status again' : 'Check payment status again'}
                 </button>
               ) : null}
-              {isEscrow && escrowId ? (
+              {isSaleCheckout && saleNegotiationId ? (
+                <Link to={`/dashboard/buyer/sale-negotiations/${saleNegotiationId}`} className="rounded-xl bg-surface-container-low px-8 py-3 text-sm font-bold">Return to purchase negotiation</Link>
+              ) : isEscrow && escrowId ? (
                 <Link
                   to={`/dashboard/buyer/escrows/${escrowId}`}
                   className="rounded-xl bg-surface-container-low px-8 py-3 text-sm font-bold"

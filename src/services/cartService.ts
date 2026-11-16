@@ -41,7 +41,7 @@ export const cartService = {
   },
 
   async getCart(): Promise<CartResponse> {
-    const { data } = await api.get<CartResponse>('/cart');
+    const { data } = await api.get<CartResponse>('/cart', { headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 
@@ -61,7 +61,7 @@ export const cartService = {
   },
 
   async checkCartEligibility(params: CartEligibilityParams): Promise<CartEligibilityResponse> {
-    const { data } = await api.get<CartEligibilityResponse>('/cart/eligibility', { params: compact(params) });
+    const { data } = await api.get<CartEligibilityResponse>('/cart/eligibility', { params: compact(params), headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 
@@ -74,22 +74,22 @@ export const cartService = {
   },
 
   async listCartCheckouts(query?: CartCheckoutListQuery): Promise<CartCheckoutListResponse> {
-    const { data } = await api.get<CartCheckoutListResponse>('/cart/checkouts', { params: compact(query) });
+    const { data } = await api.get<CartCheckoutListResponse>('/cart/checkouts', { params: compact(query), headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 
   async getCartCheckout(checkoutId: string): Promise<CartCheckoutDetail> {
-    const { data } = await api.get<CartCheckoutDetail>(`/cart/checkouts/${encodeURIComponent(checkoutId)}`);
+    const { data } = await api.get<CartCheckoutDetail>(`/cart/checkouts/${encodeURIComponent(checkoutId)}`, { headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 
   async adminListCartCheckouts(query?: AdminCartCheckoutListQuery): Promise<CartCheckoutListResponse> {
-    const { data } = await api.get<CartCheckoutListResponse>('/admin/cart-checkouts', { params: compact(query) });
+    const { data } = await api.get<CartCheckoutListResponse>('/admin/cart-checkouts', { params: compact(query), headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 
   async adminGetCartCheckout(checkoutId: string): Promise<AdminCartCheckoutDetail> {
-    const { data } = await api.get<AdminCartCheckoutDetail>(`/admin/cart-checkouts/${encodeURIComponent(checkoutId)}`);
+    const { data } = await api.get<AdminCartCheckoutDetail>(`/admin/cart-checkouts/${encodeURIComponent(checkoutId)}`, { headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 

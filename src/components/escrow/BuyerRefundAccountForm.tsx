@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
+import StepUpDialog from '../auth/StepUpDialog';
 import { useAuth } from '../../contexts/AuthContext';
-import { escrowErrorDetails, escrowService } from '../../services/escrowService';
+import { useBoundStepUp } from '../../hooks/useBoundStepUp';
+import { escrowService } from '../../services/escrowService';
 import type { Escrow, RefundAccountDetailsResponse } from '../../types/escrow';
-import { escrowBuyer } from '../../types/escrow';
 
 const BuyerRefundAccountForm = ({
   escrow,
@@ -12,18 +13,17 @@ const BuyerRefundAccountForm = ({
   escrow: Escrow;
   onChanged: () => void | Promise<unknown>;
 }) => {
-  const { user } = useAuth();
+  const { activeProfile } = useAuth();
   const [accountNumber, setAccountNumber] = useState('');
   const [bankCode, setBankCode] = useState('');
   const [bankName, setBankName] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verified, setVerified] = useState<RefundAccountDetailsResponse | null>(null);
-  const buyer = escrowBuyer(escrow);
-
+  const stepUp = useBoundStepUp<RefundAccountDetailsResponse>();
   if (
-    user?.role !== 'buyer' ||
-    buyer?._id !== user._id ||
+    activeProfile?.kind !== 'buyer' ||
+    escrow.participants?.buyer?.profileId !== activeProfile.id ||
     escrow.refundStatus !== 'needs_account_details'
   ) return null;
 
@@ -34,25 +34,40 @@ const BuyerRefundAccountForm = ({
       setError('Enter a valid 10-digit account number, bank code, and bank name.');
       return;
     }
-    setPending(true);
     setError(null);
-    try {
-      const response = await escrowService.saveRefundDetails(escrow._id, {
-        accountNumber: accountNumber.trim(),
-        bankCode: bankCode.trim(),
-        bankName: bankName.trim(),
-      });
-      setVerified(response);
-      setAccountNumber('');
-      setBankCode('');
-      setBankName('');
-      toast.success('Refund account details verified and submitted.');
-      await onChanged();
-    } catch (raw) {
-      setError(escrowErrorDetails(raw).message);
-    } finally {
-      setPending(false);
+    const body = {
+      accountNumber: accountNumber.trim(),
+      bankCode: bankCode.trim(),
+      bankName: bankName.trim(),
+    };
+    await stepUp.begin({
+      method: 'POST',
+      path: `/api/escrow/${encodeURIComponent(escrow._id)}/refund-account-details`,
+      body,
+      label: 'Submit refund account details',
+      execute: async (challengeId, exactBody) => {
+        setPending(true);
+        try { return await escrowService.saveRefundDetails(escrow._id, exactBody, challengeId); }
+        finally { setPending(false); }
+      },
+    });
+  };
+
+  const complete = async (code: string) => {
+    const result = await stepUp.complete(code);
+    if (!result.ok) {
+      setError(result.error ?? 'Refund account details could not be submitted.');
+      if (result.code?.startsWith('CONFLICT_')) await onChanged();
+      return false;
     }
+    setVerified(result.value);
+    setAccountNumber('');
+    setBankCode('');
+    setBankName('');
+    toast.success('Refund account details verified and submitted.');
+    try { await onChanged(); }
+    catch { setError('The account details were submitted. Refresh escrow status before continuing.'); }
+    return true;
   };
 
   return (
@@ -74,6 +89,7 @@ const BuyerRefundAccountForm = ({
             <input
               value={accountNumber}
               onChange={(event) => setAccountNumber(event.target.value.replace(/\D/g, '').slice(0, 10))}
+              disabled={stepUp.busy || Boolean(stepUp.challenge)}
               inputMode="numeric"
               autoComplete="off"
               className="mt-1 w-full rounded-lg border border-outline-variant/30 p-3 font-normal"
@@ -82,18 +98,19 @@ const BuyerRefundAccountForm = ({
           </label>
           <label className="text-sm font-bold">
             Bank code
-            <input value={bankCode} onChange={(event) => setBankCode(event.target.value)} autoComplete="off" className="mt-1 w-full rounded-lg border border-outline-variant/30 p-3 font-normal" required />
+            <input value={bankCode} onChange={(event) => setBankCode(event.target.value)} disabled={stepUp.busy || Boolean(stepUp.challenge)} autoComplete="off" className="mt-1 w-full rounded-lg border border-outline-variant/30 p-3 font-normal" required />
           </label>
           <label className="text-sm font-bold sm:col-span-2">
             Bank name
-            <input value={bankName} onChange={(event) => setBankName(event.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant/30 p-3 font-normal" required />
+            <input value={bankName} onChange={(event) => setBankName(event.target.value)} disabled={stepUp.busy || Boolean(stepUp.challenge)} className="mt-1 w-full rounded-lg border border-outline-variant/30 p-3 font-normal" required />
           </label>
           {error ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800 sm:col-span-2">{error}</p> : null}
-          <button type="submit" disabled={pending} className="rounded-lg bg-primary px-4 py-3 font-bold text-on-primary disabled:opacity-50 sm:col-span-2">
-            {pending ? 'Verifying details...' : 'Submit refund account'}
+          <button type="submit" disabled={pending || stepUp.busy || Boolean(stepUp.challenge)} className="rounded-lg bg-primary px-4 py-3 font-bold text-on-primary disabled:opacity-50 sm:col-span-2">
+            {pending || stepUp.busy ? 'Confirming details...' : 'Submit refund account'}
           </button>
         </form>
       )}
+      <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy || pending} error={stepUp.error} onCancel={stepUp.cancel} onSubmit={complete} />
     </section>
   );
 };

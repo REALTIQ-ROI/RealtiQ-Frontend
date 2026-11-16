@@ -8,6 +8,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { useAuth } from '../../../contexts/AuthContext';
 import { hasAdminCapability } from '../../../services/adminAccessService';
+import { ApiRequestError } from '../../../lib/axios';
 import { inquiryService } from '../../../services/inquiryService';
 import { resolveInquiryProperty } from '../../../types';
 
@@ -18,7 +19,7 @@ const formatDate = (date: string) =>
     year: 'numeric',
   });
 
-const ManageInquiries = () => {
+const ManageInquiriesContent = () => {
   const { adminAccess } = useAuth();
   const canManageSupport = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'support.manage'));
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -26,16 +27,19 @@ const ManageInquiries = () => {
   const inquiries = data ?? [];
   const openCount = inquiries.filter((inquiry) => inquiry.status === 'open').length;
 
-  const toggleStatus = async (id: string, status: 'open' | 'closed') => {
+  const toggleStatus = async (id: string, status: 'open' | 'closed', version: number) => {
     if (!canManageSupport) return;
     if (updatingId) return;
     setUpdatingId(id);
     try {
-      await inquiryService.updateInquiryStatus(id, status === 'open' ? 'closed' : 'open');
+      await inquiryService.updateInquiryStatus(id, status === 'open' ? 'closed' : 'open', version);
       toast.success(status === 'open' ? 'Inquiry closed.' : 'Inquiry reopened.');
       await execute();
-    } catch {
-      toast.error('Unable to update inquiry status.');
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.code === 'CONFLICT_INQUIRY_VERSION') {
+        await execute();
+        toast.error('The inquiry changed. Its current version is loaded; review it before retrying.');
+      } else toast.error(error instanceof Error ? error.message : 'Unable to update inquiry status.');
     } finally {
       setUpdatingId(null);
     }
@@ -104,11 +108,11 @@ const ManageInquiries = () => {
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-4">
                           <div className="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-fixed font-bold text-xs">
-                            {inquiry.fullName.slice(0, 2).toUpperCase()}
+                            {(inquiry.fullName ?? inquiry.inquirer ?? 'REALTIQ user').slice(0, 2).toUpperCase()}
                           </div>
                           <div>
-                            <h4 className="font-bold text-primary text-sm">{inquiry.fullName}</h4>
-                            <p className="text-xs text-secondary">{inquiry.email}</p>
+                            <h4 className="font-bold text-primary text-sm">{inquiry.fullName ?? inquiry.inquirer ?? 'REALTIQ user'}</h4>
+                            {inquiry.email ? <p className="text-xs text-secondary">{inquiry.email}</p> : null}
                           </div>
                         </div>
                       </td>
@@ -135,7 +139,7 @@ const ManageInquiries = () => {
                             loading={updatingId === inquiry._id}
                             loadingLabel={inquiry.status === 'open' ? 'Closing...' : 'Reopening...'}
                             disabled={Boolean(updatingId)}
-                            onClick={() => void toggleStatus(inquiry._id, inquiry.status)}
+                            onClick={() => void toggleStatus(inquiry._id, inquiry.status, inquiry.version)}
                           >
                             {inquiry.status === 'open' ? 'Close' : 'Reopen'}
                           </Button> : <span className="self-center text-xs text-secondary">Read only</span>}
@@ -153,4 +157,7 @@ const ManageInquiries = () => {
   );
 };
 
-export default ManageInquiries;
+export default function ManageInquiries() {
+  const { activeProfile } = useAuth();
+  return <ManageInquiriesContent key={activeProfile?.id ?? 'no-profile'} />;
+}

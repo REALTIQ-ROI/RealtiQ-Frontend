@@ -98,7 +98,7 @@ export interface ProviderSettlementReconciliation {
 
 export const financeRevenueService = {
   async getProviderSettlementEvents(params: RevenueRange & { after?: string; limit?: number }): Promise<{ settlements: ProviderSettlementEvent[]; nextCursor: string | null }> {
-    const { data } = await api.get<{ settlements: ProviderSettlementEvent[]; nextCursor: string | null }>(`${base}/provider-settlements`, { params });
+    const { data } = await api.get<{ settlements: ProviderSettlementEvent[]; nextCursor: string | null }>(`${base}/provider-settlements`, { params, headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
   async reconcileProviderSettlementEvent(id: string, challengeId: string): Promise<ProviderSettlementReconciliation> {
@@ -106,19 +106,19 @@ export const financeRevenueService = {
     return data;
   },
   async getFeeLines(params: RevenueRange & { feeCode?: string; currency?: RevenueCurrency; status?: string; limit?: number; after?: string }): Promise<{ feeLines: RevenueFeeLine[]; nextCursor: string | null }> {
-    const { data } = await api.get<{ feeLines: RevenueFeeLine[]; nextCursor: string | null }>(`${base}/fee-lines`, { params });
+    const { data } = await api.get<{ feeLines: RevenueFeeLine[]; nextCursor: string | null }>(`${base}/fee-lines`, { params, headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
   async getReport(range: RevenueRange): Promise<RevenueReport> {
-    const { data } = await api.get<RevenueReport>(`${base}/report`, { params: range });
+    const { data } = await api.get<RevenueReport>(`${base}/report`, { params: range, headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
   async getReconciliation(range: RevenueRange): Promise<{ from: string; to: string; feeLines: Array<{ currency: RevenueCurrency; status: string; settlementStatus: string; count: number; grossMinor: number; netMinor: number; vatMinor: number }>; paymentsMissingFeeLines: number; providerSettlementReconciliation: string; providerSettlementsPending?: number }> {
-    const { data } = await api.get<Awaited<ReturnType<typeof financeRevenueService.getReconciliation>>>(`${base}/reconciliation`, { params: range });
+    const { data } = await api.get<Awaited<ReturnType<typeof financeRevenueService.getReconciliation>>>(`${base}/reconciliation`, { params: range, headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
   async listProductRefunds(params: { state?: string; after?: string; limit?: number } = {}): Promise<{ refunds: ProductRefund[]; nextCursor: string | null; staffProfileId: string }> {
-    const { data } = await api.get<{ refunds: ProductRefund[]; nextCursor: string | null; staffProfileId: string }>(`${base}/product-refunds`, { params });
+    const { data } = await api.get<{ refunds: ProductRefund[]; nextCursor: string | null; staffProfileId: string }>(`${base}/product-refunds`, { params, headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
   async decideProductRefund(id: string, body: { decision: 'approve' | 'reject'; reason: string; expectedVersion: number }, challengeId: string): Promise<{ refund?: ProductRefund; refunds?: ProductRefund[]; decision?: string }> {
@@ -134,7 +134,7 @@ export const financeRevenueService = {
     return data;
   },
   async getProviderSettlementLines(params: RevenueRange & { currency?: RevenueCurrency; limit?: number; before?: string }): Promise<{ settlements: ProviderSettlementLine[]; nextCursor: string | null; reconciliationScope: string }> {
-    const { data } = await api.get<Awaited<ReturnType<typeof financeRevenueService.getProviderSettlementLines>>>(`${base}/provider-settlement-lines`, { params });
+    const { data } = await api.get<Awaited<ReturnType<typeof financeRevenueService.getProviderSettlementLines>>>(`${base}/provider-settlement-lines`, { params, headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 };

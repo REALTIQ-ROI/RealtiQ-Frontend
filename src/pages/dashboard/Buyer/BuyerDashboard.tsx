@@ -31,11 +31,7 @@ const formatRelativeDate = (date?: string) => {
 const BuyerDashboard = () => {
   const { user } = useAuth();
   const { properties } = useProperties();
-  const { data: inquiries } = useAsync(async () => {
-    const response = await inquiryService.getInquiries();
-    console.log('[BuyerDashboard] GET /api/inquiries response:', response);
-    return response;
-  }, true);
+  const { data: inquiries } = useAsync(() => inquiryService.getInquiries(), true);
   const { data: ownedProperties } = useAsync(() => ownershipService.getMyOwnedProperties(), true);
   const [query, setQuery] = useState('');
 
@@ -43,7 +39,7 @@ const BuyerDashboard = () => {
   const buyerInquiries = useMemo(
     () =>
       (inquiries ?? []).filter(
-        (item) => item.userId === user?._id || item.email.toLowerCase() === (user?.email ?? '').toLowerCase(),
+        (item) => item.userId === user?._id || item.email?.toLowerCase() === (user?.email ?? '').toLowerCase(),
       ),
     [inquiries, user?._id, user?.email],
   );

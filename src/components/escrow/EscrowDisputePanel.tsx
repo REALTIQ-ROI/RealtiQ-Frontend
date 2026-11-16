@@ -1,17 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
+import StepUpDialog from '../auth/StepUpDialog';
 import { useAuth } from '../../contexts/AuthContext';
-import { escrowErrorDetails, escrowService } from '../../services/escrowService';
+import { useBoundStepUp } from '../../hooks/useBoundStepUp';
+import { escrowService } from '../../services/escrowService';
 import type { Escrow } from '../../types/escrow';
 import { formatDateTime } from './escrowConfig';
-
-const referenceId = (value: unknown): string | null => {
-  if (typeof value === 'string') return value;
-  if (!value || typeof value !== 'object') return null;
-  const reference = value as { _id?: unknown; id?: unknown };
-  if (typeof reference._id === 'string') return reference._id;
-  return typeof reference.id === 'string' ? reference.id : null;
-};
 
 const EscrowDisputePanel = ({
   escrow,
@@ -20,7 +14,7 @@ const EscrowDisputePanel = ({
   escrow: Escrow;
   onChanged: () => void | Promise<unknown>;
 }) => {
-  const { user } = useAuth();
+  const { activeProfile } = useAuth();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [description, setDescription] = useState('');
@@ -28,13 +22,11 @@ const EscrowDisputePanel = ({
   const [evidenceLabel, setEvidenceLabel] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const userId = referenceId(user);
-  const buyerId = referenceId(escrow.buyer ?? escrow.buyerId);
-  const sellerId = referenceId(escrow.seller ?? escrow.sellerId);
+  const stepUp = useBoundStepUp<EscrowDispute>();
   const participant = Boolean(
-    user && userId && (
-      (user.role === 'buyer' && buyerId === userId) ||
-      (user.role === 'owner' && sellerId === userId)
+    activeProfile?.id && (
+      (activeProfile.kind === 'buyer' && escrow.participants?.buyer?.profileId === activeProfile.id) ||
+      (['owner', 'agency', 'developer'].includes(activeProfile.kind) && escrow.participants?.seller?.profileId === activeProfile.id)
     ),
   );
   const canOpen = participant && ['locked', 'release_pending'].includes(escrow.status);
@@ -53,17 +45,37 @@ const EscrowDisputePanel = ({
       return;
     }
     if (pending) return;
-    setPending(true);
     setError(null);
+    const cleanDescription = description.trim();
+    const payload = {
+      reason: cleanReason,
+      ...(cleanDescription ? { description: cleanDescription } : {}),
+      evidence: documentId.trim()
+        ? [{ documentId: documentId.trim(), label: evidenceLabel.trim() || 'Escrow evidence' }]
+        : [],
+      metadata: { source: 'escrow_detail' },
+    };
+    await stepUp.begin({
+      method: 'PATCH',
+      path: `/api/escrow/${encodeURIComponent(escrow._id)}/dispute`,
+      body: payload,
+      label: 'Submit escrow dispute',
+      execute: async (challengeId, exactBody) => {
+        setPending(true);
+        try { return await escrowService.dispute(escrow._id, exactBody, challengeId); }
+        finally { setPending(false); }
+      },
+    });
+  };
+
+  const complete = async (code: string) => {
+    const result = await stepUp.complete(code);
+    if (!result.ok) {
+      setError(result.error ?? 'The dispute could not be submitted.');
+      if (result.code?.startsWith('CONFLICT_')) await onChanged();
+      return false;
+    }
     try {
-      await escrowService.dispute(escrow._id, {
-        reason: cleanReason,
-        description: description.trim() || undefined,
-        evidence: documentId.trim()
-          ? [{ documentId: documentId.trim(), label: evidenceLabel.trim() || 'Escrow evidence' }]
-          : [],
-        metadata: { source: 'escrow_detail' },
-      });
       setReason('');
       setDescription('');
       setDocumentId('');
@@ -71,12 +83,10 @@ const EscrowDisputePanel = ({
       setOpen(false);
       toast.success('Dispute opened for administrator review.');
       await onChanged();
-    } catch (raw) {
-      const requestError = escrowErrorDetails(raw);
-      setError(requestError.message);
-      if (requestError.status === 409) await onChanged();
-    } finally {
-      setPending(false);
+      return true;
+    } catch {
+      setError('The dispute was submitted, but the latest escrow state could not be refreshed. Refresh the page before taking another action.');
+      return true;
     }
   };
 
@@ -149,8 +159,8 @@ const EscrowDisputePanel = ({
           </div>
           <p className="text-xs text-secondary">Use an existing safe document reference. This form does not upload arbitrary files.</p>
           {error ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
-          <button type="submit" disabled={pending} className="rounded-lg bg-red-700 px-4 py-3 font-bold text-white disabled:opacity-50">
-            {pending ? 'Submitting dispute...' : 'Submit dispute'}
+          <button type="submit" disabled={pending || stepUp.busy || Boolean(stepUp.challenge)} className="rounded-lg bg-red-700 px-4 py-3 font-bold text-white disabled:opacity-50">
+            {pending || stepUp.busy ? 'Confirming dispute...' : 'Submit dispute with authenticator'}
           </button>
         </form>
       ) : null}
@@ -187,6 +197,7 @@ const EscrowDisputePanel = ({
         ))}
         {!disputes.length ? <p className="rounded-lg bg-surface-container-low p-4 text-sm text-secondary">No disputes have been opened for this escrow.</p> : null}
       </div>
+      <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy || pending} error={stepUp.error} onCancel={stepUp.cancel} onSubmit={complete} />
     </section>
   );
 };

@@ -22,27 +22,31 @@ export const installmentService = {
   },
 
   async getInstallments(): Promise<Installment[]> {
-    const { data } = await api.get<Installment[]>('/installments');
+    const { data } = await api.get<Installment[]>('/installments', { headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 
   async getInstallmentById(id: string): Promise<Installment> {
-    const { data } = await api.get<Installment>(`/installments/${id}`);
+    const { data } = await api.get<Installment>(`/installments/${encodeURIComponent(id)}`, { headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 
-  async initializePayment(id: string, payload: InstallmentPaymentPayload): Promise<InstallmentPaymentResponse> {
-    const { data } = await api.post<InstallmentPaymentResponse>(`/installments/${id}/initialize-payment`, payload);
+  async initializePayment(id: string, payload: InstallmentPaymentPayload, challengeId: string): Promise<InstallmentPaymentResponse> {
+    const { data } = await api.post<InstallmentPaymentResponse>(`/installments/${encodeURIComponent(id)}/initialize-payment`, payload, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    });
     return data;
   },
 
-  async updateInstallmentStatus(id: string, payload: UpdateInstallmentStatusPayload): Promise<Installment> {
-    const { data } = await api.patch<Installment>(`/installments/${id}/admin/status`, payload);
+  async updateInstallmentStatus(id: string, payload: UpdateInstallmentStatusPayload, challengeId: string): Promise<Installment> {
+    const { data } = await api.patch<Installment>(`/installments/${encodeURIComponent(id)}/admin/status`, payload, {
+      headers: { 'X-Step-Up-Challenge': challengeId },
+    });
     return data;
   },
 
   async getSchedule(id: string): Promise<InstallmentScheduleResponse> {
-    const { data } = await api.get<InstallmentScheduleResponse>(`/installments/${id}/schedule`);
+    const { data } = await api.get<InstallmentScheduleResponse>(`/installments/${encodeURIComponent(id)}/schedule`, { headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 
@@ -53,7 +57,7 @@ export const installmentService = {
     payload: { note: string },
   ): Promise<Installment> {
     const { data } = await api.patch<Installment>(
-      `/installments/${id}/schedule/${scheduleItemId}/conditions/${conditionId}/satisfy`,
+      `/installments/${encodeURIComponent(id)}/schedule/${encodeURIComponent(scheduleItemId)}/conditions/${encodeURIComponent(conditionId)}/satisfy`,
       payload,
     );
     return data;
@@ -65,22 +69,23 @@ export const installmentService = {
   },
 
   async getPaymentHistory(id: string): Promise<InstallmentPaymentRecord[]> {
-    const { data } = await api.get<InstallmentPaymentRecord[]>(`/installments/${id}/payment-history`);
+    const { data } = await api.get<InstallmentPaymentRecord[]>(`/installments/${encodeURIComponent(id)}/payment-history`, { headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 
   async getPenalties(id: string): Promise<InstallmentPenaltyRecord[]> {
-    const { data } = await api.get<InstallmentPenaltyRecord[]>(`/installments/${id}/penalties`);
+    const { data } = await api.get<InstallmentPenaltyRecord[]>(`/installments/${encodeURIComponent(id)}/penalties`, { headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 
-  async waivePenalty(id: string, penaltyId: string, payload: { reason: string }): Promise<{
+  async waivePenalty(id: string, penaltyId: string, payload: { reason: string }, challengeId: string): Promise<{
     installment: Installment;
     penalty: InstallmentPenaltyRecord;
   }> {
     const { data } = await api.patch<{ installment: Installment; penalty: InstallmentPenaltyRecord }>(
-      `/installments/${id}/penalties/${penaltyId}/waive`,
+      `/installments/${encodeURIComponent(id)}/penalties/${encodeURIComponent(penaltyId)}/waive`,
       payload,
+      { headers: { 'X-Step-Up-Challenge': challengeId } },
     );
     return data;
   },

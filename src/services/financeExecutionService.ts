@@ -89,7 +89,7 @@ const protectedRequest = (challengeId: string) => ({ headers: { 'X-Step-Up-Chall
 
 export const financeExecutionService = {
   async getEscrowRefund(id: string): Promise<EscrowRefundExecution> {
-    const { data } = await api.get<{ execution: EscrowRefundExecution }>(escrowRefund(id));
+    const { data } = await api.get<{ execution: EscrowRefundExecution }>(escrowRefund(id), { headers: { 'Cache-Control': 'no-store' } });
     return data.execution;
   },
   async reconcileEscrowRefund(id: string, challengeId: string): Promise<{ execution: EscrowRefundExecution; pending: boolean; complete?: boolean; reconciliationRequired?: boolean }> {
@@ -101,7 +101,7 @@ export const financeExecutionService = {
     return data;
   },
   async getProxySettlement(id: string): Promise<ProxySettlementExecution> {
-    const { data } = await api.get<{ settlement: ProxySettlementExecution }>(proxySettlement(id));
+    const { data } = await api.get<{ settlement: ProxySettlementExecution }>(proxySettlement(id), { headers: { 'Cache-Control': 'no-store' } });
     return data.settlement;
   },
   async reconcileProxySettlement(id: string, challengeId: string): Promise<{ settlement: ProxySettlementExecution; complete: boolean; reconciliationRequired?: boolean }> {
@@ -113,7 +113,7 @@ export const financeExecutionService = {
     return data;
   },
   async getProxyRefund(id: string): Promise<ProxyRefundExecution> {
-    const { data } = await api.get<{ refundExecution: ProxyRefundExecution }>(proxyRefund(id));
+    const { data } = await api.get<{ refundExecution: ProxyRefundExecution }>(proxyRefund(id), { headers: { 'Cache-Control': 'no-store' } });
     return data.refundExecution;
   },
   async reconcileProxyRefund(id: string, challengeId: string): Promise<{ refundExecution: ProxyRefundExecution; pending: boolean; reconciliationRequired?: boolean }> {

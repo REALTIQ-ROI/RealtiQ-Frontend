@@ -11,12 +11,12 @@ export const messageService = {
     return data.conversation;
   },
   async inbox(params: { page?: number; limit?: number; status?: string; archived?: boolean } = {}) {
-    const { data } = await api.get<{ conversations: MarketplaceConversation[]; pagination: Pagination }>('/messages/conversations', { params });
+    const { data } = await api.get<{ conversations: MarketplaceConversation[]; pagination: Pagination }>('/messages/conversations', { params, headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
-  async detail(id: string) { const { data } = await api.get<{ conversation: MarketplaceConversation }>(`/messages/conversations/${id}`); return data.conversation; },
+  async detail(id: string) { const { data } = await api.get<{ conversation: MarketplaceConversation }>(`/messages/conversations/${encodeURIComponent(id)}`, { headers: { 'Cache-Control': 'no-store' } }); return data.conversation; },
   async history(id: string, params: { limit?: number; before?: string } = {}) {
-    const { data } = await api.get<{ messages: MarketplaceMessage[]; pageInfo: { hasMore: boolean; nextCursor: string | null } }>(`/messages/conversations/${id}/messages`, { params });
+    const { data } = await api.get<{ messages: MarketplaceMessage[]; pageInfo: { hasMore: boolean; nextCursor: string | null } }>(`/messages/conversations/${encodeURIComponent(id)}/messages`, { params, headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
   async send(id: string, body: { text?: string; attachmentIds?: string[] }) { const { data } = await api.post<{ message: MarketplaceMessage }>(`/messages/conversations/${id}/messages`, body); return data.message; },
@@ -30,11 +30,11 @@ export const messageService = {
   async previewAttachment(conversationId: string, messageId: string, attachmentIndex: number, signal?: AbortSignal): Promise<Blob> {
     const { data } = await api.get<Blob>(
       `/messages/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/attachments/${attachmentIndex}`,
-      { responseType: 'blob', ...(signal ? { signal } : {}) },
+      { responseType: 'blob', headers: { 'Cache-Control': 'no-store' }, ...(signal ? { signal } : {}) },
     );
     return data;
   },
   async report(id: string, body: { reason: ReportReason; messageId?: string; details?: string }) { const { data } = await api.post<{ report: ConversationReport }>(`/messages/conversations/${id}/reports`, body); return data.report; },
-  async moderationQueue(params: { page?: number; limit?: number; status?: string; reason?: string }) { const { data } = await api.get<{ reports: ConversationReport[]; pagination: Pagination }>('/messages/moderation/reports', { params }); return data; },
+  async moderationQueue(params: { page?: number; limit?: number; status?: string; reason?: string }) { const { data } = await api.get<{ reports: ConversationReport[]; pagination: Pagination }>('/messages/moderation/reports', { params, headers: { 'Cache-Control': 'no-store' } }); return data; },
   async moderate(reportId: string, action: ModerationAction, reason: string) { const { data } = await api.patch<{ report: ConversationReport }>(`/messages/moderation/reports/${reportId}`, { action, reason }); return data.report; },
 };

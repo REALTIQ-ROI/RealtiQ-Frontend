@@ -1,12 +1,15 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import LandlordPortalLayout from '../../../components/layout/LandlordPortalLayout';
 import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
+import { ApiRequestError } from '../../../lib/axios';
 import { inquiryService } from '../../../services/inquiryService';
+import { messageService } from '../../../services/messageService';
 import { resolveInquiryProperty } from '../../../types';
+import { useAuth } from '../../../contexts/AuthContext';
 
 const formatDate = (date: string) =>
   new Date(date).toLocaleString('en-NG', {
@@ -17,22 +20,37 @@ const formatDate = (date: string) =>
     minute: '2-digit',
   });
 
-const LandlordInquiryDetails = () => {
+const LandlordInquiryDetailsContent = () => {
+  const navigate = useNavigate();
   const { id } = useParams();
   const { data: inquiry, loading, error, execute } = useAsync(
     () => (id ? inquiryService.getInquiryById(id) : Promise.reject(new Error('Missing inquiry id'))),
     Boolean(id),
   );
   const property = inquiry ? resolveInquiryProperty(inquiry.property) : null;
+  const senderLabel = inquiry?.inquirer?.trim() || 'REALTIQ user';
+
+  const startConversation = async () => {
+    if (!inquiry) return;
+    const propertyId = typeof inquiry.property === 'string' ? inquiry.property : inquiry.property.id ?? inquiry.property._id;
+    if (!propertyId) { toast.error('This inquiry does not include a current listing reference.'); return; }
+    try {
+      const conversation = await messageService.start(propertyId, inquiry._id);
+      navigate(`/messages/${encodeURIComponent(conversation._id)}`);
+    } catch (raw) { toast.error(raw instanceof Error ? raw.message : 'Unable to open the on-platform conversation.'); }
+  };
 
   const toggleStatus = async () => {
     if (!inquiry) return;
     try {
-      await inquiryService.updateInquiryStatus(inquiry._id, inquiry.status === 'open' ? 'closed' : 'open');
+      await inquiryService.updateInquiryStatus(inquiry._id, inquiry.status === 'open' ? 'closed' : 'open', inquiry.version);
       toast.success(inquiry.status === 'open' ? 'Inquiry closed.' : 'Inquiry reopened.');
       await execute();
-    } catch {
-      toast.error('Unable to update inquiry status.');
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.code === 'CONFLICT_INQUIRY_VERSION') {
+        await execute();
+        toast.error('This inquiry changed since you opened it. The latest version is loaded; review it before trying again.');
+      } else toast.error(error instanceof Error ? error.message : 'Unable to update inquiry status.');
     }
   };
 
@@ -63,10 +81,10 @@ const LandlordInquiryDetails = () => {
                 <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
                   <div className="flex items-center gap-4">
                     <div className="w-14 h-14 rounded-full bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed font-bold text-xl">
-                      {inquiry.fullName.slice(0, 2).toUpperCase()}
+                      {senderLabel.slice(0, 2).toUpperCase()}
                     </div>
                     <div>
-                      <h2 className="text-xl font-extrabold text-slate-900">{inquiry.fullName}</h2>
+                      <h2 className="text-xl font-extrabold text-slate-900">{senderLabel}</h2>
                       <p className="text-sm text-slate-500">Sent {formatDate(inquiry.createdAt)}</p>
                     </div>
                   </div>
@@ -78,7 +96,6 @@ const LandlordInquiryDetails = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
-                  <p><strong>Email:</strong> {inquiry.email}</p>
                   <p><strong>Inquiry Type:</strong> {inquiry.inquiryType}</p>
                   <p><strong>Property:</strong> {property?.title ?? 'Property unavailable'}</p>
                   <p><strong>Location:</strong> {property?.location ?? 'Location unavailable'}</p>
@@ -101,8 +118,9 @@ const LandlordInquiryDetails = () => {
               <div className="bg-primary-container text-white rounded-xl p-8">
                 <h4 className="font-bold tracking-tight mb-4">Property Inquiry</h4>
                 <p className="text-sm text-slate-300 leading-relaxed">
-                  Reply directly by email and use the status control to keep your inquiry queue current.
+                  Continue the conversation on REALTIQ and use the status control to keep your inquiry queue current.
                 </p>
+                <Button className="mt-4" onClick={() => void startConversation()}>Continue in messages</Button>
               </div>
             </div>
           </div>
@@ -112,4 +130,7 @@ const LandlordInquiryDetails = () => {
   );
 };
 
-export default LandlordInquiryDetails;
+export default function LandlordInquiryDetails() {
+  const { activeProfile } = useAuth();
+  return <LandlordInquiryDetailsContent key={activeProfile?.id ?? 'no-profile'} />;
+}

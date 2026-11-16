@@ -34,7 +34,7 @@ const protectedRequest = (challengeId: string) => ({ headers: { 'X-Step-Up-Chall
 
 export const escrowFinanceSettlementService = {
   async get(escrowId: string): Promise<EscrowSettlementResult> {
-    const { data } = await api.get<EscrowSettlementResult>(path(escrowId));
+    const { data } = await api.get<EscrowSettlementResult>(path(escrowId), { headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
   async reconcile(escrowId: string, challengeId: string): Promise<EscrowSettlementResult> {

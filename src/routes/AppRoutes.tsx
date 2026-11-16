@@ -49,6 +49,7 @@ import Dashboard from '../pages/dashboard/Dashboard';
 import Tours from '../pages/dashboard/Tours';
 import DocumentManager from '../pages/dashboard/DocumentManager';
 import Installments from '../pages/dashboard/Installments';
+import SaleNegotiations from '../pages/dashboard/SaleNegotiations';
 import NotificationDigest from '../pages/dashboard/NotificationDigest';
 import AdminDashboard from '../pages/dashboard/Admin/AdminDashboard';
 import AdminCartCheckoutDetail from '../pages/dashboard/Admin/CartCheckoutDetail';
@@ -267,6 +268,9 @@ const AppRoutes = () => {
           <Route path="/dashboard/buyer/tours" element={<Tours />} />
           <Route path="/dashboard/buyer/installments" element={<Installments />} />
           <Route path="/dashboard/buyer/installments/:id" element={<Installments />} />
+          <Route path="/dashboard/buyer/sale-negotiations" element={<SaleNegotiations />} />
+          <Route path="/dashboard/buyer/sale-negotiations/new" element={<SaleNegotiations />} />
+          <Route path="/dashboard/buyer/sale-negotiations/:id" element={<SaleNegotiations />} />
           <Route path="/dashboard/buyer/property-details" element={<BuyerPropertyDetails />} />
           <Route path="/dashboard/buyer/property-details/:id" element={<BuyerPropertyDetails />} />
           <Route path="/dashboard/buyer/payment-history" element={<PaymentHistory />} />
@@ -307,6 +311,9 @@ const AppRoutes = () => {
           <Route path="/dashboard/landlord/tours" element={<Tours />} />
           <Route path="/dashboard/landlord/installments" element={<Installments />} />
           <Route path="/dashboard/landlord/installments/:id" element={<Installments />} />
+          <Route path="/dashboard/landlord/sale-negotiations" element={<SaleNegotiations />} />
+          <Route path="/dashboard/landlord/sale-negotiations/new" element={<SaleNegotiations />} />
+          <Route path="/dashboard/landlord/sale-negotiations/:id" element={<SaleNegotiations />} />
           <Route path="/dashboard/landlord/property-details" element={<LandlordPropertyDetails />} />
           <Route path="/dashboard/landlord/property-details/:id" element={<LandlordPropertyDetails />} />
           <Route path="/dashboard/landlord/payment-history" element={<LandlordPaymentHistory />} />

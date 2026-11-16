@@ -8,7 +8,6 @@ import {
   type FormEvent,
 } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 import InquiryForm from '../../components/forms/InquiryForm';
 import PropertyGallery from '../../components/property/PropertyGallery';
@@ -24,7 +23,6 @@ import ProtectedMediaSection from '../../components/media/ProtectedMediaSection'
 import VirtualTourExperience from '../../components/virtualTour/VirtualTourExperience';
 import PublicLayout from '../../components/layout/PublicLayout';
 import Button from '../../components/ui/Button';
-import StepUpDialog from '../../components/auth/StepUpDialog';
 import Card from '../../components/ui/Card';
 import PropertyFxAgreement from '../../components/billing/PropertyFxAgreement';
 import SellerTrustBadge from '../../components/trust/SellerTrustBadge';
@@ -36,12 +34,10 @@ import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictio
 import { messageService } from '../../services/messageService';
 import { useProperties } from '../../contexts/PropertiesContext';
 import { useAsync } from '../../hooks/useAsync';
-import { useBoundStepUp } from '../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../lib/axios';
 import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { inquiryService } from '../../services/inquiryService';
 import { installmentService } from '../../services/installmentService';
-import { paymentService, type InitializePaymentResponse } from '../../services/paymentService';
 import {
   propertyService,
   type NearbyPropertySummary,
@@ -59,7 +55,6 @@ import {
   type Property,
 } from '../../types';
 import {
-  calculateInstallmentAmount,
   getInstallmentSummary,
   isInstallmentActive,
   resolveInstallmentPropertyId,
@@ -90,13 +85,6 @@ const BOOKABLE_TOUR_TYPES = [
   { value: 'live_guided_video_tour', label: 'Live guided video tour' },
 ] as const;
 
-const INSTALLMENT_FREQUENCIES = [
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'biweekly', label: 'Biweekly' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'quarterly', label: 'Quarterly' },
-] as const;
-
 const PropertyDetails = () => {
   const { id = '' } = useParams();
   const location = useLocation();
@@ -110,12 +98,6 @@ const PropertyDetails = () => {
   const isBuyerProfile = Boolean(isAuthenticated && activeProfile?.kind === 'buyer');
   const { dictionary } = useCanonicalFieldDictionary();
   const { refreshProperties } = useProperties();
-  const propertyPaymentStepUp = useBoundStepUp<InitializePaymentResponse>();
-  const [paymentOutcomeUnknown, setPaymentOutcomeUnknown] = useState(false);
-  const [paymentTerminalStatus, setPaymentTerminalStatus] = useState<string | null>(null);
-  const [paymentStatusMessage, setPaymentStatusMessage] = useState('');
-  const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(false);
-  const [fxConfirmationId, setFxConfirmationId] = useState<string | null>(null);
   const {
     data: property,
     loading,
@@ -149,7 +131,6 @@ const PropertyDetails = () => {
   const hasMounted = useRef(false);
   const tourAvailabilityRequest = useRef(0);
   const [requestingTour, setRequestingTour] = useState(false);
-  const [creatingInstallment, setCreatingInstallment] = useState(false);
   const [nearby, setNearby] = useState<NearbyPropertySummary[]>([]);
   const [loadingNearby, setLoadingNearby] = useState(false);
   const [nearbyRadiusKm, setNearbyRadiusKm] = useState('');
@@ -161,8 +142,6 @@ const PropertyDetails = () => {
   const [tourType, setTourType] = useState<(typeof BOOKABLE_TOUR_TYPES)[number]['value']>('private_showing');
   const [selectedSlotId, setSelectedSlotId] = useState('');
   const [tourNotes, setTourNotes] = useState('');
-  const [installmentFrequency, setInstallmentFrequency] =
-    useState<(typeof INSTALLMENT_FREQUENCIES)[number]['value']>('monthly');
   const [titleSummary, setTitleSummary] =
     useState<PropertyTitleVerificationSummary | null>(null);
   const [publicTitleDocuments, setPublicTitleDocuments] = useState<
@@ -189,7 +168,8 @@ const PropertyDetails = () => {
       return;
     }
     try {
-      const conversation = await messageService.start(propertyReference);
+      if (!property?._id) throw new Error('The current listing identifier is unavailable. Refresh the property page and try again.');
+      const conversation = await messageService.start(property._id);
       navigate(`/messages/${conversation._id}`);
     } catch (nextError) {
       toast.error(
@@ -398,118 +378,18 @@ const PropertyDetails = () => {
   const hasOutrightPayment = paymentTypes.includes('outright');
   const hasInstallmentPayment = paymentTypes.includes('installment');
   const hasEscrowPayment = paymentTypes.includes('escrow');
-  const paymentResourceId = property?._id || propertyReference;
-
-  useEffect(() => {
-    const hasPendingAttempt = Boolean(
-      paymentResourceId &&
-      paymentService.getPendingPaymentReference(`property:${paymentResourceId}`),
-    );
-    setPaymentOutcomeUnknown(hasPendingAttempt);
-    if (hasPendingAttempt) {
-      setPaymentStatusMessage('A previous payment attempt for this property is still recorded. Check the server status before starting another attempt.');
-    } else {
-      setPaymentStatusMessage('');
-    }
-  }, [paymentResourceId]);
-
-  const handleBuyProperty = async () => {
-    if (!propertyReference) {
-      toast.error('Unable to initialize payment. Please try again.');
-      return;
-    }
-
+  const handleBuyProperty = () => {
+    if (!property?._id) return;
+    const target = `/dashboard/buyer/sale-negotiations/new?propertyId=${encodeURIComponent(property._id)}`;
     if (!user) {
-      paymentService.persistPendingPaymentProperty(propertyReference);
-      navigate('/login-to-purchase');
+      navigate('/login-to-purchase', { state: { redirectTo: target } });
       return;
     }
-
-    if (hasActiveInstallment && propertyInstallment) {
-      navigate(
-        `/dashboard/buyer/installments/${propertyInstallment._id}?propertyId=${propertyReference}`,
-      );
+    if (!isBuyerProfile) {
+      toast.error('Select an eligible Buyer profile to start a purchase negotiation.');
       return;
     }
-
-    if (user.role !== 'buyer') {
-      toast.error('Only buyers can purchase properties.');
-      return;
-    }
-
-    if (!hasOutrightPayment) {
-      toast.error('Outright payment is not offered for this property.');
-      return;
-    }
-
-    if (currency === 'USD' && !fxConfirmationId) {
-      toast.error('A current buyer and seller FX agreement is required before paying for this USD listing.');
-      return;
-    }
-
-    const confirmed = await Swal.fire({
-      title: 'Proceed to Payment?',
-      text: 'You will be redirected to the secure payment gateway.',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Continue',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#000000',
-      cancelButtonColor: '#6b7280',
-    });
-    if (!confirmed.isConfirmed) return;
-
-    if (paymentOutcomeUnknown || propertyPaymentStepUp.busy || propertyPaymentStepUp.challenge || !property) return;
-    const body = { propertyId: property._id || propertyReference, ...(currency === 'USD' && fxConfirmationId ? { fxConfirmationId } : {}) };
-    await propertyPaymentStepUp.begin({
-      method: 'POST',
-      path: '/api/payments/initialize',
-      body,
-      label: 'Initialize the current outright property payment',
-      execute: async (challengeId, exactBody) => {
-        try {
-          const response = await paymentService.initialize(exactBody, challengeId);
-          if (response.redirectUrl) paymentService.redirectToCheckout(response, propertyReference, `property:${property._id || propertyReference}`);
-          else {
-            setPaymentOutcomeUnknown(true);
-            setPaymentStatusMessage('The server has a pending payment attempt without a provider URL. Check its status before continuing.');
-          }
-          return response;
-        } catch (raw) {
-          if (raw instanceof ApiRequestError && (raw.code === 'PAYMENT_INITIALIZATION_OUTCOME_UNKNOWN' || raw.code === 'PAYMENT_INITIALIZATION_PENDING')) {
-            setPaymentOutcomeUnknown(true);
-            setPaymentStatusMessage('The provider outcome is unresolved. No new payment attempt was created. Check the saved reference before taking another action.');
-          }
-          toast.error(raw instanceof Error ? raw.message : 'Unable to initialize the payment.');
-          throw raw;
-        }
-      },
-    });
-  };
-
-  const submitPropertyPaymentStepUp = async (code: string): Promise<boolean> => {
-    const result = await propertyPaymentStepUp.complete(code);
-    if (!result.ok && result.error) toast.error(result.error);
-    return result.ok;
-  };
-
-  const refreshPropertyPaymentStatus = async () => {
-    const propertyResourceId = property?._id || propertyReference;
-    const reference = propertyResourceId ? paymentService.getPendingPaymentReference(`property:${propertyResourceId}`) : null;
-    if (!reference || checkingPaymentStatus) return;
-    setCheckingPaymentStatus(true);
-    try {
-      const result = await paymentService.verifyPayment(reference);
-      if (result.verified) {
-        setPaymentTerminalStatus(result.payment.status);
-        setPaymentOutcomeUnknown(result.payment.status === 'pending');
-        setPaymentStatusMessage(`Payment status: ${result.payment.status}. This status comes from the server; ownership is shown only after the ownership record is available.`);
-      } else {
-        setPaymentStatusMessage('The payment is still pending or has not been reconciled. Do not start a second attempt.');
-      }
-    } catch (raw) {
-      setPaymentStatusMessage(raw instanceof Error ? raw.message : 'Unable to check the payment reference.');
-    } finally { setCheckingPaymentStatus(false); }
+    navigate(target);
   };
 
   const handleContinueInstallment = () => {
@@ -566,18 +446,18 @@ const PropertyDetails = () => {
   };
 
   const handleCreateInstallment = async () => {
-    if (!property || !propertyReference) return;
+    if (!property?._id || !propertyReference) return;
     if (!hasInstallmentPayment) {
       toast.error('Installment payment is not offered for this property.');
       return;
     }
 
     if (!user) {
-      navigate('/login');
+      navigate('/login-to-purchase', { state: { redirectTo: `/dashboard/buyer/sale-negotiations/new?propertyId=${encodeURIComponent(property._id)}` } });
       return;
     }
-    if (user.role !== 'buyer') {
-      toast.error('Only buyers can create installment plans.');
+    if (!isBuyerProfile) {
+      toast.error('Select an eligible Buyer profile to propose instalment terms.');
       return;
     }
 
@@ -594,11 +474,8 @@ const PropertyDetails = () => {
       return;
     }
 
-    setCreatingInstallment(true);
-    navigate(
-      `/dashboard/buyer/installments?propertyId=${propertyReference}&frequency=${installmentFrequency}`,
-    );
-    setCreatingInstallment(false);
+    const target = `/dashboard/buyer/sale-negotiations/new?propertyId=${encodeURIComponent(property._id)}`;
+    navigate(target);
   };
 
   if (loading) {
@@ -677,7 +554,6 @@ const PropertyDetails = () => {
     <PublicLayout>
       <section className='mx-auto max-w-7xl space-y-8 px-4 sm:space-y-10 sm:px-6 lg:px-8'>
         <Link to={returnTo} className='inline-flex pt-5 text-sm font-bold text-primary hover:underline'>← Back to search results</Link>
-        {paymentOutcomeUnknown ? <div role='alert' className='rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950'><p className='font-bold'>Payment outcome unresolved</p><p className='mt-1'>{paymentStatusMessage}</p><p className='mt-1'>Reference: {paymentService.getPendingPaymentReference(`property:${property?._id || propertyReference}`) || 'pending reference unavailable'}</p><Button type='button' variant='secondary' className='mt-3' disabled={checkingPaymentStatus || !paymentService.getPendingPaymentReference(`property:${property?._id || propertyReference}`)} onClick={() => void refreshPropertyPaymentStatus()}>{checkingPaymentStatus ? 'Checking status…' : 'Check payment status'}</Button></div> : paymentStatusMessage ? <p role='status' className='rounded-xl bg-surface-container-low p-4 text-sm text-secondary'>{paymentStatusMessage}</p> : null}
         <PropertyGallery
           property={property}
           activeIndex={activeMediaIndex}
@@ -777,24 +653,23 @@ const PropertyDetails = () => {
                   <div>
                   <Button
                     onClick={() => void handleBuyProperty()}
-                    disabled={installmentLoading || propertyPaymentStepUp.busy || Boolean(propertyPaymentStepUp.challenge) || paymentOutcomeUnknown || paymentTerminalStatus === 'paid'}
+                    disabled={installmentLoading}
                   >
-                    {installmentLoading ? 'Checking...' : propertyPaymentStepUp.busy ? 'Preparing secure payment…' : 'Buy Property'}
+                    {installmentLoading ? 'Checking...' : 'Start purchase negotiation'}
                   </Button>
-                  {propertyPaymentStepUp.error && !propertyPaymentStepUp.challenge ? <p role="alert" className="mt-2 text-xs text-error">{propertyPaymentStepUp.error}</p> : null}
                   </div>
                 ) : canPurchase && hasInstallmentPayment ? (
                   <Button
                     onClick={() => void handleCreateInstallment()}
-                    disabled={creatingInstallment}
+                    disabled={installmentLoading}
                   >
-                    {creatingInstallment ? 'Creating...' : 'Create Plan'}
+                    {installmentLoading ? 'Checking...' : 'Propose instalment terms'}
                   </Button>
                 ) : hasEscrowPayment && canPurchase ? (
                   <Button
                     variant='secondary'
                     onClick={() => {
-                      const escrowPath = `/dashboard/buyer/escrows/create/${propertyReference}`;
+                      const escrowPath = `/dashboard/buyer/sale-negotiations/new?propertyId=${encodeURIComponent(property?._id ?? '')}`;
                       if (!user)
                         navigate('/login-to-purchase', {
                           state: { redirectTo: escrowPath },
@@ -802,7 +677,7 @@ const PropertyDetails = () => {
                       else navigate(escrowPath);
                     }}
                   >
-                    {user ? 'Create Escrow' : 'Login for Escrow'}
+                    {user ? 'Discuss protected terms' : 'Login to discuss protected terms'}
                   </Button>
                 ) : (
                   <Button disabled>Unavailable</Button>
@@ -1327,68 +1202,11 @@ const PropertyDetails = () => {
                     Installment creation is unavailable.
                   </div>
                 ) : (
-                  <div className='space-y-4'>
-                    <div className='grid grid-cols-1 md:grid-cols-2 gap-4 items-end'>
-                      <div>
-                        <label className='block text-xs font-bold uppercase tracking-widest text-secondary mb-2'>
-                          Frequency
-                        </label>
-                        <select
-                          className='w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm'
-                          value={installmentFrequency}
-                          onChange={(e) =>
-                            setInstallmentFrequency(
-                              e.target
-                                .value as (typeof INSTALLMENT_FREQUENCIES)[number]['value'],
-                            )
-                          }
-                        >
-                          {INSTALLMENT_FREQUENCIES.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className='md:col-span-2 flex flex-col sm:flex-row gap-3'>
-                        <div className='flex-1'>
-                          <label className='block text-xs font-bold uppercase tracking-widest text-secondary mb-2'>
-                            Installment Amount
-                          </label>
-                          <input
-                            readOnly
-                            value={
-                              property.price > 0
-                                ? formatCurrency(
-                                    calculateInstallmentAmount(
-                                      property.price,
-                                      installmentFrequency,
-                                    ),
-                                  )
-                                : 'Not available'
-                            }
-                            className='w-full bg-surface-container-low rounded-lg px-4 py-3 text-sm outline-none cursor-not-allowed'
-                          />
-                        </div>
-                        <Button
-                          type='button'
-                          onClick={() => void handleCreateInstallment()}
-                          disabled={creatingInstallment}
-                        >
-                          {creatingInstallment
-                            ? 'Creating...'
-                            : `Create Plan for ${formatCurrency(property.price, currency)}`}
-                        </Button>
-                        <Button
-                          type='button'
-                          variant='secondary'
-                          onClick={() =>
-                            navigate('/dashboard/buyer/installments')
-                          }
-                        >
-                          View Installments
-                        </Button>
-                      </div>
+                  <div className='space-y-4 rounded-xl border border-outline-variant/10 bg-surface-container-lowest p-4'>
+                    <p className='text-sm text-secondary'>Instalment schedules are agreed between the Buyer and Seller in a purchase proposal. The listing price is shown as a starting point; no schedule is created until both profiles accept the same terms.</p>
+                    <div className='flex flex-col gap-3 sm:flex-row'>
+                      <Button type='button' onClick={() => void handleCreateInstallment()}>Propose instalment terms</Button>
+                      <Button type='button' variant='secondary' onClick={() => navigate('/dashboard/buyer/installments')}>View Installments</Button>
                     </div>
                   </div>
                 )}
@@ -1508,14 +1326,11 @@ const PropertyDetails = () => {
                         <div>
                         <Button
                           fullWidth
-                          disabled={installmentLoading || propertyPaymentStepUp.busy || Boolean(propertyPaymentStepUp.challenge) || paymentOutcomeUnknown || paymentTerminalStatus === 'paid'}
+                          disabled={installmentLoading}
                           onClick={() => void handleBuyProperty()}
                         >
-                          {paymentOutcomeUnknown ? 'Payment status unresolved' : propertyPaymentStepUp.busy ? 'Preparing secure payment…' : installmentLoading
-                            ? 'Checking eligibility...'
-                            : 'Buy Property Outright'}
+                          {installmentLoading ? 'Checking eligibility...' : 'Start purchase negotiation'}
                         </Button>
-                        {propertyPaymentStepUp.error && !propertyPaymentStepUp.challenge ? <p role="alert" className="mt-2 text-xs text-error">{propertyPaymentStepUp.error}</p> : null}
                         </div>
                       ) : null}
                       {hasInstallmentPayment ? (
@@ -1523,11 +1338,9 @@ const PropertyDetails = () => {
                           fullWidth
                           variant='secondary'
                           onClick={() => void handleCreateInstallment()}
-                          disabled={creatingInstallment}
+                          disabled={installmentLoading}
                         >
-                          {creatingInstallment
-                            ? 'Creating...'
-                            : 'Create Installment Plan'}
+                          {installmentLoading ? 'Checking...' : 'Propose instalment terms'}
                         </Button>
                       ) : null}
                     </>
@@ -1545,16 +1358,15 @@ const PropertyDetails = () => {
                     Prefer protected release conditions?
                   </p>
                   <p className='mt-1 text-xs text-secondary'>
-                    Pay through escrow. Funds remain locked until agreed
-                    conditions are completed and an administrator approves
-                    release.
+                    Discuss whether protected funds and release conditions
+                    should form part of the mutually accepted sale terms.
                   </p>
                   <Button
                     fullWidth
                     variant='secondary'
                     className='mt-3'
                     onClick={() => {
-                      const escrowPath = `/dashboard/buyer/escrows/create/${propertyReference}`;
+                      const escrowPath = `/dashboard/buyer/sale-negotiations/new?propertyId=${encodeURIComponent(property?._id ?? '')}`;
                       if (!user) {
                         navigate('/login-to-purchase', {
                           state: { redirectTo: escrowPath },
@@ -1565,8 +1377,8 @@ const PropertyDetails = () => {
                     }}
                   >
                     {user
-                      ? 'Create Escrow Payment'
-                      : 'Login to Create Payment Escrow'}
+                      ? 'Discuss protected terms'
+                      : 'Login to discuss protected terms'}
                   </Button>
                 </div>
               ) : null}
@@ -1637,7 +1449,6 @@ const PropertyDetails = () => {
           </section>
         ) : null}
       </section>
-      <StepUpDialog challenge={propertyPaymentStepUp.challenge} busy={propertyPaymentStepUp.busy} error={propertyPaymentStepUp.error} onCancel={propertyPaymentStepUp.cancel} onSubmit={submitPropertyPaymentStepUp} />
     </PublicLayout>
   );
 };

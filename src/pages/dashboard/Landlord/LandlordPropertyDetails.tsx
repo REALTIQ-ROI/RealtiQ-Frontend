@@ -41,7 +41,7 @@ const LandlordPropertyDetails = () => {
     if (typeof propertyRef === 'string') {
       return propertyRef === property?._id;
     }
-    return propertyRef._id === property?._id;
+    return (propertyRef.id ?? propertyRef._id) === property?._id;
   });
 
   const relatedPayments = (payments ?? []).filter((item) => item.property?._id === property?._id);

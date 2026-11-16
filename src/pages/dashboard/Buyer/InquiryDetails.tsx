@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
@@ -7,6 +7,7 @@ import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
+import { messageService } from '../../../services/messageService';
 import { resolveInquiryProperty } from '../../../types';
 import { useAuth } from '../../../contexts/AuthContext';
 
@@ -19,7 +20,8 @@ const formatDate = (date: string) =>
     minute: '2-digit',
   });
 
-const InquiryDetails = () => {
+const InquiryDetailsContent = () => {
+  const navigate = useNavigate();
   const { id } = useParams();
   const { activeProfile } = useAuth();
   const [consentSaving, setConsentSaving] = useState(false);
@@ -28,6 +30,15 @@ const InquiryDetails = () => {
     Boolean(id),
   );
   const property = inquiry ? resolveInquiryProperty(inquiry.property) : null;
+  const startConversation = async () => {
+    if (!inquiry) return;
+    const propertyId = typeof inquiry.property === 'string' ? inquiry.property : inquiry.property.id ?? inquiry.property._id;
+    if (!propertyId) { toast.error('This inquiry does not include a current listing reference.'); return; }
+    try {
+      const conversation = await messageService.start(propertyId, inquiry._id);
+      navigate(`/messages/${encodeURIComponent(conversation._id)}`);
+    } catch (raw) { toast.error(raw instanceof Error ? raw.message : 'Unable to open the on-platform conversation.'); }
+  };
   const updateLeadConsent = async () => {
     if (!id || !inquiry || typeof inquiry.version !== 'number' || consentSaving) return;
     setConsentSaving(true);
@@ -79,8 +90,8 @@ const InquiryDetails = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <p><strong>Type:</strong> {inquiry.inquiryType}</p>
               <p><strong>Sent:</strong> {formatDate(inquiry.createdAt)}</p>
-              <p><strong>Name:</strong> {inquiry.fullName}</p>
-              <p><strong>Email:</strong> {inquiry.email}</p>
+              <p><strong>Name:</strong> {inquiry.fullName ?? 'Your account'}</p>
+              {inquiry.email ? <p><strong>Email:</strong> {inquiry.email}</p> : null}
             </div>
 
             <div className="bg-surface-container-low rounded-xl p-5">
@@ -93,6 +104,7 @@ const InquiryDetails = () => {
             <Button variant="secondary" onClick={() => window.history.back()}>
               Back
             </Button>
+            <Button onClick={() => void startConversation()}>Continue in messages</Button>
           </div>
         )}
       </section>
@@ -100,4 +112,7 @@ const InquiryDetails = () => {
   );
 };
 
-export default InquiryDetails;
+export default function InquiryDetails() {
+  const { activeProfile } = useAuth();
+  return <InquiryDetailsContent key={activeProfile?.id ?? 'no-profile'} />;
+}

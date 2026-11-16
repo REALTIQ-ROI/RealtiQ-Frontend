@@ -18,6 +18,7 @@ type LandlordNavKey =
   | 'tours'
   | 'installments'
   | 'inquiries'
+  | 'sale-negotiations'
   | 'growth'
   | 'community'
   | 'payment-history'
@@ -44,6 +45,7 @@ const navItems: Array<{ key: LandlordNavKey; to: string; icon: string; label: st
   { key: 'projects', to: '/dashboard/landlord/projects', icon: 'business', label: 'Projects' },
   { key: 'add-property', to: '/dashboard/landlord/add-property', icon: 'add_circle', label: 'Add Property' },
   { key: 'inquiries', to: '/dashboard/landlord/inquiries', icon: 'chat_bubble', label: 'Inquiries' },
+  { key: 'sale-negotiations', to: '/dashboard/landlord/sale-negotiations', icon: 'handshake', label: 'Sale Negotiations' },
   { key: 'growth', to: '/dashboard/community-tools', icon: 'campaign', label: 'Sharing & Growth' },
   { key: 'community', to: '/dashboard/community', icon: 'forum', label: 'Community' },
   { key: 'messages', to: '/messages', icon: 'chat', label: 'Messages' },

@@ -194,7 +194,7 @@ const LandlordDashboard = () => {
                 className="block p-4 rounded-xl hover:bg-surface-container-low transition-colors"
               >
                 <p className="text-[10px] uppercase tracking-widest text-secondary mb-1">Latest Inquiry</p>
-                <p className="font-bold">{latestInquiry.fullName}</p>
+                <p className="font-bold">{latestInquiry.inquirer || 'REALTIQ user'}</p>
                 <p className="text-sm text-secondary">{latestInquiry.inquiryType}</p>
                 <p className="text-xs text-secondary mt-2">{formatRelativeDate(latestInquiry.createdAt)}</p>
               </Link>

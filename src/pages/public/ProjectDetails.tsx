@@ -1,4 +1,5 @@
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import PublicLayout from '../../components/layout/PublicLayout';
 import ProjectMediaGallery from '../../components/project/ProjectMediaGallery';
 import ProtectedMediaSection from '../../components/media/ProtectedMediaSection';
@@ -13,10 +14,13 @@ import { projectService } from '../../services/projectService';
 import { formatDate, formatPriceRange, labelize } from '../../utils/projectFormatters';
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
 import { fieldVocabularyLabel, vocabularyLabel } from '../../utils/propertyVocabulary';
+import { useAuth } from '../../contexts/AuthContext';
 
 const ProjectDetails = () => {
   const { slug = '' } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isAuthenticated, activeProfile } = useAuth();
   const { dictionary } = useCanonicalFieldDictionary();
   const projectNavigationState = location.state as { from?: string; discoveryFrom?: string } | null;
   const searchReturn = typeof projectNavigationState?.discoveryFrom === 'string' && projectNavigationState.discoveryFrom.startsWith('/projects')
@@ -26,6 +30,19 @@ const ProjectDetails = () => {
       : '/projects';
   const { data, loading, error, execute } = useAsync(() => projectService.getProject(slug), Boolean(slug));
   const project = data?.project;
+  const startProjectNegotiation = () => {
+    if (!project?._id) return;
+    const target = `/dashboard/buyer/sale-negotiations/new?projectId=${encodeURIComponent(project._id)}`;
+    if (!isAuthenticated) {
+      navigate('/login-to-purchase', { state: { redirectTo: target } });
+      return;
+    }
+    if (activeProfile?.kind !== 'buyer') {
+      toast.error('Select an eligible Buyer profile to start a purchase negotiation.');
+      return;
+    }
+    navigate(target);
+  };
   const preview = project?.propertyPreview ?? [];
   const projectTypeLabel = project ? fieldVocabularyLabel(dictionary, 'projectType', project.projectType) ?? project.projectType : '';
   const facilities = Array.isArray(project?.canonicalFields?.estateFacilities)
@@ -57,6 +74,8 @@ const ProjectDetails = () => {
                 {project.shortDescription ? <p className="mt-5 max-w-3xl text-base leading-7 text-on-surface-variant">{project.shortDescription}</p> : null}
               </div>
             </header>
+
+            {project.isPublished && project.availableUnits > 0 ? <button type="button" onClick={startProjectNegotiation} className="inline-flex rounded-lg bg-primary px-4 py-3 text-sm font-bold text-on-primary">Select project units for a purchase negotiation</button> : null}
 
             <ProjectMediaGallery media={project.media} title={project.name} />
             <ProtectedMediaSection resourceKind="project" resourceId={project._id} title={project.name} />

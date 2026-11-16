@@ -4,6 +4,7 @@ import type { RenewalAvailability } from './renewalAvailability';
 
 const profileBase = '/profiles/current';
 const stepUp = (challengeId: string) => ({ headers: { 'X-Step-Up-Challenge': challengeId } });
+const noStore = { headers: { 'Cache-Control': 'no-store' } };
 const resource = (id: string) => encodeURIComponent(id);
 
 export interface FeeQuoteRequest {
@@ -183,23 +184,23 @@ export const revenueFoundationService = {
     return data.quote;
   },
   async listPublicationPlans(): Promise<PublicationCatalogue> {
-    const { data } = await api.get<PublicationCatalogue>(`${profileBase}/publication-plans`);
+    const { data } = await api.get<PublicationCatalogue>(`${profileBase}/publication-plans`, noStore);
     return data;
   },
   async getPublicationPlan(): Promise<PublicationEntitlement> {
-    const { data } = await api.get<PublicationEntitlement>(`${profileBase}/publication-plan`);
+    const { data } = await api.get<PublicationEntitlement>(`${profileBase}/publication-plan`, noStore);
     return data;
   },
   async listPublicationPurchases(params: { before?: string; limit?: number } = {}): Promise<{ purchases: PublicationPurchase[]; nextCursor: string | null }> {
-    const { data } = await api.get<{ purchases: PublicationPurchase[]; nextCursor: string | null }>(`${profileBase}/publication-plan-purchases`, { params });
+    const { data } = await api.get<{ purchases: PublicationPurchase[]; nextCursor: string | null }>(`${profileBase}/publication-plan-purchases`, { params, headers: noStore.headers });
     return data;
   },
   async getPublicationPurchase(id: string): Promise<PublicationPurchase> {
-    const { data } = await api.get<PublicationPurchase | { purchase: PublicationPurchase }>(`${profileBase}/publication-plan-purchases/${resource(id)}`);
+    const { data } = await api.get<PublicationPurchase | { purchase: PublicationPurchase }>(`${profileBase}/publication-plan-purchases/${resource(id)}`, noStore);
     return 'purchase' in data ? data.purchase : data;
   },
   async listPublicationPurchaseAudit(id: string, params: { before?: string; limit?: number } = {}): Promise<{ events: Array<Record<string, unknown>>; nextCursor: string | null }> {
-    const { data } = await api.get<{ events: Array<Record<string, unknown>>; nextCursor: string | null }>(`${profileBase}/publication-plan-purchases/${resource(id)}/audit`, { params });
+    const { data } = await api.get<{ events: Array<Record<string, unknown>>; nextCursor: string | null }>(`${profileBase}/publication-plan-purchases/${resource(id)}/audit`, { params, headers: noStore.headers });
     return data;
   },
   async quotePublicationChange(body: { planKey: string; billingPeriod: 'monthly' | 'annual'; operationKey: string }): Promise<PublicationChangeQuote> {
@@ -219,7 +220,7 @@ export const revenueFoundationService = {
     return data.purchase;
   },
   async listPaymentAuthorizations(): Promise<PaymentAuthorization[]> {
-    const { data } = await api.get<{ authorizations: PaymentAuthorization[] }>(`${profileBase}/billing/payment-authorizations`);
+    const { data } = await api.get<{ authorizations: PaymentAuthorization[] }>(`${profileBase}/billing/payment-authorizations`, noStore);
     return data.authorizations;
   },
   async startDirectDebit(body: { operationKey: string; consent: true }, challengeId: string): Promise<{ authorization: PaymentAuthorization; redirectUrl: string | null; pending?: boolean }> {
@@ -231,7 +232,7 @@ export const revenueFoundationService = {
     return data.authorization;
   },
   async listRenewalPreferences(): Promise<RenewalPreference[]> {
-    const { data } = await api.get<{ preferences: RenewalPreference[] }>(`${profileBase}/billing/renewal-preferences`);
+    const { data } = await api.get<{ preferences: RenewalPreference[] }>(`${profileBase}/billing/renewal-preferences`, noStore);
     return data.preferences;
   },
   async saveRenewalPreference(body: RenewalPreferenceInput, challengeId: string): Promise<RenewalPreference> {
@@ -243,11 +244,11 @@ export const revenueFoundationService = {
     return data.preference;
   },
   async listRevenueDocuments(params: { before?: string; limit?: number } = {}): Promise<{ documents: RevenueDocument[]; nextCursor: string | null }> {
-    const { data } = await api.get<{ documents: RevenueDocument[]; nextCursor: string | null }>('/revenue-documents', { params });
+    const { data } = await api.get<{ documents: RevenueDocument[]; nextCursor: string | null }>('/revenue-documents', { params, headers: noStore.headers });
     return data;
   },
   async getRevenueDocument(id: string): Promise<RevenueDocument> {
-    const { data } = await api.get<{ document: RevenueDocument }>(`/revenue-documents/${resource(id)}`);
+    const { data } = await api.get<{ document: RevenueDocument }>(`/revenue-documents/${resource(id)}`, noStore);
     return data.document;
   },
   async payRevenueDocument(id: string, body: { operationKey: string }, challengeId: string): Promise<{ id: string; reference: string; state: string; redirectUrl: string | null }> {
@@ -255,11 +256,11 @@ export const revenueFoundationService = {
     return data.payment;
   },
   async getPayoutSetup(): Promise<PayoutSetupState> {
-    const { data } = await api.get<PayoutSetupState>(`${profileBase}/payout-setup`);
+    const { data } = await api.get<PayoutSetupState>(`${profileBase}/payout-setup`, noStore);
     return data;
   },
   async getPayoutSetupHistory(params: { before?: string; limit?: number } = {}): Promise<{ events: Array<{ id: string; setupId: string; version: number; action: string; code: string | null; actorId: string; at: string }>; nextCursor: string | null }> {
-    const { data } = await api.get<Awaited<ReturnType<typeof revenueFoundationService.getPayoutSetupHistory>>>(`${profileBase}/payout-setup/history`, { params });
+    const { data } = await api.get<Awaited<ReturnType<typeof revenueFoundationService.getPayoutSetupHistory>>>(`${profileBase}/payout-setup/history`, { params, headers: noStore.headers });
     return data;
   },
   async startPayoutSetup(body: { expectedVersion: number; operationKey: string; bankCode: string; accountNumber: string }, challengeId: string): Promise<PayoutSetupRecord> {

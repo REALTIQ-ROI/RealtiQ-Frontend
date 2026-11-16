@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import Swal from 'sweetalert2';
 import AdminLayout from '../../components/layout/AdminLayout';
 import BuyerPortalLayout from '../../components/layout/BuyerPortalLayout';
 import StepUpDialog from '../../components/auth/StepUpDialog';
 import PropertyFxAgreement from '../../components/billing/PropertyFxAgreement';
 import LandlordPortalLayout from '../../components/layout/LandlordPortalLayout';
-import PropertySearchSelect from '../../components/forms/PropertySearchSelect';
 import Button from '../../components/ui/Button';
 import ErrorState from '../../components/ui/ErrorState';
 import Input from '../../components/ui/Input';
@@ -15,23 +15,15 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../lib/axios';
 import { installmentService } from '../../services/installmentService';
-import { paymentService, type PaymentInitializationRequest } from '../../services/paymentService';
-import { propertyService } from '../../services/propertyService';
-import { propertyRouteReference } from '../../types';
-import { loadInstallmentProperties } from '../../utils/installmentProperties';
-import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
+import { paymentService } from '../../services/paymentService';
 import type {
-  CustomInstallmentCreatePayload,
   Installment,
   InstallmentCondition,
-  InstallmentConditionType,
-  InstallmentFrequency,
-  InstallmentMilestoneType,
+  InstallmentPaymentPayload,
   InstallmentPaymentRecord,
   InstallmentPenaltyRecord,
   InstallmentScheduleItem,
   InstallmentStatus,
-  Property,
 } from '../../types';
 import {
   canCancelInstallment,
@@ -53,28 +45,7 @@ import {
   resolveInstallmentPropertyLabel,
 } from '../../utils/installment';
 
-const frequencies: Array<Exclude<InstallmentFrequency, 'custom'>> = ['weekly', 'biweekly', 'monthly', 'quarterly'];
 const DEFAULT_GRACE_PERIOD_HOURS = 72;
-const milestoneTypes: InstallmentMilestoneType[] = [
-  'initial_deposit',
-  'scheduled_payment',
-  'inspection_completed',
-  'document_verified',
-  'construction_stage',
-  'handover',
-  'final_payment',
-  'custom',
-];
-const conditionTypes: InstallmentConditionType[] = [
-  'buyer_confirmation',
-  'seller_confirmation',
-  'inspection_completed',
-  'document_verified',
-  'construction_stage',
-  'handover',
-  'admin_approval',
-  'custom',
-];
 const adminStatuses: InstallmentStatus[] = ['pending', 'active', 'overdue', 'defaulted', 'completed', 'cancelled'];
 
 const statusClasses: Record<InstallmentStatus, string> = {
@@ -113,12 +84,6 @@ const formatDateTime = (value?: string) => {
 };
 
 const labelize = (value?: string) => (value ? value.replaceAll('_', ' ') : 'not available');
-const toLocalInputValue = (date = new Date(Date.now() + 24 * 60 * 60 * 1000)) => {
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
-};
-const fromLocalInputValue = (value: string) => new Date(value).toISOString();
-
 const apiMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 const conflictToast = async (error: unknown, refresh: () => Promise<void>) => {
   if (error instanceof ApiRequestError && error.status === 409) {
@@ -147,311 +112,27 @@ const StatusBadge = ({ status }: { status: InstallmentStatus | string }) => (
   </span>
 );
 
-type CustomRow = {
-  id: string;
-  sequence: number;
-  title: string;
-  milestoneType: InstallmentMilestoneType;
-  expectedAmount: string;
-  dueDate: string;
-  conditions: Array<{ id: string; type: InstallmentConditionType; description: string; required: boolean }>;
-};
-
-const defaultCustomRow = (sequence: number, amount = ''): CustomRow => ({
-  id: crypto.randomUUID(),
-  sequence,
-  title: sequence === 1 ? 'Initial Deposit' : `Milestone ${sequence}`,
-  milestoneType: sequence === 1 ? 'initial_deposit' : 'scheduled_payment',
-  expectedAmount: amount,
-  dueDate: toLocalInputValue(new Date(Date.now() + sequence * 24 * 60 * 60 * 1000)),
-  conditions: [],
-});
-
-const InstallmentCreateForm = ({
-  properties,
-  loading,
-  error,
-  installments,
-  onCreated,
-  onRetryProperties,
-  initialPropertyId,
-  initialFrequency,
-}: {
-  properties: Property[];
-  loading: boolean;
-  error: string | null;
-  installments: Installment[];
-  onCreated: (plan: Installment) => Promise<void>;
-  onRetryProperties: () => void;
-  initialPropertyId?: string;
-  initialFrequency?: string;
-}) => {
-  const [mode, setMode] = useState<'automatic' | 'custom'>('automatic');
-  const [propertyId, setPropertyId] = useState('');
-  const [frequency, setFrequency] = useState<Exclude<InstallmentFrequency, 'custom'>>('monthly');
-  const [initialDeposit, setInitialDeposit] = useState('');
-  const [startDate, setStartDate] = useState(toLocalInputValue());
-  const [rows, setRows] = useState<CustomRow[]>([defaultCustomRow(1), defaultCustomRow(2)]);
-  const [creating, setCreating] = useState(false);
-
-  const activePropertyIds = useMemo(() => {
-    const ids = new Set<string>();
-    installments.filter(isInstallmentActive).forEach((installment) => {
-      const id = resolveInstallmentPropertyId(installment);
-      if (id) ids.add(id);
-    });
-    return ids;
-  }, [installments]);
-
-  const eligibleProperties = useMemo(
-    () => properties.filter((property) => {
-      const refs = [property._id, propertyRouteReference(property)].filter(Boolean);
-      const offersInstallment = normalizePropertyPaymentTypes(
-        property.paymentTypes,
-        property.price,
-      ).includes('installment');
-      return (
-        property.status === 'available' &&
-        (!property.approvalStatus || property.approvalStatus === 'approved') &&
-        offersInstallment &&
-        refs.every((ref) => !activePropertyIds.has(ref))
-      );
-    }),
-    [activePropertyIds, properties],
-  );
-  const selectedProperty = eligibleProperties.find((property) => propertyRouteReference(property) === propertyId) ?? null;
-  const selectedPropertyReference = selectedProperty ? propertyRouteReference(selectedProperty) : '';
-  const price = selectedProperty?.price ?? 0;
-  const numberOfInstallments = frequencyToInstallmentCount(frequency);
-  const scheduled = rows.reduce((sum, row) => sum + Number(row.expectedAmount || 0), 0);
-  const unorderedDates = rows.some((row, index) => index > 0 && new Date(row.dueDate) <= new Date(rows[index - 1].dueDate));
-  const invalidRows = rows.some(
-    (row) => !row.title.trim() || !row.dueDate || !Number.isFinite(Number(row.expectedAmount)) || Number(row.expectedAmount) <= 0,
-  );
-  const automaticInvalid =
-    !selectedProperty ||
-    !startDate ||
-    numberOfInstallments <= 0 ||
-    Number(initialDeposit || 0) < 0 ||
-    Number(initialDeposit || 0) >= price;
-  const customInvalid =
-    !selectedProperty || invalidRows || unorderedDates || scheduled !== price;
-  const formInvalid = mode === 'automatic' ? automaticInvalid : customInvalid;
-
-  useEffect(() => {
-    const focused = initialPropertyId ? eligibleProperties.find((property) => [property._id, propertyRouteReference(property)].includes(initialPropertyId)) : null;
-    const focusedReference = focused ? propertyRouteReference(focused) : '';
-    if (focusedReference && focusedReference !== propertyId) {
-      setPropertyId(focusedReference);
-      return;
-    }
-    if (!propertyId && eligibleProperties[0]) setPropertyId(propertyRouteReference(eligibleProperties[0]));
-  }, [eligibleProperties, initialPropertyId, propertyId]);
-
-  useEffect(() => {
-    if (initialFrequency && frequencies.includes(initialFrequency as Exclude<InstallmentFrequency, 'custom'>)) {
-      setFrequency(initialFrequency as Exclude<InstallmentFrequency, 'custom'>);
-    }
-  }, [initialFrequency]);
-
-  const updateRow = (id: string, patch: Partial<CustomRow>) => {
-    setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
-  };
-
-  const addCondition = (rowId: string) => {
-    setRows((current) =>
-      current.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              conditions: [
-                ...row.conditions,
-                { id: crypto.randomUUID(), type: 'admin_approval', description: '', required: true },
-              ],
-            }
-          : row,
-      ),
-    );
-  };
-
-  const updateCondition = (
-    rowId: string,
-    conditionId: string,
-    patch: Partial<CustomRow['conditions'][number]>,
-  ) => {
-    setRows((current) =>
-      current.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              conditions: row.conditions.map((condition) =>
-                condition.id === conditionId ? { ...condition, ...patch } : condition,
-              ),
-            }
-          : row,
-      ),
-    );
-  };
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!selectedProperty || formInvalid) return;
-    setCreating(true);
-    try {
-      const payload =
-        mode === 'automatic'
-          ? {
-              propertyId: selectedPropertyReference,
-              frequency,
-              numberOfInstallments,
-              initialDeposit: Number(initialDeposit || 0),
-              startDate: fromLocalInputValue(startDate),
-              gracePeriodHours: DEFAULT_GRACE_PERIOD_HOURS,
-            }
-          : ({
-              propertyId: selectedPropertyReference,
-              totalAmount: selectedProperty.price,
-              gracePeriodHours: DEFAULT_GRACE_PERIOD_HOURS,
-              schedule: rows.map((row, index) => ({
-                sequence: index + 1,
-                title: row.title.trim(),
-                milestoneType: row.milestoneType,
-                expectedAmount: Number(row.expectedAmount),
-                dueDate: fromLocalInputValue(row.dueDate),
-                conditions: row.conditions.map((condition) => ({
-                  type: condition.type,
-                  description: condition.description.trim() || labelize(condition.type),
-                  required: condition.required,
-                })),
-              })),
-            } satisfies CustomInstallmentCreatePayload);
-      const plan = await installmentService.createInstallmentPlan(payload);
-      toast.success('Installment plan created.');
-      await onCreated(plan);
-    } catch (error) {
-      if (error instanceof ApiRequestError && error.status === 409) {
-        toast.error(`Duplicate or active plan conflict: ${error.message}`);
-      } else {
-        toast.error(apiMessage(error, 'Unable to create installment plan.'));
-      }
-    } finally {
-      setCreating(false);
-    }
-  };
+const InstallmentAgreementNotice = ({ propertyId }: { propertyId?: string }) => {
+  const target = propertyId
+    ? `/dashboard/buyer/sale-negotiations/new?propertyId=${encodeURIComponent(propertyId)}`
+    : '/dashboard/buyer/sale-negotiations';
 
   return (
-    <section className="mb-6 rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4 sm:mb-8 sm:p-5">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-xl font-extrabold text-on-surface">Create installment plan</h2>
-          <p className="text-sm text-secondary">Choose automatic dates or define milestone rows.</p>
-        </div>
-        <div className="inline-flex w-full rounded-lg bg-surface-container-low p-1 sm:w-auto">
-          {(['automatic', 'custom'] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={`min-w-0 flex-1 rounded-md px-3 py-2 text-sm font-bold capitalize sm:flex-none sm:px-4 ${mode === item ? 'bg-primary text-on-primary' : 'text-secondary'}`}
-              onClick={() => setMode(item)}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-      </div>
-      {loading ? <LoadingState label="Loading eligible properties..." /> : null}
-      {error ? <ErrorState message={error} onRetry={onRetryProperties} /> : null}
-      {!loading && !error ? (
-        <form onSubmit={(event) => void submit(event)} className="space-y-5">
-          {eligibleProperties.length ? (
-            <PropertySearchSelect
-              label="Property"
-              properties={eligibleProperties}
-              value={propertyId}
-              onChange={(property) => setPropertyId(property ? propertyRouteReference(property) : '')}
-              emptyMessage="No eligible properties currently offer installment payments."
-              helperText="Only available properties without an active installment plan are shown."
-            />
-          ) : (
-            <div className="rounded-lg border border-dashed border-outline-variant/30 p-4 text-sm text-secondary sm:p-5">
-              No eligible properties currently offer installment payments.
-            </div>
-          )}
-
-          {mode === 'automatic' ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
-              <label className="space-y-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-secondary">Frequency</span>
-                <select className="w-full rounded-lg bg-surface-container-low px-4 py-3 text-sm" value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)}>
-                  {frequencies.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
-                </select>
-              </label>
-              <Input label="Number of installments" type="number" min="1" value={numberOfInstallments} readOnly className="cursor-not-allowed opacity-75" />
-              <Input label="Initial deposit" type="number" min="0" value={initialDeposit} onChange={(event) => setInitialDeposit(event.target.value)} />
-              <Input label="Start date and time" type="datetime-local" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-              <Input label="Grace period hours" type="number" min="0" value={DEFAULT_GRACE_PERIOD_HOURS} readOnly className="cursor-not-allowed opacity-75" />
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {rows.map((row, index) => (
-                <div key={row.id} className="min-w-0 rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 sm:p-4">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-6">
-                    <Input label="Sequence" type="number" min="1" value={index + 1} readOnly className="cursor-not-allowed opacity-75" />
-                    <Input label="Title" value={row.title} onChange={(event) => updateRow(row.id, { title: event.target.value })} className="md:col-span-2" />
-                    <label className="space-y-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-secondary">Milestone type</span>
-                      <select className="w-full rounded-lg bg-surface-container-lowest px-4 py-3 text-sm" value={row.milestoneType} onChange={(event) => updateRow(row.id, { milestoneType: event.target.value as InstallmentMilestoneType })}>
-                        {milestoneTypes.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
-                      </select>
-                    </label>
-                    <Input label="Expected amount" type="number" min="1" value={row.expectedAmount} onChange={(event) => updateRow(row.id, { expectedAmount: event.target.value })} />
-                    <Input label="Due date and time" type="datetime-local" value={row.dueDate} onChange={(event) => updateRow(row.id, { dueDate: event.target.value })} />
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    {row.conditions.map((condition) => (
-                      <div key={condition.id} className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-4">
-                        <select className="rounded-lg bg-surface-container-lowest px-3 py-2 text-sm" value={condition.type} onChange={(event) => updateCondition(row.id, condition.id, { type: event.target.value as InstallmentConditionType })}>
-                          {conditionTypes.map((item) => <option key={item} value={item}>{labelize(item)}</option>)}
-                        </select>
-                        <input className="rounded-lg bg-surface-container-lowest px-3 py-2 text-sm md:col-span-2" placeholder="Condition description" value={condition.description} onChange={(event) => updateCondition(row.id, condition.id, { description: event.target.value })} />
-                        <label className="flex items-center gap-2 text-sm text-secondary">
-                          <input type="checkbox" checked={condition.required} onChange={(event) => updateCondition(row.id, condition.id, { required: event.target.checked })} />
-                          Required
-                        </label>
-                      </div>
-                    ))}
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" variant="ghost" onClick={() => addCondition(row.id)}>Add condition</Button>
-                      {rows.length > 1 ? <Button type="button" variant="ghost" onClick={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))}>Remove row</Button> : null}
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <Button type="button" variant="secondary" onClick={() => setRows((current) => [...current, defaultCustomRow(current.length + 1)])}>Add milestone</Button>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
-            <Stat label="Property price" value={selectedProperty ? formatCurrency(price) : 'Select property'} />
-            <Stat label="Principal total" value={selectedProperty ? formatCurrency(price) : 'Select property'} />
-            <Stat label="Principal scheduled" value={mode === 'custom' ? formatCurrency(scheduled) : 'Calculated automatically'} />
-            <Stat label="Difference" value={mode === 'custom' ? formatCurrency(scheduled - price) : formatCurrency(0)} tone={mode === 'custom' && scheduled !== price ? 'text-error' : ''} />
-            <Stat label="Grace period" value={`${DEFAULT_GRACE_PERIOD_HOURS} hours`} />
-          </div>
-          <div className="text-xs text-secondary">
-            {unorderedDates ? 'Milestone due dates must be ordered. ' : ''}
-            {mode === 'custom' && scheduled !== price ? 'Scheduled principal must equal the property price. ' : ''}
-            Estimated first due date: {mode === 'custom' ? formatDateTime(fromLocalInputValue(rows[0]?.dueDate)) : formatDateTime(fromLocalInputValue(startDate))}
-          </div>
-          <Button type="submit" disabled={creating || formInvalid || !eligibleProperties.length}>
-            {creating ? 'Creating...' : 'Create plan'}
-          </Button>
-        </form>
-      ) : null}
+    <section className="mb-6 rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-5 sm:p-6">
+      <h2 className="text-lg font-bold text-primary">Agree instalment terms with the seller</h2>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary">
+        Instalment schedules are part of the purchase proposal. Start a purchase negotiation to agree the price,
+        payment schedule and any applicable conditions with the seller before checkout.
+      </p>
+      <Link
+        to={target}
+        className="mt-4 inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-on-primary"
+      >
+        Open purchase negotiation
+      </Link>
     </section>
   );
 };
-
 const InstallmentList = ({
   installments,
   selectedId,
@@ -481,7 +162,7 @@ const InstallmentList = ({
       {filtered.map((installment) => (
         <Link
           key={installment._id}
-          to={`/dashboard/${role === 'admin' ? 'admin' : role === 'owner' ? 'owner' : 'buyer'}/installments/${installment._id}`}
+          to={`/dashboard/${role === 'admin' ? 'admin' : role === 'owner' ? 'landlord' : 'buyer'}/installments/${installment._id}`}
           className={`block min-w-0 rounded-lg border p-3 transition hover:border-primary sm:p-4 ${selectedId === installment._id ? 'border-primary bg-surface-container-low' : 'border-outline-variant/20 bg-surface-container-lowest'}`}
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
@@ -509,11 +190,12 @@ const PaymentPanel = ({
 }: {
   installment: Installment;
 }) => {
+  const { activeProfile } = useAuth();
   const [amount, setAmount] = useState(String(getNextPayableScheduleItem(installment)?.remainingAmount || getTotalOutstandingBalance(installment)));
   const [selectedFx, setSelectedFx] = useState<{ scheduleItemId: string; id: string } | null>(null);
   const [paying, setPaying] = useState(false);
-  const paymentStepUp = useBoundStepUp<Awaited<ReturnType<typeof paymentService.initialize>>>();
-  const paymentResourceKey = `installment:${installment._id}`;
+  const paymentStepUp = useBoundStepUp<Awaited<ReturnType<typeof installmentService.initializePayment>>>();
+  const paymentResourceKey = `installment:${activeProfile?.id ?? 'no-profile'}:${installment._id}`;
   const [outcomeUnknown, setOutcomeUnknown] = useState(() => Boolean(paymentService.getPendingPaymentReference(paymentResourceKey)));
   const [statusMessage, setStatusMessage] = useState('');
   const [checkingStatus, setCheckingStatus] = useState(false);
@@ -541,20 +223,21 @@ const PaymentPanel = ({
 
   const initialize = async () => {
     if (invalidAmount || blockedByConditions || !currency || (isUsd && (!fxConfirmationId || getOutstandingPenaltyAmount(installment) > 0)) || !canPayInstallment(installment) || outcomeUnknown || paymentStepUp.busy || paymentStepUp.challenge) return;
-    const body: PaymentInitializationRequest = isUsd
-      ? { installmentId: installment._id, scheduleItemId, fxConfirmationId: fxConfirmationId! }
-      : { installmentId: installment._id, amount: numericAmount, ...(scheduleItemId ? { scheduleItemId } : {}) };
+    const body: InstallmentPaymentPayload = isUsd
+      ? { scheduleItemId, fxConfirmationId: fxConfirmationId! }
+      : { amount: numericAmount, ...(scheduleItemId ? { scheduleItemId } : {}) };
     await paymentStepUp.begin({
-      method: 'POST', path: '/api/payments/initialize', body,
+      method: 'POST', path: `/api/installments/${encodeURIComponent(installment._id)}/initialize-payment`, body,
       label: 'Initialize the selected installment payment',
       execute: async (challengeId, exactBody) => {
         setPaying(true);
         try {
-          const response = await paymentService.initialize(exactBody, challengeId);
+          const response = await installmentService.initializePayment(installment._id, exactBody, challengeId);
           if (response.redirectUrl) paymentService.redirectToCheckout(response, resolveInstallmentPropertyId(installment), paymentResourceKey);
-          else { setOutcomeUnknown(true); setStatusMessage('This payment attempt has no provider URL yet. Check its reference before taking another action.'); }
+          else { paymentService.persistPaymentReference(response.reference, resolveInstallmentPropertyId(installment), paymentResourceKey); setOutcomeUnknown(true); setStatusMessage('This payment attempt has no provider URL yet. Check its reference before taking another action.'); }
           return response;
         } catch (raw) {
+          if (raw instanceof ApiRequestError && raw.reference) paymentService.persistPaymentReference(raw.reference, resolveInstallmentPropertyId(installment), paymentResourceKey);
           if (raw instanceof ApiRequestError && (raw.code === 'PAYMENT_INITIALIZATION_OUTCOME_UNKNOWN' || raw.code === 'PAYMENT_INITIALIZATION_PENDING')) {
             setOutcomeUnknown(true);
             setStatusMessage('The provider outcome is unresolved. No new payment request was sent. Check the saved reference first.');
@@ -614,7 +297,7 @@ const PaymentPanel = ({
       {blockedByConditions ? <p className="mt-3 text-sm text-error">Required milestone conditions must be satisfied before paying this targeted item.</p> : null}
       {isUsd ? <><p className="mt-3 text-sm text-secondary">This payment uses the selected confirmed FX agreement for the current schedule principal. Outstanding penalties cannot be combined in this FX checkout.</p><PropertyFxAgreement installment={{ id: installment._id, scheduleItemId, listedAmountMinor }} onSelect={(id) => setSelectedFx(id ? { scheduleItemId, id } : null)} /></> : <p className="mt-3 text-sm text-secondary">Maximum payable now: {formatCurrency(maxPayable)}.</p>}
       {!currency ? <p role="alert" className="mt-3 text-sm text-error">The plan's listing currency is unavailable. Refresh the plan before payment.</p> : null}
-      {outcomeUnknown ? <div role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950"><p>{statusMessage || 'A previous payment attempt must be reconciled before another initialization.'}</p><p className="mt-1">Reference: {paymentService.getPendingPaymentReference() || 'not available'}</p><Button type="button" variant="secondary" className="mt-2" disabled={checkingStatus || !paymentService.getPendingPaymentReference()} onClick={() => void refreshPaymentStatus()}>{checkingStatus ? 'Checking…' : 'Check payment status'}</Button></div> : statusMessage ? <p role="status" className="mt-3 text-sm text-secondary">{statusMessage}</p> : null}
+      {outcomeUnknown ? <div role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950"><p>{statusMessage || 'A previous payment attempt must be reconciled before another initialization.'}</p><p className="mt-1">Reference: {paymentService.getPendingPaymentReference(paymentResourceKey) || 'not available'}</p><Button type="button" variant="secondary" className="mt-2" disabled={checkingStatus || !paymentService.getPendingPaymentReference(paymentResourceKey)} onClick={() => void refreshPaymentStatus()}>{checkingStatus ? 'Checking…' : 'Check payment status'}</Button></div> : statusMessage ? <p role="status" className="mt-3 text-sm text-secondary">{statusMessage}</p> : null}
       {paymentStepUp.error && !paymentStepUp.challenge ? <p role="alert" className="mt-3 text-sm text-error">{paymentStepUp.error}</p> : null}
       <StepUpDialog challenge={paymentStepUp.challenge} busy={paymentStepUp.busy || paying} error={paymentStepUp.error} onCancel={paymentStepUp.cancel} onSubmit={completePaymentStepUp} />
     </section>
@@ -708,11 +391,13 @@ const HistoryPanel = ({
   payments,
   penalties,
   role,
+  canWaive,
   onWaive,
 }: {
   payments: InstallmentPaymentRecord[];
   penalties: InstallmentPenaltyRecord[];
   role?: string;
+  canWaive: boolean;
   onWaive: (penalty: InstallmentPenaltyRecord) => Promise<void>;
 }) => (
   <div className="grid grid-cols-1 gap-5 2xl:grid-cols-2">
@@ -739,7 +424,7 @@ const HistoryPanel = ({
               <div className="flex flex-wrap justify-between gap-2">
                 <p className="font-bold">Interval {penalty.intervalNumber ?? 'n/a'} - {penalty.status ?? 'outstanding'}</p>
                 {role === 'admin' && penalty.status !== 'waived' && Number(penalty.outstandingAmount || 0) > 0 ? (
-                  <Button type="button" variant="secondary" className="px-3 py-2" onClick={() => void onWaive(penalty)}>Waive</Button>
+                  <Button type="button" variant="secondary" className="px-3 py-2" disabled={!canWaive} title={!canWaive ? 'Refresh: the current installment version was not returned.' : undefined} onClick={() => void onWaive(penalty)}>Waive with authenticator</Button>
                 ) : null}
               </div>
               <p>Rate: {penalty.percentageValue ?? 0.5}% {penalty.penaltyType ?? 'percentage'}</p>
@@ -761,6 +446,7 @@ const InstallmentDetail = ({
   payments,
   penalties,
   loading,
+  canManageAdmin,
   onRefresh,
 }: {
   installment: Installment | null;
@@ -768,11 +454,14 @@ const InstallmentDetail = ({
   payments: InstallmentPaymentRecord[];
   penalties: InstallmentPenaltyRecord[];
   loading: boolean;
+  canManageAdmin: boolean;
   onRefresh: () => Promise<void>;
 }) => {
   const [adminStatus, setAdminStatus] = useState<InstallmentStatus>('defaulted');
   const [adminNote, setAdminNote] = useState('');
   const [mutating, setMutating] = useState(false);
+  const protectedSuccessMessage = useRef('');
+  const protectedStepUp = useBoundStepUp<Installment | { installment: Installment; penalty: InstallmentPenaltyRecord }>();
 
   if (loading) return <LoadingState label="Loading installment details..." />;
   if (!installment) return <div className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-8 text-secondary">Select an installment plan to view details.</div>;
@@ -781,8 +470,9 @@ const InstallmentDetail = ({
   const currentFxItem = getNextPayableScheduleItem(installment);
   const currentFxMinor = Number(currentFxItem?.remainingAmount) * 100;
   const cancel = async () => {
-    const note = window.prompt('Confirm cancellation note. Cancellation does not process a refund or transfer ownership.', '');
-    if (note === null) return;
+    const result = await Swal.fire<string>({ title: 'Cancel installment plan?', text: 'Cancellation does not process a refund or transfer ownership.', input: 'textarea', inputLabel: 'Note (optional)', inputPlaceholder: 'Add context for the audit history', showCancelButton: true, confirmButtonText: 'Cancel plan', confirmButtonColor: '#9f1239' });
+    if (!result.isConfirmed) return;
+    const note = result.value?.trim() ?? '';
     setMutating(true);
     try {
       await installmentService.cancelInstallment(installment._id, { note });
@@ -796,8 +486,9 @@ const InstallmentDetail = ({
   };
   const satisfy = async (item: InstallmentScheduleItem, condition: InstallmentCondition) => {
     if (!item._id || !condition._id) return;
-    const note = window.prompt('Add a note before satisfying this installment condition.', '');
-    if (note === null) return;
+    const result = await Swal.fire<string>({ title: 'Satisfy this condition?', input: 'textarea', inputLabel: 'Note (optional)', inputPlaceholder: 'Add a note for the schedule record', showCancelButton: true, confirmButtonText: 'Confirm condition' });
+    if (!result.isConfirmed) return;
+    const note = result.value?.trim() ?? '';
     setMutating(true);
     try {
       await installmentService.satisfyCondition(installment._id, item._id, condition._id, { note });
@@ -810,30 +501,37 @@ const InstallmentDetail = ({
     }
   };
   const updateStatus = async () => {
-    setMutating(true);
-    try {
-      await installmentService.updateInstallmentStatus(installment._id, { status: adminStatus, note: adminNote.trim() || undefined });
-      toast.success('Installment status updated.');
-      await onRefresh();
-    } catch (error) {
-      if (!(await conflictToast(error, onRefresh))) toast.error(apiMessage(error, 'Unable to update status.'));
-    } finally {
-      setMutating(false);
-    }
+    const body = { status: adminStatus, ...(adminNote.trim() ? { note: adminNote.trim() } : {}) };
+    protectedSuccessMessage.current = 'Installment status updated.';
+    await protectedStepUp.begin({ method: 'PATCH', path: `/api/installments/${encodeURIComponent(installment._id)}/admin/status`, body, label: 'Update installment status', execute: async (challengeId, exactBody) => {
+      setMutating(true);
+      try { return await installmentService.updateInstallmentStatus(installment._id, exactBody, challengeId); }
+      finally { setMutating(false); }
+    } });
   };
   const waive = async (penalty: InstallmentPenaltyRecord) => {
-    const reason = window.prompt('Waiver reason is required.', '');
-    if (!reason?.trim()) return;
-    setMutating(true);
-    try {
-      await installmentService.waivePenalty(installment._id, penalty._id, { reason: reason.trim() });
-      toast.success('Penalty waived.');
-      await onRefresh();
-    } catch (error) {
-      if (!(await conflictToast(error, onRefresh))) toast.error(apiMessage(error, 'Unable to waive penalty.'));
-    } finally {
-      setMutating(false);
+    const result = await Swal.fire<string>({ title: 'Waive this penalty?', text: Number.isSafeInteger(installment.version) ? `Current installment version ${installment.version} will be checked by the server.` : 'The server will validate the current installment before applying a waiver.', input: 'textarea', inputLabel: 'Reason (required)', inputPlaceholder: 'Explain why this penalty should be waived', showCancelButton: true, confirmButtonText: 'Continue to authenticator', confirmButtonColor: '#173d32', inputValidator: (value) => !value.trim() ? 'A waiver reason is required.' : undefined });
+    if (!result.isConfirmed || !result.value?.trim()) return;
+    const body = { reason: result.value.trim() };
+    protectedSuccessMessage.current = 'Penalty waiver recorded.';
+    await protectedStepUp.begin({ method: 'PATCH', path: `/api/installments/${encodeURIComponent(installment._id)}/penalties/${encodeURIComponent(penalty._id)}/waive`, body, label: 'Waive installment penalty', execute: async (challengeId, exactBody) => {
+      setMutating(true);
+      try { return await installmentService.waivePenalty(installment._id, penalty._id, exactBody, challengeId); }
+      finally { setMutating(false); }
+    } });
+  };
+
+  const completeProtectedMutation = async (code: string) => {
+    const result = await protectedStepUp.complete(code);
+    if (!result.ok) {
+      toast.error(result.error ?? 'The installment action was not confirmed.');
+      if (result.code?.startsWith('CONFLICT_')) await onRefresh();
+      return false;
     }
+    toast.success(protectedSuccessMessage.current || 'Installment updated.');
+    protectedSuccessMessage.current = '';
+    await onRefresh();
+    return true;
   };
 
   return (
@@ -865,7 +563,7 @@ const InstallmentDetail = ({
       {role === 'owner' && property?.currency === 'USD' && currentFxItem?._id && Number.isSafeInteger(currentFxMinor) && currentFxMinor > 0 ?
         <PropertyFxAgreement installment={{ id: installment._id, scheduleItemId: currentFxItem._id, listedAmountMinor: currentFxMinor }} onSelect={() => {}} /> : null}
       <ScheduleTable installment={installment} role={role} onSatisfy={satisfy} />
-      <HistoryPanel payments={payments} penalties={penalties} role={role} onWaive={waive} />
+      <HistoryPanel payments={payments} penalties={penalties} role={role} canWaive={canManageAdmin} onWaive={waive} />
 
       <section className="min-w-0 rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4 sm:p-5">
         <h3 className="text-lg font-bold">Actions</h3>
@@ -873,54 +571,45 @@ const InstallmentDetail = ({
           <Button type="button" variant="secondary" onClick={() => void onRefresh()} disabled={mutating}>Refresh</Button>
           {canCancelInstallment(installment, role) ? <Button type="button" variant="secondary" onClick={() => void cancel()} disabled={mutating}>Cancel plan</Button> : null}
         </div>
-        {role === 'admin' ? (
+        {canManageAdmin ? (
           <div className="mt-5 rounded-lg bg-surface-container-low p-4">
             <p className="text-sm font-bold">Exceptional manual status management</p>
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
-              <select className="rounded-lg bg-surface-container-lowest px-4 py-3 text-sm" value={adminStatus} onChange={(event) => setAdminStatus(event.target.value as InstallmentStatus)}>
+              <select className="rounded-lg bg-surface-container-lowest px-4 py-3 text-sm" disabled={protectedStepUp.busy || Boolean(protectedStepUp.challenge)} value={adminStatus} onChange={(event) => setAdminStatus(event.target.value as InstallmentStatus)}>
                 {adminStatuses.map((status) => <option key={status} value={status}>{labelize(status)}</option>)}
               </select>
-              <input className="rounded-lg bg-surface-container-lowest px-4 py-3 text-sm" placeholder="Administrative note" value={adminNote} onChange={(event) => setAdminNote(event.target.value)} />
-              <Button type="button" onClick={() => void updateStatus()} disabled={mutating || adminStatus === installment.status}>Update status</Button>
+              <input className="rounded-lg bg-surface-container-lowest px-4 py-3 text-sm" disabled={protectedStepUp.busy || Boolean(protectedStepUp.challenge)} placeholder="Administrative note" value={adminNote} onChange={(event) => setAdminNote(event.target.value)} />
+              <Button type="button" onClick={() => void updateStatus()} disabled={mutating || protectedStepUp.busy || Boolean(protectedStepUp.challenge) || adminStatus === installment.status}>Update status with authenticator</Button>
             </div>
           </div>
         ) : null}
       </section>
+      <StepUpDialog challenge={protectedStepUp.challenge} busy={protectedStepUp.busy || mutating} error={protectedStepUp.error} onCancel={protectedStepUp.cancel} onSubmit={completeProtectedMutation} />
     </div>
   );
 };
 
-const Installments = () => {
-  const { user, token, activeProfile } = useAuth();
+const InstallmentsContent = () => {
+  const { activeProfile, adminAccess } = useAuth();
   const { id } = useParams<{ id?: string }>();
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const role = user?.role === 'proxy_inspector' ? undefined : user?.role;
-  const propertyScopeKey = JSON.stringify([user?._id ?? null, activeProfile?.id ?? null, role, token]);
-  const propertyRequestSequence = useRef(0);
-  const currentPropertyScope = useRef(propertyScopeKey);
+  const isCurrentStaffProfile = activeProfile?.kind === 'staff' && adminAccess?.profileId === activeProfile.id;
+  const role: 'buyer' | 'owner' | 'admin' | undefined = activeProfile?.kind === 'buyer'
+    ? 'buyer'
+    : ['owner', 'agency', 'developer'].includes(activeProfile?.kind ?? '')
+      ? 'owner'
+      : isCurrentStaffProfile
+        ? 'admin'
+        : undefined;
+  const canManageAdminInstallments = Boolean(role === 'admin' && adminAccess?.isExecutive && !adminAccess.readOnly);
   const [query, setQuery] = useState('');
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [selected, setSelected] = useState<Installment | null>(null);
-  const [properties, setProperties] = useState<Property[]>([]);
   const [payments, setPayments] = useState<InstallmentPaymentRecord[]>([]);
   const [penalties, setPenalties] = useState<InstallmentPenaltyRecord[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [loadingProperties, setLoadingProperties] = useState(user?.role === 'buyer');
   const [listError, setListError] = useState<string | null>(null);
-  const [propertyError, setPropertyError] = useState<string | null>(null);
-
-  const routeBase = role === 'admin' ? '/dashboard/admin/installments' : role === 'owner' ? '/dashboard/landlord/installments' : '/dashboard/buyer/installments';
-
-  useLayoutEffect(() => {
-    if (currentPropertyScope.current === propertyScopeKey) return;
-    currentPropertyScope.current = propertyScopeKey;
-    propertyRequestSequence.current += 1;
-    setProperties([]);
-    setPropertyError(null);
-    setLoadingProperties(role === 'buyer');
-  }, [propertyScopeKey, role]);
 
   const loadList = useCallback(async () => {
     setLoadingList(true);
@@ -934,27 +623,6 @@ const Installments = () => {
       setLoadingList(false);
     }
   }, []);
-
-  const loadProperties = useCallback(async () => {
-    if (role !== 'buyer') return;
-    const requestId = ++propertyRequestSequence.current;
-    const requestScope = propertyScopeKey;
-    const isCurrentRequest = () => requestId === propertyRequestSequence.current &&
-      currentPropertyScope.current === requestScope;
-    setLoadingProperties(true);
-    setPropertyError(null);
-    try {
-      const availableProperties = await loadInstallmentProperties(
-        (page, limit) => propertyService.getProperties({ status: 'available', page, limit }),
-        { isCurrent: isCurrentRequest },
-      );
-      if (isCurrentRequest()) setProperties(availableProperties);
-    } catch (error) {
-      if (isCurrentRequest()) setPropertyError(apiMessage(error, 'Unable to load eligible properties.'));
-    } finally {
-      if (isCurrentRequest()) setLoadingProperties(false);
-    }
-  }, [propertyScopeKey, role]);
 
   const loadDetail = useCallback(async (installmentId: string) => {
     setLoadingDetail(true);
@@ -982,9 +650,7 @@ const Installments = () => {
 
   useEffect(() => {
     void loadList();
-    void loadProperties();
-    return () => { propertyRequestSequence.current += 1; };
-  }, [loadList, loadProperties]);
+  }, [loadList]);
 
   useEffect(() => {
     if (id) {
@@ -1015,27 +681,13 @@ const Installments = () => {
         <div className="min-w-0">
           <h1 className="text-2xl font-extrabold text-primary sm:text-3xl">Installments</h1>
           <p className="text-sm text-secondary">
-            {role === 'admin' ? 'All milestone-based installment plans.' : role === 'owner' ? 'Plans on your properties.' : 'Create, track, and pay your plans.'}
+            {role === 'admin' ? 'All milestone-based installment plans.' : role === 'owner' ? 'Plans on your properties.' : 'Review your agreed payment schedules and current payment status.'}
           </p>
         </div>
         <div className="flex w-full min-w-0 flex-wrap gap-3 sm:w-auto">{searchInput}</div>
       </header>
 
-      {role === 'buyer' ? (
-        <InstallmentCreateForm
-          properties={properties}
-          loading={loadingProperties}
-          error={propertyError}
-          installments={installments}
-          onRetryProperties={() => void loadProperties()}
-          initialPropertyId={searchParams.get('propertyId') ?? undefined}
-          initialFrequency={searchParams.get('frequency') ?? undefined}
-          onCreated={async (plan) => {
-            await loadList();
-            navigate(`${routeBase}/${plan._id}`, { replace: true });
-          }}
-        />
-      ) : null}
+      {role === 'buyer' ? <InstallmentAgreementNotice propertyId={searchParams.get('propertyId') ?? undefined} /> : null}
 
       {loadingList ? <LoadingState label="Loading installment plans..." /> : null}
       {listError ? <ErrorState message={listError} onRetry={() => void loadList()} /> : null}
@@ -1049,6 +701,7 @@ const Installments = () => {
             payments={payments}
             penalties={penalties}
             loading={loadingDetail}
+            canManageAdmin={canManageAdminInstallments}
             onRefresh={refreshAll}
           />
         </div>
@@ -1076,4 +729,7 @@ const Installments = () => {
   );
 };
 
-export default Installments;
+export default function Installments() {
+  const { activeProfile } = useAuth();
+  return <InstallmentsContent key={activeProfile?.id ?? 'no-profile'} />;
+}

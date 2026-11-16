@@ -5,8 +5,10 @@ import Button from '../../../components/ui/Button';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
+import { ApiRequestError } from '../../../lib/axios';
 import { inquiryService } from '../../../services/inquiryService';
 import { resolveInquiryProperty } from '../../../types';
+import { useAuth } from '../../../contexts/AuthContext';
 
 const formatDate = (date: string) =>
   new Date(date).toLocaleString('en-NG', {
@@ -15,18 +17,21 @@ const formatDate = (date: string) =>
     year: 'numeric',
   });
 
-const InquiriesList = () => {
+const InquiriesListContent = () => {
   const { data, loading, error, execute } = useAsync(() => inquiryService.getInquiries(), true);
   const inquiries = data ?? [];
   const openCount = inquiries.filter((item) => item.status === 'open').length;
 
-  const toggleStatus = async (id: string, status: 'open' | 'closed') => {
+  const toggleStatus = async (id: string, status: 'open' | 'closed', version: number) => {
     try {
-      await inquiryService.updateInquiryStatus(id, status === 'open' ? 'closed' : 'open');
+      await inquiryService.updateInquiryStatus(id, status === 'open' ? 'closed' : 'open', version);
       toast.success(status === 'open' ? 'Inquiry closed.' : 'Inquiry reopened.');
       await execute();
-    } catch {
-      toast.error('Unable to update inquiry status.');
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.code === 'CONFLICT_INQUIRY_VERSION') {
+        await execute();
+        toast.error('The inquiry changed. Its current version is loaded; review it before retrying.');
+      } else toast.error(error instanceof Error ? error.message : 'Unable to update inquiry status.');
     }
   };
 
@@ -81,8 +86,7 @@ const InquiriesList = () => {
                           <td className="px-6 py-5 text-sm font-bold text-slate-900">{property?.title ?? 'Property unavailable'}</td>
                           <td className="px-6 py-5">
                             <div className="flex flex-col">
-                              <span className="text-sm font-semibold text-slate-900">{item.fullName}</span>
-                              <span className="text-xs text-secondary">{item.email}</span>
+                              <span className="text-sm font-semibold text-slate-900">{item.inquirer || 'REALTIQ user'}</span>
                             </div>
                           </td>
                           <td className="px-6 py-5 text-sm text-secondary">{item.inquiryType}</td>
@@ -99,7 +103,7 @@ const InquiriesList = () => {
                               <Link to={`/dashboard/landlord/inquiry-details/${item._id}`} className="text-primary font-bold text-sm hover:underline self-center">
                                 View
                               </Link>
-                              <Button variant="secondary" onClick={() => void toggleStatus(item._id, item.status)}>
+                              <Button variant="secondary" onClick={() => void toggleStatus(item._id, item.status, item.version)}>
                                 {item.status === 'open' ? 'Close' : 'Reopen'}
                               </Button>
                             </div>
@@ -118,4 +122,7 @@ const InquiriesList = () => {
   );
 };
 
-export default InquiriesList;
+export default function InquiriesList() {
+  const { activeProfile } = useAuth();
+  return <InquiriesListContent key={activeProfile?.id ?? 'no-profile'} />;
+}

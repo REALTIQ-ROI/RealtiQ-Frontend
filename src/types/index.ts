@@ -697,11 +697,12 @@ export interface CreateInquiryPayload {
 }
 
 export interface InquiryProperty {
-  _id: string;
+  id?: string;
+  _id?: string;
   publicReference?: string;
   title: string;
-  price: number;
   location: string;
+  status?: string;
 }
 
 export interface InquiryUser {
@@ -716,14 +717,16 @@ export interface ApiInquiry {
   userId?: string | null;
   user?: InquiryUser;
   ownerId: string;
-  fullName: string;
-  email: string;
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  inquirer?: string;
   message: string;
   inquiryType: string;
   status: 'open' | 'closed';
   createdAt: string;
   updatedAt?: string;
-  version?: number;
+  version: number;
   leadUpdatesOptIn?: boolean;
 }
 
@@ -1444,6 +1447,7 @@ export interface InstallmentPenaltyRecord {
 
 export interface Installment {
   _id: string;
+  version?: number;
   property?: Property | TourPropertySummary | string;
   propertyId?: string | Property | TourPropertySummary;
   user?: TourParticipant | string;
@@ -1518,8 +1522,9 @@ export interface CustomInstallmentCreatePayload {
 export type InstallmentCreatePayload = AutomaticInstallmentCreatePayload | CustomInstallmentCreatePayload;
 
 export interface InstallmentPaymentPayload {
-  amount: number;
+  amount?: number;
   scheduleItemId?: string;
+  fxConfirmationId?: string;
 }
 
 export interface InstallmentPaymentResponse {

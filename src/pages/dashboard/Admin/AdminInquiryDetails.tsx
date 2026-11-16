@@ -7,6 +7,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { useAuth } from '../../../contexts/AuthContext';
 import { hasAdminCapability } from '../../../services/adminAccessService';
+import { ApiRequestError } from '../../../lib/axios';
 import { inquiryService } from '../../../services/inquiryService';
 import { resolveInquiryProperty } from '../../../types';
 
@@ -19,7 +20,7 @@ const formatDate = (date: string) =>
     minute: '2-digit',
   });
 
-const AdminInquiryDetails = () => {
+const AdminInquiryDetailsContent = () => {
   const { adminAccess } = useAuth();
   const canManageSupport = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'support.manage'));
   const { id } = useParams();
@@ -32,11 +33,14 @@ const AdminInquiryDetails = () => {
   const toggleStatus = async () => {
     if (!inquiry || !canManageSupport) return;
     try {
-      await inquiryService.updateInquiryStatus(inquiry._id, inquiry.status === 'open' ? 'closed' : 'open');
+      await inquiryService.updateInquiryStatus(inquiry._id, inquiry.status === 'open' ? 'closed' : 'open', inquiry.version);
       toast.success(inquiry.status === 'open' ? 'Inquiry closed.' : 'Inquiry reopened.');
       await execute();
-    } catch {
-      toast.error('Unable to update inquiry status.');
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.code === 'CONFLICT_INQUIRY_VERSION') {
+        await execute();
+        toast.error('This inquiry changed since you opened it. The latest version is loaded; review it before trying again.');
+      } else toast.error(error instanceof Error ? error.message : 'Unable to update inquiry status.');
     }
   };
 
@@ -68,8 +72,8 @@ const AdminInquiryDetails = () => {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs text-secondary uppercase tracking-widest">Sender</p>
-                <h3 className="text-2xl font-extrabold text-primary">{inquiry.fullName}</h3>
-                <p className="text-sm text-secondary">{inquiry.email}</p>
+                <h3 className="text-2xl font-extrabold text-primary">{inquiry.fullName ?? inquiry.inquirer ?? 'REALTIQ user'}</h3>
+                {inquiry.email ? <p className="text-sm text-secondary">{inquiry.email}</p> : null}
               </div>
               <span className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase ${
                 inquiry.status === 'open' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
@@ -104,4 +108,7 @@ const AdminInquiryDetails = () => {
   );
 };
 
-export default AdminInquiryDetails;
+export default function AdminInquiryDetails() {
+  const { activeProfile } = useAuth();
+  return <AdminInquiryDetailsContent key={activeProfile?.id ?? 'no-profile'} />;
+}

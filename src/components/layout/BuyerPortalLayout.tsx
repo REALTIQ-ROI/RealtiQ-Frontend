@@ -21,6 +21,7 @@ const navItems = [
   { to: '/dashboard/personalisation', icon: 'favorite', label: 'Saved Activity' },
   { to: '/dashboard/community', icon: 'forum', label: 'Community' },
   { to: '/dashboard/buyer/inquiry-history', icon: 'chat_bubble', label: 'Inquiry History' },
+  { to: '/dashboard/buyer/sale-negotiations', icon: 'handshake', label: 'Purchase Negotiations' },
   { to: '/messages', icon: 'chat', label: 'Messages' },
   { to: '/dashboard/notifications', icon: 'notifications', label: 'Notifications' },
   { to: '/dashboard/trust', icon: 'verified_user', label: 'Account Trust' },

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import Swal from 'sweetalert2';
+import StepUpDialog from '../../../components/auth/StepUpDialog';
 import {
   canSatisfyRule,
   ESCROW_STATUS,
@@ -20,15 +21,13 @@ import RefundAdminPanel from '../../../components/escrow/RefundAdminPanel';
 import RefundChat from '../../../components/escrow/RefundChat';
 import EscrowFinanceSettlement from '../../../components/escrow/EscrowFinanceSettlement';
 import FinanceExecutionPanel from '../../../components/escrow/FinanceExecutionPanel';
-import StepUpDialog from '../../../components/auth/StepUpDialog';
 import MediaPreview from '../../../components/property/MediaPreview';
 import ErrorState from '../../../components/ui/ErrorState';
 import LoadingState from '../../../components/ui/LoadingState';
 import { useAuth } from '../../../contexts/AuthContext';
 import { hasAdminCapability } from '../../../services/adminAccessService';
-import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
-import { ApiRequestError } from '../../../lib/axios';
 import { useAsync } from '../../../hooks/useAsync';
+import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import {
   escrowErrorDetails,
   escrowService,
@@ -112,14 +111,23 @@ const escrowRuleIdentifier = (rule: EscrowRule): string | undefined => {
   return undefined;
 };
 
-const EscrowDetails = () => {
+const EscrowDetailsContent = () => {
   const { id: routeId } = useParams();
   const normalizedRouteId = routeId?.trim() ?? '';
   const id = ['undefined', 'null', ':id'].includes(normalizedRouteId.toLowerCase())
     ? ''
     : normalizedRouteId;
   const { user, activeProfile, adminAccess } = useAuth();
-  const canAdminManageFinance = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'finance.manage'));
+  const isCurrentStaffProfile = activeProfile?.kind === 'staff' && adminAccess?.profileId === activeProfile.id;
+  const role: 'buyer' | 'owner' | 'admin' | undefined = activeProfile?.kind === 'buyer'
+    ? 'buyer'
+    : ['owner', 'agency', 'developer'].includes(activeProfile?.kind ?? '')
+      ? 'owner'
+      : isCurrentStaffProfile
+        ? 'admin'
+        : undefined;
+  const canAdminReadFinance = Boolean(isCurrentStaffProfile && hasAdminCapability(adminAccess, 'finance.read'));
+  const canAdminManageFinance = Boolean(isCurrentStaffProfile && hasAdminCapability(adminAccess, 'finance.manage'));
   const {
     data: escrow,
     loading,
@@ -133,11 +141,10 @@ const EscrowDetails = () => {
   );
   const [satisfactionUpdate, setSatisfactionUpdate] =
     useState<SatisfyEscrowRuleResponse | null>(null);
-  const escrowPaymentStepUp = useBoundStepUp<Awaited<ReturnType<typeof escrowService.initializePayment>>>();
   const [paymentOutcomeUnknown, setPaymentOutcomeUnknown] = useState(false);
   const [paymentStatusMessage, setPaymentStatusMessage] = useState('');
-  const [paymentTerminalStatus, setPaymentTerminalStatus] = useState<string | null>(null);
   const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(false);
+  const stepUp = useBoundStepUp<MutationResponse>();
 
   const displayedRules = useMemo(() => {
     if (!escrow) return [];
@@ -231,11 +238,11 @@ const EscrowDetails = () => {
   );
   const propertyReference = propertyPublicReference(visibleProperty);
   useEffect(() => {
-    if (displayedEscrow && escrowService.getPendingId() === displayedEscrow._id && escrowService.getPendingReference()) {
+    if (displayedEscrow && escrowService.getPendingId(activeProfile?.id) === displayedEscrow._id && escrowService.getPendingReference(activeProfile?.id)) {
       setPaymentOutcomeUnknown(true);
       setPaymentStatusMessage('A previous escrow payment attempt is recorded. Check its status before starting another attempt.');
     }
-  }, [displayedEscrow]);
+  }, [activeProfile?.id, displayedEscrow]);
   const progress = useMemo(
     () => (displayedEscrow ? requiredProgress(displayedEscrow) : null),
     [displayedEscrow],
@@ -258,6 +265,7 @@ const EscrowDetails = () => {
     key: string,
     operation: () => Promise<MutationResponse>,
     onSuccess?: (result: MutationResponse) => void,
+    rethrow = false,
   ) => {
     if (pending) return;
     setPending(key);
@@ -295,6 +303,7 @@ const EscrowDetails = () => {
       } else {
         toast.error(err.message);
       }
+      if (rethrow) throw raw;
     } finally {
       setPending(null);
     }
@@ -302,7 +311,7 @@ const EscrowDetails = () => {
 
   const action = async (type: Action) => {
     if (!displayedEscrow) return;
-    if (user?.role === 'admin' && !canAdminManageFinance) {
+    if (role === 'admin' && !canAdminManageFinance) {
       toast.error('The current staff access does not include escrow financial operations.');
       return;
     }
@@ -315,24 +324,29 @@ const EscrowDetails = () => {
     const result = await notePrompt(settings[0], settings[1], settings[2]);
     if (!result.isConfirmed) return;
     const note = result.value?.trim() ?? '';
-    if (type === 'cancel') {
-      await mutate(type, () => escrowService.cancel(displayedEscrow._id, note));
-    }
-    if (type === 'request') {
-      await mutate(type, () =>
-        escrowService.requestRelease(displayedEscrow._id, note),
-      );
-    }
-    if (type === 'approve') {
-      await mutate(type, () =>
-        escrowService.approveRelease(displayedEscrow._id, note),
-      );
-    }
+    const body: { note?: string } = type === 'cancel' || note ? { note } : {};
+    const method = type === 'request' ? 'POST' : 'PATCH';
+    const path = type === 'cancel'
+      ? `/api/escrow/${encodeURIComponent(displayedEscrow._id)}/cancel`
+      : type === 'approve'
+        ? `/api/escrow/${encodeURIComponent(displayedEscrow._id)}/approve-release`
+        : `/api/escrow/${encodeURIComponent(displayedEscrow._id)}/request-release`;
+    await stepUp.begin({
+      method,
+      path,
+      body,
+      label: settings[2],
+      execute: (challengeId, exactBody) => mutate(type, () => {
+        if (type === 'cancel') return escrowService.cancel(displayedEscrow._id, exactBody.note ?? '', challengeId);
+        if (type === 'approve') return escrowService.approveRelease(displayedEscrow._id, exactBody.note, challengeId);
+        return escrowService.requestRelease(displayedEscrow._id, exactBody.note, challengeId);
+      }, undefined, true),
+    });
   };
 
   const satisfy = async (ruleId: string) => {
     if (!displayedEscrow) return;
-    if (user?.role === 'admin' && !canAdminManageFinance) {
+    if (role === 'admin' && !canAdminManageFinance) {
       toast.error('The current staff access does not include escrow financial operations.');
       return;
     }
@@ -358,75 +372,30 @@ const EscrowDetails = () => {
     );
   };
 
-  const initialize = async () => {
-    if (!displayedEscrow || pending || paymentOutcomeUnknown || escrowPaymentStepUp.busy || escrowPaymentStepUp.challenge) return;
-    const result = await Swal.fire({
-      title: 'Continue to secured payment?',
-      text: `Paystack will charge the full escrow amount of ${formatEscrowMoney(
-        displayedEscrow.amount,
-        displayedEscrow.currency ?? visibleProperty?.currency,
-      )}. Milestone allocations do not split this funding transaction.`,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Continue to Paystack',
-      confirmButtonColor: '#173d32',
-    });
-    if (!result.isConfirmed) return;
-    setPending('payment');
-    await escrowPaymentStepUp.begin({
-      method: 'POST', path: '/api/payments/initialize', body: { escrowId: displayedEscrow._id },
-      label: 'Initialize this escrow funding payment',
-      execute: async (challengeId) => {
-        try {
-          const response = await escrowService.initializePayment(displayedEscrow._id, challengeId);
-          if (response.redirectUrl) escrowService.redirectToPayment(response);
-          else {
-            setPaymentOutcomeUnknown(true);
-            setPaymentStatusMessage('The escrow payment is pending without a provider URL. Check its reference before taking another action.');
-          }
-          return response;
-        } catch (raw) {
-          if (raw instanceof ApiRequestError && (raw.code === 'PAYMENT_INITIALIZATION_OUTCOME_UNKNOWN' || raw.code === 'PAYMENT_INITIALIZATION_PENDING')) {
-            setPaymentOutcomeUnknown(true);
-            setPaymentStatusMessage('The provider outcome is unresolved. No replacement escrow payment was initialized.');
-          } else if (!(raw instanceof ApiRequestError) || !raw.status || raw.status >= 500) {
-            setPaymentOutcomeUnknown(true);
-            setPaymentStatusMessage('The payment response was not confirmed. Check the saved reference before another attempt.');
-          }
-          toast.error(escrowErrorDetails(raw).message);
-          throw raw;
-        } finally { setPending(null); }
-      },
-    });
-  };
-
-  const completeEscrowStepUp = async (code: string): Promise<boolean> => {
-    const result = await escrowPaymentStepUp.complete(code);
-    if (!result.ok) setPending(null);
-    if (!result.ok && result.error) toast.error(result.error);
+  const completeProtectedAction = async (code: string) => {
+    const result = await stepUp.complete(code);
     return result.ok;
   };
 
   const refreshEscrowPaymentStatus = async () => {
-    const reference = escrowService.getPendingReference();
+    const reference = escrowService.getPendingReference(activeProfile?.id);
     if (!reference || checkingPaymentStatus) return;
     setCheckingPaymentStatus(true);
     try {
       const result = await paymentService.verifyPayment(reference);
       if (result.verified) {
-        setPaymentTerminalStatus(result.payment.status);
-        setPaymentOutcomeUnknown(result.payment.status === 'pending');
+        setPaymentOutcomeUnknown(result.payment.status === 'pending' || result.payment.status === 'reversed');
         setPaymentStatusMessage(`Server payment status: ${result.payment.status}. Escrow funding and allocations remain subject to the escrow record.`);
-        if (result.payment.status === 'failed' || result.payment.status === 'canceled') escrowService.clearPending();
+        if (result.payment.status === 'failed' || result.payment.status === 'canceled') escrowService.clearPending(activeProfile?.id);
       } else setPaymentStatusMessage('The payment is still pending or has not been reconciled. Do not create another attempt.');
     } catch (raw) { setPaymentStatusMessage(raw instanceof Error ? raw.message : 'Unable to check escrow payment status.'); }
     finally { setCheckingPaymentStatus(false); }
   };
 
   if (!id) {
-    const listPath = user?.role === 'admin'
+    const listPath = role === 'admin'
       ? '/dashboard/admin/escrows'
-      : user?.role === 'owner'
+      : role === 'owner'
         ? '/dashboard/landlord/escrows'
         : '/dashboard/buyer/escrows';
     return (
@@ -457,8 +426,8 @@ const EscrowDetails = () => {
   }
 
   const refundEscrow = refundStatuses.includes(displayedEscrow.status);
-  const availableActions = escrowActions(user?.role ?? 'buyer', displayedEscrow);
-  const capabilityActions = user?.role === 'admin' && !canAdminManageFinance
+  const availableActions = role ? escrowActions(role, displayedEscrow) : { initializePayment: false, dispute: false, requestRelease: false, approveRelease: false, cancel: false };
+  const capabilityActions = role === 'admin' && !canAdminManageFinance
     ? { ...availableActions, requestRelease: false, approveRelease: false, cancel: false }
     : availableActions;
   const actions = hasMalformedRules
@@ -650,7 +619,7 @@ const EscrowDetails = () => {
                   className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800"
                 >
                   Refund processing was unsuccessful.{' '}
-                  {canAdminManageFinance && user?.role === 'admin' &&
+                  {canAdminManageFinance && role === 'admin' &&
                   displayedEscrow.refundFailureReason
                     ? displayedEscrow.refundFailureReason
                     : 'An administrator will review and retry it.'}
@@ -751,9 +720,9 @@ const EscrowDetails = () => {
                       ? displayedRules[firstUnsatisfiedMilestoneIndex]
                       : null;
                   const canCurrentUserSatisfy = Boolean(
-                    user &&
-                    canSatisfyRule(user.role, displayedEscrow, rule) &&
-                    (user.role !== 'admin' || canAdminManageFinance),
+                    role &&
+                    canSatisfyRule(role, displayedEscrow, rule) &&
+                    (role !== 'admin' || canAdminManageFinance),
                   );
                   return (
                     <article
@@ -798,7 +767,7 @@ const EscrowDetails = () => {
                         {canCurrentUserSatisfy && ruleId ? (
                           <button
                             type="button"
-                            disabled={Boolean(pending) || sequenceBlocked}
+                disabled={Boolean(pending) || sequenceBlocked || stepUp.busy || Boolean(stepUp.challenge)}
                             onClick={() => void satisfy(ruleId)}
                             className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-40"
                           >
@@ -813,11 +782,11 @@ const EscrowDetails = () => {
             </section>
           )}
 
-          {refundEscrow && user && (user.role === 'buyer' || (user.role === 'admin' && canAdminManageFinance)) ? (
+          {refundEscrow && (role === 'buyer' || (role === 'admin' && canAdminReadFinance)) ? (
             <RefundChat escrow={displayedEscrow} onChanged={execute} />
           ) : null}
           <BuyerRefundAccountForm escrow={displayedEscrow} onChanged={execute} />
-          {user?.role === 'admin' && canAdminManageFinance && refundEscrow ? (
+          {role === 'admin' && canAdminManageFinance && refundEscrow ? (
             <RefundAdminPanel escrow={displayedEscrow} onChanged={execute} />
           ) : null}
 
@@ -859,24 +828,25 @@ const EscrowDetails = () => {
         <aside className="h-fit rounded-xl bg-white p-5 xl:sticky xl:top-24">
           <h2 className="font-bold">Available actions</h2>
           <div className="mt-5 space-y-3">
-            {user?.role === 'buyer' &&
-            displayedEscrow.status === 'pending_payment' ? (
-              <button
-                type="button"
-                disabled={Boolean(pending) || paymentOutcomeUnknown || paymentTerminalStatus === 'paid' || escrowPaymentStepUp.busy || Boolean(escrowPaymentStepUp.challenge)}
-                onClick={() => void initialize()}
-                className="w-full rounded-lg bg-primary px-4 py-3 font-bold text-on-primary"
-              >
-                {paymentOutcomeUnknown ? 'Payment outcome unresolved' : pending || escrowPaymentStepUp.busy ? 'Preparing secure payment…' : 'Fund full escrow amount'}
-              </button>
+            {role === 'buyer' && displayedEscrow.status === 'pending_payment' ? (
+              <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-4 text-sm">
+                <p className="font-bold text-primary">Funding follows the agreed purchase terms</p>
+                <p className="mt-1 text-secondary">Open the purchase negotiation to review the current Terms Agreed checkout. This escrow record cannot start a separate legacy payment.</p>
+                <Link
+                  to={propertyId ? `/dashboard/buyer/sale-negotiations/new?propertyId=${encodeURIComponent(propertyId)}` : '/dashboard/buyer/sale-negotiations'}
+                  className="mt-3 inline-flex font-bold text-primary underline"
+                >
+                  Open purchase negotiation
+                </Link>
+              </div>
             ) : null}
-            {paymentOutcomeUnknown ? <div role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950"><p>{paymentStatusMessage}</p><p className="mt-1">Reference: {escrowService.getPendingReference() || 'not available'}</p><button type="button" className="mt-2 font-bold underline" disabled={checkingPaymentStatus || !escrowService.getPendingReference()} onClick={() => void refreshEscrowPaymentStatus()}>{checkingPaymentStatus ? 'Checking…' : 'Check payment status'}</button></div> : paymentStatusMessage ? <p role="status" className="text-sm text-secondary">{paymentStatusMessage}</p> : null}
-            {escrowPaymentStepUp.error && !escrowPaymentStepUp.challenge ? <p role="alert" className="text-sm text-error">{escrowPaymentStepUp.error}</p> : null}
+            {paymentOutcomeUnknown ? <div role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950"><p>{paymentStatusMessage}</p><p className="mt-1">Reference: {escrowService.getPendingReference(activeProfile?.id) || 'not available'}</p><button type="button" className="mt-2 font-bold underline" disabled={checkingPaymentStatus || !escrowService.getPendingReference(activeProfile?.id)} onClick={() => void refreshEscrowPaymentStatus()}>{checkingPaymentStatus ? 'Checking…' : 'Check payment status'}</button></div> : paymentStatusMessage ? <p role="status" className="text-sm text-secondary">{paymentStatusMessage}</p> : null}
             {actions.requestRelease ? (
               <button
                 type="button"
                 onClick={() => void action('request')}
-                className="w-full rounded-lg bg-primary px-4 py-3 font-bold text-on-primary"
+                disabled={Boolean(pending) || stepUp.busy || Boolean(stepUp.challenge)}
+                className="w-full rounded-lg bg-primary px-4 py-3 font-bold text-on-primary disabled:opacity-50"
               >
                 Request release
               </button>
@@ -885,7 +855,8 @@ const EscrowDetails = () => {
               <button
                 type="button"
                 onClick={() => void action('approve')}
-                className="w-full rounded-lg bg-emerald-700 px-4 py-3 font-bold text-white"
+                disabled={Boolean(pending) || stepUp.busy || Boolean(stepUp.challenge)}
+                className="w-full rounded-lg bg-emerald-700 px-4 py-3 font-bold text-white disabled:opacity-50"
               >
                 Approve final release
               </button>
@@ -894,14 +865,15 @@ const EscrowDetails = () => {
               <button
                 type="button"
                 onClick={() => void action('cancel')}
-                className="w-full rounded-lg border border-red-300 px-4 py-3 font-bold text-red-700"
+                disabled={Boolean(pending) || stepUp.busy || Boolean(stepUp.challenge)}
+                className="w-full rounded-lg border border-red-300 px-4 py-3 font-bold text-red-700 disabled:opacity-50"
               >
                 Cancel escrow
               </button>
             ) : null}
             {refundEscrow &&
-            user &&
-            (user.role === 'buyer' || (user.role === 'admin' && canAdminManageFinance)) ? (
+            role &&
+            (role === 'buyer' || (role === 'admin' && canAdminManageFinance)) ? (
               <a
                 href="#refund-chat"
                 className="block rounded-lg bg-primary px-4 py-3 text-center font-bold text-on-primary"
@@ -911,12 +883,15 @@ const EscrowDetails = () => {
             ) : null}
           </div>
       </aside>
-      <StepUpDialog challenge={escrowPaymentStepUp.challenge} busy={escrowPaymentStepUp.busy || pending === 'payment'} error={escrowPaymentStepUp.error} onCancel={() => { escrowPaymentStepUp.cancel(); setPending(null); }} onSubmit={completeEscrowStepUp} />
       </div>
-      {user?.role === 'admin' && displayedEscrow._id ? <EscrowFinanceSettlement key={`${activeProfile?.id ?? ''}:${displayedEscrow._id}`} escrowId={displayedEscrow._id} /> : null}
-      {user?.role === 'admin' && displayedEscrow._id ? <FinanceExecutionPanel key={`refund:${activeProfile?.id ?? ''}:${displayedEscrow._id}`} kind="escrow_refund" resourceId={displayedEscrow._id} /> : null}
+      {canAdminReadFinance && displayedEscrow._id ? <EscrowFinanceSettlement key={`${activeProfile?.id ?? ''}:${displayedEscrow._id}`} escrowId={displayedEscrow._id} /> : null}
+      {canAdminReadFinance && displayedEscrow._id ? <FinanceExecutionPanel key={`refund:${activeProfile?.id ?? ''}:${displayedEscrow._id}`} kind="escrow_refund" resourceId={displayedEscrow._id} /> : null}
+      <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy || Boolean(pending)} error={stepUp.error} onCancel={stepUp.cancel} onSubmit={completeProtectedAction} />
     </EscrowRoleLayout>
   );
 };
 
-export default EscrowDetails;
+export default function EscrowDetails() {
+  const { activeProfile } = useAuth();
+  return <EscrowDetailsContent key={activeProfile?.id ?? 'no-profile'} />;
+}

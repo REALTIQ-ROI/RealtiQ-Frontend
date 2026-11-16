@@ -4,6 +4,7 @@ import type { ApiPayment, VerifyPaymentResponse } from '../types';
 const PENDING_PAYMENT_REFERENCE_KEY = 'realtiq.pendingPaymentReference';
 const PENDING_PAYMENT_PROPERTY_KEY = 'realtiq.pendingPaymentPropertyId';
 const PENDING_PAYMENT_RESOURCE_KEY = 'realtiq.pendingPaymentResourceKey';
+const pendingResourceReferenceKey = (resourceKey: string) => `realtiq.pendingPaymentReference:${encodeURIComponent(resourceKey)}`;
 
 type FeePayerSelection =
   | { payerRule?: 'buyer' | 'seller'; buyerSharePercent?: never }
@@ -34,7 +35,10 @@ const persistPendingPayment = (reference: string, propertyId?: string, resourceK
   if (propertyId) {
     sessionStorage.setItem(PENDING_PAYMENT_PROPERTY_KEY, propertyId);
   }
-  if (resourceKey) sessionStorage.setItem(PENDING_PAYMENT_RESOURCE_KEY, resourceKey);
+  if (resourceKey) {
+    sessionStorage.setItem(PENDING_PAYMENT_RESOURCE_KEY, resourceKey);
+    sessionStorage.setItem(pendingResourceReferenceKey(resourceKey), reference);
+  }
 };
 
 const resourceKeyFor = (body: PaymentInitializationRequest): string => {
@@ -55,7 +59,10 @@ export const paymentService = {
   },
 
   getPendingPaymentReference(resourceKey?: string): string | null {
-    if (resourceKey && sessionStorage.getItem(PENDING_PAYMENT_RESOURCE_KEY) !== resourceKey) return null;
+    if (resourceKey) {
+      return sessionStorage.getItem(pendingResourceReferenceKey(resourceKey)) ??
+        (sessionStorage.getItem(PENDING_PAYMENT_RESOURCE_KEY) === resourceKey ? sessionStorage.getItem(PENDING_PAYMENT_REFERENCE_KEY) : null);
+    }
     return sessionStorage.getItem(PENDING_PAYMENT_REFERENCE_KEY);
   },
 
@@ -68,7 +75,10 @@ export const paymentService = {
   },
 
   clearPendingPayment(resourceKey?: string): void {
-    if (resourceKey && sessionStorage.getItem(PENDING_PAYMENT_RESOURCE_KEY) !== resourceKey) return;
+    if (resourceKey) {
+      sessionStorage.removeItem(pendingResourceReferenceKey(resourceKey));
+      if (sessionStorage.getItem(PENDING_PAYMENT_RESOURCE_KEY) !== resourceKey) return;
+    }
     sessionStorage.removeItem(PENDING_PAYMENT_REFERENCE_KEY);
     sessionStorage.removeItem(PENDING_PAYMENT_PROPERTY_KEY);
     sessionStorage.removeItem(PENDING_PAYMENT_RESOURCE_KEY);
@@ -102,13 +112,13 @@ export const paymentService = {
   },
 
   async getPayments(): Promise<ApiPayment[]> {
-    const { data } = await api.get<ApiPayment[]>('/payments');
+    const { data } = await api.get<ApiPayment[]>('/payments', { headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 
   async getPaymentsPage(page = 1, limit = 20): Promise<{ payments: ApiPayment[]; page: number; limit: number; total: number | null }> {
     if (!Number.isInteger(page) || page < 1 || page > 10000 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Choose a page from 1 to 10000 and a page size from 1 to 100.');
-    const response = await api.get<ApiPayment[]>('/payments', { params: { page, limit } });
+    const response = await api.get<ApiPayment[]>('/payments', { params: { page, limit }, headers: { 'Cache-Control': 'no-store' } });
     const header = (name: string): number | null => {
       const raw = response.headers?.[name];
       const parsed = Number(raw);
@@ -118,12 +128,12 @@ export const paymentService = {
   },
 
   async getPaymentById(id: string): Promise<ApiPayment> {
-    const { data } = await api.get<ApiPayment>(`/payments/${id}`);
+    const { data } = await api.get<ApiPayment>(`/payments/${encodeURIComponent(id)}`, { headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 
   async verifyPayment(reference: string): Promise<VerifyPaymentResponse> {
-    const { data } = await api.get<VerifyPaymentResponse>(`/payments/verify/${encodeURIComponent(reference)}`, { withCredentials: true });
+    const { data } = await api.get<VerifyPaymentResponse>(`/payments/verify/${encodeURIComponent(reference)}`, { withCredentials: true, headers: { 'Cache-Control': 'no-store' } });
     return data;
   },
 

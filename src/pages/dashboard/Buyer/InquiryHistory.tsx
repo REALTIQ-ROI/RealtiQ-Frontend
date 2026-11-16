@@ -5,6 +5,7 @@ import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
 import { resolveInquiryProperty, type ApiInquiry } from '../../../types';
+import { useAuth } from '../../../contexts/AuthContext';
 
 type FilterTab = 'all' | 'open' | 'closed';
 
@@ -25,7 +26,7 @@ const statusLabel = (status: ApiInquiry['status']) => (status === 'closed' ? 'Re
 const PLACEHOLDER_IMG =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuBxL6O9vohoafRE9IDJNjUsEXY6FseCx6W94YAa1rqCWzA0T_rrzgMNej1LpRdusNAYGdCPbXnhugD6rrA3jB3famHKj_e-RKIBdVrnISKWtPe1R4ujmq3tJ5QWv1satUoTMvXShAOfMe7DrcZbmshKi_S5Z3vtfl2l8drfbkc64N0L-5QUd9znYF6PWJkuXbgn8NRU8_Urt2D5EvqTQd6bHuL3v5sb6gtcOZz9QrZ00lY6kpcAq1DShMZxX2VtOpnERZ8mMQN0Iw';
 
-const InquiryHistory = () => {
+const InquiryHistoryContent = () => {
   const navigate = useNavigate();
   const { data, loading, error, execute } = useAsync(() => inquiryService.getInquiries(), true);
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
@@ -167,15 +168,6 @@ const InquiryHistory = () => {
               );
             })}
 
-            <div className="lg:col-span-2 bg-primary-container text-on-primary-container rounded-xl p-8 flex flex-col justify-center relative overflow-hidden min-h-[280px]">
-              <div className="relative z-10 max-w-lg">
-                <h3 className="font-headline font-bold text-2xl text-white mb-4">Concierge Assistant</h3>
-                <p className="text-on-primary-container/80 text-sm leading-relaxed mb-8">
-                  Want to skip the wait? Our Premium Curator service can handle all negotiations and technical inquiries on your behalf, reducing response times by up to 60%.
-                </p>
-                <button className="px-8 py-3 bg-white text-primary text-xs font-bold rounded-md hover:scale-105 transition-transform">Enable Premium Concierge</button>
-              </div>
-            </div>
           </div>
 
           <div className="mt-16 flex items-center justify-between border-t border-surface-container-high pt-8">
@@ -196,4 +188,7 @@ const InquiryHistory = () => {
   );
 };
 
-export default InquiryHistory;
+export default function InquiryHistory() {
+  const { activeProfile } = useAuth();
+  return <InquiryHistoryContent key={activeProfile?.id ?? 'no-profile'} />;
+}
