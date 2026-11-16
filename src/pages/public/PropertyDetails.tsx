@@ -38,6 +38,7 @@ import { useProperties } from '../../contexts/PropertiesContext';
 import { useAsync } from '../../hooks/useAsync';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../lib/axios';
+import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { inquiryService } from '../../services/inquiryService';
 import { installmentService } from '../../services/installmentService';
 import { paymentService, type InitializePaymentResponse } from '../../services/paymentService';
@@ -50,6 +51,7 @@ import { tourService } from '../../services/tourService';
 import { titleVerificationService } from '../../services/titleVerificationService';
 import {
   type ConstructionUpdate,
+  type PropertyCoordinates,
   propertyRouteReference,
   resolvePropertyOwnerId,
   type PropertyTitleVerificationSummary,
@@ -73,6 +75,13 @@ const formatCurrency = (value: number | undefined, currency?: string) => {
   try {
     return new Intl.NumberFormat('en-NG', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
   } catch { return 'Price unavailable'; }
+};
+
+const publicPointCoordinates = (item: Pick<Property, 'coordinates'> & { locationPoint?: Property['locationPoint'] }): PropertyCoordinates | null => {
+  if (item.coordinates && Number.isFinite(item.coordinates.lat) && Number.isFinite(item.coordinates.lng)) return item.coordinates;
+  const point = item.locationPoint?.coordinates;
+  if (point && Number.isFinite(point[0]) && Number.isFinite(point[1])) return { lng: point[0], lat: point[1] };
+  return null;
 };
 
 const BOOKABLE_TOUR_TYPES = [
@@ -143,6 +152,9 @@ const PropertyDetails = () => {
   const [creatingInstallment, setCreatingInstallment] = useState(false);
   const [nearby, setNearby] = useState<NearbyPropertySummary[]>([]);
   const [loadingNearby, setLoadingNearby] = useState(false);
+  const [nearbyRadiusKm, setNearbyRadiusKm] = useState('');
+  const [nearbyError, setNearbyError] = useState('');
+  const [nearbySearched, setNearbySearched] = useState(false);
   const [availabilityByType, setAvailabilityByType] = useState<Record<string, import('../../types').TourAvailability>>({});
   const [availabilityErrors, setAvailabilityErrors] = useState<Record<string, string>>({});
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
@@ -286,21 +298,11 @@ const PropertyDetails = () => {
       void propertyService.incrementView(reference).catch(() => undefined);
     }
 
-    if (!property.coordinates) {
-      setNearby([]);
-      return;
-    }
-
-    setLoadingNearby(true);
-    propertyService
-      .getNearbyProperties({
-        lat: property.coordinates.lat,
-        lng: property.coordinates.lng,
-        radius: 5,
-      })
-      .then(setNearby)
-      .catch(() => setNearby([]))
-      .finally(() => setLoadingNearby(false));
+    setNearby([]);
+    setNearbyRadiusKm('');
+    setNearbyError('');
+    setNearbySearched(false);
+    setLoadingNearby(false);
   }, [isAuthenticated, property]);
 
   useEffect(() => {
@@ -626,16 +628,50 @@ const PropertyDetails = () => {
   const nearbyMapProperties = nearby
     .map((item): Property | null => {
       const reference = item.publicReference || item._id;
-      if (!reference || !item.coordinates) return null;
+      const coordinates = publicPointCoordinates(item);
+      if (!reference || !coordinates) return null;
       return {
         _id: reference,
         publicReference: item.publicReference,
         title: item.title,
-        coordinates: item.coordinates,
+        coordinates,
         ...(item.paymentTypes ? { paymentTypes: item.paymentTypes } : {}),
       } as Property;
     })
     .filter((item): item is Property => item !== null);
+
+  const searchNearby = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!property.coordinates || loadingNearby) return;
+    const radiusKm = Number(nearbyRadiusKm);
+    if (!Number.isFinite(radiusKm) || radiusKm <= 0) {
+      setNearbyError('Enter a radius greater than zero kilometres.');
+      return;
+    }
+    setNearbyError('');
+    setLoadingNearby(true);
+    setNearbySearched(true);
+    try {
+      const query = new URLSearchParams({
+        queryVersion: 'canonical-v1',
+        lat: String(property.coordinates.lat),
+        lng: String(property.coordinates.lng),
+        radiusKm: String(radiusKm),
+      });
+      const result = await propertyService.getCanonicalNearbyProperties(query);
+      setNearby(result.properties.map((item) => ({
+        _id: item._id,
+        publicReference: item.publicReference,
+        title: item.title ?? 'Property',
+        coordinates: publicPointCoordinates(item),
+        paymentTypes: item.paymentTypes,
+      })));
+    } catch (raw) {
+      setNearbyError(apiErrorMessage(raw, 'Nearby search is unavailable. Keep your radius and try again later.'));
+    } finally {
+      setLoadingNearby(false);
+    }
+  };
 
   return (
     <PublicLayout>
@@ -1095,6 +1131,14 @@ const PropertyDetails = () => {
                 Nearby Properties
               </h2>
               <Card className='min-w-0 space-y-4 overflow-hidden p-3 sm:p-5'>
+                <form onSubmit={(event) => void searchNearby(event)} className='flex flex-wrap items-end gap-3'>
+                  <label className='min-w-48 flex-1 text-sm font-semibold text-on-surface'>Search within this distance
+                    <span className='mt-1 flex items-center gap-2'><input aria-label='Nearby radius kilometres' type='number' min='0.1' step='any' required disabled={!property.coordinates || loadingNearby} value={nearbyRadiusKm} onChange={(event) => setNearbyRadiusKm(event.target.value)} className='w-full rounded-lg border border-outline-variant/30 bg-white px-3 py-2' placeholder='Radius in km' /><span className='text-xs text-secondary'>km</span></span>
+                  </label>
+                  <button type='submit' disabled={!property.coordinates || loadingNearby || !nearbyRadiusKm} className='rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-on-primary disabled:opacity-50'>{loadingNearby ? 'Searching…' : 'Search nearby'}</button>
+                </form>
+                <p className='text-xs text-secondary'>The server checks the current supported search radius. Enter a distance; no radius is assumed.</p>
+                {nearbyError ? <div role='alert' className='rounded-lg bg-amber-50 p-3 text-sm text-amber-950'>{nearbyError}</div> : null}
                 {loadingNearby ? (
                   <LoadingState label='Loading nearby properties...' />
                 ) : nearby.length > 0 ? (
@@ -1153,12 +1197,16 @@ const PropertyDetails = () => {
                       );
                     })}
                   </div>
-                ) : (
+                ) : nearbySearched ? (
                   <div className='text-sm text-secondary'>
                     No nearby properties found for this location.
                   </div>
+                ) : property.coordinates ? (
+                  <p className='text-sm text-secondary'>Enter a radius and search to see eligible properties nearby.</p>
+                ) : (
+                  <p className='text-sm text-secondary'>Nearby search is unavailable because this property has no published location point.</p>
                 )}
-                {property.coordinates ? (
+                {nearby.length > 0 ? (
                   <button
                     type='button'
                     onClick={() => setNearbyMapOpen(true)}

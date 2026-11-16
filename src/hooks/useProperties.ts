@@ -7,19 +7,20 @@ import {
   type PropertyFiltersQuery,
   type UpdatePropertyPayload,
 } from '../services/propertyService';
-import { ApiRequestError } from '../lib/axios';
 import type { Property } from '../types';
+import { canonicalQueryParams } from '../utils/catalogueQuery';
+import { apiErrorMessage } from '../utils/apiErrorMessage';
 
 interface UsePropertiesOptions {
   autoFetch?: boolean;
   initialFilters?: PropertyFiltersQuery | URLSearchParams;
   initialPage?: number;
   limit?: number;
-  onRecommendedUnavailable?: () => void;
+  onNormalizationQuery?: (query: unknown, requestQuery: URLSearchParams) => URLSearchParams | null;
 }
 
 export const useProperties = (options: UsePropertiesOptions = {}) => {
-  const { autoFetch = false, initialFilters = {}, initialPage = 1, limit = 10, onRecommendedUnavailable } = options;
+  const { autoFetch = false, initialFilters = {}, initialPage = 1, limit = 10, onNormalizationQuery } = options;
   const [properties, setProperties] = useState<Property[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(initialPage);
@@ -30,78 +31,52 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
   const [facets, setFacets] = useState<unknown>(null);
   const [filters, setFilters] = useState<PropertyFiltersQuery | URLSearchParams>(initialFilters);
   const requestSequence = useRef(0);
-  const onRecommendedUnavailableRef = useRef(onRecommendedUnavailable);
-  onRecommendedUnavailableRef.current = onRecommendedUnavailable;
+  const activeRequest = useRef<AbortController | null>(null);
+  const onNormalizationRef = useRef(onNormalizationQuery);
+  onNormalizationRef.current = onNormalizationQuery;
+
+  useEffect(() => () => {
+    requestSequence.current += 1;
+    activeRequest.current?.abort();
+  }, []);
 
   const fetchProperties = useCallback(
     async (currentFilters: PropertyFiltersQuery | URLSearchParams = filters, currentPage = page) => {
       const requestId = ++requestSequence.current;
+      activeRequest.current?.abort();
+      const controller = new AbortController();
+      activeRequest.current = controller;
       setLoading(true);
       setError(null);
       setNotices([]);
       setDiagnostics(null);
       setFacets(null);
       try {
-        const requestFilters = currentFilters instanceof URLSearchParams
-          ? new URLSearchParams(currentFilters)
-          : { ...currentFilters, page: currentPage, limit };
-        if (requestFilters instanceof URLSearchParams) {
-          requestFilters.set('page', String(currentPage));
-          requestFilters.set('limit', String(limit));
-        }
-        const res = await propertyService.getProperties(requestFilters);
+        const requestFilters = canonicalQueryParams(currentFilters);
+        requestFilters.set('page', String(currentPage));
+        requestFilters.set('limit', String(limit));
+        const nearbyFields = ['nearbyLat', 'nearbyLng', 'nearbyRadiusKm'];
+        const hasCompleteNearby = nearbyFields.every((key) => {
+          const value = requestFilters.get(key);
+          return value !== null && value.trim() !== '' && Number.isFinite(Number(value));
+        });
+        const res = hasCompleteNearby
+          ? await propertyService.getCanonicalNearbyProperties(requestFilters, controller.signal)
+          : await propertyService.getProperties(requestFilters, controller.signal);
         if (requestId === requestSequence.current) {
           setProperties(res.properties);
           setTotal(res.total);
           setNotices(res.normalization?.notices ?? []);
           setDiagnostics(res.diagnostics ?? null);
           setFacets(res.facets ?? null);
+          if (res.normalization?.query !== undefined) {
+            const adopted = onNormalizationRef.current?.(res.normalization.query, requestFilters);
+            if (adopted) setFilters(adopted);
+          }
         }
       } catch (err) {
-        let requestError: unknown = err;
-        const requestedSort = currentFilters instanceof URLSearchParams
-          ? currentFilters.get('sort')
-          : currentFilters.sort;
-        if (requestId === requestSequence.current
-          && err instanceof ApiRequestError
-          && err.code === 'RECOMMENDED_WEIGHTS_UNCONFIGURED'
-          && (!requestedSort || requestedSort === 'recommended')) {
-          const fallbackFilters = currentFilters instanceof URLSearchParams
-            ? new URLSearchParams(currentFilters)
-            : { ...currentFilters };
-          if (fallbackFilters instanceof URLSearchParams) fallbackFilters.set('sort', 'newest');
-          else fallbackFilters.sort = 'newest';
-          setFilters(fallbackFilters);
-          onRecommendedUnavailableRef.current?.();
-
-          const fallbackRequestFilters = fallbackFilters instanceof URLSearchParams
-            ? new URLSearchParams(fallbackFilters)
-            : { ...fallbackFilters, page: currentPage, limit };
-          if (fallbackRequestFilters instanceof URLSearchParams) {
-            fallbackRequestFilters.set('page', String(currentPage));
-            fallbackRequestFilters.set('limit', String(limit));
-          }
-
-          try {
-            const res = await propertyService.getProperties(fallbackRequestFilters);
-            if (requestId === requestSequence.current) {
-              setProperties(res.properties);
-              setTotal(res.total);
-              setNotices([
-                ...(res.normalization?.notices ?? []),
-                'Recommended sorting is unavailable right now. Showing newest properties instead.',
-              ]);
-              setDiagnostics(res.diagnostics ?? null);
-              setFacets(res.facets ?? null);
-              setError(null);
-            }
-            return;
-          } catch (fallbackError) {
-            requestError = fallbackError;
-          }
-        }
         if (requestId === requestSequence.current) {
-          const message = requestError instanceof ApiRequestError && requestError.code ? `${requestError.message} (${requestError.code})` : requestError instanceof Error ? requestError.message : 'Failed to load properties.';
+          const message = apiErrorMessage(err, 'Failed to load properties.');
           setProperties([]);
           setTotal(0);
           setDiagnostics(null);
@@ -114,6 +89,19 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
     },
     [filters, page, limit],
   );
+
+  const clearResults = useCallback(() => {
+    requestSequence.current += 1;
+    activeRequest.current?.abort();
+    activeRequest.current = null;
+    setProperties([]);
+    setTotal(0);
+    setNotices([]);
+    setDiagnostics(null);
+    setFacets(null);
+    setError(null);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     if (autoFetch) void fetchProperties(initialFilters, initialPage);
@@ -199,6 +187,7 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
     facets,
     filters,
     fetchProperties,
+    clearResults,
     applyFilters,
     goToPage,
     createProperty,

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import PublicLayout from "../../components/layout/PublicLayout";
 import PropertyCard from "../../components/property/PropertyCard";
 import ActiveCatalogueFilters from "../../components/property/ActiveCatalogueFilters";
+import CatalogueResultInsights from '../../components/property/CatalogueResultInsights';
 import PropertyFiltersPanel from "../../components/property/PropertyFiltersPanel";
 import PropertyMap from "../../components/property/map/PropertyMap";
 import ErrorState from "../../components/ui/ErrorState";
@@ -14,11 +15,14 @@ import { personalisationService } from "../../services/personalisationService";
 import { propertyService } from "../../services/propertyService";
 import type { CanonicalMapMarker } from '../../types/canonicalMap';
 import { canonicalMapMarkers } from '../../utils/canonicalMapMarkers';
-import { cataloguePageFromQuery, readCatalogueQuery, writeCatalogueQuery } from "../../utils/catalogueQuery";
+import { adoptCanonicalQuery, catalogueFilterFormKey, cataloguePageFromQuery, catalogueQueryForDisplay, readCatalogueQuery, sameCanonicalCriteria, writeCatalogueQuery } from "../../utils/catalogueQuery";
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
-import { savedSearchFiltersFromUrl } from '../../utils/savedSearchQuery';
+import { savedSearchFiltersFromUrl, savedSearchFiltersToUrl } from '../../utils/savedSearchQuery';
 import type { SavedSearch } from '../../types';
+import type { SavedSearchAlerts } from '../../types';
+import SavedSearchAlertsFields, { defaultSavedSearchAlerts } from '../../components/property/SavedSearchAlertsFields';
 import { ApiRequestError } from '../../lib/axios';
+import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { writeCatalogueMapViewport } from '../../utils/catalogueMapViewport';
 import {
   propertyPublicReference,
@@ -42,7 +46,11 @@ const Listings = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialSavedSearchEdit = (location.state as { savedSearchEdit?: { id?: string; name?: string; revision?: number } } | null)?.savedSearchEdit;
+  const searchParamsRef = useRef(searchParams);
+  const displaySearchParams = useMemo(() => catalogueQueryForDisplay(searchParams), [searchParams]);
+  const { user, activeProfile } = useAuth();
+  const savedSearchProfileId = useRef(activeProfile?.id ?? null);
+  const initialSavedSearchEdit = (location.state as { savedSearchEdit?: { id?: string; name?: string; revision?: number; alerts?: SavedSearchAlerts } } | null)?.savedSearchEdit;
   const [savedSearchEdit, setSavedSearchEdit] = useState(initialSavedSearchEdit?.id && Number.isInteger(initialSavedSearchEdit.revision)
     ? { id: initialSavedSearchEdit.id, name: initialSavedSearchEdit.name ?? '', revision: initialSavedSearchEdit.revision as number }
     : null);
@@ -52,13 +60,18 @@ const Listings = () => {
   const [initialFilters] = useState(() => new URLSearchParams(searchParams));
   const [initialPage] = useState(() => cataloguePageFromQuery(searchParams));
   const appliedQueryKey = useRef(searchParams.toString());
-  const useNewestWhenRecommendedUnavailable = useCallback(() => {
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set('sort', 'newest');
-    appliedQueryKey.current = nextParams.toString();
-    setSearchParams(nextParams, { replace: true });
-  }, [searchParams, setSearchParams]);
-  const { user, activeProfile } = useAuth();
+  useEffect(() => { searchParamsRef.current = searchParams; }, [searchParams]);
+  const adoptNormalization = useCallback((serverQuery: unknown, requestQuery: URLSearchParams, fromCatalogue = false) => {
+    const current = searchParamsRef.current;
+    if (!sameCanonicalCriteria(current, requestQuery)) return null;
+    const next = adoptCanonicalQuery(current, serverQuery);
+    if (next.toString() !== current.toString()) {
+      searchParamsRef.current = next;
+      if (fromCatalogue) appliedQueryKey.current = next.toString();
+      setSearchParams(next, { replace: true });
+    }
+    return fromCatalogue ? next : null;
+  }, [setSearchParams]);
   const {
     properties,
     loading,
@@ -69,14 +82,16 @@ const Listings = () => {
     page,
     filters,
     fetchProperties,
+    clearResults,
     applyFilters,
     goToPage,
+    facets,
   } = usePropertyCatalog({
     autoFetch: true,
     limit: LIMIT,
     initialFilters,
     initialPage,
-    onRecommendedUnavailable: useNewestWhenRecommendedUnavailable,
+    onNormalizationQuery: (query, request) => adoptNormalization(query, request, true),
   });
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(
     null,
@@ -88,29 +103,45 @@ const Listings = () => {
     west: number;
     zoom: number;
   } | null>(null);
-  const [mapState, setMapState] = useState<{ queryKey: string; count: number | null; error: string | null; markers: CanonicalMapMarker[]; skipped: number; mode: 'properties' | 'clusters' | null; truncated: boolean; facets: Record<string, unknown>; priceAggregateState: string | null; normalizationNotices: unknown[] }>({ queryKey: '', count: null, error: null, markers: [], skipped: 0, mode: null, truncated: false, facets: {}, priceAggregateState: null, normalizationNotices: [] });
-  const mapQuery = new URLSearchParams(searchParams);
+  const [mapState, setMapState] = useState<{ queryKey: string; count: number | null; error: string | null; markers: CanonicalMapMarker[]; skipped: number; mode: 'properties' | 'clusters' | null; truncated: boolean; limit: number; facets: Record<string, unknown>; priceAggregateState: string | null; normalizationNotices: unknown[] }>({ queryKey: '', count: null, error: null, markers: [], skipped: 0, mode: null, truncated: false, limit: 0, facets: {}, priceAggregateState: null, normalizationNotices: [] });
+  const mapQuery = new URLSearchParams(displaySearchParams);
   mapQuery.delete('page');
   mapQuery.delete('limit');
   const mapQueryKey = mapQuery.toString();
-  const mapActive = searchParams.get('mapActive') === 'true';
+  const mapRequestIdentity = JSON.stringify([activeProfile?.id ?? null, mapQueryKey]);
+  const mapActive = displaySearchParams.get('mapActive') === 'true';
   const requestedViewport = useMemo(() => {
     const keys = ['north', 'south', 'east', 'west', 'mapZoom'] as const;
-    const values = keys.map((key) => Number(searchParams.get(key)));
-    if (!keys.every((key) => searchParams.has(key)) || values.some((value) => !Number.isFinite(value))) return null;
+    const values = keys.map((key) => Number(displaySearchParams.get(key)));
+    if (!keys.every((key) => displaySearchParams.has(key)) || values.some((value) => !Number.isFinite(value))) return null;
     const [north, south, east, west, zoom] = values;
     if (north! <= south! || east! <= west! || zoom! < 0) return null;
     return { north: north!, south: south!, east: east!, west: west!, zoom: zoom! };
-  }, [searchParams]);
-  const mapLoading = mapActive && mapState.queryKey !== mapQueryKey;
-  const mapError = mapState.queryKey === mapQueryKey ? mapState.error : null;
-  const activeMapMarkers = mapActive && mapState.queryKey === mapQueryKey ? mapState.markers : [];
+  }, [displaySearchParams]);
+  const mapLoading = mapActive && mapState.queryKey !== mapRequestIdentity;
+  const mapError = mapState.queryKey === mapRequestIdentity ? mapState.error : null;
+  const activeMapMarkers = mapActive && mapState.queryKey === mapRequestIdentity ? mapState.markers : [];
   const resultsRef = useRef<HTMLDivElement>(null);
   const viewportKey = useRef("");
   const viewportInteracted = useRef(false);
   const [saveSearchOpen, setSaveSearchOpen] = useState(false);
   const [savedSearchName, setSavedSearchName] = useState(initialSavedSearchEdit?.name ?? '');
+  const [savedSearchAlerts, setSavedSearchAlerts] = useState<SavedSearchAlerts>(initialSavedSearchEdit?.alerts ?? { ...defaultSavedSearchAlerts });
+  const [savedSearchAlertsDirty, setSavedSearchAlertsDirty] = useState(false);
   const [savingSearch, setSavingSearch] = useState(false);
+  useEffect(() => {
+    const nextProfileId = activeProfile?.id ?? null;
+    if (savedSearchProfileId.current === nextProfileId) return;
+    savedSearchProfileId.current = nextProfileId;
+    setSaveSearchOpen(false);
+    setSavedSearchName('');
+    setSavedSearchEdit(null);
+    setSavedSearchConflict(null);
+    setReviewedLatestSavedSearch(false);
+    setSavedSearchError('');
+    setSavedSearchAlerts({ ...defaultSavedSearchAlerts });
+    setSavedSearchAlertsDirty(false);
+  }, [activeProfile?.id]);
   useEffect(() => {
     const key = searchParams.toString();
     if (key === appliedQueryKey.current) return;
@@ -127,21 +158,23 @@ const Listings = () => {
     void propertyService.getCanonicalMap(query, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
+        if (result.normalization?.query !== undefined) adoptNormalization(result.normalization.query, query);
         const parsed = canonicalMapMarkers(result);
-        setMapState({ queryKey: mapQueryKey, count: Number.isFinite(result.total) ? result.total : null, error: null,
+        setMapState({ queryKey: mapRequestIdentity, count: Number.isFinite(result.total) ? result.total : null, error: null,
           markers: parsed.markers, skipped: parsed.skipped, mode: result.mode,
           truncated: result.mode === 'properties' && result.truncated,
+          limit: result.limit,
           facets: result.facets ?? {}, priceAggregateState: result.mode === 'clusters' ? result.priceAggregateState ?? null : null,
           normalizationNotices: result.normalization?.notices ?? [] });
       })
       .catch((raw: unknown) => {
-        if (!controller.signal.aborted) setMapState({ queryKey: mapQueryKey, count: null, error: raw instanceof ApiRequestError && raw.code ? `${raw.message} (${raw.code})` : raw instanceof Error ? raw.message : 'Map results are unavailable.', markers: [], skipped: 0, mode: null, truncated: false, facets: {}, priceAggregateState: null, normalizationNotices: [] });
+        if (!controller.signal.aborted) setMapState({ queryKey: mapRequestIdentity, count: null, error: apiErrorMessage(raw, 'Map results are unavailable.'), markers: [], skipped: 0, mode: null, truncated: false, limit: 0, facets: {}, priceAggregateState: null, normalizationNotices: [] });
       });
     return () => controller.abort();
-  }, [mapQueryKey]);
+  }, [mapQueryKey, mapRequestIdentity, adoptNormalization]);
 
   const handleApplyFilters = useCallback(
-    (changes: Parameters<typeof writeCatalogueQuery>[0], clearAll = false) => {
+    (changes: Parameters<typeof writeCatalogueQuery>[0], clearAll = false, replace = false) => {
       const patch = viewport && viewportInteracted.current && !clearAll
         ? { ...changes, north: viewport.north, south: viewport.south, east: viewport.east, west: viewport.west, mapActive: true, mapZoom: viewport.zoom }
         : changes;
@@ -151,8 +184,9 @@ const Listings = () => {
         viewportKey.current = '';
         viewportInteracted.current = false;
       }
+      searchParamsRef.current = nextParams;
       appliedQueryKey.current = nextParams.toString();
-      setSearchParams(nextParams);
+      setSearchParams(nextParams, replace ? { replace: true } : undefined);
       applyFilters(nextParams);
     },
     [applyFilters, searchParams, viewport, setSearchParams],
@@ -169,12 +203,23 @@ const Listings = () => {
       setViewport(nextViewport);
       if (userInitiated) viewportInteracted.current = true;
       const nextParams = writeCatalogueMapViewport(searchParams, nextViewport, userInitiated);
+      searchParamsRef.current = nextParams;
       appliedQueryKey.current = nextParams.toString();
       setSearchParams(nextParams);
       applyFilters(nextParams, userInitiated ? 1 : cataloguePageFromQuery(nextParams));
     },
     [applyFilters, searchParams, setSearchParams],
   );
+
+  const profileContext = useRef(activeProfile?.id ?? null);
+  useEffect(() => {
+    const nextProfileId = activeProfile?.id ?? null;
+    if (profileContext.current === nextProfileId) return;
+    profileContext.current = nextProfileId;
+    clearResults();
+    setMapState({ queryKey: '', count: null, error: null, markers: [], skipped: 0, mode: null, truncated: false, limit: 0, facets: {}, priceAggregateState: null, normalizationNotices: [] });
+    void fetchProperties(filters, page);
+  }, [activeProfile?.id, clearResults, fetchProperties, filters, page]);
 
   const selectProperty = useCallback((property: Property) => {
     setSelectedPropertyId(propertyRouteReference(property));
@@ -211,6 +256,7 @@ const Listings = () => {
     const nextParams = new URLSearchParams(searchParams);
     if (nextPage <= 1) nextParams.delete('page');
     else nextParams.set('page', String(nextPage));
+    searchParamsRef.current = nextParams;
     appliedQueryKey.current = nextParams.toString();
     setSearchParams(nextParams);
     goToPage(nextPage);
@@ -218,6 +264,7 @@ const Listings = () => {
   };
   const clearFilterChip = (key: string, index: number) => {
     const next = removeCatalogueFilterChip(searchParams, { key, index });
+    searchParamsRef.current = next;
     appliedQueryKey.current = next.toString();
     setSearchParams(next);
     applyFilters(next);
@@ -228,6 +275,7 @@ const Listings = () => {
     if (!user || !activeProfile) { navigate('/login-required'); return; }
     const name = savedSearchName.trim();
     if (!name || savingSearch) return;
+    const profileId = activeProfile.id;
     setSavingSearch(true);
     setSavedSearchError('');
     try {
@@ -236,10 +284,12 @@ const Listings = () => {
         const expectedConfigurationRevision = savedSearchConflict
           ? reviewedLatestSavedSearch ? savedSearchConflict.configurationRevision : savedSearchEdit.revision
           : savedSearchEdit.revision;
-        const updated = await personalisationService.updateSearch(savedSearchEdit.id, { name, filters, expectedConfigurationRevision });
+        const updated = await personalisationService.updateSearch(savedSearchEdit.id, { name, filters, ...(savedSearchAlertsDirty ? { alerts: savedSearchAlerts } : {}), expectedConfigurationRevision });
+        if (savedSearchProfileId.current !== profileId) return;
         toast.success(`Saved search updated to revision ${updated.configurationRevision}.`);
       } else {
-        await personalisationService.createSearch({ name, filters });
+        await personalisationService.createSearch({ name, filters, alerts: savedSearchAlerts });
+        if (savedSearchProfileId.current !== profileId) return;
         toast.success('Search saved to this profile.');
       }
       setSavedSearchName('');
@@ -247,7 +297,9 @@ const Listings = () => {
       setSavedSearchEdit(null);
       setSavedSearchConflict(null);
       setReviewedLatestSavedSearch(false);
+      setSavedSearchAlertsDirty(false);
     } catch (raw) {
+      if (savedSearchProfileId.current !== profileId) return;
       if (savedSearchEdit && raw instanceof ApiRequestError && raw.code === 'CONFLICT_SAVED_SEARCH_VERSION') {
         try {
           const latest = await personalisationService.getSearch(savedSearchEdit.id);
@@ -256,7 +308,7 @@ const Listings = () => {
           setSavedSearchError(`Saved search changed on the server. Latest revision ${latest.configurationRevision} is shown below. Your current filters and name are preserved for review.`);
         } catch (refreshError) { setSavedSearchError(refreshError instanceof Error ? refreshError.message : 'The latest saved-search revision could not be loaded.'); }
       } else {
-        const message = raw instanceof Error ? raw.message : 'Unable to save this search.';
+        const message = apiErrorMessage(raw, 'Unable to save this search.');
         setSavedSearchError(message);
         toast.error(message);
       }
@@ -272,15 +324,16 @@ const Listings = () => {
             {saveSearchOpen ? <form onSubmit={(event) => void saveCurrentSearch(event)} className="flex flex-wrap items-center gap-2 rounded-lg bg-white p-2">
               <label className="sr-only" htmlFor="saved-search-name">Saved search name</label>
               <input id="saved-search-name" value={savedSearchName} onChange={(event) => setSavedSearchName(event.target.value)} maxLength={120} required placeholder="Name this search" className="rounded-md border border-outline-variant/30 px-3 py-2 text-sm" />
+              <SavedSearchAlertsFields value={savedSearchAlerts} onChange={(next) => { setSavedSearchAlerts(next); setSavedSearchAlertsDirty(true); }} idPrefix="catalogue-saved-search" />
               <button type="submit" disabled={savingSearch || !savedSearchName.trim() || Boolean(savedSearchConflict && !reviewedLatestSavedSearch)} className="rounded-md bg-primary px-3 py-2 text-sm font-bold text-white disabled:opacity-50">{savingSearch ? 'Saving…' : savedSearchEdit ? 'Update search' : 'Save search'}</button>
               <button type="button" disabled={savingSearch} onClick={() => setSaveSearchOpen(false)} className="px-3 py-2 text-sm font-semibold text-secondary">Cancel</button>
               {savedSearchEdit ? <p className="w-full text-xs text-secondary">Updating saved search revision {savedSearchConflict?.configurationRevision ?? savedSearchEdit.revision}. Pagination is excluded; current canonical criteria are retained.</p> : null}
-              {savedSearchError ? <div role="alert" className="w-full rounded bg-amber-50 p-3 text-xs text-amber-950">{savedSearchError}{savedSearchConflict ? <><pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap">Latest server criteria: {JSON.stringify(savedSearchConflict.filters)}</pre><label className="mt-2 flex items-center gap-2"><input type="checkbox" checked={reviewedLatestSavedSearch} onChange={(event) => setReviewedLatestSavedSearch(event.target.checked)} />I reviewed the latest revision and want to apply my current search criteria.</label></> : null}</div> : null}
+              {savedSearchError ? <div role="alert" className="w-full rounded bg-amber-50 p-3 text-xs text-amber-950">{savedSearchError}{savedSearchConflict ? <><Link className="mt-2 inline-block font-bold underline" to={`/properties?${savedSearchFiltersToUrl(savedSearchConflict.filters)}`}>Open the latest saved-search criteria</Link><label className="mt-2 flex items-center gap-2"><input type="checkbox" checked={reviewedLatestSavedSearch} onChange={(event) => setReviewedLatestSavedSearch(event.target.checked)} />I reviewed the latest revision and want to apply my current search criteria.</label></> : null}</div> : null}
             </form> : null}
           </> : null}
         </div>
         <PropertyFiltersPanel
-          key={searchParams.toString()}
+          key={catalogueFilterFormKey(searchParams)}
           initialFilters={readCatalogueQuery(searchParams)}
           initialQuery={searchParams}
           activeProfile={activeProfile}
@@ -320,10 +373,11 @@ const Listings = () => {
                 Updating this area…
               </div>
             ) : null}
-            {searchParams.get('mapActive') === 'true' && (mapLoading || mapError || (mapState.queryKey === mapQueryKey && (mapState.priceAggregateState === 'fx_unconfigured' || mapState.normalizationNotices.length > 0))) ? <div className="absolute bottom-4 left-4 z-[1000] max-w-[min(90%,340px)] rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-secondary shadow" role="status">
+            {mapActive && (mapLoading || mapError || (mapState.queryKey === mapRequestIdentity && (mapState.priceAggregateState === 'fx_unconfigured' || mapState.normalizationNotices.length > 0 || mapState.truncated))) ? <div className="absolute bottom-4 left-4 z-[1000] max-w-[min(90%,340px)] rounded-lg bg-white/95 px-3 py-2 text-xs font-semibold text-secondary shadow" role="status">
               {mapLoading ? 'Checking map results…' : mapError ? `Map results unavailable: ${mapError}` : null}
-              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey && mapState.priceAggregateState === 'fx_unconfigured' ? <span className="block font-semibold text-amber-800">Price aggregates are unavailable because currency conversion is not configured.</span> : null}
-              {!mapLoading && !mapError && mapState.queryKey === mapQueryKey ? mapState.normalizationNotices.map((notice, index) => mapNoticeText(notice) ? <span key={`map-notice-${index}`} className="mt-1 block font-normal">Search notice: {mapNoticeText(notice)}</span> : null) : null}
+              {!mapLoading && !mapError && mapState.queryKey === mapRequestIdentity && mapState.priceAggregateState === 'fx_unconfigured' ? <span className="block font-semibold text-amber-800">Price aggregates are unavailable because currency conversion is not configured.</span> : null}
+              {!mapLoading && !mapError && mapState.queryKey === mapRequestIdentity && mapState.truncated ? <span className="block font-normal">The map shows up to {mapState.limit} property markers. Zoom in or narrow the area to view more detail.</span> : null}
+              {!mapLoading && !mapError && mapState.queryKey === mapRequestIdentity ? mapState.normalizationNotices.map((notice, index) => mapNoticeText(notice) ? <span key={`map-notice-${index}`} className="mt-1 block font-normal">Search notice: {mapNoticeText(notice)}</span> : null) : null}
             </div> : null}
           </section>
           <section
@@ -357,6 +411,7 @@ const Listings = () => {
               {notices.map((notice, index) => <p key={index}>{typeof notice === 'string' ? notice : notice && typeof notice === 'object' && 'code' in notice ? String(notice.code) : 'Search results were adjusted by the server.'}</p>)}
             </div> : null}
             <ActiveCatalogueFilters params={searchParams} onClear={clearFilterChip} />
+            <div className="px-4 pt-3 sm:px-5"><CatalogueResultInsights facets={facets} diagnostics={diagnostics} onApplySuggestion={(patch) => handleApplyFilters(patch)} /></div>
             <div
               ref={resultsRef}
               className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5"

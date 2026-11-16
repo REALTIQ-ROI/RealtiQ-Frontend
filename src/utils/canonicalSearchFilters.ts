@@ -14,8 +14,8 @@ export interface CanonicalSearchControl {
 const explicitSearchKeys = new Set([
   'search', 'sort', 'minPrice', 'maxPrice', 'priceBand', 'includeUnpriced', 'withPhotosOnly',
   'propertyType', 'status', 'buildStage', 'completionStage', 'state', 'lga', 'area',
-  'gatedEstate', 'estateName', 'bedrooms', 'minBedrooms', 'maxBedrooms', 'fullBathrooms',
-  'bathrooms', 'minBathrooms', 'maxBathrooms', 'powderRooms', 'minPowderRooms', 'maxPowderRooms',
+  'gatedEstate', 'estateName', 'bedrooms', 'exactBedrooms', 'minBedrooms', 'maxBedrooms', 'fullBathrooms',
+  'bathrooms', 'exactFullBathrooms', 'minFullBathrooms', 'maxFullBathrooms', 'powderRooms', 'minPowderRooms', 'maxPowderRooms',
   'internalFloorArea', 'minInternalFloorArea', 'maxInternalFloorArea', 'unitFootprint',
   'minBuiltUpArea', 'maxBuiltUpArea', 'plotSize', 'minPlotArea', 'maxPlotArea', 'numberOfFloors',
   'serviceCharge', 'annualServiceCharge', 'paymentOptions', 'instalmentDuration', 'initialDepositCap',

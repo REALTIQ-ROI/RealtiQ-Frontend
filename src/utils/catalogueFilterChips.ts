@@ -1,7 +1,11 @@
 import { writeCatalogueQuery } from './catalogueQuery';
 
 const structuralKeys = new Set(['queryVersion', 'page', 'limit', 'mapActive', 'mapZoom', 'zoom', 'north', 'south', 'east', 'west']);
-const humanize = (key: string) => key.replace(/([A-Z])/g, ' $1').replaceAll('_', ' ').trim();
+const defaultValues: Record<string, string> = {
+  sort: 'recommended', status: 'available', includeUnpriced: 'true', withPhotosOnly: 'true',
+  includeUnderOffer: 'false', includeSold: 'false',
+};
+const humanize = (key: string) => key.replace(/([A-Z])/g, ' $1').replaceAll('_', ' ').trim().replace(/^./, (letter) => letter.toUpperCase());
 
 export interface CatalogueFilterChip {
   key: string;
@@ -13,7 +17,7 @@ export interface CatalogueFilterChip {
 export const catalogueFilterChips = (params: URLSearchParams): CatalogueFilterChip[] => {
   const seen = new Map<string, number>();
   return [...params.entries()].flatMap(([key, value]) => {
-    if (structuralKeys.has(key)) return [];
+    if (structuralKeys.has(key) || defaultValues[key] === value) return [];
     const index = seen.get(key) ?? 0;
     seen.set(key, index + 1);
     const displayValue = value === 'true' ? 'Yes' : value === 'false' ? 'No' : value || '(empty)';

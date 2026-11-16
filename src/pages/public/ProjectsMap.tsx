@@ -7,30 +7,35 @@ import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import { projectService, type ProjectMapItem } from '../../services/projectService';
 import { projectMapPricePresentation } from '../../utils/projectFormatters';
-import { ApiRequestError } from '../../lib/axios';
+import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { MAP_PROVIDER } from '../../config/maps';
 import { configureMapbox, MAPBOX_STYLE, nigeriaCenter } from '../../lib/mapbox';
 import { writeCatalogueMapViewport } from '../../utils/catalogueMapViewport';
+import { adoptCanonicalQuery, catalogueQueryForDisplay, sameCanonicalCriteria, writeCatalogueQuery } from '../../utils/catalogueQuery';
+import CatalogueResultInsights from '../../components/property/CatalogueResultInsights';
+import { useAuth } from '../../contexts/AuthContext';
 
 const emptyProjects: ProjectMapItem[] = [];
 
 const ProjectsMap = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const displaySearchParams = useMemo(() => catalogueQueryForDisplay(searchParams), [searchParams]);
+  const { activeProfile } = useAuth();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const leafletMapRef = useRef<L.Map | null>(null);
   const leafletMarkersRef = useRef<L.LayerGroup | null>(null);
-  const [mapResult, setMapResult] = useState<{ requestKey: string; projects: ProjectMapItem[]; total: number; error: string }>({ requestKey: '', projects: emptyProjects, total: 0, error: '' });
+  const [mapResult, setMapResult] = useState<{ requestKey: string; projects: ProjectMapItem[]; total: number; error: string; truncated: boolean; limit: number; facets: Record<string, unknown>; diagnostics: unknown }>({ requestKey: '', projects: emptyProjects, total: 0, error: '', truncated: false, limit: 0, facets: {}, diagnostics: null });
   const [selectedProject, setSelectedProject] = useState<{ requestKey: string; project: ProjectMapItem } | null>(null);
   const [mapTilesError, setMapTilesError] = useState(() => configureMapbox() ? '' : 'Mapbox is not configured for this deployment. Use list view to continue browsing projects.');
   const [refreshVersion, setRefreshVersion] = useState(0);
   const queryKey = searchParams.toString();
-  const requestKey = JSON.stringify([queryKey, refreshVersion]);
-  const mapActive = searchParams.get('mapActive') === 'true';
+  const requestKey = JSON.stringify([queryKey, refreshVersion, activeProfile?.id ?? null]);
+  const mapActive = displaySearchParams.get('mapActive') === 'true';
   const mapQueryHasBounds = ['north', 'south', 'east', 'west', 'mapZoom'].every((key) => {
-    const value = searchParams.get(key);
+    const value = displaySearchParams.get(key);
     return value !== null && Number.isFinite(Number(value));
   });
   const mapRequestEnabled = mapActive && mapQueryHasBounds;
@@ -49,11 +54,11 @@ const ProjectsMap = () => {
   }, [searchParams, setSearchParams]);
   const requestedViewport = useMemo(() => {
     const keys = ['north', 'south', 'east', 'west', 'mapZoom'] as const;
-    if (!keys.every((key) => searchParams.has(key))) return null;
-    const [north, south, east, west, zoom] = keys.map((key) => Number(searchParams.get(key)));
+    if (!keys.every((key) => displaySearchParams.has(key))) return null;
+    const [north, south, east, west, zoom] = keys.map((key) => Number(displaySearchParams.get(key)));
     if (![north, south, east, west, zoom].every(Number.isFinite) || north! <= south! || east! <= west! || zoom! < 0) return null;
     return { north: north!, south: south!, east: east!, west: west!, zoom: zoom! };
-  }, [searchParams]);
+  }, [displaySearchParams]);
 
   useEffect(() => {
     if (MAP_PROVIDER !== 'mapbox' || !containerRef.current || mapRef.current) return;
@@ -121,7 +126,7 @@ const ProjectsMap = () => {
         north: bounds.getNorth(), south: bounds.getSouth(),
         east: bounds.getEast(), west: bounds.getWest(), zoom,
       }, userInitiated);
-      if (next.toString() !== current.toString()) setSearchParamsRef.current(next, { replace: true });
+      if (next.toString() !== current.toString()) { searchParamsRef.current = next; setSearchParamsRef.current(next, { replace: true }); }
     };
     let timer = 0;
     const settled = () => {
@@ -155,15 +160,25 @@ const ProjectsMap = () => {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(queryKey);
+    const params = catalogueQueryForDisplay(new URLSearchParams(queryKey));
     const required = ['north', 'south', 'east', 'west', 'mapZoom'];
     if (params.get('mapActive') !== 'true' || !required.every((key) => params.has(key) && Number.isFinite(Number(params.get(key))))) return;
     const controller = new AbortController();
     void projectService.getProjectMap(params, controller.signal)
-      .then((response) => { if (!controller.signal.aborted) setMapResult({ requestKey, projects: response.projects ?? emptyProjects, total: response.total ?? 0, error: '' }); })
-      .catch((raw: unknown) => { if (!controller.signal.aborted) setMapResult({ requestKey, projects: emptyProjects, total: 0, error: raw instanceof ApiRequestError && raw.code ? `${raw.message} (${raw.code})` : raw instanceof Error ? raw.message : 'Unable to load project map.' }); });
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        setMapResult({ requestKey, projects: response.projects ?? emptyProjects, total: response.total ?? 0, error: '', truncated: response.truncated, limit: response.limit, facets: response.facets ?? {}, diagnostics: response.diagnostics ?? null });
+        if (response.normalization?.query !== undefined) {
+          const current = searchParamsRef.current;
+          if (sameCanonicalCriteria(current, params)) {
+            const normalized = adoptCanonicalQuery(current, response.normalization.query);
+            if (normalized.toString() !== current.toString()) { searchParamsRef.current = normalized; setSearchParams(normalized, { replace: true }); }
+          }
+        }
+      })
+      .catch((raw: unknown) => { if (!controller.signal.aborted) setMapResult({ requestKey, projects: emptyProjects, total: 0, error: apiErrorMessage(raw, 'Unable to load project map.'), truncated: false, limit: 0, facets: {}, diagnostics: null }); });
     return () => controller.abort();
-  }, [queryKey, requestKey]);
+  }, [queryKey, requestKey, activeProfile?.id, setSearchParams]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -202,6 +217,8 @@ const ProjectsMap = () => {
         </header>
         {loading ? <LoadingState label="Loading project map..." /> : null}
         {error ? <ErrorState message={error} onRetry={() => setRefreshVersion((version) => version + 1)} /> : null}
+        {!loading && !error && activeMapResult?.truncated ? <p role="status" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">The map returned the current configured limit of {activeMapResult.limit} project markers. Zoom in or narrow the map area to see a smaller result set.</p> : null}
+        {!loading && !error && activeMapResult ? <CatalogueResultInsights facets={activeMapResult.facets} diagnostics={activeMapResult.diagnostics} onApplySuggestion={(patch) => { const next = writeCatalogueQuery(patch, { base: searchParams, resetPage: true }); searchParamsRef.current = next; setSearchParams(next); }} /> : null}
         <div className="relative min-h-[640px] overflow-hidden rounded-xl bg-surface-container-low">
           <div ref={containerRef} className="absolute inset-0" />
           {mapTilesError ? <p role="alert" className="absolute left-4 right-4 top-4 z-[1000] rounded-lg bg-error-container p-3 text-sm text-on-error-container">{mapTilesError}</p> : null}
@@ -215,7 +232,7 @@ const ProjectsMap = () => {
               <p className="mt-1 text-sm text-secondary">{selected.projectType.replaceAll('_', ' ')}</p>
               <p className="mt-3 font-bold">{selectedPrice?.label}</p>
               {selectedPrice?.notice ? <p role="status" className="mt-1 text-xs text-amber-800">{selectedPrice.notice}</p> : null}
-              <p className="text-sm text-secondary">{selected.availableUnitCount} available · {selected.underOfferUnitCount} under offer · {selected.matchingUnitCount} matching units</p>
+              <p className="text-sm text-secondary">{selected.availableUnitCount} available · {selected.underOfferUnitCount} under offer · {selected.soldUnitCount} sold · {selected.matchingUnitCount} matching units</p>
               <Link to={`/projects/${selected.slug || selected._id}`} state={{ from: `${location.pathname}${location.search}`, discoveryFrom }} className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-bold text-on-primary">View project</Link>
             </div>
           ) : null}

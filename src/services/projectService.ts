@@ -12,9 +12,11 @@ import type {
   ProjectType,
   ProjectUnit,
   Property,
+  PropertyFilters,
 } from '../types';
 import { normalizeProjectPublication } from '../utils/projectPublication';
 import { propertyService } from './propertyService';
+import { canonicalQueryParams } from '../utils/catalogueQuery';
 
 const compact = <T extends object>(value?: T) =>
   Object.fromEntries(
@@ -50,28 +52,7 @@ export interface ProjectSearchQuery {
   publicationState?: 'published' | 'unpublished' | 'all' | string;
 }
 
-export interface ProjectPropertyQuery {
-  propertyType?: string;
-  minPrice?: number;
-  maxPrice?: number;
-  bedrooms?: number;
-  bathrooms?: number;
-  amenities?: string;
-  status?: string;
-  availableOnly?: boolean;
-  phase?: string;
-  block?: string;
-  floor?: string;
-  listingType?: ListingType;
-  developmentStatus?: OffPlanDevelopmentStatus | string;
-  installmentAvailable?: boolean;
-  completionBefore?: string;
-  completionAfter?: string;
-  page?: number;
-  limit?: number;
-  sort?: string;
-  includeUnpublished?: boolean;
-}
+export type ProjectPropertyQuery = Partial<PropertyFilters> & { includeUnpublished?: boolean };
 
 export interface ProjectMapQuery extends ProjectSearchQuery {
   north: number;
@@ -81,10 +62,8 @@ export interface ProjectMapQuery extends ProjectSearchQuery {
   zoom: number;
 }
 
-const canonicalProjectParams = (query?: ProjectSearchQuery | URLSearchParams) => {
-  const params = query instanceof URLSearchParams
-    ? new URLSearchParams(query)
-    : new URLSearchParams(Object.entries(compact(query)).map(([key, value]) => [key, String(value)]));
+const canonicalProjectParams = (query?: ProjectSearchQuery | ProjectPropertyQuery | URLSearchParams) => {
+  const params = canonicalQueryParams(query ?? {});
   params.set('queryVersion', 'canonical-v1');
   return params;
 };
@@ -97,11 +76,12 @@ export interface ProjectMapItem {
   matchingUnitCount: number;
   availableUnitCount: number;
   underOfferUnitCount: number;
+  soldUnitCount: number;
   minimumPrice: number | null;
   maximumPrice: number | null;
   currency?: string;
   priceAggregateState: 'configured' | 'fx_unconfigured';
-  coordinates?: { lat: number; lng: number } | null;
+  coordinates: { lat: number; lng: number } | null;
 }
 
 export interface ProjectListResponse {
@@ -110,6 +90,7 @@ export interface ProjectListResponse {
   page: number;
   limit: number;
   facets?: Record<string, unknown>;
+  diagnostics?: unknown;
   normalization?: { queryVersion?: string; query?: unknown; notices?: unknown[] };
 }
 
@@ -120,6 +101,7 @@ export interface ProjectPropertiesResponse {
   page: number;
   limit: number;
   facets?: Record<string, unknown>;
+  diagnostics?: unknown;
   normalization?: { queryVersion?: string; query?: unknown; notices?: unknown[] };
 }
 
@@ -127,8 +109,11 @@ export interface ProjectMapResponse {
   mode: 'projects';
   bounds: { north: number; south: number; east: number; west: number; zoom: number } | null;
   total: number;
+  limit: number;
+  truncated: boolean;
   projects: ProjectMapItem[];
   facets?: Record<string, unknown>;
+  diagnostics?: unknown;
   normalization?: { queryVersion?: string; query?: unknown; notices?: unknown[] };
 }
 
@@ -147,7 +132,7 @@ const parseProjectMapResponse = (value: unknown): ProjectMapResponse => {
       Number.isFinite(item.coordinates.lng) && item.coordinates.lng >= -180 && item.coordinates.lng <= 180);
     return typeof item._id === 'string' && typeof item.name === 'string' && typeof item.slug === 'string' &&
       typeof item.projectType === 'string' &&
-      [item.matchingUnitCount, item.availableUnitCount, item.underOfferUnitCount].every((count) => typeof count === 'number' && Number.isFinite(count) && count >= 0) &&
+      [item.matchingUnitCount, item.availableUnitCount, item.underOfferUnitCount, item.soldUnitCount].every((count) => typeof count === 'number' && Number.isFinite(count) && count >= 0) &&
       (item.minimumPrice === null || (typeof item.minimumPrice === 'number' && Number.isFinite(item.minimumPrice))) &&
       (item.maximumPrice === null || (typeof item.maximumPrice === 'number' && Number.isFinite(item.maximumPrice))) &&
       (item.priceAggregateState === 'configured' || item.priceAggregateState === 'fx_unconfigured') &&
@@ -155,6 +140,9 @@ const parseProjectMapResponse = (value: unknown): ProjectMapResponse => {
   });
   if (response.mode !== 'projects' || !hasValidBounds || !hasValidProjects || typeof response.total !== 'number' || !Number.isFinite(response.total)) {
     throw new Error('Project map marker fields are not fully specified for this response. Use list view to continue.');
+  }
+  if (typeof response.limit !== 'number' || !Number.isInteger(response.limit) || response.limit < 1 || typeof response.truncated !== 'boolean') {
+    throw new Error('Project map truncation status is missing. Use list view or refresh the map to continue.');
   }
   return value as ProjectMapResponse;
 };
@@ -314,8 +302,12 @@ export const projectService = {
   },
 
   async getProjectProperties(idOrSlug: string, query?: ProjectPropertyQuery | URLSearchParams, signal?: AbortSignal): Promise<ProjectPropertiesResponse> {
+    const params = canonicalProjectParams(query);
+    if (params.get('includeUnpublished') === 'true') {
+      throw new Error('Unpublished units are not available through public project discovery.');
+    }
     const { data } = await api.get<ProjectPropertiesResponse>(`/projects/${encodeURIComponent(idOrSlug)}/properties`, {
-      params: query instanceof URLSearchParams ? canonicalProjectParams(query) : compact(query),
+      params,
       signal,
     });
     return data;

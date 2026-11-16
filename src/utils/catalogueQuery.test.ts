@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cataloguePageFromQuery, readCatalogueQuery, writeCatalogueQuery } from './catalogueQuery';
+import { adoptCanonicalQuery, canonicalQueryParams, catalogueFilterFormKey, cataloguePageFromQuery, defaultCatalogueQuery, readCatalogueQuery, sameCanonicalCriteria, writeCatalogueQuery } from './catalogueQuery';
 
 describe('canonical catalogue URL', () => {
   it('round-trips supported filters and sort', () => {
@@ -98,5 +98,59 @@ describe('canonical catalogue URL', () => {
     expect(next.get('allBedroomsEnSuite')).toBe('false');
     expect(next.get('state')).toBe('lagos');
     expect(next.has('page')).toBe(false);
+  });
+
+  it('restores full canonical defaults when Clear All is selected', () => {
+    const cleared = writeCatalogueQuery({ sort: 'recommended' }, { base: new URLSearchParams('search=homes&includeSold=true&page=8'), clearAll: true });
+    expect(cleared).toEqual(defaultCatalogueQuery());
+    expect(cleared.toString()).toBe('queryVersion=canonical-v1&sort=recommended&status=available&includeUnpriced=true&withPhotosOnly=true&includeUnderOffer=false&includeSold=false');
+  });
+
+  it('canonicalizes supported URL aliases and preserves repeated values, explicit false and zero', () => {
+    const params = canonicalQueryParams({ queryVersion: 'canonical-v1', min_price: 0, amenities: ['pool', 'lift'], verified: false });
+    expect(params.get('minPrice')).toBe('0');
+    expect(params.has('min_price')).toBe(false);
+    expect(params.getAll('amenities')).toEqual(['pool', 'lift']);
+    expect(params.get('verified')).toBe('false');
+  });
+
+  it('maps documented sort aliases to their canonical key', () => {
+    const params = canonicalQueryParams(new URLSearchParams('sort=recent'));
+    expect(params.get('sort')).toBe('newest');
+    expect(readCatalogueQuery(new URLSearchParams('sort=price_low_to_high')).sort).toBe('price_asc');
+  });
+
+  it('restores bathroom aliases as the exact full-bathroom filter and rejects conflicts', () => {
+    expect(canonicalQueryParams(new URLSearchParams('bathrooms=2')).get('exactFullBathrooms')).toBe('2');
+    expect(canonicalQueryParams(new URLSearchParams('fullBathrooms=2')).get('exactFullBathrooms')).toBe('2');
+    expect(() => canonicalQueryParams(new URLSearchParams('bathrooms=2&exactFullBathrooms=3'))).toThrow(/conflicting/i);
+  });
+
+  it('rejects conflicting alias and canonical values before sending a request', () => {
+    expect(() => canonicalQueryParams(new URLSearchParams('beds=2&bedrooms=3'))).toThrow(/conflicting bedrooms and beds/i);
+    expect(canonicalQueryParams(new URLSearchParams('beds=3')).get('bedrooms')).toBe('3');
+  });
+
+  it('adopts server normalization, clears dependent criteria, and retains map and page UI state', () => {
+    const current = new URLSearchParams('queryVersion=canonical-v1&readyToMoveIn=true&constructionMilestone=roofing&north=7&south=6&east=4&west=3&mapActive=true&mapZoom=9&page=2&limit=10');
+    const normalized = adoptCanonicalQuery(current, { queryVersion: 'canonical-v1', readyToMoveIn: true, sort: 'recommended', status: 'available' });
+    expect(normalized.has('constructionMilestone')).toBe(false);
+    expect(normalized.get('mapActive')).toBe('true');
+    expect(normalized.get('north')).toBe('7');
+    expect(normalized.get('page')).toBe('2');
+    expect(normalized.get('includeUnpriced')).toBe('true');
+    expect(normalized.get('includeSold')).toBe('false');
+  });
+
+  it('compares criteria without treating pagination as a different search', () => {
+    expect(sameCanonicalCriteria(new URLSearchParams('search=homes&page=1'), new URLSearchParams('queryVersion=canonical-v1&search=homes&page=4&limit=20'))).toBe(true);
+    expect(sameCanonicalCriteria(new URLSearchParams('search=homes'), new URLSearchParams('search=flats'))).toBe(false);
+  });
+
+  it('keeps the filter form mounted while search text, pagination, or map bounds change', () => {
+    const first = new URLSearchParams('search=homes&state=state-id&page=1&mapActive=true&north=7&south=6&east=4&west=3&mapZoom=9');
+    const next = new URLSearchParams('search=flats&state=state-id&page=4&mapActive=true&north=8&south=7&east=5&west=4&mapZoom=10');
+    expect(catalogueFilterFormKey(first)).toBe(catalogueFilterFormKey(next));
+    expect(catalogueFilterFormKey(new URLSearchParams('search=homes&state=another-state'))).not.toBe(catalogueFilterFormKey(first));
   });
 });

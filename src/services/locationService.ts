@@ -46,6 +46,7 @@ export const locationService = {
     if (input.level !== 'state' && !input.parentId) throw new Error('Select the parent location before searching this level.');
     const { data } = await api.get<{ suggestions: LocationSuggestion[]; revision: number }>('/locations/suggestions', {
       params: { ...input, q: query },
+      headers: { 'Cache-Control': 'no-store' },
       signal,
     });
     return { ...data, suggestions: data.suggestions.map((suggestion) => ({ ...suggestion, revision: data.revision })) };

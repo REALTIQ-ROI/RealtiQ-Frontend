@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams, useParams } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
 import PropertyCard from '../../components/property/PropertyCard';
@@ -6,11 +6,12 @@ import ActiveCatalogueFilters from '../../components/property/ActiveCatalogueFil
 import PropertyFiltersPanel from '../../components/property/PropertyFiltersPanel';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
+import CatalogueResultInsights from '../../components/property/CatalogueResultInsights';
 import { useAuth } from '../../contexts/AuthContext';
-import { ApiRequestError } from '../../lib/axios';
+import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { projectService, type ProjectPropertiesResponse } from '../../services/projectService';
 import { isProjectPublished } from '../../utils/projectPublication';
-import { readCatalogueQuery, writeCatalogueQuery } from '../../utils/catalogueQuery';
+import { adoptCanonicalQuery, catalogueFilterFormKey, readCatalogueQuery, sameCanonicalCriteria, writeCatalogueQuery } from '../../utils/catalogueQuery';
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
 
 const PAGE_SIZE = 20;
@@ -30,13 +31,16 @@ const ProjectProperties = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeProfile } = useAuth();
+  const searchParamsRef = useRef(searchParams);
+  useEffect(() => { searchParamsRef.current = searchParams; }, [searchParams]);
   const projectNavigationState = location.state as { from?: string; discoveryFrom?: string } | null;
   const queryKey = searchParams.toString();
   const page = pageFromQuery(searchParams);
   const [data, setData] = useState<ProjectPropertiesResponse | null>(null);
+  const [dataProfileId, setDataProfileId] = useState<string | null>(activeProfile?.id ?? null);
   const [requestState, setRequestState] = useState<{ key: string; error: string | null } | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
-  const requestKey = JSON.stringify([slug, queryKey, page, refreshVersion]);
+  const requestKey = JSON.stringify([slug, queryKey, page, refreshVersion, activeProfile?.id ?? null]);
   const loading = requestState?.key !== requestKey;
   const error = requestState?.key === requestKey ? requestState.error ?? '' : '';
 
@@ -51,22 +55,34 @@ const ProjectProperties = () => {
       .then((response) => {
         if (!controller.signal.aborted) {
           setData(response);
+          setDataProfileId(activeProfile?.id ?? null);
           setRequestState({ key: requestKey, error: null });
+          if (response.normalization?.query !== undefined) {
+            const current = searchParamsRef.current;
+            if (sameCanonicalCriteria(current, query)) {
+              const normalized = adoptCanonicalQuery(current, response.normalization.query);
+              if (normalized.toString() !== current.toString()) {
+                searchParamsRef.current = normalized;
+                setSearchParams(normalized, { replace: true });
+              }
+            }
+          }
         }
       })
       .catch((raw: unknown) => {
         if (!controller.signal.aborted) {
-          const message = raw instanceof ApiRequestError && raw.code ? `${raw.message} (${raw.code})` : raw instanceof Error ? raw.message : 'Unable to load project units.';
+          const message = apiErrorMessage(raw, 'Unable to load project units.');
           setRequestState({ key: requestKey, error: message });
         }
       });
     return () => controller.abort();
-  }, [slug, queryKey, page, refreshVersion, requestKey]);
+  }, [slug, queryKey, page, refreshVersion, requestKey, activeProfile?.id, setSearchParams]);
 
-  const project = data?.project;
+  const currentData = dataProfileId === (activeProfile?.id ?? null) ? data : null;
+  const project = currentData?.project;
   const projectIsPublic = project ? isProjectPublished(project) : true;
-  const properties = projectIsPublic ? data?.properties ?? [] : [];
-  const total = data?.total ?? 0;
+  const properties = projectIsPublic ? currentData?.properties ?? [] : [];
+  const total = currentData?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const applyFilters = (changes: Parameters<typeof writeCatalogueQuery>[0], clearAll = false) => setSearchParams(writeCatalogueQuery(changes, { base: searchParams, resetPage: true, clearAll }));
   const clearFilterChip = (key: string, index: number) => setSearchParams(removeCatalogueFilterChip(searchParams, { key, index }));
@@ -85,10 +101,11 @@ const ProjectProperties = () => {
         <h1 className="mt-3 text-4xl font-black tracking-tight">{project ? `${project.name} Units` : 'Project Units'}</h1>
         <p className="mt-2 text-sm text-secondary">Filter project child listings and open a unit for its public detail flow.</p>
       </header>
-      <div className="-mx-4 mb-5 sm:-mx-8"><PropertyFiltersPanel key={queryKey} initialFilters={readCatalogueQuery(searchParams)} initialQuery={searchParams} activeProfile={activeProfile} onApply={applyFilters} /></div>
+      <div className="-mx-4 mb-5 sm:-mx-8"><PropertyFiltersPanel key={catalogueFilterFormKey(searchParams)} initialFilters={readCatalogueQuery(searchParams)} initialQuery={searchParams} activeProfile={activeProfile} onApply={applyFilters} /></div>
       <div className="-mx-4 sm:-mx-8"><ActiveCatalogueFilters params={searchParams} onClear={clearFilterChip} /></div>
+      <CatalogueResultInsights facets={currentData?.facets} diagnostics={currentData?.diagnostics} onApplySuggestion={(patch) => applyFilters(patch)} />
       <div className="my-5 flex items-center justify-between gap-3"><p className="text-sm font-semibold text-secondary">{total.toLocaleString()} units</p><button type="button" onClick={() => setRefreshVersion((version) => version + 1)} className="text-sm font-bold text-primary">Refresh</button></div>
-      {data?.normalization?.notices?.length ? <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{data.normalization.notices.map((notice, index) => <p key={`unit-search-notice-${index}`}>{noticeText(notice) || 'The server normalized this search.'}</p>)}</div> : null}
+      {currentData?.normalization?.notices?.length ? <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{currentData.normalization.notices.map((notice, index) => <p key={`unit-search-notice-${index}`}>{noticeText(notice) || 'The server normalized this search.'}</p>)}</div> : null}
       {loading && !properties.length ? <LoadingState label="Loading project units..." /> : null}
       {error ? <ErrorState message={error} onRetry={() => setRefreshVersion((version) => version + 1)} /> : null}
       {!loading && !error && !projectIsPublic ? <div className="rounded-xl border border-dashed border-outline-variant/20 p-10 text-center text-secondary">This project is not published yet.</div> : null}

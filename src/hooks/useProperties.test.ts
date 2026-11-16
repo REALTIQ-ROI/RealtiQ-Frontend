@@ -38,26 +38,16 @@ describe('useProperties catalogue request ordering', () => {
     expect(result.current.loading).toBe(false);
   });
 
-  it('falls back from unavailable recommended weights to newest and informs the caller', async () => {
-    const fallbackNotice = vi.fn();
-    vi.mocked(propertyService.getProperties)
-      .mockRejectedValueOnce(new ApiRequestError('Recommended weights are not configured.', { code: 'RECOMMENDED_WEIGHTS_UNCONFIGURED', status: 503 }))
-      .mockResolvedValueOnce(response({ _id: 'newest-property', title: 'Newest property' } as Property));
-    const { result } = renderHook(() => useProperties({ limit: 10, onRecommendedUnavailable: fallbackNotice }));
+  it('does not retry or change Recommended when the backend reports a ranking gate', async () => {
+    vi.mocked(propertyService.getProperties).mockRejectedValueOnce(new ApiRequestError('Recommended ranking is unavailable.', { code: 'FEATURE_POLICY_UNCONFIGURED', status: 503 }));
+    const { result } = renderHook(() => useProperties({ limit: 10 }));
 
-    act(() => { result.current.applyFilters(new URLSearchParams('search=lagos')); });
-    await waitFor(() => expect(propertyService.getProperties).toHaveBeenCalledTimes(2));
+    act(() => { result.current.applyFilters(new URLSearchParams('search=lagos&sort=recommended')); });
+    await waitFor(() => expect(result.current.error).toContain('FEATURE_POLICY_UNCONFIGURED'));
 
-    expect(propertyService.getProperties).toHaveBeenCalledTimes(2);
-    const fallbackQuery = vi.mocked(propertyService.getProperties).mock.calls[1][0] as URLSearchParams;
-    expect(fallbackQuery.get('search')).toBe('lagos');
-    expect(fallbackQuery.get('sort')).toBe('newest');
-    expect(fallbackQuery.get('page')).toBe('1');
-    expect(fallbackQuery.get('limit')).toBe('10');
-    expect(fallbackNotice).toHaveBeenCalledOnce();
-    expect(result.current.properties.map((property) => property._id)).toEqual(['newest-property']);
-    expect(result.current.notices).toContain('Recommended sorting is unavailable right now. Showing newest properties instead.');
-    expect(result.current.error).toBeNull();
+    expect(propertyService.getProperties).toHaveBeenCalledOnce();
+    expect(result.current.properties).toEqual([]);
+    expect(result.current.error).toContain('FEATURE_POLICY_UNCONFIGURED');
   });
 
   it('does not retry non-recommended searches when another backend error occurs', async () => {
@@ -69,5 +59,40 @@ describe('useProperties catalogue request ordering', () => {
 
     expect(propertyService.getProperties).toHaveBeenCalledOnce();
     expect(result.current.error).toContain('CONTENT_QUERY_INVALID');
+  });
+
+  it('passes the server normalized query and original request to the caller', async () => {
+    const onNormalizationQuery = vi.fn();
+    vi.mocked(propertyService.getProperties).mockResolvedValueOnce({
+      ...response({ _id: 'normalized', title: 'Normalized result' } as Property),
+      normalization: { queryVersion: 'canonical-v1', query: { queryVersion: 'canonical-v1', sort: 'newest', minPrice: 0, verified: false, amenities: ['pool', 'lift'] }, notices: [] },
+    });
+    const { result } = renderHook(() => useProperties({ limit: 10, onNormalizationQuery }));
+    const request = new URLSearchParams('sort=recommended&amenities=pool&amenities=lift');
+
+    act(() => { result.current.applyFilters(request); });
+    await waitFor(() => expect(onNormalizationQuery).toHaveBeenCalledOnce());
+
+    expect(onNormalizationQuery.mock.calls[0][0]).toMatchObject({ sort: 'newest', minPrice: 0, verified: false });
+    expect(onNormalizationQuery.mock.calls[0][1]).toBeInstanceOf(URLSearchParams);
+    expect((onNormalizationQuery.mock.calls[0][1] as URLSearchParams).get('page')).toBe('1');
+  });
+
+  it('clears search results and derived facets when the active profile context changes', async () => {
+    vi.mocked(propertyService.getProperties).mockResolvedValueOnce({
+      ...response({ _id: 'profile-result', title: 'Profile scoped result' } as Property),
+      facets: { categories: { houses: 1 } },
+      diagnostics: { state: 'zero_results', suggestions: [] },
+    });
+    const { result } = renderHook(() => useProperties({ limit: 10 }));
+    act(() => { result.current.applyFilters(new URLSearchParams('fromAccountsIFollow=true')); });
+    await waitFor(() => expect(result.current.properties).toHaveLength(1));
+    expect(result.current.facets).toEqual({ categories: { houses: 1 } });
+
+    act(() => { result.current.clearResults(); });
+    expect(result.current.properties).toEqual([]);
+    expect(result.current.total).toBe(0);
+    expect(result.current.facets).toBeNull();
+    expect(result.current.diagnostics).toBeNull();
   });
 });

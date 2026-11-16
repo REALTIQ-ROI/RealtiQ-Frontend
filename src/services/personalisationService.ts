@@ -45,6 +45,7 @@ const parseSavedSearchEnvelope = (value: unknown): SavedSearch => {
   }
   return parseSavedSearch(value.savedSearch);
 };
+const noStoreConfig = { headers: { 'Cache-Control': 'no-store' } };
 const favouriteMutations = new Map<string, Promise<FavouriteMutationResult>>();
 const mutateFavourite = (propertyId: string, value: boolean) => {
   const pending = favouriteMutations.get(propertyId);
@@ -68,7 +69,7 @@ export const personalisationService = {
     const { data } = await api.get<{
       favourites: FavouriteItem[];
       pagination: Pagination;
-    }>("/personalisation/favourites", { params: { page, limit } });
+    }>("/personalisation/favourites", { params: { page, limit }, ...noStoreConfig });
     return data;
   },
   setFavourite(propertyId: string, value: boolean) {
@@ -85,7 +86,7 @@ export const personalisationService = {
     const { data } = await api.get<{
       recentlyViewed: RecentlyViewedItem[];
       pagination: Pagination;
-    }>("/personalisation/recent", { params: { page, limit } });
+    }>("/personalisation/recent", { params: { page, limit }, ...noStoreConfig });
     return data;
   },
   async recordRecent(propertyId: string) {
@@ -107,7 +108,7 @@ export const personalisationService = {
     const { data } = await api.get<{
       savedSearches: SavedSearch[];
       pagination: Pagination;
-    }>("/personalisation/searches", { params: { page, limit } });
+    }>("/personalisation/searches", { params: { page, limit }, ...noStoreConfig });
     if (!isRecord(data) || !Array.isArray(data.savedSearches)) {
       throw new Error('The saved-search list response is not available in a supported format.');
     }
@@ -117,12 +118,14 @@ export const personalisationService = {
     const { data } = await api.post<{ savedSearch: SavedSearch }>(
       "/personalisation/searches",
       input,
+      noStoreConfig,
     );
     return parseSavedSearchEnvelope(data);
   },
   async getSearch(id: string) {
     const { data } = await api.get<{ savedSearch: SavedSearch }>(
       `/personalisation/searches/${id}`,
+      noStoreConfig,
     );
     return parseSavedSearchEnvelope(data);
   },
@@ -130,10 +133,11 @@ export const personalisationService = {
     const { data } = await api.patch<{ savedSearch: SavedSearch }>(
       `/personalisation/searches/${id}`,
       input,
+      noStoreConfig,
     );
     return parseSavedSearchEnvelope(data);
   },
   async deleteSearch(id: string) {
-    await api.delete(`/personalisation/searches/${id}`);
+    await api.delete(`/personalisation/searches/${id}`, noStoreConfig);
   },
 };

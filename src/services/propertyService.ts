@@ -26,6 +26,7 @@ import type {
   StructuredPropertyFacts,
 } from '../types';
 import { normalizePropertyPaymentTypes } from '../utils/propertyPaymentTypes';
+import { canonicalQueryParams } from '../utils/catalogueQuery';
 
 export interface TitleDocumentUploadMetadata {
   assetId: string;
@@ -115,6 +116,7 @@ export interface NearbyPropertySummary {
   publicReference?: string | null;
   title: string;
   coordinates?: PropertyCoordinates | null;
+  locationPoint?: { type?: 'Point'; coordinates: [number, number] } | null;
   paymentTypes?: PropertyPaymentType[];
 }
 
@@ -305,10 +307,15 @@ const normalizePropertiesResponse = (response: PropertiesResponse): PropertiesRe
 });
 
 export const propertyService = {
-  async getProperties(filters?: PropertyFiltersQuery | URLSearchParams): Promise<PropertiesResponse> {
-    const params = filters instanceof URLSearchParams ? new URLSearchParams(filters) : { queryVersion: 'canonical-v1', ...filters };
-    if (params instanceof URLSearchParams && !params.has('queryVersion')) params.set('queryVersion', 'canonical-v1');
-    const { data } = await api.get<PropertiesResponse>('/properties', { params });
+  async getProperties(filters?: PropertyFiltersQuery | URLSearchParams, signal?: AbortSignal): Promise<PropertiesResponse> {
+    const params = canonicalQueryParams(filters ?? {});
+    const { data } = await api.get<PropertiesResponse>('/properties', { params, signal });
+    return normalizePropertiesResponse(data);
+  },
+
+  async getCanonicalNearbyProperties(filters: PropertyFiltersQuery | URLSearchParams, signal?: AbortSignal): Promise<PropertiesResponse> {
+    const params = canonicalQueryParams(filters);
+    const { data } = await api.get<PropertiesResponse>('/properties/map/nearby', { params, signal });
     return normalizePropertiesResponse(data);
   },
 
@@ -321,9 +328,7 @@ export const propertyService = {
   },
 
   async getCanonicalMap(query: URLSearchParams, signal?: AbortSignal): Promise<CanonicalPropertyMapResponse> {
-    const params = new URLSearchParams(query);
-    if (!params.has('mapZoom') && params.has('zoom')) params.set('mapZoom', params.get('zoom') ?? '');
-    params.delete('zoom');
+    const params = canonicalQueryParams(query);
     params.set('queryVersion', 'canonical-v1');
     params.delete('mapActive');
     params.delete('page');

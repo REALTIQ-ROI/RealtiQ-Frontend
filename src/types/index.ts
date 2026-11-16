@@ -216,6 +216,7 @@ export interface ProjectOwnerSummary {
 export interface ProjectDetail extends ProjectCard {
   version?: number;
   canonicalFields?: Record<string, unknown>;
+  canonicalEffectiveFields?: Record<string, unknown>;
   effectiveFields?: Record<string, unknown>;
   fieldSources?: Record<string, { sourceLevel: string; state: string }>;
   unitTypes?: Array<{ id: string; version: number; canonicalFields?: Record<string, unknown>; effectiveFields?: Record<string, unknown>; fieldSources?: Record<string, { sourceLevel: string; state: string }> }>;
@@ -227,6 +228,7 @@ export interface ProjectDetail extends ProjectCard {
   city?: string;
   area?: string;
   coordinates?: PropertyCoordinates | null;
+  locationPoint?: { type?: 'Point'; coordinates: [number, number] } | null;
   media?: ProjectMedia[];
   amenities?: string[];
   features?: string[];
@@ -388,6 +390,7 @@ export interface UserKyc {
 export interface Property {
   _id: string;
   canonicalFields?: Record<string, unknown>;
+  canonicalEffectiveFields?: Record<string, unknown>;
   effectiveCanonicalFields?: Record<string, unknown>;
   canonicalFieldProvenance?: Record<string, { sourceLevel: string; state: string }>;
   canonicalUnitTypeId?: string;
@@ -408,6 +411,7 @@ export interface Property {
   paymentTypes: PropertyPaymentType[];
   version?: number;
   coordinates?: PropertyCoordinates | null;
+  locationPoint?: { type?: 'Point'; coordinates: [number, number] } | null;
   media: MediaItem[];
   status: PropertyStatus;
   approvalStatus?: PropertyApprovalStatus;
@@ -622,18 +626,29 @@ export interface RegisterPayload {
 export interface PropertyFilters {
   queryVersion?: 'canonical-v1';
   search?: string;
-  sort?: 'recommended' | 'newest' | 'price_asc' | 'price_desc' | 'handover_soonest' | 'verified_first' | 'recently_reduced' | 'largest_reduction' | 'bedrooms_desc' | 'floor_area_desc' | 'highest_rated' | 'trust_tier';
+  sort?: 'recommended' | 'newest' | 'price_asc' | 'price_desc' | 'handover_soonest' | 'verified_first' | 'recently_reduced' | 'largest_reduction' | 'bedrooms_desc' | 'floor_area_desc' | 'highest_rated' | 'trust_tier' | 'newest_most_recent' | 'recent' | 'price_low_to_high' | 'price_high_to_low' | 'handover_date_soonest' | 'price_reduced_largest_drop' | 'bedrooms_most' | 'bedrooms' | 'floor_area_largest' | 'floor_area';
   minPrice?: number;
   maxPrice?: number;
   propertyType?: string;
   bedrooms?: number;
   bathrooms?: number;
+  exactBedrooms?: number | '6+';
+  minBedrooms?: number;
+  maxBedrooms?: number;
+  exactFullBathrooms?: number;
+  minFullBathrooms?: number;
+  maxFullBathrooms?: number;
+  internalFloorArea?: number;
+  unitFootprint?: number;
+  plotSize?: number;
   ownerId?: string;
   category?: PropertyCategory;
   completionStage?: PropertyCompletionStage;
   currency?: PropertyCurrency;
   featured?: boolean;
-  status?: PropertyStatus | 'all' | 'under_offer';
+  status?: PropertyStatus | 'all' | 'under_offer' | 'sold';
+  includeUnderOffer?: boolean;
+  includeSold?: boolean;
   projectId?: string;
   projectSlug?: string;
   hasProject?: boolean;

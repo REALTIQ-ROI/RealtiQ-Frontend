@@ -14,27 +14,39 @@ vi.mock('../lib/axios', () => ({
 describe('projectService', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('lists public projects with search and child property filters', async () => {
+  it('lists grouped projects with the canonical query and defaults', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { projects: [], total: 0, page: 1, limit: 20 } });
-    await projectService.listProjects({
-      search: 'palm',
-      projectType: 'estate',
-      city: 'Lekki',
-      propertyType: 'apartment',
-      bedrooms: 3,
-      listingType: 'off_plan',
-      developmentStatus: 'foundation',
-      availableOnly: true,
-      page: 1,
-      limit: 20,
-    });
+    await projectService.listProjects(new URLSearchParams('search=palm&projectType=estate&propertyType=flat&minPrice=0&exactBedrooms=3&page=1&limit=20'));
     expect(api.get).toHaveBeenCalledWith('/projects', expect.objectContaining({ params: expect.any(URLSearchParams) }));
     const params = vi.mocked(api.get).mock.calls[0][1]?.params as URLSearchParams;
-    expect(params.toString()).toBe('search=palm&projectType=estate&city=Lekki&propertyType=apartment&bedrooms=3&listingType=off_plan&developmentStatus=foundation&availableOnly=true&page=1&limit=20&queryVersion=canonical-v1');
+    expect(params.get('search')).toBe('palm');
+    expect(params.get('projectType')).toBe('estate');
+    expect(params.get('minPrice')).toBe('0');
+    expect(params.get('exactBedrooms')).toBe('3');
+    expect(params.get('queryVersion')).toBe('canonical-v1');
+    expect(params.get('status')).toBe('available');
+    expect(params.get('includeUnpriced')).toBe('true');
+    expect(params.get('withPhotosOnly')).toBe('true');
+  });
+
+  it('uses canonical search params for public project units and refuses unpublished-unit filters', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { project: {}, properties: [], total: 0, page: 1, limit: 20 } });
+    await projectService.getProjectProperties('palm-court', { search: 'garden', page: 2, limit: 20 });
+    expect(api.get).toHaveBeenCalledWith('/projects/palm-court/properties', expect.objectContaining({ params: expect.any(URLSearchParams) }));
+    const params = vi.mocked(api.get).mock.calls[0][1]?.params as URLSearchParams;
+    expect(params.get('queryVersion')).toBe('canonical-v1');
+    expect(params.get('search')).toBe('garden');
+    expect(params.get('page')).toBe('2');
+    expect(params.get('includeUnpublished')).toBeNull();
+
+    vi.clearAllMocks();
+    await expect(projectService.getProjectProperties('palm-court', new URLSearchParams('includeUnpublished=true')))
+      .rejects.toThrow(/not available through public project discovery/i);
+    expect(api.get).not.toHaveBeenCalled();
   });
 
   it('uses the canonical query version and preserves repeated URL criteria for project maps', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: { mode: 'projects', bounds: null, total: 0, projects: [] } });
+    vi.mocked(api.get).mockResolvedValue({ data: { mode: 'projects', bounds: { north: 14, south: 4, east: 14, west: 2, zoom: 6 }, total: 0, limit: 100, truncated: false, projects: [] } });
     const query = new URLSearchParams('amenities=Pool&amenities=Lift&minPrice=0&page=4&limit=20&north=14&south=4&east=14&west=2&mapZoom=6');
     await projectService.getProjectMap(query);
     expect(api.get).toHaveBeenCalledWith('/projects/map', expect.objectContaining({ params: expect.any(URLSearchParams), signal: undefined }));
@@ -49,10 +61,10 @@ describe('projectService', () => {
   it('preserves documented project-map unit counts and FX aggregate state', async () => {
     const mapProject = {
       _id: 'project-1', name: 'Palm Court', slug: 'palm-court', projectType: 'estate',
-      coordinates: null, matchingUnitCount: 12, availableUnitCount: 8, underOfferUnitCount: 2,
+      coordinates: null, matchingUnitCount: 12, availableUnitCount: 8, underOfferUnitCount: 2, soldUnitCount: 1,
       minimumPrice: null, maximumPrice: null, currency: 'NGN', priceAggregateState: 'fx_unconfigured' as const,
     };
-    vi.mocked(api.get).mockResolvedValue({ data: { mode: 'projects', bounds: null, total: 1, projects: [mapProject] } });
+    vi.mocked(api.get).mockResolvedValue({ data: { mode: 'projects', bounds: null, total: 1, limit: 100, truncated: false, projects: [mapProject] } });
 
     const result = await projectService.getProjectMap(new URLSearchParams());
 
@@ -67,7 +79,7 @@ describe('projectService', () => {
   });
 
   it('rejects project markers missing the canonical configuration and availability fields', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: { mode: 'projects', bounds: null, total: 1, projects: [{ _id: 'project-1', name: 'Palm Court', slug: 'palm', projectType: 'estate' }] } });
+    vi.mocked(api.get).mockResolvedValue({ data: { mode: 'projects', bounds: null, total: 1, limit: 100, truncated: false, projects: [{ _id: 'project-1', name: 'Palm Court', slug: 'palm', projectType: 'estate' }] } });
     await expect(projectService.getProjectMap(new URLSearchParams()))
       .rejects.toThrow('Project map marker fields are not fully specified');
   });

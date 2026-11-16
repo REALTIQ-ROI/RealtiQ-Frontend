@@ -40,14 +40,14 @@ vi.mock('../../hooks/useCanonicalFieldDictionary', () => ({
 vi.mock('./LocationCascadeFields', () => ({ default: () => <div /> }));
 
 describe('PropertyFiltersPanel dictionary-backed vocabulary', () => {
-  it('uses accepted availability and advertiser values and excludes non-public availability', () => {
+  it('uses canonical availability and dictionary-backed advertiser values and excludes non-public availability', () => {
     const onApply = vi.fn();
     render(<PropertyFiltersPanel onApply={onApply} />);
     fireEvent.click(screen.getByRole('button', { name: /more filters/i }));
 
-    const availability = screen.getByRole('combobox', { name: 'Availability' });
+    const availability = screen.getByRole('combobox', { name: 'Availability scope' });
     expect(Array.from((availability as HTMLSelectElement).options).map((option) => option.textContent)).toEqual([
-      'Any availability', 'Available', 'Under Offer', 'Sold',
+      'Available only', 'Available and selected statuses', 'Under Offer only', 'Sold only',
     ]);
     expect(screen.queryByRole('option', { name: 'Not released' })).not.toBeInTheDocument();
 
@@ -61,11 +61,11 @@ describe('PropertyFiltersPanel dictionary-backed vocabulary', () => {
     const onApply = vi.fn();
     render(<PropertyFiltersPanel onApply={onApply} />);
     fireEvent.click(screen.getByRole('button', { name: /more filters/i }));
-    fireEvent.change(screen.getByRole('combobox', { name: 'Availability' }), { target: { value: 'Under Offer' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Availability scope' }), { target: { value: 'under_offer' } });
     fireEvent.change(screen.getByRole('combobox', { name: 'Listed by' }), { target: { value: 'Agency' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply Filters' }));
 
-    expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ status: 'Under Offer', advertiserType: 'Agency' }));
+    expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ status: 'under_offer', advertiserType: 'Agency' }));
   });
 
   it('renders grouped amenity filters from the dictionary and submits every selected feature', () => {

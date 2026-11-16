@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
 import ProjectCard from '../../components/project/ProjectCard';
 import PropertyFiltersPanel from '../../components/property/PropertyFiltersPanel';
 import ActiveCatalogueFilters from '../../components/property/ActiveCatalogueFilters';
+import CatalogueResultInsights from '../../components/property/CatalogueResultInsights';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
-import { ApiRequestError } from '../../lib/axios';
+import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { projectService, type ProjectListResponse } from '../../services/projectService';
-import { readCatalogueQuery, writeCatalogueQuery } from '../../utils/catalogueQuery';
+import { adoptCanonicalQuery, catalogueFilterFormKey, readCatalogueQuery, sameCanonicalCriteria, writeCatalogueQuery } from '../../utils/catalogueQuery';
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
-import { summarizeCatalogueFacets } from '../../utils/catalogueFacets';
 
 const PAGE_SIZE = 20;
 const validPage = (params: URLSearchParams) => {
@@ -29,7 +29,10 @@ const Projects = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeProfile } = useAuth();
+  const searchParamsRef = useRef(searchParams);
+  useEffect(() => { searchParamsRef.current = searchParams; }, [searchParams]);
   const [data, setData] = useState<ProjectListResponse | null>(null);
+  const [dataProfileId, setDataProfileId] = useState<string | null>(activeProfile?.id ?? null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshVersion, setRefreshVersion] = useState(0);
@@ -45,28 +48,44 @@ const Projects = () => {
     params.set('limit', String(PAGE_SIZE));
     params.set('queryVersion', 'canonical-v1');
     void projectService.listProjects(params, controller.signal)
-      .then((response) => { if (!controller.signal.aborted) setData(response); })
-      .catch((raw: unknown) => { if (!controller.signal.aborted) setError(raw instanceof ApiRequestError && raw.code ? `${raw.message} (${raw.code})` : raw instanceof Error ? raw.message : 'Unable to load projects.'); })
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        setData(response);
+        setDataProfileId(activeProfile?.id ?? null);
+        if (response.normalization?.query !== undefined) {
+          const current = searchParamsRef.current;
+          if (sameCanonicalCriteria(current, params)) {
+            const normalized = adoptCanonicalQuery(current, response.normalization.query);
+            if (normalized.toString() !== current.toString()) {
+              searchParamsRef.current = normalized;
+              setSearchParams(normalized, { replace: true });
+            }
+          }
+        }
+      })
+      .catch((raw: unknown) => { if (!controller.signal.aborted) setError(apiErrorMessage(raw, 'Unable to load projects.')); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [queryKey, page, refreshVersion]);
+  }, [queryKey, page, refreshVersion, activeProfile?.id, setSearchParams]);
 
-  const projects = data?.projects ?? [];
-  const total = data?.total ?? 0;
+  const currentData = dataProfileId === (activeProfile?.id ?? null) ? data : null;
+  const projects = currentData?.projects ?? [];
+  const total = currentData?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const resultLabel = useMemo(() => total === 1 ? '1 project' : `${total.toLocaleString()} projects`, [total]);
-  const facets = summarizeCatalogueFacets(data?.facets);
 
-  const applyFilters = (changes: Parameters<typeof writeCatalogueQuery>[0], clearAll = false) => {
+  const applyFilters = (changes: Parameters<typeof writeCatalogueQuery>[0], clearAll = false, replace = false) => {
     const next = writeCatalogueQuery(changes, { base: searchParams, resetPage: true, clearAll });
-    setSearchParams(next);
+    searchParamsRef.current = next;
+    setSearchParams(next, replace ? { replace: true } : undefined);
   };
-  const clearFilterChip = (key: string, index: number) => setSearchParams(removeCatalogueFilterChip(searchParams, { key, index }));
+  const clearFilterChip = (key: string, index: number) => { const next = removeCatalogueFilterChip(searchParams, { key, index }); searchParamsRef.current = next; setSearchParams(next); };
 
   const changePage = (nextPage: number) => {
     const next = new URLSearchParams(searchParams);
     if (nextPage <= 1) next.delete('page');
     else next.set('page', String(nextPage));
+    searchParamsRef.current = next;
     setSearchParams(next);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -91,7 +110,7 @@ const Projects = () => {
 
         <div className="-mx-4 mb-6 sm:-mx-8">
           <PropertyFiltersPanel
-            key={queryKey}
+            key={catalogueFilterFormKey(searchParams)}
             initialFilters={readCatalogueQuery(searchParams)}
             initialQuery={searchParams}
             activeProfile={activeProfile}
@@ -100,13 +119,14 @@ const Projects = () => {
           />
         </div>
         <div className="-mx-4 sm:-mx-8"><ActiveCatalogueFilters params={searchParams} onClear={clearFilterChip} /></div>
+        <CatalogueResultInsights facets={currentData?.facets} diagnostics={currentData?.diagnostics} onApplySuggestion={(patch) => applyFilters(patch)} />
 
         <div className="mb-5 flex items-center justify-between">
-          <div><p className="text-sm font-semibold text-secondary">{resultLabel}</p>{facets ? <p className="mt-1 text-xs text-secondary">Available facets: {facets}</p> : null}</div>
+          <div><p className="text-sm font-semibold text-secondary">{resultLabel}</p></div>
           <button type="button" onClick={refresh} className="text-sm font-bold text-primary hover:underline">Refresh</button>
         </div>
 
-        {data?.normalization?.notices?.length ? <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{data.normalization.notices.map((notice, index) => <p key={`project-notice-${index}`}>{searchNotice(notice) || 'The server normalized this search.'}</p>)}</div> : null}
+        {currentData?.normalization?.notices?.length ? <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{currentData.normalization.notices.map((notice, index) => <p key={`project-notice-${index}`}>{searchNotice(notice) || 'The server normalized this search.'}</p>)}</div> : null}
 
         {loading && !projects.length ? <LoadingState label="Loading projects..." /> : null}
         {error ? <ErrorState message={error} onRetry={refresh} /> : null}

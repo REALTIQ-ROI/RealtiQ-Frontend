@@ -1,15 +1,17 @@
 import type { SavedSearchFilters } from '../types';
+import { canonicalQueryParams } from './catalogueQuery';
 
 const exactReferenceKeys = ['reference', 'exactReference'];
 
 export const savedSearchFiltersFromUrl = (params: URLSearchParams): SavedSearchFilters => {
-  if (exactReferenceKeys.some((key) => params.has(key))) {
+  const canonical = canonicalQueryParams(params);
+  if (exactReferenceKeys.some((key) => canonical.has(key))) {
     throw new Error('Exact-reference searches cannot be saved. Remove the reference criterion before saving this search.');
   }
   const filters: Record<string, string | readonly string[]> = {};
-  for (const key of new Set(params.keys())) {
+  for (const key of new Set(canonical.keys())) {
     if (key === 'page' || key === 'limit') continue;
-    const values = params.getAll(key);
+    const values = canonical.getAll(key);
     filters[key] = values.length > 1 ? values : values[0] ?? '';
   }
   if (!Object.prototype.hasOwnProperty.call(filters, 'queryVersion')) filters.queryVersion = 'canonical-v1';
