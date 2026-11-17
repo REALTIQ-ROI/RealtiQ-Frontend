@@ -46,7 +46,7 @@ describe('adminPolicyService', () => {
 
   it('posts expiry-reminder revisions using the exact value, reason, revision, and step-up header', async () => {
     const input = { expectedRevision: 0, reason: 'Set evidence-expiry reminder lead time', value: { reminderDays: 30 } };
-    const revision = { id: 'expiry-reminder-revision', key: 'verification_expiry_reminders', basedOnRevision: 0, value: input.value, reason: input.reason, state: 'approved' } as AdminPolicyRevision;
+    const revision: AdminPolicyRevision = { id: 'expiry-reminder-revision', key: 'verification_expiry_reminders', basedOnRevision: 0, value: input.value, reason: input.reason, state: 'approved', preparedBy: 'staff-account', preparedProfile: 'staff-profile', createdAt: '2026-11-01T12:00:00.000Z' };
     vi.mocked(api.post).mockResolvedValueOnce({ data: { revision } } as never);
     await expect(adminPolicyService.prepareRevision('verification_expiry_reminders', input, 'expiry-challenge')).resolves.toBe(revision);
     expect(api.post).toHaveBeenCalledWith('/admin/policies/verification_expiry_reminders/revisions', input, { headers: { 'X-Step-Up-Challenge': 'expiry-challenge' } });

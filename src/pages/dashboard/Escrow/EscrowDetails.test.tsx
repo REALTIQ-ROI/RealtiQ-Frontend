@@ -40,7 +40,7 @@ describe('EscrowDetails role actions and resilience', () => {
   beforeEach(() => {
     state.role = 'buyer';
     state.adminAccess = { readOnly: false, isInternalAudit: false, staffDepartments: ['finance'], capabilities: ['finance.manage'] };
-    vi.mocked(propertyService.getPropertyById).mockReset().mockResolvedValue({ media: [] } as Property);
+    vi.mocked(propertyService.getPropertyById).mockReset().mockResolvedValue({ media: [] } as unknown as Property);
   });
   afterEach(() => { cleanup(); vi.useRealTimers(); });
   it('shows buyer rule and dispute actions but never release actions', async () => {
@@ -126,11 +126,11 @@ describe('EscrowDetails role actions and resilience', () => {
     } as NonNullable<Escrow['payment']>;
     escrow.participants = { buyer: null, seller: null };
     escrow.property = 'p1';
-    escrow.propertyId = { _id: 'p1', title: 'Property', price: escrow.amount, location: 'Lagos', currency: 'NGN', propertyType: 'house', media: [] };
+    escrow.propertyId = { _id: 'p1', title: 'Property', price: escrow.amount, location: 'Lagos', currency: 'NGN', propertyType: 'house', media: [], status: 'available' };
     vi.mocked(propertyService.getPropertyById).mockResolvedValueOnce({
       _id: 'p1', title: 'Property', price: escrow.amount, location: 'Lagos', currency: 'NGN',
       propertyType: 'house', media: [], owner: { _id: 'seller-account', name: 'Do Not Use Property Owner Name' },
-    } as Property);
+    } as unknown as Property);
 
     renderDetails(escrow);
 
@@ -259,7 +259,7 @@ describe('EscrowDetails role actions and resilience', () => {
   it('ignores null release-rule entries and fails closed on release actions', () => {
     state.role = 'admin';
     const escrow = makeEscrow('release_pending', true);
-    escrow.rules = [null, ...escrow.rules] as unknown as Escrow['rules'];
+    escrow.rules = [null, ...(escrow.rules ?? [])] as unknown as Escrow['rules'];
 
     renderDetails(escrow);
 

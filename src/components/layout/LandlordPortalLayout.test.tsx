@@ -15,7 +15,7 @@ const renderLayout = (ownerVerified?: boolean) => {
   mockedUseAuth.mockReturnValue({
     user: { _id: 'landlord-1', name: 'Landlord Example', email: 'landlord@example.test', role: 'owner', ownerVerified },
     logout: vi.fn(),
-  } as ReturnType<typeof useAuth>);
+  } as unknown as ReturnType<typeof useAuth>);
 
   return render(
     <MemoryRouter>

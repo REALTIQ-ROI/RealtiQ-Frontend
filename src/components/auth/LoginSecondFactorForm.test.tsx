@@ -21,7 +21,7 @@ describe('LoginSecondFactorForm', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useAuth).mockReturnValue({ completeLoginSecondFactor, cancelLoginChallenge, isLoading: false } as ReturnType<typeof useAuth>);
+    vi.mocked(useAuth).mockReturnValue({ completeLoginSecondFactor, cancelLoginChallenge, isLoading: false } as unknown as ReturnType<typeof useAuth>);
   });
 
   it('submits the entered one-time code and completes sign-in only after the service succeeds', async () => {

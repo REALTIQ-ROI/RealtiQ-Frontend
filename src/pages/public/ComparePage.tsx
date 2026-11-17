@@ -5,7 +5,6 @@ import PublicLayout from '../../components/layout/PublicLayout';
 import PropertyMap from '../../components/property/map/PropertyMap';
 import InquiryForm from '../../components/forms/InquiryForm';
 import ModalPortal from '../../components/ui/ModalPortal';
-import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCompare } from '../../contexts/CompareContext';
@@ -246,12 +245,15 @@ const ComparePage = () => {
     { key: 'freshness', label: 'Listing freshness', value: (item) => ({ present: Boolean(item.freshnessNotice || Object.keys(item.freshness ?? {}).length), value: item.freshnessNotice ? labelize(item.freshnessNotice) : item.freshness.state ?? null }) },
     { key: 'listedAt', label: 'Listed', value: (item) => ({ present: item.listedAt !== null, value: item.listedAt ? formatDateLabel(item.listedAt) : null }) },
   ];
-  const rows = [...baseRows, ...dynamicKeys.map((key) => ({
-    key,
-    label: canonicalFieldMap.get(key)?.label ?? labelize(key),
-    value: (item: CompareItem) => getRecordValue(item.effectiveFields, key),
-    nullMeaning: canonicalFieldMap.get(key)?.nullMeaning,
-  }))].filter((row) => orderedItems.some((item) => row.value(item).present)).filter((row) => !differenceOnly || new Set(orderedItems.map((item) => {
+  const rows: typeof baseRows = [...baseRows, ...dynamicKeys.map((key) => {
+    const field = canonicalFieldMap.get(key);
+    return {
+      key,
+      label: typeof field?.label === 'string' ? field.label : labelize(key),
+      value: (item: CompareItem) => getRecordValue(item.effectiveFields, key),
+      nullMeaning: typeof field?.nullMeaning === 'string' ? field.nullMeaning : undefined,
+    };
+  })].filter((row) => orderedItems.some((item) => row.value(item).present)).filter((row) => !differenceOnly || new Set(orderedItems.map((item) => {
     const result = row.value(item);
     return result.present ? JSON.stringify(result.value) : '__not_provided__';
   })).size > 1);
@@ -317,7 +319,7 @@ const ComparePage = () => {
       </> : null}
 
       {viewIds.length ? <>
-        <SuggestionPanel category={currentCategory} anchorIds={viewIds} existingIds={compare.propertyIds} existingCategory={compare.category} disabled={compare.busy || isShared} onConfirm={compare.replaceSelection} returnPath={compare.returnPath} />
+        <SuggestionPanel category={currentCategory} anchorIds={viewIds} existingCategory={compare.category} disabled={compare.busy || isShared} onConfirm={compare.replaceSelection} returnPath={compare.returnPath} />
         <RecentSalesPanel key={`${isShared ? 'shared' : `${user?._id ?? 'guest'}:${activeProfile?.id ?? 'no-profile'}`}:${viewIds.join(',')}`} items={orderedItems} fallbackIds={viewIds} userEmailVerified={Boolean(user?.emailVerified)} />
       </> : null}
 
@@ -337,7 +339,7 @@ const FxNotice = ({ fx }: { fx: CompareFx }) => {
   return <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Currency conversion is unavailable. Original listing prices remain visible; cross-currency price markers and ranking are disabled. {fx.message ?? ''}</p>;
 };
 
-const SuggestionPanel = ({ category, anchorIds, existingIds, existingCategory, disabled, onConfirm, returnPath }: { category: CompareCategory | null; anchorIds: string[]; existingIds: string[]; existingCategory: CompareCategory | null; disabled: boolean; onConfirm: (ids: string[], category: CompareCategory, origin: 'top_matches' | 'similar', criterion?: string, replaceCategory?: boolean) => Promise<void>; returnPath: string }) => {
+const SuggestionPanel = ({ category, anchorIds, existingCategory, disabled, onConfirm, returnPath }: { category: CompareCategory | null; anchorIds: string[]; existingCategory: CompareCategory | null; disabled: boolean; onConfirm: (ids: string[], category: CompareCategory, origin: 'top_matches' | 'similar', criterion?: string, replaceCategory?: boolean) => Promise<void>; returnPath: string }) => {
   const [mode, setMode] = useState<'top_matches' | 'similar'>('top_matches');
   const [selectedCategory, setSelectedCategory] = useState<CompareCategory>(category ?? 'residential');
   const [criterion, setCriterion] = useState<CompareCriterion>('lowest_price_per_sqm');

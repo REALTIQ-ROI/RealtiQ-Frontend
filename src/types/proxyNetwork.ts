@@ -178,7 +178,7 @@ export interface AdminInspectorProfile extends Omit<PublicInspectorProfile, 'use
   } }>;
   rejectionReason?: string; suspensionReason?: string; suspendedAt?: string;
 }
-export interface AdminInspectorDetailProfile extends Omit<AdminInspectorProfile, 'user'> {
+export interface AdminInspectorDetailProfile extends Omit<AdminInspectorProfile, 'user' | 'approvedAt' | 'createdAt' | 'suspendedAt'> {
   id?: string;
   name?: string;
   bio?: string;

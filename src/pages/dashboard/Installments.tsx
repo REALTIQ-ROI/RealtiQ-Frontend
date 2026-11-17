@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import Swal from 'sweetalert2';
@@ -29,7 +29,6 @@ import {
   canCancelInstallment,
   canPayInstallment,
   canRoleSatisfyCondition,
-  frequencyToInstallmentCount,
   getNextPayableScheduleItem,
   getOutstandingPenaltyAmount,
   getPrincipalAmount,
@@ -38,7 +37,6 @@ import {
   getScheduleItems,
   getTotalOutstandingBalance,
   hasUnsatisfiedRequiredConditions,
-  isInstallmentActive,
   resolveInstallmentBuyerLabel,
   resolveInstallmentProperty,
   resolveInstallmentPropertyId,

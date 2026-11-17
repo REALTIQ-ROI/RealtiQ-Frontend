@@ -261,13 +261,28 @@ const EscrowDetailsContent = () => {
     };
   }, [escrow, execute]);
 
-  const mutate = async (
+  function mutate(
+    key: string,
+    operation: () => Promise<MutationResponse>,
+    onSuccess: ((result: MutationResponse) => void) | undefined,
+    rethrow: true,
+  ): Promise<MutationResponse>;
+  function mutate(
+    key: string,
+    operation: () => Promise<MutationResponse>,
+    onSuccess?: (result: MutationResponse) => void,
+    rethrow?: false,
+  ): Promise<void>;
+  async function mutate(
     key: string,
     operation: () => Promise<MutationResponse>,
     onSuccess?: (result: MutationResponse) => void,
     rethrow = false,
-  ) => {
-    if (pending) return;
+  ): Promise<MutationResponse | void> {
+    if (pending) {
+      if (rethrow) throw new Error('Another escrow action is already in progress.');
+      return;
+    }
     setPending(key);
     setConflict(null);
     try {
@@ -275,6 +290,7 @@ const EscrowDetailsContent = () => {
       onSuccess?.(result);
       toast.success('Escrow updated successfully.');
       await execute();
+      return result;
     } catch (raw) {
       const err = escrowErrorDetails(raw);
       if (err.status === 409) {
@@ -307,7 +323,7 @@ const EscrowDetailsContent = () => {
     } finally {
       setPending(null);
     }
-  };
+  }
 
   const action = async (type: Action) => {
     if (!displayedEscrow) return;

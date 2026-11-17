@@ -625,7 +625,7 @@ export type VerifyPaymentResponse =
     _id: string;
     user?: string;
     property?: string | null;
-    status: 'pending' | 'paid' | 'failed' | 'canceled';
+    status: 'pending' | 'paid' | 'failed' | 'canceled' | 'reversed';
     reference: string;
     purpose?: string;
     fulfilledAt?: string;
@@ -638,7 +638,7 @@ export type VerifyPaymentResponse =
     };
   };
 }
-  | { verified: false; payment?: undefined };
+  | { verified: false; status?: 'pending' | 'failed' | 'canceled' | 'reversed'; payment?: undefined };
 
 export interface AuthResponse {
   user: User;

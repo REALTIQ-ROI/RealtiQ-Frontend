@@ -317,6 +317,7 @@ export const mockStore = {
 
   createInquiry(payload: CreateInquiryPayload, currentUser?: User) {
     const state = readState();
+    if (!payload.propertyId) throw new Error('Property not found.');
     const property = state.properties.find((item) => item._id === payload.propertyId);
     if (!property) {
       throw new Error('Property not found.');

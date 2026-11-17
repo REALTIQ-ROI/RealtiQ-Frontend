@@ -91,7 +91,7 @@ const ProfileCampaigns = () => {
         setSelected(detail.campaign); setEntries(ledger.entries); setEntryCursor(ledger.nextCursor);
         const saved = operationStorageKey ? sessionStorage.getItem(operationStorageKey) : null;
         if (saved) {
-          try { const prior = JSON.parse(saved) as { reference?: string }; if (prior.reference && ledger.entries.some((entry) => entry.payment?.reference === prior.reference && ['paid', 'failed', 'cancelled'].includes(entry.payment.state))) { sessionStorage.removeItem(operationStorageKey); operation.current = null; setOutcomeUnknown(false); } }
+          try { const prior = JSON.parse(saved) as { reference?: string }; if (prior.reference && ledger.entries.some((entry) => entry.payment?.reference === prior.reference && ['paid', 'failed', 'cancelled'].includes(entry.payment?.state ?? ''))) { sessionStorage.removeItem(operationStorageKey); operation.current = null; setOutcomeUnknown(false); } }
           catch { /* Keep the existing operation locked until the user can inspect it. */ }
         }
       }
@@ -208,7 +208,7 @@ const ProfileCampaigns = () => {
     setOutcomeUnknown(false);
     setTopUpAmount('');
     if (result.value.kind === 'funding' || result.value.kind === 'create') { const payment = result.value.result.payment; setPaymentUrl(providerLink(payment.redirectUrl)); setNotice(`Campaign ${result.value.result.campaign.state}. Funding ${payment.state}. Reference: ${payment.reference}. A redirect does not confirm funding.`); if (operationStorageKey && operation.current) sessionStorage.setItem(operationStorageKey, JSON.stringify({ ...operation.current, reference: payment.reference })); if (['paid', 'failed', 'cancelled'].includes(payment.state)) { operation.current = null; if (operationStorageKey) sessionStorage.removeItem(operationStorageKey); } }
-    else { setNotice(`Campaign state: ${result.value.result.campaign.state}. ${result.value.result.requiresIndependentApproval ? 'A Finance decision is pending.' : 'Refresh to inspect the final refund or transfer state.'}`); operation.current = null; if (operationStorageKey) sessionStorage.removeItem(operationStorageKey); }
+    else { const requiresIndependentApproval = 'requiresIndependentApproval' in result.value.result && result.value.result.requiresIndependentApproval; setNotice(`Campaign state: ${result.value.result.campaign.state}. ${requiresIndependentApproval ? 'A Finance decision is pending.' : 'Refresh to inspect the final refund or transfer state.'}`); operation.current = null; if (operationStorageKey) sessionStorage.removeItem(operationStorageKey); }
     await refresh();
     if (result.value.kind === 'create') await open(result.value.result.campaign.id);
     return true;

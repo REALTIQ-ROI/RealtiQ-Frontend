@@ -63,7 +63,7 @@ describe('profile publication billing', () => {
     const oldPage = new Promise<{ documents: RevenueDocument[]; nextCursor: null }>((resolve) => { resolveOldPage = resolve; });
     let firstPageReads = 0;
     vi.mocked(revenueFoundationService.listRevenueDocuments).mockImplementation(async (params) => {
-      if (params.before) return oldPage;
+      if (params?.before) return oldPage;
       firstPageReads += 1;
       return firstPageReads === 1
         ? { documents: [document('first-document')], nextCursor: 'older-cursor' }

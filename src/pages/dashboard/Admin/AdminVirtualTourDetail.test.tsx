@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { propertyService } from '../../../services/propertyService';
 import { virtualTourService } from '../../../services/virtualTourService';
 import type { AdminVirtualTourDetail } from '../../../types/virtualTour';
+import type { VirtualTourCapabilities } from '../../../types/virtualTour';
 import AdminVirtualTourDetailPage from './AdminVirtualTourDetail';
 
 vi.mock('../../../components/layout/AdminLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
@@ -18,11 +19,13 @@ const detail = (overrides: Partial<AdminVirtualTourDetail> = {}): AdminVirtualTo
   resolvedProvider: null,
   fallbackUsed: false,
   providers: {
-    realsee: { enabled: false, status: 'not_configured', workId: null, workUrl: null, vrUrl: null, capabilities: {}, metadata: {}, configuredAt: null, readyAt: null, failedAt: null, failureReason: null },
-    matterport: { enabled: false, status: 'not_configured', modelSid: null, showcaseUrl: null, capabilities: {}, metadata: {}, configuredAt: null, readyAt: null, failedAt: null, failureReason: null },
+    realsee: { enabled: false, status: 'not_configured', workId: null, workUrl: null, vrUrl: null, capabilities: emptyCapabilities(), metadata: {}, configuredAt: null, readyAt: null, failedAt: null, failureReason: null },
+    matterport: { enabled: false, status: 'not_configured', modelSid: null, showcaseUrl: null, capabilities: emptyCapabilities(), metadata: {}, configuredAt: null, readyAt: null, failedAt: null, failureReason: null },
   },
   ...overrides,
 });
+
+const emptyCapabilities = (): VirtualTourCapabilities => ({ panorama: false, model3D: false, floorPlan: false, measurements: false, roomLabels: false, guidedTour: false, tags: false });
 
 const renderPage = () => render(
   <MemoryRouter initialEntries={['/dashboard/admin/virtual-tours/RTQ-PROP-1']}>

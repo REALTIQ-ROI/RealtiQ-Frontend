@@ -48,7 +48,7 @@ describe('profile campaign budgets', () => {
     let resolveOldPage!: (value: { entries: PromotionEntry[]; nextCursor: null }) => void;
     const oldPage = new Promise<{ entries: PromotionEntry[]; nextCursor: null }>((resolve) => { resolveOldPage = resolve; });
     vi.mocked(promotionCampaignService.ledger).mockImplementation(async (id, params) =>
-      id === 'one' && params.before ? oldPage : { entries: [entry(`entry-${id}`, id)], nextCursor: id === 'one' ? 'next-page' : null });
+      id === 'one' && params?.before ? oldPage : { entries: [entry(`entry-${id}`, id)], nextCursor: id === 'one' ? 'next-page' : null });
     const user = userEvent.setup();
     render(<ProfileCampaigns />);
     await user.click(await screen.findByRole('button', { name: 'Campaign for property property-one' }));

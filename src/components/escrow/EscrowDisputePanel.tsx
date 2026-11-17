@@ -4,7 +4,7 @@ import StepUpDialog from '../auth/StepUpDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
 import { escrowService } from '../../services/escrowService';
-import type { Escrow } from '../../types/escrow';
+import type { Escrow, EscrowDispute } from '../../types/escrow';
 import { formatDateTime } from './escrowConfig';
 
 const EscrowDisputePanel = ({

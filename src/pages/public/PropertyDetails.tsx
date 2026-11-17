@@ -143,6 +143,7 @@ const PropertyDetails = () => {
   const [tourType, setTourType] = useState<(typeof BOOKABLE_TOUR_TYPES)[number]['value']>('private_showing');
   const [selectedSlotId, setSelectedSlotId] = useState('');
   const [tourNotes, setTourNotes] = useState('');
+  const [, setFxConfirmationId] = useState<string | null>(null);
   const [titleSummary, setTitleSummary] =
     useState<PropertyTitleVerificationSummary | null>(null);
   const [publicTitleDocuments, setPublicTitleDocuments] = useState<

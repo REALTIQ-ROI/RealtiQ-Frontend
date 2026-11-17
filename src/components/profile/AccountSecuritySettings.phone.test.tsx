@@ -65,7 +65,7 @@ describe('account phone verification visibility', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send verification code' }));
     fireEvent.change(await screen.findByLabelText('Verification code'), { target: { value: '123456' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Verify', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Verify' }));
     await waitFor(() => expect(mocks.auth.refreshUser).toHaveBeenCalledTimes(1));
     expect(mocks.service.verifyPhone).toHaveBeenCalledWith('challenge-1', '123456');
     expect(screen.queryByRole('heading', { name: 'Phone verification' })).not.toBeInTheDocument();
@@ -77,7 +77,7 @@ describe('account phone verification visibility', () => {
     mocks.auth.refreshUser.mockRejectedValue(new Error('Account unavailable. Retry status refresh.'));
     fireEvent.click(screen.getByRole('button', { name: 'Send verification code' }));
     fireEvent.change(await screen.findByLabelText('Verification code'), { target: { value: '123456' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Verify', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Verify' }));
     expect(await screen.findByText('Account unavailable. Retry status refresh.')).toBeInTheDocument();
     expect(screen.queryByText('Phone verified.')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Refresh status' })).toBeInTheDocument();

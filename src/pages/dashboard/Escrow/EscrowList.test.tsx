@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../../../lib/axios';
 import { escrowService } from '../../../services/escrowService';
 import { propertyService } from '../../../services/propertyService';
+import type { Escrow } from '../../../types/escrow';
 import EscrowList from './EscrowList';
 
 vi.mock('../../../contexts/AuthContext', () => ({
@@ -21,13 +22,13 @@ vi.mock('../../../services/propertyService', async (importOriginal) => {
   return { ...original, propertyService: { ...original.propertyService, getPropertyById: vi.fn() } };
 });
 
-const listedEscrow = {
+const listedEscrow: Escrow = {
   _id: 'escrow-1',
   property: 'property-1',
   amount: 2_000_000,
   status: 'locked',
   createdAt: '2026-10-27T12:00:00.000Z',
-} as never;
+};
 
 describe('EscrowList', () => {
   beforeEach(() => {
@@ -89,7 +90,7 @@ describe('EscrowList', () => {
   });
 
   it('uses the API `id` when an escrow projection does not include `_id`', async () => {
-    const idOnlyEscrow = { ...listedEscrow, _id: undefined, id: 'escrow-id-only' } as never;
+    const idOnlyEscrow = { ...listedEscrow, _id: undefined, id: 'escrow-id-only' } as unknown as Escrow;
     vi.mocked(escrowService.list).mockResolvedValue([idOnlyEscrow]);
     vi.mocked(escrowService.get).mockResolvedValue({ ...idOnlyEscrow, rules: [] } as never);
 
