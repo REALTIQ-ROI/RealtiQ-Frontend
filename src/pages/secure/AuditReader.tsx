@@ -3,22 +3,27 @@ import { Link, useSearchParams } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ArrowLeft, ArrowRight, BookOpen, Search } from 'lucide-react';
-import summary from '../../../realtiq-action-summary.md?raw';
-import deliveryPlan from '../../../realtiq-delivery-plan.md?raw';
 import AuditBudgetCalculator from './AuditBudgetCalculator';
 import { parseAudit } from '../../utils/auditReader';
 import './auditReader.css';
 
 const plugins = [remarkGfm];
+const loadAuditReport = async (file: string): Promise<string> => {
+  const response = await fetch(`/${encodeURIComponent(file)}`, { cache: 'no-store' });
+  if (response.status === 404) throw new Error('This audit report is not included in this deployment.');
+  if (!response.ok) throw new Error('Could not load this audit report. Try again later.');
+  if (response.headers.get('content-type')?.includes('text/html')) {
+    throw new Error('This audit report is not included in this deployment.');
+  }
+  return response.text();
+};
 const reports = [
-  { id: 'plan', name: 'New features, improvements, quote and timeline', file: 'realtiq-delivery-plan.md', load: async () => deliveryPlan },
-  { id: 'summary', name: 'Background, current inventory and glossary', file: 'realtiq-action-summary.md', load: async () => summary },
-  { id: 'combined', name: 'Combined frontend + backend scope', file: 'combined-current-scope.md', load: async () => (await import('../../../combined-current-scope.md?raw')).default },
-  { id: 'backend', name: 'Detailed backend audit', file: 'backend-needed-updates.md', load: async () => (await import('../../../backend-needed-updates.md?raw')).default },
-  { id: 'frontend', name: 'Original frontend audit', file: 'needed-updates.md', load: async () => (await import('../../../needed-updates.md?raw')).default },
+  { id: 'plan', name: 'New features, improvements, quote and timeline', file: 'realtiq-delivery-plan.md', load: () => loadAuditReport('realtiq-delivery-plan.md') },
+  { id: 'summary', name: 'Background, current inventory and glossary', file: 'realtiq-action-summary.md', load: () => loadAuditReport('realtiq-action-summary.md') },
+  { id: 'combined', name: 'Combined frontend + backend scope', file: 'combined-current-scope.md', load: () => loadAuditReport('combined-current-scope.md') },
+  { id: 'backend', name: 'Detailed backend audit', file: 'backend-needed-updates.md', load: () => loadAuditReport('backend-needed-updates.md') },
+  { id: 'frontend', name: 'Original frontend audit', file: 'needed-updates.md', load: () => loadAuditReport('needed-updates.md') },
 ];
-const summaryChapters = parseAudit(summary);
-const planChapters = parseAudit(deliveryPlan);
 const emptyChapters: ReturnType<typeof parseAudit> = [];
 
 export default function AuditReader() {
@@ -26,7 +31,7 @@ export default function AuditReader() {
   const search = useDeferredValue(query.trim().toLowerCase());
   const [params, setParams] = useSearchParams();
   const report = reports.find(item => item.id === params.get('view')) ?? reports[0];
-  const [documents, setDocuments] = useState<Record<string, ReturnType<typeof parseAudit>>>({ plan: planChapters, summary: summaryChapters });
+  const [documents, setDocuments] = useState<Record<string, ReturnType<typeof parseAudit>>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const chapters = documents[report.id] ?? emptyChapters;
   useEffect(() => {
@@ -34,8 +39,8 @@ export default function AuditReader() {
     let active = true;
     report.load().then(markdown => {
       if (active) setDocuments(previous => ({ ...previous, [report.id]: parseAudit(markdown) }));
-    }).catch(() => {
-      if (active) setErrors(previous => ({ ...previous, [report.id]: 'Could not load this report. Reload the page to try again.' }));
+    }).catch(raw => {
+      if (active) setErrors(previous => ({ ...previous, [report.id]: raw instanceof Error ? raw.message : 'Could not load this audit report. Try again later.' }));
     });
     return () => { active = false; };
   }, [report, documents]);
