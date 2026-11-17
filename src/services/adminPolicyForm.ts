@@ -113,7 +113,7 @@ export const findPolicySchemaDrift = (fields: readonly AdminPolicyField[], value
       drift.push(`${path} (type changed)`);
     } else if (field.type === 'string' || field.type === 'enum') {
       if (typeof current !== 'string') drift.push(`${path} (type changed)`);
-      else if (field.type === 'enum' && field.options && !field.options.includes(current)) drift.push(`${path} (new enum value)`);
+      else if (field.type === 'enum' && field.options?.length && !field.options.includes(current)) drift.push(`${path} (new enum value)`);
     }
   };
   const record = asRecord(value);
@@ -187,7 +187,7 @@ const serializeField = (field: AdminPolicyField, draft: unknown, path: string, c
   if (field.minLength !== undefined && text.length < field.minLength) context.errors.push(`${path}: use at least ${field.minLength} character${field.minLength === 1 ? '' : 's'}.`);
   if (field.maxLength !== undefined && text.length > field.maxLength) context.errors.push(`${path}: use no more than ${field.maxLength} characters.`);
   if (field.pattern && text && !new RegExp(field.pattern).test(text)) context.errors.push(`${path}: value has an invalid format.`);
-  if (field.type === 'enum' && field.options && text && !field.options.includes(text)) context.errors.push(`${path}: choose a supported value.`);
+  if (field.type === 'enum' && field.options?.length && text && !field.options.includes(text)) context.errors.push(`${path}: choose a supported value.`);
   if (field.label.includes('ISO-8601') && text && Number.isNaN(Date.parse(text))) context.errors.push(`${path}: enter a valid ISO-8601 timestamp.`);
   if (field.label.includes('IANA time zone') && text) {
     try { new Intl.DateTimeFormat('en-US', { timeZone: text }); } catch { context.errors.push(`${path}: enter a valid IANA time zone.`); }

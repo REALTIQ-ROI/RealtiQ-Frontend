@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { configureMapbox, fitCoordinates, MAPBOX_STYLE, nigeriaCenter } from '../../../lib/mapbox';
 import { propertyPublicReference, propertyRouteReference, type Property } from '../../../types';
 import PropertyMapPreviewCard from './PropertyMapPreviewCard';
-import LeafletPropertyMap from './LeafletPropertyMap';
-import { MAP_PROVIDER } from '../../../config/maps';
 import type { CanonicalMapMarker } from '../../../types/canonicalMap';
 import { effectiveCanonicalValue } from '../../../utils/propertyVocabulary';
+import GooglePropertyMap from './GooglePropertyMap';
+import { useMapConfig } from '../../../contexts/MapConfigContext';
+import Button from '../../ui/Button';
 
-interface Props {
+export interface PropertyMapProps {
   properties: Property[];
   detailsPath: (property: Property) => string;
   actions?: (property: Property) => ReactNode;
@@ -21,7 +22,10 @@ interface Props {
   onDetailsNavigate?: () => void;
   canonicalMarkers?: CanonicalMapMarker[];
   onSelectCanonicalMarker?: (marker: Extract<CanonicalMapMarker, { kind: 'property' }>) => void | Property | Promise<Property | void>;
+  suppressPreview?: boolean;
 }
+
+type Props = PropertyMapProps;
 
 const isMappable = (property: Property) => {
   const lat = property.coordinates?.lat;
@@ -40,7 +44,7 @@ const priceLabel = (price: number, currency?: string) => {
   return `${prefix}${price}`;
 };
 
-const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, requestedViewport, onSelectProperty, resolveProperty, onDetailsNavigate, canonicalMarkers, onSelectCanonicalMarker }: Props) => {
+const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, requestedViewport, onSelectProperty, resolveProperty, onDetailsNavigate, canonicalMarkers, onSelectCanonicalMarker, suppressPreview = false }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const propertyLookupRef = useRef(new Map<string, Property>());
@@ -72,7 +76,7 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
       const reference = propertyRouteReference(property);
       setSelectedPreview(property); onSelectProperty?.(property);
       if (resolveProperty) void resolveProperty(property).then((resolved) => {
-        if (resolved && propertyRouteReference(resolved) === reference) setSelectedPreview(resolved);
+        if (resolved && propertyRouteReference(resolved) === reference) { setSelectedPreview(resolved); onSelectProperty?.(resolved); }
       }).catch(() => undefined);
     };
   }, [onSelectProperty, resolveProperty]);
@@ -167,7 +171,7 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
           setSelectedPreview(null);
           setCanonicalPreviewLoading(true);
           Promise.resolve(selectCanonicalRef.current?.(marker)).then((property) => {
-            if (request === canonicalPreviewRequest.current && property && propertyPublicReference(property) === marker.reference) setSelectedPreview(property);
+            if (request === canonicalPreviewRequest.current && property && propertyPublicReference(property) === marker.reference) { setSelectedPreview(property); onSelectProperty?.(property); }
           }).catch(() => undefined).finally(() => {
             if (request === canonicalPreviewRequest.current) setCanonicalPreviewLoading(false);
           });
@@ -275,11 +279,69 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
       {mapError ? <div className="absolute left-3 right-3 top-3 z-[1000] rounded-lg bg-error-container p-3 text-sm text-on-error-container">The map tiles could not be loaded. List results are still available.</div> : null}
       {missingCount > 0 ? <div className="absolute left-3 top-3 z-[900] rounded-lg bg-white/95 px-3 py-2 text-xs font-medium text-secondary shadow">{missingCount} {missingCount === 1 ? 'property is' : 'properties are'} list-only (no coordinates).</div> : null}
       {canonicalPreviewLoading ? <div role="status" className="absolute bottom-4 left-4 z-[1000] rounded-lg bg-white/95 px-4 py-3 text-sm font-semibold text-secondary shadow">Loading property preview…</div> : null}
-      {selectedPreview ? <PropertyMapPreviewCard property={selectedPreview} detailsPath={detailsPath} actions={actions} onClose={() => setSelectedPreview(null)} onDetailsNavigate={onDetailsNavigate} /> : null}
+      {!suppressPreview && selectedPreview ? <PropertyMapPreviewCard property={selectedPreview} detailsPath={detailsPath} actions={actions} onClose={() => setSelectedPreview(null)} onDetailsNavigate={onDetailsNavigate} /> : null}
     </section>
   );
 };
 
-const PropertyMap = (props: Props) => MAP_PROVIDER === 'leaflet' ? <LeafletPropertyMap {...props} /> : <MapboxPropertyMap {...props} />;
+const PropertyMap = (props: Props) => {
+  const { state, refresh, hasCredential } = useMapConfig();
+  const [lastViewport, setLastViewport] = useState<Props['requestedViewport']>(props.requestedViewport ?? null);
+  const [selectedPreview, setSelectedPreview] = useState<Property | null>(null);
+  useEffect(() => {
+    if (props.requestedViewport) setLastViewport(props.requestedViewport);
+  }, [props.requestedViewport]);
+
+  const handleViewportChange = useCallback((bounds: NonNullable<Props['requestedViewport']>, userInitiated?: boolean) => {
+    setLastViewport(bounds);
+    props.onViewportChange?.(bounds, userInitiated);
+  }, [props.onViewportChange]);
+
+  const handleSelectProperty = useCallback((property: Property) => {
+    const reference = propertyRouteReference(property);
+    setSelectedPreview(property);
+    props.onSelectProperty?.(property);
+    if (props.resolveProperty) void props.resolveProperty(property).then((resolved) => {
+      if (resolved && propertyRouteReference(resolved) === reference) setSelectedPreview(resolved);
+    }).catch(() => undefined);
+  }, [props.onSelectProperty, props.resolveProperty]);
+
+  const handleSelectCanonicalMarker = useCallback(async (marker: Extract<CanonicalMapMarker, { kind: 'property' }>) => {
+    const property = await props.onSelectCanonicalMarker?.(marker);
+    if (property) setSelectedPreview(property);
+    return property;
+  }, [props.onSelectCanonicalMarker]);
+
+  if (state.status === 'loading') return <section className={`relative min-h-[55vh] overflow-hidden rounded-xl bg-surface-container-low sm:min-h-[420px] ${props.className ?? ''}`} aria-label="Property map" role="status"><p className="absolute inset-0 flex items-center justify-center p-5 text-sm text-secondary">Loading map settings…</p></section>;
+  if (state.status === 'error') return <UnavailableMap className={props.className} message={state.error} onRetry={() => void refresh()} />;
+  const provider = state.config.provider;
+  if (!hasCredential(provider)) {
+    const providerLabel = state.config.supportedProviders.find((option) => option.id === provider)?.label ?? provider;
+    return <UnavailableMap className={props.className} message={`${providerLabel} is selected for this website, but its restricted browser SDK credential is not configured. List results remain available.`} onRetry={() => void refresh()} />;
+  }
+
+  const mapProps: Props = {
+    ...props,
+    requestedViewport: lastViewport,
+    onViewportChange: handleViewportChange,
+    onSelectProperty: handleSelectProperty,
+    resolveProperty: undefined,
+    onSelectCanonicalMarker: handleSelectCanonicalMarker,
+    suppressPreview: true,
+  };
+  return <div className={`relative ${props.className ?? ''}`}>
+    {provider === 'google_maps'
+      ? <GooglePropertyMap key={provider} {...mapProps} />
+      : <MapboxPropertyMap key={provider} {...mapProps} />}
+    {selectedPreview ? <PropertyMapPreviewCard property={selectedPreview} detailsPath={props.detailsPath} actions={props.actions} onClose={() => setSelectedPreview(null)} onDetailsNavigate={props.onDetailsNavigate} /> : null}
+  </div>;
+};
+
+const UnavailableMap = ({ className = '', message, onRetry }: { className?: string; message: string; onRetry: () => void }) => <section className={`relative min-h-[55vh] overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low p-5 sm:min-h-[420px] ${className}`} aria-label="Property map unavailable">
+  <div className="flex h-full min-h-[45vh] flex-col items-center justify-center gap-3 text-center" role="status">
+    <p className="max-w-md text-sm text-secondary">{message}</p>
+    <Button type="button" variant="secondary" onClick={onRetry}>Retry map</Button>
+  </div>
+</section>;
 
 export default PropertyMap;

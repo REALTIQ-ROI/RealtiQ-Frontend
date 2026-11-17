@@ -8,6 +8,8 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useBoundStepUp } from '../../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../../lib/axios';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useMapConfig } from '../../../contexts/MapConfigContext';
+import type { MapsConfig, SupportedMapProvider } from '../../../services/mapsConfigService';
 import { hasAdminCapability } from '../../../services/adminAccessService';
 import {
   adminPolicyService,
@@ -118,9 +120,17 @@ const PolicyValueDisplay = ({ value }: { value: AdminPolicyJsonValue | null }) =
 };
 
 const errorText = (error: unknown) => {
-  if (error instanceof ApiRequestError && error.code) return `${error.message} (${error.code})`;
+  if (error instanceof ApiRequestError) {
+    const code = error.code ? ` (${error.code})` : '';
+    const requestId = error.requestId ? ` · Support reference: ${error.requestId}` : '';
+    return `${error.message}${code}${requestId}`;
+  }
   return error instanceof Error ? error.message : 'The policy request could not be completed.';
 };
+
+const requestIdSuffix = (error: unknown) => error instanceof ApiRequestError && error.requestId
+  ? ` Support reference: ${error.requestId}.`
+  : '';
 
 const isPolicyWriteDenied = (code: string | null | undefined) =>
   code === 'PERMISSION_DEPARTMENT_REQUIRED'
@@ -144,6 +154,10 @@ interface PolicyEditorProps {
   currentIdentityId: string | null;
   canManage: boolean;
   canApprove: boolean;
+  mapConfig: MapsConfig | null;
+  mapConfigStatus: 'loading' | 'error' | 'ready';
+  onRetryMapConfig: () => void;
+  hasMapCredential: (provider: SupportedMapProvider['id']) => boolean;
   protectedBusy: boolean;
   onPrepare: (key: AdminPolicyKey, value: AdminPolicyValue, reason: string) => Promise<void>;
   onDecision: (key: AdminPolicyKey, revision: AdminPolicyRevision, decision: 'approved' | 'rejected') => Promise<void>;
@@ -155,11 +169,15 @@ interface PolicyEditorProps {
 }
 
 const PolicyEditor = ({
-  policyKey, panel, currentIdentityId, canManage, canApprove, protectedBusy, onPrepare, onDecision, onLoadMore,
+  policyKey, panel, currentIdentityId, canManage, canApprove, mapConfig, mapConfigStatus, onRetryMapConfig, hasMapCredential, protectedBusy, onPrepare, onDecision, onLoadMore,
   onRetry, onAcknowledgeReview, onDirtyChange, onRegisterCommit,
 }: PolicyEditorProps) => {
   const metadata = getAdminPolicyMetadata(policyKey);
   const policy = panel.policy;
+  const availableMapProviders = policyKey === 'map_display_provider'
+    ? (mapConfig?.supportedProviders ?? []).filter((provider) => hasMapCredential(provider.id))
+    : [];
+  const mapProviderOptions = availableMapProviders.map((provider) => ({ value: provider.id, label: provider.label }));
   const [draft, setDraft] = useState<EditorDraft>(() => ({ value: createPolicyDraft(metadata.fields, policy?.value ?? null), reason: '' }));
   const [formError, setFormError] = useState<string | null>(null);
   const baseline = useRef(draftSignature(draft));
@@ -259,6 +277,13 @@ const PolicyEditor = ({
     }
     const value = parseValue();
     if (value === null) return;
+    if (policyKey === 'map_display_provider') {
+      const provider = isObject(value) ? value.provider : undefined;
+      if (!mapConfig || typeof provider !== 'string' || !availableMapProviders.some((option) => option.id === provider)) {
+        setFormError('Select a map renderer supported by the server and configured for this website.');
+        return;
+      }
+    }
     await onPrepare(policyKey, value, reason);
   };
 
@@ -294,9 +319,19 @@ const PolicyEditor = ({
         <p className="text-sm">State: <strong className="capitalize">{policy.state}</strong></p>
         <p className="text-sm">Approved revision: <strong>{policy.revision}</strong></p>
         {policy.approvedAt ? <p className="text-sm">Approved/effective: {safeDate(policy.approvedAt)}</p> : null}
-        {policy.state === 'unconfigured'
-          ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{metadata.unconfiguredNote ?? 'No approved value is configured. No default values are supplied here.'}</p>
-          : <div className="max-h-80 overflow-auto rounded-lg bg-surface-container-low p-4 text-sm" aria-label={`${metadata.label} current values`}><PolicyValueDisplay value={policyValueForDisplay(policyKey, policy.value)} /></div>}
+        {policyKey === 'map_display_provider' && mapConfig ? <div className="rounded-lg bg-surface-container-low p-4 text-sm" aria-label="Effective map renderer">
+          <p>Active renderer: <strong>{mapConfig.supportedProviders.find((provider) => provider.id === mapConfig.provider)?.label ?? mapConfig.provider}</strong></p>
+          <p className="mt-1 text-xs text-secondary">{mapConfig.selectionSource === 'default' ? 'Backend default · no explicit policy selected' : `Selected by Console policy · revision ${mapConfig.policyRevision}`}</p>
+        </div> : null}
+        {policyKey === 'map_display_provider' && mapConfigStatus !== 'ready' ? <div role={mapConfigStatus === 'error' ? 'alert' : 'status'} className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+          <p>{mapConfigStatus === 'loading' ? 'Loading the effective map renderer…' : 'The effective map renderer could not be confirmed. Map changes are unavailable until it can be reloaded.'}</p>
+          {mapConfigStatus === 'error' ? <Button type="button" variant="secondary" className="mt-2" onClick={onRetryMapConfig}>Retry map configuration</Button> : null}
+        </div> : null}
+        {policyKey === 'map_display_provider'
+          ? policy.state === 'unconfigured' ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{metadata.unconfiguredNote}</p> : null
+          : policy.state === 'unconfigured'
+            ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{metadata.unconfiguredNote ?? 'No approved value is configured. No default values are supplied here.'}</p>
+            : <div className="max-h-80 overflow-auto rounded-lg bg-surface-container-low p-4 text-sm" aria-label={`${metadata.label} current values`}><PolicyValueDisplay value={policyValueForDisplay(policyKey, policy.value)} /></div>}
         {currentHasSecret ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Sensitive fields are redacted. Editing is disabled to avoid resubmitting redacted values.</p> : null}
         <p className="text-xs text-secondary">A configured Console policy does not by itself confirm that external providers, credentials, datasets, or runtime services are available. Feature operations remain subject to backend readiness.</p>
       </div>
@@ -308,14 +343,15 @@ const PolicyEditor = ({
         </div>
         {metadata.note ? <p role="note" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{metadata.note}</p> : null}
         {!schemaAvailable ? <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{currentHasSecret ? 'This policy contains sensitive fields and is read-only in this editor.' : `The active value contains fields not represented by this editor: ${schemaDrift.join(', ')}. Refresh or ask the policy owner to reconcile the schema before editing.`}</p> : null}
-        <AdminPolicyValueEditor fields={metadata.fields} value={draft.value} onChange={updateValue} disabled={protectedBusy || !schemaAvailable} />
+        {policyKey === 'map_display_provider' && !availableMapProviders.length && mapConfigStatus === 'ready' ? <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">No supported map renderer has a browser SDK credential configured for this deployment. Ask the site operator to configure a restricted public browser key.</p> : null}
+        <AdminPolicyValueEditor fields={metadata.fields} value={draft.value} onChange={updateValue} disabled={protectedBusy || !schemaAvailable || (policyKey === 'map_display_provider' && (!mapConfig || !availableMapProviders.length))} enumOptions={policyKey === 'map_display_provider' ? { provider: mapProviderOptions } : undefined} />
         <label className="block text-sm font-semibold">Reason<textarea aria-label="Reason" required className="mt-1 w-full rounded-lg border border-outline-variant/30 px-3 py-2" rows={3} maxLength={500} value={draft.reason} onChange={(event) => updateReason(event.target.value)} /><span className="mt-1 block text-xs font-normal text-secondary">{draft.reason.trim().length}/500 characters</span></label>
         {formError ? <p role="alert" className="text-sm text-red-700">{formError}</p> : null}
         {panel.validationErrors.length ? <ul role="alert" aria-label="Server validation errors" className="list-disc space-y-1 rounded-lg bg-red-50 p-3 pl-8 text-sm text-red-800">{panel.validationErrors.map((message, index) => <li key={`${index}:${message}`}>{message}</li>)}</ul> : null}
         {panel.needsReview ? <label className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><input className="mt-1" type="checkbox" onChange={() => onAcknowledgeReview(policyKey)} /><span>I reviewed the refreshed current policy and revision history before preparing another revision.</span></label> : null}
         {panel.notice ? <div role="status" className="rounded-lg bg-surface-container-low p-3 text-sm"><p>{panel.notice}</p>{panel.notice.toLowerCase().includes('authenticator') ? <Link className="mt-2 inline-block font-bold text-primary underline" to="/dashboard/admin/settings">Open account security settings</Link> : null}</div> : null}
         {panel.writeDenied ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">The backend denied policy write access for this selected staff profile. Policy changes are disabled.</p> : null}
-        <Button type={panel.writeDenied ? 'button' : 'submit'} loading={protectedBusy} disabled={panel.writeDenied || protectedBusy || panel.loading || panel.needsReview || !schemaAvailable}>{panel.writeDenied ? 'Policy editing unavailable' : 'Submit policy revision'}</Button>
+        <Button type={panel.writeDenied ? 'button' : 'submit'} loading={protectedBusy} disabled={panel.writeDenied || protectedBusy || panel.loading || panel.needsReview || !schemaAvailable || (policyKey === 'map_display_provider' && (!mapConfig || !availableMapProviders.length))}>{panel.writeDenied ? 'Policy editing unavailable' : 'Submit policy revision'}</Button>
       </form> : <div className="space-y-3 rounded-xl border border-outline-variant/15 bg-surface-container-low p-4"><h3 className="font-bold">Read-only policy access</h3><p className="text-sm text-secondary">The current staff access projection permits viewing this policy but does not include policy revision authority.</p></div>}
     </div>
 
@@ -352,11 +388,12 @@ const PolicyEditor = ({
 interface PolicyIndexProps {
   policyKeys: readonly AdminPolicyKey[];
   panels: PolicyPanels;
+  mapConfig: MapsConfig | null;
   onSelect: (key: AdminPolicyKey) => void;
   onRefresh: (key: AdminPolicyKey) => void;
 }
 
-const PolicyIndex = ({ policyKeys, panels, onSelect, onRefresh }: PolicyIndexProps) => <div className="space-y-7">
+const PolicyIndex = ({ policyKeys, panels, mapConfig, onSelect, onRefresh }: PolicyIndexProps) => <div className="space-y-7">
   {getAdminPolicyCategories().filter((category) => policyKeys.some((key) => getAdminPolicyMetadata(key).category === category)).map((category) => <section key={category} aria-labelledby={`category-${category.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
     <h2 id={`category-${category.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`} className="mb-3 text-lg font-bold">{category}</h2>
     <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -374,7 +411,10 @@ const PolicyIndex = ({ policyKeys, panels, onSelect, onRefresh }: PolicyIndexPro
           {policy ? <>
             <p className="mt-3 text-sm">Approved revision: <strong>{policy.revision}</strong></p>
             {policy.approvedAt ? <p className="mt-1 text-xs text-secondary">Effective {safeDate(policy.approvedAt)}</p> : null}
-            <div className="mt-2 line-clamp-4 break-words text-xs text-secondary">{policy.state === 'unconfigured' ? (metadata.unconfiguredNote ?? 'No approved policy value is configured.') : policy.value === null ? 'No value returned.' : <PolicyValueDisplay value={policyValueForDisplay(key, policy.value)} />}</div>
+            {key === 'map_display_provider' && mapConfig ? <p className="mt-2 text-sm">Active renderer: <strong>{mapConfig.supportedProviders.find((provider) => provider.id === mapConfig.provider)?.label ?? mapConfig.provider}</strong></p> : null}
+            <div className="mt-2 line-clamp-4 break-words text-xs text-secondary">{key === 'map_display_provider'
+              ? policy.state === 'unconfigured' ? (metadata.unconfiguredNote ?? 'No explicit renderer is selected.') : 'The active renderer is shown from the public map configuration.'
+              : policy.state === 'unconfigured' ? (metadata.unconfiguredNote ?? 'No approved policy value is configured.') : policy.value === null ? 'No value returned.' : <PolicyValueDisplay value={policyValueForDisplay(key, policy.value)} />}</div>
             <p className="mt-2 text-xs text-secondary">Revision access is checked by the backend for the selected staff profile.</p>
           </> : null}
           <Button type="button" variant="secondary" className="mt-4 w-full" disabled={!policy} onClick={() => onSelect(key)}>View and edit policy</Button>
@@ -386,6 +426,8 @@ const PolicyIndex = ({ policyKeys, panels, onSelect, onRefresh }: PolicyIndexPro
 
 const AdminPolicies = () => {
   const { user, activeProfile, token, adminAccess } = useAuth();
+  const { state: mapConfigState, refresh: refreshMapConfig, hasCredential: hasMapCredential } = useMapConfig();
+  const mapConfig = mapConfigState.status === 'ready' ? mapConfigState.config : null;
   const canManagePolicies = Boolean(adminAccess && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'policies.manage'));
   const canApprovePolicies = Boolean(adminAccess && adminAccess.isExecutive && !adminAccess.readOnly && hasAdminCapability(adminAccess, 'policies.approve'));
   const canReadAllPolicies = Boolean(adminAccess && (
@@ -440,7 +482,17 @@ const AdminPolicies = () => {
       }
       return { ...current, [key]: next };
     });
-  }, []);
+    if (key === 'map_display_provider') return await refreshMapConfig();
+    return null;
+  }, [refreshMapConfig]);
+
+  const canManagePolicy = (key: AdminPolicyKey) => {
+    if (!canManagePolicies) return false;
+    if (key !== 'map_display_provider') return true;
+    return Boolean(adminAccess && !adminAccess.isInternalAudit && !adminAccess.readOnly &&
+      adminAccess.staffDepartments.includes('technical') &&
+      hasAdminCapability(adminAccess, 'policies.manage'));
+  };
 
   useEffect(() => {
     const loadingKeys = loadingMoreRef.current;
@@ -503,24 +555,24 @@ const AdminPolicies = () => {
     const validationErrors = validationMessages(error);
     if (code === 'CONFLICT_POLICY_VERSION') {
       await refreshPolicy(key, true);
-      setPanels((current) => ({ ...current, [key]: { ...current[key], needsReview: true, notice: 'The approved policy revision changed. The current policy and history were refreshed; review them before preparing again.', validationErrors } }));
+      setPanels((current) => ({ ...current, [key]: { ...current[key], needsReview: true, notice: `The approved policy revision changed. The current policy and history were refreshed; review them before preparing again.${requestIdSuffix(error)}`, validationErrors } }));
       return;
     }
     if (code === 'CONFLICT_POLICY_DECIDED') {
       await refreshPolicy(key, true);
-      setPanels((current) => ({ ...current, [key]: { ...current[key], notice: 'This revision was already decided. Refreshed history shows the server-recorded decision.', validationErrors } }));
+      setPanels((current) => ({ ...current, [key]: { ...current[key], notice: `This revision was already decided. Refreshed history shows the server-recorded decision.${requestIdSuffix(error)}`, validationErrors } }));
       return;
     }
     if (status === undefined || status >= 500) {
       await refreshPolicy(key, true);
-      setPanels((current) => ({ ...current, [key]: { ...current[key], notice: `The ${action} result could not be confirmed. Policy and history were refreshed; inspect the server state before taking another action.`, validationErrors } }));
+      setPanels((current) => ({ ...current, [key]: { ...current[key], notice: `The ${action} result could not be confirmed. Policy and history were refreshed; inspect the server state before taking another action.${requestIdSuffix(error)}`, validationErrors } }));
     } else {
       setPanels((current) => ({ ...current, [key]: { ...current[key], notice: errorText(error), validationErrors } }));
     }
   };
 
   const beginPrepare = async (key: AdminPolicyKey, value: AdminPolicyValue, reason: string) => {
-    if (!canManagePolicies || !accessiblePolicyKeys.includes(key)) return;
+    if (!canManagePolicy(key) || !accessiblePolicyKeys.includes(key)) return;
     const expectedRevision = panels[key].policy?.revision;
     if (!Number.isInteger(expectedRevision) || expectedRevision === undefined || expectedRevision < 0 || panels[key].needsReview) return;
     const body: PrepareAdminPolicyRevisionInput = { value, reason, expectedRevision };
@@ -575,11 +627,21 @@ const AdminPolicies = () => {
     actionRef.current = null;
     if (action.kind === 'prepare') editorCommitRef.current?.();
     const responseState = result.value.state;
-    const message = action.kind === 'prepare'
+    let message = action.kind === 'prepare'
       ? `Revision ${result.value.id} was submitted. The server reports its state as “${responseState}”.`
       : `Revision ${result.value.id} is ${responseState} according to the server.`;
     setPanels((current) => ({ ...current, [action.key]: { ...current[action.key], notice: message } }));
-    await refreshPolicy(action.key, true);
+    const refreshedMapConfig = await refreshPolicy(action.key, true);
+    if (action.key === 'map_display_provider') {
+      const submittedValue = isObject(result.value.value) ? result.value.value.provider : undefined;
+      if (refreshedMapConfig && submittedValue === refreshedMapConfig.provider) {
+        const label = refreshedMapConfig.supportedProviders.find((provider) => provider.id === refreshedMapConfig.provider)?.label ?? refreshedMapConfig.provider;
+        message = `The active map renderer is now ${label}, confirmed by the refreshed map configuration.`;
+      } else {
+        message = 'The policy response was received, but the refreshed map configuration does not confirm the submitted renderer. Review the current policy and active map settings before trying again.';
+      }
+      setPanels((current) => ({ ...current, [action.key]: { ...current[action.key], notice: message } }));
+    }
     setPanels((current) => {
       const revisions = current[action.key].revisions;
       const existingIndex = revisions.findIndex((revision) => revision.id === result.value.id);
@@ -610,7 +672,7 @@ const AdminPolicies = () => {
       </header>
       {!selectedKey ? <>
         <p className="text-sm text-secondary">Choose a policy assigned to your current staff department to review its server state and revision history. Executive and Internal Audit access follows the backend policy-read rules.</p>
-        {accessiblePolicyKeys.length ? <PolicyIndex policyKeys={accessiblePolicyKeys} panels={panels} onSelect={selectPolicy} onRefresh={(key) => void refreshPolicy(key)} /> : <p role="status" className="rounded-xl border border-outline-variant/20 bg-white p-5 text-sm text-secondary">No policy is assigned to this staff department in the frontend contract registry. The backend remains authoritative.</p>}
+        {accessiblePolicyKeys.length ? <PolicyIndex policyKeys={accessiblePolicyKeys} panels={panels} mapConfig={mapConfig} onSelect={selectPolicy} onRefresh={(key) => void refreshPolicy(key)} /> : <p role="status" className="rounded-xl border border-outline-variant/20 bg-white p-5 text-sm text-secondary">No policy is assigned to this staff department in the frontend contract registry. The backend remains authoritative.</p>}
       </> : <>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Button type="button" variant="secondary" onClick={returnToIndex}>Back to policy index</Button>
@@ -621,8 +683,12 @@ const AdminPolicies = () => {
           policyKey={selectedKey}
           panel={selectedPanel!}
           currentIdentityId={currentIdentityId}
-          canManage={canManagePolicies}
+          canManage={canManagePolicy(selectedKey)}
           canApprove={canApprovePolicies}
+          mapConfig={mapConfig}
+          mapConfigStatus={mapConfigState.status}
+          onRetryMapConfig={() => void refreshMapConfig()}
+          hasMapCredential={hasMapCredential}
           protectedBusy={stepUp.busy || Boolean(stepUp.challenge)}
           onPrepare={beginPrepare}
           onDecision={beginDecision}

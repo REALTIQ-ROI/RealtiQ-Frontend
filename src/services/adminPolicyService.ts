@@ -42,7 +42,7 @@ export interface AdminPolicySnapshot {
   state: string;
   revision: number;
   value: AdminPolicyValue | null;
-  approvedAt?: string;
+  approvedAt?: string | null;
 }
 
 export interface AdminPolicyRevision {
@@ -52,12 +52,12 @@ export interface AdminPolicyRevision {
   value: AdminPolicyValue;
   reason: string;
   state: string;
-  preparedBy: string;
-  preparedProfile: string;
+  preparedBy?: string | null;
+  preparedProfile?: string | null;
   approvedBy?: string | null;
   approvedAt?: string | null;
   rejectedAt?: string | null;
-  createdAt: string;
+  createdAt?: string | null;
 }
 
 export interface PrepareAdminPolicyRevisionInput {

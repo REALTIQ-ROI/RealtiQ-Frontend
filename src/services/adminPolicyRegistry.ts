@@ -57,6 +57,12 @@ const keyPattern = '^[a-z][a-z0-9_]{0,79}$';
 const objectArray = (key: string, label: string, fields: readonly AdminPolicyField[], minItems: number, maxItems: number, help?: string) => arr(key, label, obj('_item', 'Entry', fields), minItems, maxItems, { help });
 
 const definitions = {
+  map_display_provider: {
+    label: 'Map display provider', category: 'Listings and data', department: 'technical',
+    fields: [e('provider', 'Active map renderer', [])],
+    note: 'The server controls the supported provider list. Select only a provider whose browser SDK credential is configured for this deployment.',
+    unconfiguredNote: 'No explicit provider policy is configured. The active renderer is supplied by the public map configuration.',
+  },
   identity_email: {
     label: 'Identity email', category: 'Identity and profiles', department: 'technical',
     fields: [

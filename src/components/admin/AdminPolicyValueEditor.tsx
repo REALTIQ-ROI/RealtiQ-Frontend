@@ -7,6 +7,7 @@ interface AdminPolicyValueEditorProps {
   value: Record<string, unknown>;
   onChange: (path: Array<string | number>, value: unknown) => void;
   disabled?: boolean;
+  enumOptions?: Record<string, readonly { value: string; label: string; disabled?: boolean }[]>;
 }
 
 const inputClass = 'mt-1 w-full rounded-lg border border-outline-variant/30 bg-white px-3 py-2 text-sm';
@@ -22,7 +23,7 @@ const humanize = (value: string) => value
   .replace(/[_-]+/g, ' ')
   .replace(/^./, (first) => first.toUpperCase());
 
-const AdminPolicyValueEditor = ({ fields, value, onChange, disabled = false }: AdminPolicyValueEditorProps) => {
+const AdminPolicyValueEditor = ({ fields, value, onChange, disabled = false, enumOptions = {} }: AdminPolicyValueEditorProps) => {
   const renderField = (field: AdminPolicyField, path: Array<string | number>, rootLabel: string): ReactNode => {
     const draft = readAtPath(value, path);
     const arrayItem = field.key === '_item';
@@ -87,7 +88,7 @@ const AdminPolicyValueEditor = ({ fields, value, onChange, disabled = false }: A
     if (field.type === 'boolean' || field.type === 'enum') {
       const options = field.type === 'boolean' ? [
         { value: 'true', label: 'Enabled' }, { value: 'false', label: 'Disabled' },
-      ] : (field.options ?? []).map((option) => ({ value: option, label: option.replace(/[_-]+/g, ' ') }));
+      ] : enumOptions[path.join('.')] ?? (field.options ?? []).map((option) => ({ value: option, label: option.replace(/[_-]+/g, ' ') }));
       const selected = typeof draft === 'boolean' ? String(draft) : typeof draft === 'string' ? draft : '';
       return <label key={path.join('.')} className="block text-sm font-semibold">
         {label}
@@ -100,7 +101,7 @@ const AdminPolicyValueEditor = ({ fields, value, onChange, disabled = false }: A
           onChange={(event) => onChange(path, event.target.value)}
         >
           <option value="">Select a value</option>
-          {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          {options.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
         </select>
         {help ? <span id={helpId} className="mt-1 block text-xs font-normal text-secondary">{help}</span> : null}
       </label>;

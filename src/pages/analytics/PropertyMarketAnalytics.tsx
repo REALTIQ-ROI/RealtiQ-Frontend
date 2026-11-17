@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
-import L from 'leaflet';
 import { toast } from 'sonner';
 import PublicLayout from '../../components/layout/PublicLayout';
 import SimpleLineChart from '../../components/analytics/SimpleLineChart';
@@ -19,7 +18,8 @@ import {
 import { propertyService } from '../../services/propertyService';
 import type { Property } from '../../types';
 import { configureMapbox, fitCoordinates, MAPBOX_STYLE } from '../../lib/mapbox';
-import { MAP_PROVIDER } from '../../config/maps';
+import { loadGoogleMapsSdk, type GoogleMapInstance, type GoogleMapsApi } from '../../lib/googleMaps';
+import { useMapConfig } from '../../contexts/MapConfigContext';
 
 const formatCurrency = (value: number, currency = 'NGN') =>
   new Intl.NumberFormat('en-NG', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value || 0);
@@ -37,8 +37,10 @@ const isMappable = (property: Property) => {
 const distanceScore = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) =>
   Math.abs(a.lat - b.lat) + Math.abs(a.lng - b.lng);
 
-const drawHeatmapCanvas = (map: mapboxgl.Map | L.Map, canvas: HTMLCanvasElement, points: PropertyHeatmapResponse['points']) => {
-  const size = map instanceof L.Map ? map.getSize() : { x: map.getCanvas().clientWidth, y: map.getCanvas().clientHeight };
+const drawHeatmapCanvas = (map: mapboxgl.Map | GoogleMapInstance, googleMaps: GoogleMapsApi | null, canvas: HTMLCanvasElement, points: PropertyHeatmapResponse['points']) => {
+  const size = map instanceof mapboxgl.Map
+    ? { x: map.getCanvas().clientWidth, y: map.getCanvas().clientHeight }
+    : { x: map.getDiv().clientWidth, y: map.getDiv().clientHeight };
   const ratio = window.devicePixelRatio || 1;
   canvas.width = size.x * ratio;
   canvas.height = size.y * ratio;
@@ -52,7 +54,10 @@ const drawHeatmapCanvas = (map: mapboxgl.Map | L.Map, canvas: HTMLCanvasElement,
 
   const maxWeight = Math.max(...points.map((point) => point.weight), 1);
   points.forEach((point) => {
-    const pixel = map instanceof L.Map ? map.latLngToContainerPoint([point.lat, point.lng]) : map.project([point.lng, point.lat]);
+    const pixel = map instanceof mapboxgl.Map
+      ? map.project([point.lng, point.lat])
+      : googleMaps ? map.getProjection()?.fromLatLngToContainerPixel(new googleMaps.LatLng(point.lat, point.lng)) : null;
+    if (!pixel) return;
     const intensity = Math.max(0.12, Math.min(1, point.weight / maxWeight));
     const radius = 34 + intensity * 58;
     const gradient = context.createRadialGradient(pixel.x, pixel.y, 0, pixel.x, pixel.y, radius);
@@ -75,28 +80,37 @@ const MarketHeatmap = ({
   data: PropertyHeatmapResponse | null;
   matchingProperties: Property[];
 }) => {
+  const { state: mapConfigState, refresh: refreshMapConfig, hasCredential } = useMapConfig();
+  const mapProvider = mapConfigState.status === 'ready' ? mapConfigState.config.provider : null;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
-  const leafletMapRef = useRef<L.Map | null>(null);
-  const leafletLayerRef = useRef<L.LayerGroup | null>(null);
+  const googleMapRef = useRef<GoogleMapInstance | null>(null);
+  const googleMapsRef = useRef<GoogleMapsApi | null>(null);
+  const googleMarkersRef = useRef<Array<{ marker: InstanceType<GoogleMapsApi['Marker']>; listener: { remove(): void } }>>([]);
   const heatCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [mapUnavailable, setMapUnavailable] = useState(() => !configureMapbox());
+  const [mapUnavailable, setMapUnavailable] = useState(true);
+  const [mapInstanceVersion, setMapInstanceVersion] = useState(0);
+  const [mapRetryVersion, setMapRetryVersion] = useState(0);
+
+  useEffect(() => { setMapUnavailable(true); }, [mapConfigState.status, mapProvider]);
 
   useEffect(() => {
-    if (MAP_PROVIDER !== 'mapbox' || !containerRef.current || mapRef.current) return;
-    if (!configureMapbox()) { setMapUnavailable(true); return; }
-    const map = new mapboxgl.Map({ container: containerRef.current, style: MAPBOX_STYLE, center: [3.3792, 6.5244], zoom: 10 });
+    if (mapProvider !== 'mapbox' || !containerRef.current || mapRef.current) return undefined;
+    if (!hasCredential('mapbox') || !configureMapbox()) { setMapUnavailable(true); return undefined; }
+    const container = containerRef.current;
+    const map = new mapboxgl.Map({ container, style: MAPBOX_STYLE, center: [3.3792, 6.5244], zoom: 10 });
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
     map.on('error', () => setMapUnavailable(true));
     map.on('load', () => setMapUnavailable(false));
     mapRef.current = map;
     const heatCanvas = document.createElement('canvas');
     heatCanvas.className = 'pointer-events-none absolute inset-0 z-[450] mix-blend-multiply';
-    containerRef.current.appendChild(heatCanvas);
+    container.appendChild(heatCanvas);
     heatCanvasRef.current = heatCanvas;
     const resize = new ResizeObserver(() => map.resize());
-    resize.observe(containerRef.current);
+    resize.observe(container);
+    setMapInstanceVersion((version) => version + 1);
     return () => {
       resize.disconnect();
       heatCanvas.remove();
@@ -105,22 +119,51 @@ const MarketHeatmap = ({
       mapRef.current = null;
       markersRef.current = [];
     };
-  }, []);
+  }, [mapProvider, hasCredential, mapRetryVersion]);
 
   useEffect(() => {
-    if (MAP_PROVIDER !== 'leaflet' || !containerRef.current || leafletMapRef.current) return;
-    const map = L.map(containerRef.current, { zoomControl: true }).setView([6.5244, 3.3792], 11);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
-    leafletLayerRef.current = L.layerGroup().addTo(map); leafletMapRef.current = map;
-    const heatCanvas = document.createElement('canvas'); heatCanvas.className = 'pointer-events-none absolute inset-0 z-[450] mix-blend-multiply'; containerRef.current.appendChild(heatCanvas); heatCanvasRef.current = heatCanvas;
-    const resize = new ResizeObserver(() => map.invalidateSize()); resize.observe(containerRef.current);
-    return () => { resize.disconnect(); heatCanvas.remove(); heatCanvasRef.current = null; map.remove(); leafletMapRef.current = null; leafletLayerRef.current = null; };
-  }, []);
+    if (mapProvider !== 'google_maps' || !containerRef.current || googleMapRef.current) return undefined;
+    if (!hasCredential('google_maps')) { setMapUnavailable(true); return undefined; }
+    const container = containerRef.current;
+    let disposed = false;
+    let map: GoogleMapInstance | null = null;
+    let maps: GoogleMapsApi | null = null;
+    let resize: ResizeObserver | null = null;
+    void loadGoogleMapsSdk().then((googleMaps) => {
+      if (disposed) return;
+      maps = googleMaps;
+      map = new googleMaps.Map(container, {
+        center: { lat: 6.5244, lng: 3.3792 }, zoom: 11,
+        mapTypeControl: false, streetViewControl: false, fullscreenControl: false, clickableIcons: false,
+      });
+      googleMapsRef.current = googleMaps;
+      googleMapRef.current = map;
+      const heatCanvas = document.createElement('canvas');
+      heatCanvas.className = 'pointer-events-none absolute inset-0 z-[450] mix-blend-multiply';
+      container.appendChild(heatCanvas);
+      heatCanvasRef.current = heatCanvas;
+      map.addListener('tilesloaded', () => setMapUnavailable(false));
+      resize = new ResizeObserver(() => { if (maps && map) maps.event.trigger(map, 'resize'); });
+      resize.observe(container);
+      setMapInstanceVersion((version) => version + 1);
+    }).catch(() => { if (!disposed) setMapUnavailable(true); });
+    return () => {
+      disposed = true;
+      resize?.disconnect();
+      heatCanvasRef.current?.remove();
+      heatCanvasRef.current = null;
+      googleMarkersRef.current.forEach(({ marker, listener }) => { listener.remove(); marker.setMap(null); });
+      googleMarkersRef.current = [];
+      if (map && maps) maps.event.clearInstanceListeners(map);
+      googleMapRef.current = null;
+      googleMapsRef.current = null;
+    };
+  }, [mapProvider, hasCredential, mapRetryVersion]);
 
   useEffect(() => {
     const map = mapRef.current;
     const heatCanvas = heatCanvasRef.current;
-    if (MAP_PROVIDER !== 'mapbox' || !map || !heatCanvas) return;
+    if (mapProvider !== 'mapbox' || !map || !heatCanvas) return;
     markersRef.current.forEach((marker) => marker.remove());
     const propertyPoints = matchingProperties.filter(isMappable);
     const points = data?.points ?? [];
@@ -131,35 +174,60 @@ const MarketHeatmap = ({
     });
     const coordinates: Array<[number, number]> = [...propertyPoints.map((property) => [property.coordinates!.lng, property.coordinates!.lat] as [number, number]), ...points.map((point) => [point.lng, point.lat] as [number, number])];
     fitCoordinates(map, coordinates, { padding: 30, maxZoom: propertyPoints.length ? 15 : 13 });
-    const redraw = () => drawHeatmapCanvas(map, heatCanvas, points);
+    const redraw = () => drawHeatmapCanvas(map, null, heatCanvas, points);
     window.setTimeout(redraw, 0);
     map.on('moveend', redraw); map.on('resize', redraw);
     return () => {
       map.off('moveend', redraw); map.off('resize', redraw);
     };
-  }, [data, matchingProperties]);
+  }, [data, matchingProperties, mapProvider, mapInstanceVersion]);
 
   useEffect(() => {
-    const map = leafletMapRef.current; const layer = leafletLayerRef.current; const heatCanvas = heatCanvasRef.current;
-    if (MAP_PROVIDER !== 'leaflet' || !map || !layer || !heatCanvas) return;
-    layer.clearLayers(); const propertyPoints = matchingProperties.filter(isMappable); const points = data?.points ?? []; const bounds = L.latLngBounds([]);
-    propertyPoints.forEach((property) => {
-      L.circleMarker([property.coordinates!.lat, property.coordinates!.lng], { radius: 6, fillColor: '#111827', fillOpacity: 0.95, color: '#ffffff', weight: 2 })
-        .bindPopup(`<strong>${property.title}</strong><br/>${property.location}<br/>${formatCurrency(property.price, property.currency)}`).addTo(layer);
-      bounds.extend([property.coordinates!.lat, property.coordinates!.lng]);
+    const map = googleMapRef.current;
+    const maps = googleMapsRef.current;
+    const heatCanvas = heatCanvasRef.current;
+    if (mapProvider !== 'google_maps' || !map || !maps || !heatCanvas) return;
+    googleMarkersRef.current.forEach(({ marker, listener }) => { listener.remove(); marker.setMap(null); });
+    const propertyPoints = matchingProperties.filter(isMappable);
+    const points = data?.points ?? [];
+    googleMarkersRef.current = propertyPoints.map((property) => {
+      const marker = new maps.Marker({
+        map, position: { lat: property.coordinates!.lat, lng: property.coordinates!.lng }, title: property.title,
+        icon: { path: maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#111827', fillOpacity: 0.95, strokeColor: '#ffffff', strokeWeight: 2 },
+      });
+      const popupContent = document.createElement('div');
+      const title = document.createElement('strong'); title.textContent = property.title;
+      const detail = document.createElement('p'); detail.textContent = `${property.location} · ${formatCurrency(property.price, property.currency)}`;
+      popupContent.append(title, detail);
+      const popup = new maps.InfoWindow({ content: popupContent });
+      return { marker, listener: marker.addListener('click', () => popup.open({ map, anchor: marker })) };
     });
-    points.forEach((point) => bounds.extend([point.lat, point.lng]));
-    if (bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30], maxZoom: propertyPoints.length ? 15 : 13 });
-    const redraw = () => drawHeatmapCanvas(map, heatCanvas, points); window.setTimeout(redraw, 0); map.on('moveend zoomend resize', redraw);
-    return () => { map.off('moveend zoomend resize', redraw); };
-  }, [data, matchingProperties]);
+    const allPoints = [...propertyPoints.map((property) => ({ lat: property.coordinates!.lat, lng: property.coordinates!.lng })), ...points.map((point) => ({ lat: point.lat, lng: point.lng }))];
+    if (allPoints.length) {
+      const bounds = new maps.LatLngBounds();
+      allPoints.forEach((point) => bounds.extend(point));
+      map.fitBounds(bounds, 30);
+    }
+    const redraw = () => drawHeatmapCanvas(map, maps, heatCanvas, points);
+    window.setTimeout(redraw, 0);
+    const idleListener = map.addListener('idle', redraw);
+    const resizeListener = map.addListener('resize', redraw);
+    return () => { idleListener.remove(); resizeListener.remove(); };
+  }, [data, matchingProperties, mapProvider, mapInstanceVersion]);
 
   return (
     <div className="relative min-h-[420px] overflow-hidden rounded-xl border border-outline-variant/10 bg-surface-container-low">
       <div ref={containerRef} className="absolute inset-0" />
-      {mapUnavailable ? (
-        <div role="status" className="absolute inset-0 z-[500] flex items-center justify-center bg-white/90 p-8 text-center text-sm text-secondary">
-          Mapbox is unavailable. Market summaries and list results remain available.
+      {mapConfigState.status === 'loading' ? (
+        <div role="status" className="absolute inset-0 z-[500] flex items-center justify-center bg-white/90 p-8 text-center text-sm text-secondary">Loading active map settings…</div>
+      ) : mapConfigState.status === 'error' ? (
+        <div role="alert" className="absolute inset-0 z-[500] flex flex-col items-center justify-center gap-3 bg-white/90 p-8 text-center text-sm text-secondary"><p>{mapConfigState.error}</p><button type="button" className="font-bold text-primary underline" onClick={() => void refreshMapConfig()}>Retry map settings</button></div>
+      ) : mapUnavailable ? (
+        <div role="status" className="absolute inset-0 z-[500] flex flex-col items-center justify-center gap-3 bg-white/90 p-8 text-center text-sm text-secondary">
+          <p>{!hasCredential(mapProvider!)
+            ? `${mapConfigState.config.supportedProviders.find((provider) => provider.id === mapProvider)?.label ?? mapProvider} is selected, but its browser SDK credential is not configured.`
+            : `${mapConfigState.config.supportedProviders.find((provider) => provider.id === mapProvider)?.label ?? mapProvider} is unavailable. Market summaries and list results remain available.`}</p>
+          {hasCredential(mapProvider!) ? <button type="button" className="font-bold text-primary underline" onClick={() => setMapRetryVersion((version) => version + 1)}>Retry map</button> : null}
         </div>
       ) : data && data.points.length === 0 && matchingProperties.filter(isMappable).length === 0 ? (
         <div className="absolute inset-0 z-[500] flex items-center justify-center bg-white/85 p-8 text-center text-sm text-secondary">

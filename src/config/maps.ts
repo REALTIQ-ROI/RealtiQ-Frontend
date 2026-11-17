@@ -1,9 +1,9 @@
-export type MapProvider = 'leaflet' | 'mapbox';
+import type { MapProviderId } from '../services/mapsConfigService';
 
-/** Legacy provider helper retained for compatibility. Runtime maps do not use it to switch providers. */
-export const resolveMapProvider = (requestedProvider: MapProvider, mapboxToken?: string): MapProvider =>
-  requestedProvider === 'mapbox' && !mapboxToken?.trim() ? 'leaflet' : requestedProvider;
+export type MapProvider = MapProviderId;
 
-// Mapbox is the source-defined maps provider. Missing configuration is shown as
-// unavailable by map surfaces; the UI must not substitute an unapproved provider.
-export const MAP_PROVIDER: MapProvider = 'mapbox';
+/** Browser SDK credentials are public deployment settings; never send them to the API. */
+export const hasMapProviderCredential = (provider: MapProviderId): boolean => {
+  if (provider === 'google_maps') return Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim());
+  return Boolean(import.meta.env.VITE_MAPBOX_ACCESS_TOKEN?.trim());
+};

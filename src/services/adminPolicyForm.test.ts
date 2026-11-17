@@ -10,9 +10,9 @@ import {
 } from './adminPolicyForm';
 
 describe('admin policy schemas and form serialization', () => {
-  it('defines editable schemas for all 37 registered backend policy keys', () => {
-    expect(adminPolicyKeys).toHaveLength(37);
-    expect(adminPolicyRegistry).toHaveLength(37);
+  it('defines editable schemas for all 38 registered backend policy keys', () => {
+    expect(adminPolicyKeys).toHaveLength(38);
+    expect(adminPolicyRegistry).toHaveLength(38);
     for (const key of adminPolicyKeys) {
       expect(getAdminPolicyMetadata(key).fields.length, `${key} fields`).toBeGreaterThan(0);
     }

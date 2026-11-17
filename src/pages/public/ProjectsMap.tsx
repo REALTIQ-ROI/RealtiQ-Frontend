@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
-import L from 'leaflet';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
 import ErrorState from '../../components/ui/ErrorState';
@@ -8,8 +7,9 @@ import LoadingState from '../../components/ui/LoadingState';
 import { projectService, type ProjectMapItem } from '../../services/projectService';
 import { projectMapPricePresentation } from '../../utils/projectFormatters';
 import { apiErrorMessage } from '../../utils/apiErrorMessage';
-import { MAP_PROVIDER } from '../../config/maps';
 import { configureMapbox, MAPBOX_STYLE, nigeriaCenter } from '../../lib/mapbox';
+import { loadGoogleMapsSdk, type GoogleMapInstance, type GoogleMapsApi } from '../../lib/googleMaps';
+import { useMapConfig } from '../../contexts/MapConfigContext';
 import { writeCatalogueMapViewport } from '../../utils/catalogueMapViewport';
 import { adoptCanonicalQuery, catalogueQueryForDisplay, sameCanonicalCriteria, writeCatalogueQuery } from '../../utils/catalogueQuery';
 import CatalogueResultInsights from '../../components/property/CatalogueResultInsights';
@@ -22,14 +22,19 @@ const ProjectsMap = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const displaySearchParams = useMemo(() => catalogueQueryForDisplay(searchParams), [searchParams]);
   const { activeProfile } = useAuth();
+  const { state: mapConfigState, refresh: refreshMapConfig, hasCredential } = useMapConfig();
+  const mapProvider = mapConfigState.status === 'ready' ? mapConfigState.config.provider : null;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const googleMapRef = useRef<GoogleMapInstance | null>(null);
+  const googleMapsRef = useRef<GoogleMapsApi | null>(null);
+  const googleMarkersRef = useRef<Array<{ marker: InstanceType<GoogleMapsApi['Marker']>; listener?: { remove(): void } }>>([]);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
-  const leafletMapRef = useRef<L.Map | null>(null);
-  const leafletMarkersRef = useRef<L.LayerGroup | null>(null);
+  const [mapInstanceVersion, setMapInstanceVersion] = useState(0);
+  const [mapRetryVersion, setMapRetryVersion] = useState(0);
   const [mapResult, setMapResult] = useState<{ requestKey: string; projects: ProjectMapItem[]; total: number; error: string; truncated: boolean; limit: number; facets: Record<string, unknown>; diagnostics: unknown }>({ requestKey: '', projects: emptyProjects, total: 0, error: '', truncated: false, limit: 0, facets: {}, diagnostics: null });
   const [selectedProject, setSelectedProject] = useState<{ requestKey: string; project: ProjectMapItem } | null>(null);
-  const [mapTilesError, setMapTilesError] = useState(() => configureMapbox() ? '' : 'Mapbox is not configured for this deployment. Use list view to continue browsing projects.');
+  const [mapTilesError, setMapTilesError] = useState('');
   const [refreshVersion, setRefreshVersion] = useState(0);
   const queryKey = searchParams.toString();
   const requestKey = JSON.stringify([queryKey, refreshVersion, activeProfile?.id ?? null]);
@@ -61,51 +66,77 @@ const ProjectsMap = () => {
   }, [displaySearchParams]);
 
   useEffect(() => {
-    if (MAP_PROVIDER !== 'mapbox' || !containerRef.current || mapRef.current) return;
-    if (!configureMapbox()) return;
+    if (mapProvider !== 'mapbox' || !containerRef.current || mapRef.current) return;
+    if (!hasCredential('mapbox') || !configureMapbox()) {
+      setMapTilesError('Mapbox is selected, but its restricted browser SDK credential is not configured. Use list view to continue browsing projects.');
+      return;
+    }
+    setMapTilesError('');
     const map = new mapboxgl.Map({ container: containerRef.current, style: MAPBOX_STYLE, center: nigeriaCenter, zoom: 5.2 });
     map.addControl(new mapboxgl.NavigationControl(), 'top-right');
     map.on('error', () => setMapTilesError('Map tiles are unavailable. Use list view to continue browsing projects.'));
     mapRef.current = map;
+    setMapInstanceVersion((version) => version + 1);
     return () => {
       map.remove();
       mapRef.current = null;
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
     };
-  }, []);
+  }, [mapProvider, hasCredential, mapRetryVersion]);
 
   useEffect(() => {
-    if (MAP_PROVIDER !== 'leaflet' || !containerRef.current || leafletMapRef.current) return;
-    const map = L.map(containerRef.current).setView([9.082, 8.6753], 6);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' })
-      .on('tileerror', () => setMapTilesError('Map tiles are unavailable. Use list view to continue browsing projects.'))
-      .addTo(map);
-    leafletMapRef.current = map; leafletMarkersRef.current = L.layerGroup().addTo(map);
-    return () => { map.remove(); leafletMapRef.current = null; leafletMarkersRef.current = null; };
-  }, []);
+    if (mapProvider !== 'google_maps' || !containerRef.current || googleMapRef.current) return undefined;
+    if (!hasCredential('google_maps')) {
+      setMapTilesError('Google Maps is selected, but its restricted browser SDK credential is not configured. Use list view to continue browsing projects.');
+      return undefined;
+    }
+    let disposed = false;
+    setMapTilesError('');
+    void loadGoogleMapsSdk().then((maps) => {
+      if (disposed || !containerRef.current) return;
+      const map = new maps.Map(containerRef.current, {
+        center: { lat: nigeriaCenter[1], lng: nigeriaCenter[0] }, zoom: 5.2,
+        mapTypeControl: false, streetViewControl: false, fullscreenControl: false, clickableIcons: false,
+      });
+      googleMapsRef.current = maps;
+      googleMapRef.current = map;
+      map.addListener('tilesloaded', () => setMapTilesError(''));
+      setMapInstanceVersion((version) => version + 1);
+    }).catch(() => {
+      if (!disposed) setMapTilesError('Google Maps could not be loaded. Use list view to continue browsing projects.');
+    });
+    return () => {
+      disposed = true;
+      googleMarkersRef.current.forEach(({ marker, listener }) => { listener?.remove(); marker.setMap(null); });
+      googleMarkersRef.current = [];
+      if (googleMapRef.current && googleMapsRef.current) googleMapsRef.current.event.clearInstanceListeners(googleMapRef.current);
+      googleMapRef.current = null;
+      googleMapsRef.current = null;
+    };
+  }, [mapProvider, hasCredential, mapRetryVersion]);
 
   useEffect(() => {
     if (!requestedViewport) return;
     const mapbox = mapRef.current;
-    const leaflet = leafletMapRef.current;
+    const googleMap = googleMapRef.current;
     if (mapbox) {
       const bounds = mapbox.getBounds();
       if (bounds && Math.abs(bounds.getNorth() - requestedViewport.north) < 0.0001 && Math.abs(bounds.getSouth() - requestedViewport.south) < 0.0001 && Math.abs(bounds.getEast() - requestedViewport.east) < 0.0001 && Math.abs(bounds.getWest() - requestedViewport.west) < 0.0001 && Math.abs(mapbox.getZoom() - requestedViewport.zoom) < 0.01) return;
       mapbox.fitBounds([[requestedViewport.west, requestedViewport.south], [requestedViewport.east, requestedViewport.north]], { duration: 0, maxZoom: requestedViewport.zoom });
-    } else if (leaflet) {
-      const bounds = leaflet.getBounds();
-      if (Math.abs(bounds.getNorth() - requestedViewport.north) < 0.0001 && Math.abs(bounds.getSouth() - requestedViewport.south) < 0.0001 && Math.abs(bounds.getEast() - requestedViewport.east) < 0.0001 && Math.abs(bounds.getWest() - requestedViewport.west) < 0.0001 && Math.abs(leaflet.getZoom() - requestedViewport.zoom) < 0.01) return;
-      leaflet.fitBounds([[requestedViewport.south, requestedViewport.west], [requestedViewport.north, requestedViewport.east]], { animate: false, maxZoom: requestedViewport.zoom });
+    } else if (googleMap) {
+      googleMap.panTo({ lat: (requestedViewport.north + requestedViewport.south) / 2, lng: (requestedViewport.east + requestedViewport.west) / 2 });
+      googleMap.setZoom(requestedViewport.zoom);
     }
-  }, [requestedViewport]);
+  }, [requestedViewport, mapInstanceVersion]);
 
   useEffect(() => {
     const mapbox = mapRef.current;
-    const leaflet = leafletMapRef.current;
-    if (!mapbox && !leaflet) return;
+    const googleMap = googleMapRef.current;
+    const googleMaps = googleMapsRef.current;
+    if (!mapbox && !googleMap) return;
     const markUserViewportChange = () => { userViewportChangeRef.current = true; };
-    const container = mapbox ? mapbox.getCanvasContainer() : leaflet!.getContainer();
+    const container = mapbox ? mapbox.getCanvasContainer() : googleMap!.getDiv();
     container.addEventListener('wheel', markUserViewportChange, { passive: true });
     container.addEventListener('touchstart', markUserViewportChange, { passive: true });
     container.addEventListener('keydown', markUserViewportChange);
@@ -114,17 +145,26 @@ const ProjectsMap = () => {
       mapbox.on('dblclick', markUserViewportChange);
       container.querySelectorAll<HTMLElement>('.mapboxgl-ctrl-zoom-in, .mapboxgl-ctrl-zoom-out').forEach((button) => button.addEventListener('click', markUserViewportChange));
     } else {
-      leaflet!.on('dragstart', markUserViewportChange);
-      container.querySelectorAll<HTMLElement>('.leaflet-control-zoom a').forEach((button) => button.addEventListener('click', markUserViewportChange));
+      googleMap!.addListener('dragstart', markUserViewportChange);
+      googleMap!.addListener('dblclick', markUserViewportChange);
     }
     const updateViewport = (userInitiated: boolean) => {
-      const bounds = mapbox ? mapbox.getBounds() : leaflet!.getBounds();
-      const zoom = mapbox ? mapbox.getZoom() : leaflet!.getZoom();
-      if (!bounds) return;
+      const zoom = mapbox ? mapbox.getZoom() : googleMap!.getZoom();
+      if (typeof zoom !== 'number') return;
+      let north: number; let south: number; let east: number; let west: number;
+      if (mapbox) {
+        const bounds = mapbox.getBounds();
+        if (!bounds) return;
+        north = bounds.getNorth(); south = bounds.getSouth(); east = bounds.getEast(); west = bounds.getWest();
+      } else {
+        const bounds = googleMap!.getBounds();
+        if (!bounds) return;
+        const northEast = bounds.getNorthEast(); const southWest = bounds.getSouthWest();
+        north = northEast.lat(); south = southWest.lat(); east = northEast.lng(); west = southWest.lng();
+      }
       const current = searchParamsRef.current;
       const next = writeCatalogueMapViewport(current, {
-        north: bounds.getNorth(), south: bounds.getSouth(),
-        east: bounds.getEast(), west: bounds.getWest(), zoom,
+        north, south, east, west, zoom,
       }, userInitiated);
       if (next.toString() !== current.toString()) { searchParamsRef.current = next; setSearchParamsRef.current(next, { replace: true }); }
     };
@@ -139,25 +179,22 @@ const ProjectsMap = () => {
     };
     const first = window.setTimeout(() => updateViewport(false), 0);
     if (mapbox) mapbox.on('moveend', settled);
-    else leaflet!.on('moveend zoomend', settled);
+    else googleMap!.addListener('idle', settled);
     return () => {
       window.clearTimeout(first);
       window.clearTimeout(timer);
       if (mapbox) mapbox.off('moveend', settled);
-      else leaflet?.off('moveend zoomend', settled);
+      else if (googleMap && googleMaps) googleMaps.event.clearInstanceListeners(googleMap);
       if (mapbox) {
         mapbox.off('dragstart', markUserViewportChange);
         mapbox.off('dblclick', markUserViewportChange);
         container.querySelectorAll<HTMLElement>('.mapboxgl-ctrl-zoom-in, .mapboxgl-ctrl-zoom-out').forEach((button) => button.removeEventListener('click', markUserViewportChange));
-      } else {
-        leaflet?.off('dragstart', markUserViewportChange);
-        container.querySelectorAll<HTMLElement>('.leaflet-control-zoom a').forEach((button) => button.removeEventListener('click', markUserViewportChange));
       }
       container.removeEventListener('wheel', markUserViewportChange);
       container.removeEventListener('touchstart', markUserViewportChange);
       container.removeEventListener('keydown', markUserViewportChange);
     };
-  }, []);
+  }, [mapInstanceVersion]);
 
   useEffect(() => {
     const params = catalogueQueryForDisplay(new URLSearchParams(queryKey));
@@ -182,7 +219,7 @@ const ProjectsMap = () => {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (MAP_PROVIDER !== 'mapbox' || !map) return;
+    if (mapProvider !== 'mapbox' || !map) return;
     markersRef.current.forEach((marker) => marker.remove());
     const mapped = projects.filter((project) => project.coordinates && Number.isFinite(project.coordinates.lat) && project.coordinates.lat >= -90 && project.coordinates.lat <= 90 && Number.isFinite(project.coordinates.lng) && project.coordinates.lng >= -180 && project.coordinates.lng <= 180);
     markersRef.current = mapped.map((project) => {
@@ -192,14 +229,24 @@ const ProjectsMap = () => {
       element.addEventListener('click', () => setSelectedProject({ requestKey, project }));
       return new mapboxgl.Marker({ element, anchor: 'bottom' }).setLngLat([project.coordinates!.lng, project.coordinates!.lat]).addTo(map);
     });
-  }, [projects, requestKey]);
+  }, [projects, requestKey, mapInstanceVersion, mapProvider]);
 
   useEffect(() => {
-    const map = leafletMapRef.current; const markers = leafletMarkersRef.current;
-    if (MAP_PROVIDER !== 'leaflet' || !map || !markers) return;
-    markers.clearLayers();
-    projects.forEach((project) => { if (!project.coordinates || !Number.isFinite(project.coordinates.lat) || project.coordinates.lat < -90 || project.coordinates.lat > 90 || !Number.isFinite(project.coordinates.lng) || project.coordinates.lng < -180 || project.coordinates.lng > 180) return; const marker = L.marker([project.coordinates.lat, project.coordinates.lng], { title: project.name, icon: L.divIcon({ className: 'realtiq-map-marker', html: `<span>${project.availableUnitCount} units</span>`, iconSize: [86, 32], iconAnchor: [43, 32] }) }); marker.on('click', () => setSelectedProject({ requestKey, project })); markers.addLayer(marker); });
-  }, [projects, requestKey]);
+    const map = googleMapRef.current;
+    const maps = googleMapsRef.current;
+    if (mapProvider !== 'google_maps' || !map || !maps) return;
+    googleMarkersRef.current.forEach(({ marker, listener }) => { listener?.remove(); marker.setMap(null); });
+    const mapped = projects.filter((project) => project.coordinates && Number.isFinite(project.coordinates.lat) && project.coordinates.lat >= -90 && project.coordinates.lat <= 90 && Number.isFinite(project.coordinates.lng) && project.coordinates.lng >= -180 && project.coordinates.lng <= 180);
+    googleMarkersRef.current = mapped.map((project) => {
+      const marker = new maps.Marker({
+        map, position: { lat: project.coordinates!.lat, lng: project.coordinates!.lng }, title: project.name,
+        label: { text: `${project.availableUnitCount} units`, color: '#ffffff', fontWeight: '700', fontSize: '11px' },
+        icon: { path: maps.SymbolPath.CIRCLE, scale: 24, fillColor: '#173d32', fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 2 },
+      });
+      const listener = marker.addListener('click', () => setSelectedProject({ requestKey, project }));
+      return { marker, listener };
+    });
+  }, [projects, requestKey, mapInstanceVersion, mapProvider]);
 
   const discoveryFrom = (location.state as { discoveryFrom?: string } | null)?.discoveryFrom ?? `/projects${location.search}`;
   const selectedPrice = selected
@@ -221,7 +268,9 @@ const ProjectsMap = () => {
         {!loading && !error && activeMapResult ? <CatalogueResultInsights facets={activeMapResult.facets} diagnostics={activeMapResult.diagnostics} onApplySuggestion={(patch) => { const next = writeCatalogueQuery(patch, { base: searchParams, resetPage: true }); searchParamsRef.current = next; setSearchParams(next); }} /> : null}
         <div className="relative min-h-[640px] overflow-hidden rounded-xl bg-surface-container-low">
           <div ref={containerRef} className="absolute inset-0" />
-          {mapTilesError ? <p role="alert" className="absolute left-4 right-4 top-4 z-[1000] rounded-lg bg-error-container p-3 text-sm text-on-error-container">{mapTilesError}</p> : null}
+          {mapConfigState.status === 'loading' ? <p role="status" className="absolute left-4 right-4 top-4 z-[1000] rounded-lg bg-white/95 p-3 text-sm text-secondary shadow">Loading active map settings…</p> : null}
+          {mapConfigState.status === 'error' ? <div role="alert" className="absolute left-4 right-4 top-4 z-[1000] rounded-lg bg-error-container p-3 text-sm text-on-error-container"><p>{mapConfigState.error}</p><button type="button" className="mt-2 font-bold underline" onClick={() => void refreshMapConfig()}>Retry map settings</button></div> : null}
+          {mapTilesError && mapConfigState.status === 'ready' ? <div role="alert" className="absolute left-4 right-4 top-4 z-[1000] rounded-lg bg-error-container p-3 text-sm text-on-error-container"><p>{mapTilesError}</p>{hasCredential(mapConfigState.config.provider) ? <button type="button" className="mt-2 font-bold underline" onClick={() => setMapRetryVersion((version) => version + 1)}>Retry map</button> : null}</div> : null}
           {!loading && !error && mapRequestEnabled && total === 0 ? <div role="status" className="absolute left-4 top-4 z-[1000] rounded-lg bg-white/95 px-4 py-3 text-sm font-semibold text-secondary shadow">No projects match this map area.</div> : null}
           {selected ? (
             <div className="absolute bottom-5 left-5 z-[1000] max-w-sm rounded-xl bg-white p-5 shadow-xl">
