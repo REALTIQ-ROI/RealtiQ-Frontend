@@ -1,6 +1,6 @@
 import { writeCatalogueQuery } from './catalogueQuery';
 
-const structuralKeys = new Set(['queryVersion', 'page', 'limit', 'mapActive', 'mapZoom', 'zoom', 'north', 'south', 'east', 'west']);
+const structuralKeys = new Set(['queryVersion', 'page', 'limit', 'mapActive', 'mapZoom', 'zoom', 'north', 'south', 'east', 'west', 'featured']);
 const defaultValues: Record<string, string> = {
   sort: 'recommended', status: 'available', includeUnpriced: 'true', withPhotosOnly: 'true',
   includeUnderOffer: 'false', includeSold: 'false',

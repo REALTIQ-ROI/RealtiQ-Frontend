@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import PublicLayout from "../../components/layout/PublicLayout";
 import PropertyCard from "../../components/property/PropertyCard";
@@ -15,7 +15,7 @@ import { personalisationService } from "../../services/personalisationService";
 import { propertyService } from "../../services/propertyService";
 import type { CanonicalMapMarker } from '../../types/canonicalMap';
 import { canonicalMapMarkers } from '../../utils/canonicalMapMarkers';
-import { adoptCanonicalQuery, catalogueFilterFormKey, cataloguePageFromQuery, catalogueQueryForDisplay, readCatalogueQuery, sameCanonicalCriteria, writeCatalogueQuery } from "../../utils/catalogueQuery";
+import { adoptCanonicalQuery, catalogueFilterFormKey, cataloguePageFromQuery, catalogueQueryForDisplay, hasFeaturedFilterIgnoredNotice, readCatalogueQuery, sameCanonicalCriteria, visibleCatalogueNotices, writeCatalogueQuery, withoutFeaturedSearchFilter } from "../../utils/catalogueQuery";
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
 import { savedSearchFiltersFromUrl, savedSearchFiltersToUrl } from '../../utils/savedSearchQuery';
 import type { SavedSearch } from '../../types';
@@ -24,6 +24,7 @@ import SavedSearchAlertsFields, { defaultSavedSearchAlerts } from '../../compone
 import { ApiRequestError } from '../../lib/axios';
 import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { writeCatalogueMapViewport } from '../../utils/catalogueMapViewport';
+import { useBuyerCatalogueSearchParams } from '../../hooks/useBuyerCatalogueSearchParams';
 import {
   propertyPublicReference,
   propertyRouteReference,
@@ -45,7 +46,7 @@ const mapNoticeText = (notice: unknown): string => {
 const Listings = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useBuyerCatalogueSearchParams();
   const searchParamsRef = useRef(searchParams);
   const displaySearchParams = useMemo(() => catalogueQueryForDisplay(searchParams), [searchParams]);
   const { user, activeProfile } = useAuth();
@@ -158,14 +159,16 @@ const Listings = () => {
     void propertyService.getCanonicalMap(query, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
-        if (result.normalization?.query !== undefined) adoptNormalization(result.normalization.query, query);
+        if (result.normalization?.query !== undefined || hasFeaturedFilterIgnoredNotice(result.normalization?.notices)) {
+          adoptNormalization(result.normalization?.query ?? withoutFeaturedSearchFilter(query), query);
+        }
         const parsed = canonicalMapMarkers(result);
         setMapState({ queryKey: mapRequestIdentity, count: Number.isFinite(result.total) ? result.total : null, error: null,
           markers: parsed.markers, skipped: parsed.skipped, mode: result.mode,
           truncated: result.mode === 'properties' && result.truncated,
           limit: result.limit,
           facets: result.facets ?? {}, priceAggregateState: result.mode === 'clusters' ? result.priceAggregateState ?? null : null,
-          normalizationNotices: result.normalization?.notices ?? [] });
+          normalizationNotices: visibleCatalogueNotices(result.normalization?.notices) });
       })
       .catch((raw: unknown) => {
         if (!controller.signal.aborted) setMapState({ queryKey: mapRequestIdentity, count: null, error: apiErrorMessage(raw, 'Map results are unavailable.'), markers: [], skipped: 0, mode: null, truncated: false, limit: 0, facets: {}, priceAggregateState: null, normalizationNotices: [] });

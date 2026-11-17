@@ -30,7 +30,7 @@ const Home = () => {
 
   useEffect(() => {
     let live = true;
-    void projectService.listProjects({ featured: true, publicationState: 'published', limit: 12 })
+    void projectService.listProjects({ publicationState: 'published', limit: 100 })
       .then((result) => { if (live) setProjects(result.projects.filter((item) => item.isFeatured && item.isPublished === true)); })
       .catch(() => { if (live) setProjects([]); })
       .finally(() => { if (live) setProjectsLoading(false); });
@@ -42,8 +42,8 @@ const Home = () => {
 
   useEffect(() => {
     const controller = new AbortController();
-    void propertyService.getProperties({ featured: true, page: 1, limit: 4 }, controller.signal)
-      .then((result) => { if (!controller.signal.aborted) setFeaturedProperties(result.properties.filter((item) => item.featured === true)); })
+    void propertyService.getProperties({ page: 1, limit: 100 }, controller.signal)
+      .then((result) => { if (!controller.signal.aborted) setFeaturedProperties(result.properties.filter((item) => item.featured === true).slice(0, 4)); })
       .catch(() => { if (!controller.signal.aborted) setError('Unable to load featured properties.'); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();

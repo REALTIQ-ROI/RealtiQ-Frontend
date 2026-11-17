@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useSearchParams, useParams, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useParams, useNavigate } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
 import PropertyCard from '../../components/property/PropertyCard';
 import ActiveCatalogueFilters from '../../components/property/ActiveCatalogueFilters';
@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { projectService, type ProjectPropertiesResponse } from '../../services/projectService';
 import { isProjectPublished } from '../../utils/projectPublication';
-import { adoptCanonicalQuery, catalogueFilterFormKey, readCatalogueQuery, sameCanonicalCriteria, writeCatalogueQuery } from '../../utils/catalogueQuery';
+import { adoptCanonicalQuery, catalogueFilterFormKey, hasFeaturedFilterIgnoredNotice, readCatalogueQuery, sameCanonicalCriteria, visibleCatalogueNotices, writeCatalogueQuery, withoutFeaturedSearchFilter } from '../../utils/catalogueQuery';
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
 import { inquiryService } from '../../services/inquiryService';
 import CompareToggle from '../../components/compare/CompareToggle';
@@ -23,6 +23,7 @@ import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictio
 import { effectiveCanonicalValue, fieldVocabularyLabel } from '../../utils/propertyVocabulary';
 import { propertyRouteReference } from '../../types';
 import { groupProjectUnits, readProjectUnitDisplayMode, type ProjectUnitView } from '../../utils/projectUnitDisplay';
+import { useBuyerCatalogueSearchParams } from '../../hooks/useBuyerCatalogueSearchParams';
 
 const PAGE_SIZE = 20;
 const EMPTY_PROPERTIES: import('../../types').Property[] = [];
@@ -41,7 +42,7 @@ const ProjectProperties = () => {
   const { slug = '' } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useBuyerCatalogueSearchParams();
   const { activeProfile, isAuthenticated } = useAuth();
   const { dictionary } = useCanonicalFieldDictionary();
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
@@ -75,10 +76,10 @@ const ProjectProperties = () => {
           setData(response);
           setDataProfileId(activeProfile?.id ?? null);
           setRequestState({ key: requestKey, error: null });
-          if (response.normalization?.query !== undefined) {
+          if (response.normalization?.query !== undefined || hasFeaturedFilterIgnoredNotice(response.normalization?.notices)) {
             const current = searchParamsRef.current;
             if (sameCanonicalCriteria(current, query)) {
-              const normalized = adoptCanonicalQuery(current, response.normalization.query);
+              const normalized = adoptCanonicalQuery(current, response.normalization?.query ?? withoutFeaturedSearchFilter(query));
               if (normalized.toString() !== current.toString()) {
                 searchParamsRef.current = normalized;
                 setSearchParams(normalized, { replace: true });
@@ -166,7 +167,7 @@ const ProjectProperties = () => {
       <CatalogueResultInsights facets={currentData?.facets} diagnostics={currentData?.diagnostics} onApplySuggestion={(patch) => applyFilters(patch)} />
       <div className="my-5 flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-secondary">{total.toLocaleString()} units</p><p className="mt-1 text-xs text-secondary">Developer’s unit display preference: {projectUnitDisplayMode === 'grouped_by_unit_type' ? 'Grouped by unit type' : projectUnitDisplayMode === 'individual_units' ? 'Individual units' : 'Unavailable'}</p>{projectUnitDisplayMode === 'grouped_by_unit_type' ? <p className="mt-1 text-xs text-secondary">Units are grouped by returned type name on this page; each unit still opens its own listing.</p> : null}</div><div className="flex flex-wrap items-center gap-3"><fieldset className="flex items-center gap-1 rounded-lg border p-1" aria-label="Unit presentation"><legend className="sr-only">Unit presentation</legend>{(['cards', 'list', 'table'] as const).map((view) => <button key={view} type="button" aria-pressed={unitView === view} onClick={() => setUnitView(view)} className={`rounded-md px-3 py-2 text-sm font-semibold ${unitView === view ? 'bg-primary text-on-primary' : 'text-secondary'}`}>{view === 'cards' ? 'Cards' : view === 'list' ? 'List' : 'Table'}</button>)}</fieldset><button type="button" onClick={() => setRefreshVersion((version) => version + 1)} className="text-sm font-bold text-primary">Refresh</button>{selectedUnitIds.length ? <><Button type="button" disabled={selectedUnitIds.length > 100} onClick={startNegotiation}>Start negotiation · {selectedUnitIds.length} selected</Button>{selectedUnitIds.length >= 2 ? <Button type="button" variant="secondary" onClick={() => setInquiryOpen(true)}>Enquire about selected units</Button> : null}</> : null}</div></div>
       {projectDetailState?.slug === slug && (projectDetailState.error || (projectDetailState.project && !projectUnitDisplayMode)) ? <p role="status" className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">The developer-selected unit layout was not returned. Units are shown individually for this view.</p> : null}
-      {currentData?.normalization?.notices?.length ? <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{currentData.normalization.notices.map((notice, index) => <p key={`unit-search-notice-${index}`}>{noticeText(notice) || 'The server normalized this search.'}</p>)}</div> : null}
+      {visibleCatalogueNotices(currentData?.normalization?.notices).length ? <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{visibleCatalogueNotices(currentData?.normalization?.notices).map((notice, index) => <p key={`unit-search-notice-${index}`}>{noticeText(notice) || 'The server normalized this search.'}</p>)}</div> : null}
       {loading && !properties.length ? <LoadingState label="Loading project units..." /> : null}
       {error ? <ErrorState message={error} onRetry={() => setRefreshVersion((version) => version + 1)} /> : null}
       {!loading && !error && !projectIsPublic ? <div className="rounded-xl border border-dashed border-outline-variant/20 p-10 text-center text-secondary">This project is not published yet.</div> : null}

@@ -1,10 +1,10 @@
 import type { SavedSearchFilters } from '../types';
-import { canonicalQueryParams } from './catalogueQuery';
+import { canonicalCatalogueSearchParams } from './catalogueQuery';
 
 const exactReferenceKeys = ['reference', 'exactReference'];
 
 export const savedSearchFiltersFromUrl = (params: URLSearchParams): SavedSearchFilters => {
-  const canonical = canonicalQueryParams(params);
+  const canonical = canonicalCatalogueSearchParams(params);
   if (exactReferenceKeys.some((key) => canonical.has(key))) {
     throw new Error('Exact-reference searches cannot be saved. Remove the reference criterion before saving this search.');
   }
@@ -24,6 +24,7 @@ export const savedSearchFiltersToUrl = (filters: SavedSearchFilters): URLSearchP
     if (value === undefined || value === null) continue;
     for (const item of Array.isArray(value) ? value : [value]) params.append(key, String(item));
   }
+  params.delete('featured');
   if (!params.has('queryVersion')) params.set('queryVersion', 'canonical-v1');
   return params;
 };

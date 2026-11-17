@@ -8,7 +8,7 @@ import {
   type UpdatePropertyPayload,
 } from '../services/propertyService';
 import type { Property } from '../types';
-import { canonicalQueryParams } from '../utils/catalogueQuery';
+import { canonicalCatalogueSearchParams, hasFeaturedFilterIgnoredNotice, visibleCatalogueNotices, withoutFeaturedSearchFilter } from '../utils/catalogueQuery';
 import { apiErrorMessage } from '../utils/apiErrorMessage';
 
 interface UsePropertiesOptions {
@@ -52,7 +52,11 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
       setDiagnostics(null);
       setFacets(null);
       try {
-        const requestFilters = canonicalQueryParams(currentFilters);
+        const requestFilters = canonicalCatalogueSearchParams(currentFilters);
+        const hasLegacyFeatured = currentFilters instanceof URLSearchParams
+          ? currentFilters.has('featured')
+          : Boolean(currentFilters && typeof currentFilters === 'object' && 'featured' in currentFilters);
+        if (hasLegacyFeatured) setFilters(requestFilters);
         requestFilters.set('page', String(currentPage));
         requestFilters.set('limit', String(limit));
         const nearbyFields = ['nearbyLat', 'nearbyLng', 'nearbyRadiusKm'];
@@ -66,11 +70,12 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
         if (requestId === requestSequence.current) {
           setProperties(res.properties);
           setTotal(res.total);
-          setNotices(res.normalization?.notices ?? []);
+          setNotices(visibleCatalogueNotices(res.normalization?.notices));
           setDiagnostics(res.diagnostics ?? null);
           setFacets(res.facets ?? null);
-          if (res.normalization?.query !== undefined) {
-            const adopted = onNormalizationRef.current?.(res.normalization.query, requestFilters);
+          if (res.normalization?.query !== undefined || hasFeaturedFilterIgnoredNotice(res.normalization?.notices)) {
+            const normalizedQuery = res.normalization?.query ?? withoutFeaturedSearchFilter(requestFilters);
+            const adopted = onNormalizationRef.current?.(normalizedQuery, requestFilters);
             if (adopted) setFilters(adopted);
           }
         }

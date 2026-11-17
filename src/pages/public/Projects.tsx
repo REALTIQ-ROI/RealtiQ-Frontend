@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
 import ProjectCard from '../../components/project/ProjectCard';
 import PropertyFiltersPanel from '../../components/property/PropertyFiltersPanel';
@@ -10,8 +10,9 @@ import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { projectService, type ProjectListResponse } from '../../services/projectService';
-import { adoptCanonicalQuery, catalogueFilterFormKey, readCatalogueQuery, sameCanonicalCriteria, writeCatalogueQuery } from '../../utils/catalogueQuery';
+import { adoptCanonicalQuery, catalogueFilterFormKey, hasFeaturedFilterIgnoredNotice, readCatalogueQuery, sameCanonicalCriteria, visibleCatalogueNotices, writeCatalogueQuery, withoutFeaturedSearchFilter } from '../../utils/catalogueQuery';
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
+import { useBuyerCatalogueSearchParams } from '../../hooks/useBuyerCatalogueSearchParams';
 
 const PAGE_SIZE = 20;
 const validPage = (params: URLSearchParams) => {
@@ -27,7 +28,7 @@ const searchNotice = (value: unknown) => {
 
 const Projects = () => {
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useBuyerCatalogueSearchParams();
   const { activeProfile } = useAuth();
   const searchParamsRef = useRef(searchParams);
   useEffect(() => { searchParamsRef.current = searchParams; }, [searchParams]);
@@ -52,10 +53,10 @@ const Projects = () => {
         if (controller.signal.aborted) return;
         setData(response);
         setDataProfileId(activeProfile?.id ?? null);
-        if (response.normalization?.query !== undefined) {
+        if (response.normalization?.query !== undefined || hasFeaturedFilterIgnoredNotice(response.normalization?.notices)) {
           const current = searchParamsRef.current;
           if (sameCanonicalCriteria(current, params)) {
-            const normalized = adoptCanonicalQuery(current, response.normalization.query);
+            const normalized = adoptCanonicalQuery(current, response.normalization?.query ?? withoutFeaturedSearchFilter(params));
             if (normalized.toString() !== current.toString()) {
               searchParamsRef.current = normalized;
               setSearchParams(normalized, { replace: true });
@@ -126,7 +127,7 @@ const Projects = () => {
           <button type="button" onClick={refresh} className="text-sm font-bold text-primary hover:underline">Refresh</button>
         </div>
 
-        {currentData?.normalization?.notices?.length ? <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{currentData.normalization.notices.map((notice, index) => <p key={`project-notice-${index}`}>{searchNotice(notice) || 'The server normalized this search.'}</p>)}</div> : null}
+        {visibleCatalogueNotices(currentData?.normalization?.notices).length ? <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{visibleCatalogueNotices(currentData?.normalization?.notices).map((notice, index) => <p key={`project-notice-${index}`}>{searchNotice(notice) || 'The server normalized this search.'}</p>)}</div> : null}
 
         {loading && !projects.length ? <LoadingState label="Loading projects..." /> : null}
         {error ? <ErrorState message={error} onRetry={refresh} /> : null}

@@ -28,7 +28,6 @@ const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps)
   const [bedrooms, setBedrooms] = useState(initialFilters.bedrooms?.toString() ?? '');
   const [completionStage, setCompletionStage] = useState(initialFilters.completionStage ?? '');
   const [currency, setCurrency] = useState(initialFilters.currency ?? '');
-  const [featured, setFeatured] = useState(initialFilters.featured === true ? 'true' : '');
   const [status, setStatus] = useState(initialFilters.status ?? '');
 
   const handleApply = () => {
@@ -41,7 +40,6 @@ const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps)
       category: category || undefined,
       completionStage: completionStage || undefined,
       currency: currency || undefined,
-      featured: featured === '' ? undefined : featured === 'true',
       status: (status as PropertyFiltersQuery['status']) || undefined,
     });
   };
@@ -55,7 +53,6 @@ const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps)
     setCategory('');
     setCompletionStage('');
     setCurrency('');
-    setFeatured('');
     setStatus('');
     onApply({});
   };
@@ -157,23 +154,13 @@ const PropertyFilters = ({ initialFilters = {}, onApply }: PropertyFiltersProps)
         </select>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1.5">
+      <div className="space-y-1.5">
           <label htmlFor="property-filter-status" className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Status</label>
           <select id="property-filter-status" value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass} disabled={!dictionary}>
             <option value="">Any status</option>
             {status && !availability.some((option) => option.value === status) ? <option value={status}>Unavailable option: {status}</option> : null}
             {availability.filter((option) => option.label.trim().toLowerCase() !== 'not released').map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold uppercase tracking-widest text-secondary block">Featured</label>
-          <select value={featured} onChange={(e) => setFeatured(e.target.value)} className={inputClass}>
-            <option value="">Any</option>
-            <option value="true">Featured</option>
-            <option value="false">Not Featured</option>
-          </select>
-        </div>
       </div>
 
       {!dictionary ? <div role="status" className="text-xs text-secondary">{loading ? 'Loading current property vocabulary…' : <>{error ?? 'Property vocabulary is unavailable.'} <button type="button" className="font-bold underline" onClick={refresh}>Retry</button></>}</div> : null}

@@ -16,7 +16,7 @@ import type {
 } from '../types';
 import { normalizeProjectPublication } from '../utils/projectPublication';
 import { propertyService } from './propertyService';
-import { canonicalQueryParams } from '../utils/catalogueQuery';
+import { canonicalCatalogueSearchParams } from '../utils/catalogueQuery';
 
 const compact = <T extends object>(value?: T) =>
   Object.fromEntries(
@@ -37,7 +37,6 @@ export interface ProjectSearchQuery {
   minPrice?: number;
   maxPrice?: number;
   status?: ProjectStatus | string;
-  featured?: boolean;
   ownerId?: string;
   propertyType?: string;
   bedrooms?: number;
@@ -63,7 +62,7 @@ export interface ProjectMapQuery extends ProjectSearchQuery {
 }
 
 const canonicalProjectParams = (query?: ProjectSearchQuery | ProjectPropertyQuery | URLSearchParams) => {
-  const params = canonicalQueryParams(query ?? {});
+  const params = canonicalCatalogueSearchParams(query ?? {});
   params.set('queryVersion', 'canonical-v1');
   return params;
 };
@@ -302,7 +301,7 @@ export const projectService = {
   },
 
   async getProjectProperties(idOrSlug: string, query?: ProjectPropertyQuery | URLSearchParams, signal?: AbortSignal): Promise<ProjectPropertiesResponse> {
-    const params = canonicalProjectParams(query);
+    const params = canonicalCatalogueSearchParams(query ?? {});
     if (params.get('includeUnpublished') === 'true') {
       throw new Error('Unpublished units are not available through public project discovery.');
     }
@@ -314,7 +313,7 @@ export const projectService = {
   },
 
   async getProjectMap(query: ProjectMapQuery | URLSearchParams, signal?: AbortSignal): Promise<ProjectMapResponse> {
-    const params = canonicalProjectParams(query);
+    const params = canonicalCatalogueSearchParams(query);
     // Project map results summarize all matching projects in the bounds; page
     // state belongs to the list view and must not limit the map request.
     params.delete('page');

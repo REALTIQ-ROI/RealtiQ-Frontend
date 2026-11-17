@@ -684,7 +684,6 @@ export interface PropertyFilters {
   category?: PropertyCategory;
   completionStage?: PropertyCompletionStage;
   currency?: PropertyCurrency;
-  featured?: boolean;
   status?: PropertyStatus | 'all' | 'under_offer' | 'sold';
   includeUnderOffer?: boolean;
   includeSold?: boolean;

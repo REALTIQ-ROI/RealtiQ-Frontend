@@ -26,7 +26,7 @@ import type {
   StructuredPropertyFacts,
 } from '../types';
 import { normalizePropertyPaymentTypes } from '../utils/propertyPaymentTypes';
-import { canonicalQueryParams } from '../utils/catalogueQuery';
+import { canonicalCatalogueSearchParams } from '../utils/catalogueQuery';
 
 export interface TitleDocumentUploadMetadata {
   assetId: string;
@@ -308,19 +308,21 @@ const normalizePropertiesResponse = (response: PropertiesResponse): PropertiesRe
 
 export const propertyService = {
   async getProperties(filters?: PropertyFiltersQuery | URLSearchParams, signal?: AbortSignal): Promise<PropertiesResponse> {
-    const params = canonicalQueryParams(filters ?? {});
+    const params = canonicalCatalogueSearchParams(filters ?? {});
     const { data } = await api.get<PropertiesResponse>('/properties', { params, signal });
     return normalizePropertiesResponse(data);
   },
 
   async getCanonicalNearbyProperties(filters: PropertyFiltersQuery | URLSearchParams, signal?: AbortSignal): Promise<PropertiesResponse> {
-    const params = canonicalQueryParams(filters);
+    const params = canonicalCatalogueSearchParams(filters);
     const { data } = await api.get<PropertiesResponse>('/properties/map/nearby', { params, signal });
     return normalizePropertiesResponse(data);
   },
 
   async getMapProperties(filters: PropertyMapFilters, signal?: AbortSignal): Promise<PropertyMapResponse> {
-    const { data } = await api.get<PropertyMapResponse>('/properties/map', { params: filters, signal });
+    const params: Record<string, unknown> = { ...filters };
+    delete params.featured;
+    const { data } = await api.get<PropertyMapResponse>('/properties/map', { params, signal });
     if (data.mode === 'properties') {
       return { ...data, properties: data.properties.map(normalizeProperty) };
     }
@@ -328,7 +330,7 @@ export const propertyService = {
   },
 
   async getCanonicalMap(query: URLSearchParams, signal?: AbortSignal): Promise<CanonicalPropertyMapResponse> {
-    const params = canonicalQueryParams(query);
+    const params = canonicalCatalogueSearchParams(query);
     params.set('queryVersion', 'canonical-v1');
     params.delete('mapActive');
     params.delete('page');

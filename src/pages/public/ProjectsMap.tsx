@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
@@ -11,15 +11,16 @@ import { configureMapbox, MAPBOX_STYLE, nigeriaCenter } from '../../lib/mapbox';
 import { loadGoogleMapsSdk, type GoogleMapInstance, type GoogleMapsApi } from '../../lib/googleMaps';
 import { useMapConfig } from '../../contexts/MapConfigContext';
 import { writeCatalogueMapViewport } from '../../utils/catalogueMapViewport';
-import { adoptCanonicalQuery, catalogueQueryForDisplay, sameCanonicalCriteria, writeCatalogueQuery } from '../../utils/catalogueQuery';
+import { adoptCanonicalQuery, catalogueQueryForDisplay, hasFeaturedFilterIgnoredNotice, sameCanonicalCriteria, writeCatalogueQuery, withoutFeaturedSearchFilter } from '../../utils/catalogueQuery';
 import CatalogueResultInsights from '../../components/property/CatalogueResultInsights';
 import { useAuth } from '../../contexts/AuthContext';
+import { useBuyerCatalogueSearchParams } from '../../hooks/useBuyerCatalogueSearchParams';
 
 const emptyProjects: ProjectMapItem[] = [];
 
 const ProjectsMap = () => {
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useBuyerCatalogueSearchParams();
   const displaySearchParams = useMemo(() => catalogueQueryForDisplay(searchParams), [searchParams]);
   const { activeProfile } = useAuth();
   const { state: mapConfigState, refresh: refreshMapConfig, hasCredential } = useMapConfig();
@@ -205,10 +206,10 @@ const ProjectsMap = () => {
       .then((response) => {
         if (controller.signal.aborted) return;
         setMapResult({ requestKey, projects: response.projects ?? emptyProjects, total: response.total ?? 0, error: '', truncated: response.truncated, limit: response.limit, facets: response.facets ?? {}, diagnostics: response.diagnostics ?? null });
-        if (response.normalization?.query !== undefined) {
+        if (response.normalization?.query !== undefined || hasFeaturedFilterIgnoredNotice(response.normalization?.notices)) {
           const current = searchParamsRef.current;
           if (sameCanonicalCriteria(current, params)) {
-            const normalized = adoptCanonicalQuery(current, response.normalization.query);
+            const normalized = adoptCanonicalQuery(current, response.normalization?.query ?? withoutFeaturedSearchFilter(params));
             if (normalized.toString() !== current.toString()) { searchParamsRef.current = normalized; setSearchParams(normalized, { replace: true }); }
           }
         }
