@@ -8,7 +8,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
 import { messageService } from '../../../services/messageService';
-import { resolveInquiryProperty } from '../../../types';
+import { resolveInquiryId, resolveInquiryProperties, resolveInquiryProperty } from '../../../types';
 import { useAuth } from '../../../contexts/AuthContext';
 
 const formatDate = (date: string) =>
@@ -30,12 +30,14 @@ const InquiryDetailsContent = () => {
     Boolean(id),
   );
   const property = inquiry ? resolveInquiryProperty(inquiry.property) : null;
+  const selectedProperties = inquiry ? resolveInquiryProperties(inquiry) : [];
+  const inquiryId = inquiry ? resolveInquiryId(inquiry) : '';
   const startConversation = async () => {
-    if (!inquiry) return;
+    if (!inquiry || !inquiryId) return;
     const propertyId = typeof inquiry.property === 'string' ? inquiry.property : inquiry.property.id ?? inquiry.property._id;
     if (!propertyId) { toast.error('This inquiry does not include a current listing reference.'); return; }
     try {
-      const conversation = await messageService.start(propertyId, inquiry._id);
+      const conversation = await messageService.start(propertyId, inquiryId);
       navigate(`/messages/${encodeURIComponent(conversation._id)}`);
     } catch (raw) { toast.error(raw instanceof Error ? raw.message : 'Unable to open the on-platform conversation.'); }
   };
@@ -74,9 +76,9 @@ const InquiryDetailsContent = () => {
           <div className="rounded-xl border border-outline-variant/20 p-5 space-y-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs text-secondary uppercase tracking-widest">Property</p>
-                <h2 className="text-xl font-extrabold">{property?.title ?? 'Property unavailable'}</h2>
-                <p className="text-sm text-secondary">{property?.location ?? 'Location unavailable'}</p>
+                <p className="text-xs text-secondary uppercase tracking-widest">{selectedProperties.length > 1 ? 'Selected units' : 'Property'}</p>
+                <h2 className="text-xl font-extrabold">{property?.title ?? selectedProperties[0]?.title ?? 'Property unavailable'}</h2>
+                <p className="text-sm text-secondary">{property?.location ?? selectedProperties[0]?.location ?? 'Location unavailable'}</p>
               </div>
               <span
                 className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
@@ -86,6 +88,12 @@ const InquiryDetailsContent = () => {
                 {inquiry.status}
               </span>
             </div>
+
+            {selectedProperties.length > 1 ? <section className="rounded-xl border border-outline-variant/15 p-4">
+              <h3 className="font-bold">Units included in this enquiry</h3>
+              <ul className="mt-2 divide-y divide-outline-variant/15">{selectedProperties.map((selected, index) => <li key={selected.id ?? selected._id ?? `${selected.title}-${index}`} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span className="font-semibold">{selected.title || 'Unit'}</span><span className="text-secondary">{[selected.publicReference, selected.location, selected.status].filter(Boolean).join(' · ') || 'Current status unavailable'}</span></li>)}</ul>
+              <p className="mt-2 text-xs text-secondary">This is one enquiry for the selected units, not a purchase negotiation.</p>
+            </section> : null}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <p><strong>Type:</strong> {inquiry.inquiryType}</p>

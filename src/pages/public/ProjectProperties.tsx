@@ -7,6 +7,8 @@ import PropertyFiltersPanel from '../../components/property/PropertyFiltersPanel
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import Button from '../../components/ui/Button';
+import ModalPortal from '../../components/ui/ModalPortal';
+import InquiryForm from '../../components/forms/InquiryForm';
 import CatalogueResultInsights from '../../components/property/CatalogueResultInsights';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
@@ -15,6 +17,7 @@ import { projectService, type ProjectPropertiesResponse } from '../../services/p
 import { isProjectPublished } from '../../utils/projectPublication';
 import { adoptCanonicalQuery, catalogueFilterFormKey, readCatalogueQuery, sameCanonicalCriteria, writeCatalogueQuery } from '../../utils/catalogueQuery';
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
+import { inquiryService } from '../../services/inquiryService';
 
 const PAGE_SIZE = 20;
 const pageFromQuery = (params: URLSearchParams) => {
@@ -35,6 +38,8 @@ const ProjectProperties = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeProfile, isAuthenticated } = useAuth();
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
+  const [selectedUnits, setSelectedUnits] = useState<Record<string, import('../../types').Property>>({});
+  const [inquiryOpen, setInquiryOpen] = useState(false);
   const searchParamsRef = useRef(searchParams);
   useEffect(() => { searchParamsRef.current = searchParams; }, [searchParams]);
   const projectNavigationState = location.state as { from?: string; discoveryFrom?: string } | null;
@@ -97,10 +102,16 @@ const ProjectProperties = () => {
     setSearchParams(next);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  useEffect(() => { setSelectedUnitIds([]); }, [slug, activeProfile?.id]);
-  const toggleUnitSelection = (propertyId: string) => setSelectedUnitIds((current) => current.includes(propertyId)
-    ? current.filter((id) => id !== propertyId)
-    : current.length < 100 ? [...current, propertyId] : current);
+  useEffect(() => { setSelectedUnitIds([]); setSelectedUnits({}); }, [slug, activeProfile?.id]);
+  const toggleUnitSelection = (property: import('../../types').Property) => {
+    setSelectedUnitIds((current) => current.includes(property._id)
+      ? current.filter((id) => id !== property._id)
+      : current.length < 100 ? [...current, property._id] : current);
+    setSelectedUnits((current) => {
+      if (property._id in current) { const next = { ...current }; delete next[property._id]; return next; }
+      return Object.keys(current).length < 100 ? { ...current, [property._id]: property } : current;
+    });
+  };
   const startNegotiation = () => {
     if (!selectedUnitIds.length) return;
     const target = `/dashboard/buyer/sale-negotiations/new?${selectedUnitIds.map((id) => `propertyId=${encodeURIComponent(id)}`).join('&')}`;
@@ -119,15 +130,16 @@ const ProjectProperties = () => {
       <div className="-mx-4 mb-5 sm:-mx-8"><PropertyFiltersPanel key={catalogueFilterFormKey(searchParams)} initialFilters={readCatalogueQuery(searchParams)} initialQuery={searchParams} activeProfile={activeProfile} onApply={applyFilters} /></div>
       <div className="-mx-4 sm:-mx-8"><ActiveCatalogueFilters params={searchParams} onClear={clearFilterChip} /></div>
       <CatalogueResultInsights facets={currentData?.facets} diagnostics={currentData?.diagnostics} onApplySuggestion={(patch) => applyFilters(patch)} />
-      <div className="my-5 flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-semibold text-secondary">{total.toLocaleString()} units</p><div className="flex items-center gap-3"><button type="button" onClick={() => setRefreshVersion((version) => version + 1)} className="text-sm font-bold text-primary">Refresh</button>{selectedUnitIds.length ? <Button type="button" disabled={selectedUnitIds.length > 100} onClick={startNegotiation}>Start negotiation · {selectedUnitIds.length} selected</Button> : null}</div></div>
+      <div className="my-5 flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-semibold text-secondary">{total.toLocaleString()} units</p><div className="flex items-center gap-3"><button type="button" onClick={() => setRefreshVersion((version) => version + 1)} className="text-sm font-bold text-primary">Refresh</button>{selectedUnitIds.length ? <><Button type="button" disabled={selectedUnitIds.length > 100} onClick={startNegotiation}>Start negotiation · {selectedUnitIds.length} selected</Button>{selectedUnitIds.length >= 2 ? <Button type="button" variant="secondary" onClick={() => setInquiryOpen(true)}>Enquire about selected units</Button> : null}</> : null}</div></div>
       {currentData?.normalization?.notices?.length ? <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{currentData.normalization.notices.map((notice, index) => <p key={`unit-search-notice-${index}`}>{noticeText(notice) || 'The server normalized this search.'}</p>)}</div> : null}
       {loading && !properties.length ? <LoadingState label="Loading project units..." /> : null}
       {error ? <ErrorState message={error} onRetry={() => setRefreshVersion((version) => version + 1)} /> : null}
       {!loading && !error && !projectIsPublic ? <div className="rounded-xl border border-dashed border-outline-variant/20 p-10 text-center text-secondary">This project is not published yet.</div> : null}
-      {!loading && !error && projectIsPublic && properties.length ? <div className={`grid gap-6 md:grid-cols-2 xl:grid-cols-3 ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>{properties.map((property) => <article key={property._id} className="min-w-0"><PropertyCard property={property} />{property.status === 'available' ? <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><input type="checkbox" checked={selectedUnitIds.includes(property._id)} disabled={!selectedUnitIds.includes(property._id) && selectedUnitIds.length >= 100} onChange={() => toggleUnitSelection(property._id)} /><span>Select this available unit for a purchase negotiation</span></label> : null}</article>)}</div> : null}
+      {!loading && !error && projectIsPublic && properties.length ? <div className={`grid gap-6 md:grid-cols-2 xl:grid-cols-3 ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>{properties.map((property) => <article key={property._id} className="min-w-0"><PropertyCard property={property} showCompareAction />{['available', 'under_offer'].includes(property.status) ? <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><input type="checkbox" checked={selectedUnitIds.includes(property._id)} disabled={!selectedUnitIds.includes(property._id) && selectedUnitIds.length >= 100} onChange={() => toggleUnitSelection(property)} /><span>Select this unit for an enquiry or negotiation</span></label> : null}</article>)}</div> : null}
       {!loading && !error && projectIsPublic && !properties.length ? <div className="rounded-xl border border-dashed border-outline-variant/20 p-10 text-center text-secondary">No project units match this search.</div> : null}
       {total > PAGE_SIZE ? <nav className="mt-8 flex items-center justify-between" aria-label="Project unit result pages"><button type="button" onClick={() => changePage(Math.max(1, page - 1))} disabled={page <= 1 || loading} className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold disabled:opacity-40">Previous</button><span className="text-sm font-semibold text-secondary">Page {page} of {totalPages}</span><button type="button" onClick={() => changePage(Math.min(totalPages, page + 1))} disabled={page >= totalPages || loading} className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold disabled:opacity-40">Next</button></nav> : null}
     </section>
+    {inquiryOpen ? <ModalPortal><div className="fixed inset-0 z-[2500] flex items-center justify-center bg-black/65 p-4" role="presentation" onClick={() => setInquiryOpen(false)}><section role="dialog" aria-modal="true" aria-labelledby="project-units-inquiry-title" className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-surface p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="mb-4 flex items-start justify-between gap-3"><div><h2 id="project-units-inquiry-title" className="text-xl font-black">Enquire about selected units</h2><p className="text-sm text-secondary">One inquiry will be sent for these {selectedUnitIds.length} units. The seller receives one lead with the current selected-unit summaries.</p></div><button type="button" aria-label="Close enquiry form" onClick={() => setInquiryOpen(false)} className="rounded-full border px-3 py-1">×</button></div><ul className="mb-4 max-h-32 space-y-1 overflow-y-auto rounded-lg bg-surface-container-low p-3 text-sm">{selectedUnitIds.map((id) => <li key={id}>{selectedUnits[id]?.title || 'Selected unit'}</li>)}</ul><InquiryForm propertyIds={selectedUnitIds} allowLeadUpdatesOptIn={activeProfile?.kind === 'buyer'} onSubmitInquiry={async (payload) => { await inquiryService.createInquiry(payload); toast.success('Your grouped unit enquiry has been sent.'); setInquiryOpen(false); setSelectedUnitIds([]); setSelectedUnits({}); }} /></section></div></ModalPortal> : null}
   </PublicLayout>;
 };
 

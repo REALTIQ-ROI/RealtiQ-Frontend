@@ -10,7 +10,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { hasAdminCapability } from '../../../services/adminAccessService';
 import { ApiRequestError } from '../../../lib/axios';
 import { inquiryService } from '../../../services/inquiryService';
-import { resolveInquiryProperty } from '../../../types';
+import { resolveInquiryId, resolveInquiryProperties, resolveInquiryProperty } from '../../../types';
 
 const formatDate = (date: string) =>
   new Date(date).toLocaleString('en-NG', {
@@ -103,8 +103,10 @@ const ManageInquiriesContent = () => {
               <tbody className="divide-y divide-outline-variant/10">
                 {inquiries.map((inquiry) => {
                   const property = resolveInquiryProperty(inquiry.property);
+                  const selectedProperties = resolveInquiryProperties(inquiry);
+                  const inquiryId = resolveInquiryId(inquiry);
                   return (
-                    <tr key={inquiry._id} className="hover:bg-surface-container-low/50 transition-colors">
+                    <tr key={inquiryId} className="hover:bg-surface-container-low/50 transition-colors">
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-4">
                           <div className="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-fixed font-bold text-xs">
@@ -117,8 +119,8 @@ const ManageInquiriesContent = () => {
                         </div>
                       </td>
                       <td className="px-6 py-5">
-                        <p className="text-sm font-bold text-primary">{property?.title ?? 'Property unavailable'}</p>
-                        <p className="text-xs text-secondary">{property?.location ?? 'Location unavailable'}</p>
+                        <p className="text-sm font-bold text-primary">{property?.title ?? selectedProperties[0]?.title ?? 'Property unavailable'}</p>
+                        <p className="text-xs text-secondary">{property?.location ?? selectedProperties[0]?.location ?? 'Location unavailable'}{selectedProperties.length > 1 ? ` · ${selectedProperties.length} selected units` : ''}</p>
                       </td>
                       <td className="px-6 py-5 text-sm text-secondary">{inquiry.inquiryType}</td>
                       <td className="px-6 py-5 text-sm text-secondary">{formatDate(inquiry.createdAt)}</td>
@@ -131,15 +133,15 @@ const ManageInquiriesContent = () => {
                       </td>
                       <td className="px-6 py-5">
                         <div className="flex justify-end gap-2">
-                          <Link to={`/dashboard/admin/inquiry-details/${inquiry._id}`} className="self-center text-primary font-bold text-sm hover:underline">
+                          <Link to={`/dashboard/admin/inquiry-details/${inquiryId}`} className="self-center text-primary font-bold text-sm hover:underline">
                             View
                           </Link>
                           {canManageSupport ? <Button
                             variant="secondary"
-                            loading={updatingId === inquiry._id}
+                            loading={updatingId === inquiryId}
                             loadingLabel={inquiry.status === 'open' ? 'Closing...' : 'Reopening...'}
                             disabled={Boolean(updatingId)}
-                            onClick={() => void toggleStatus(inquiry._id, inquiry.status, inquiry.version)}
+                            onClick={() => void toggleStatus(inquiryId, inquiry.status, inquiry.version)}
                           >
                             {inquiry.status === 'open' ? 'Close' : 'Reopen'}
                           </Button> : <span className="self-center text-xs text-secondary">Read only</span>}

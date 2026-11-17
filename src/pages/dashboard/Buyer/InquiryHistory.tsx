@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import BuyerPortalLayout from '../../../components/layout/BuyerPortalLayout';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
-import { resolveInquiryProperty, type ApiInquiry } from '../../../types';
+import { resolveInquiryId, resolveInquiryProperties, resolveInquiryProperty, type ApiInquiry } from '../../../types';
 import { useAuth } from '../../../contexts/AuthContext';
 
 type FilterTab = 'all' | 'open' | 'closed';
@@ -136,9 +136,11 @@ const InquiryHistoryContent = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filtered.map((inquiry) => {
               const property = resolveInquiryProperty(inquiry.property);
+              const selectedProperties = resolveInquiryProperties(inquiry);
+              const inquiryId = resolveInquiryId(inquiry);
               return (
                 <div
-                  key={inquiry._id}
+                  key={inquiryId}
                   className="group bg-surface-container-lowest rounded-xl overflow-hidden hover:translate-y-[-4px] transition-all duration-300 shadow-sm border border-outline-variant/10"
                 >
                   <div className="relative h-48 overflow-hidden">
@@ -152,14 +154,15 @@ const InquiryHistoryContent = () => {
                   </div>
                   <div className="p-6">
                     <div className="flex justify-between items-start mb-3">
-                      <h3 className="font-headline font-bold text-lg text-primary tracking-tight">{property?.title ?? 'Property unavailable'}</h3>
+                      <h3 className="font-headline font-bold text-lg text-primary tracking-tight">{property?.title ?? selectedProperties[0]?.title ?? 'Property unavailable'}</h3>
                       <span className="text-[10px] font-medium text-secondary">{formatDate(inquiry.createdAt)}</span>
                     </div>
                     <p className="text-xs text-secondary/70 uppercase tracking-wider font-medium mb-2">{inquiry.inquiryType}</p>
+                    {selectedProperties.length > 1 ? <p className="mb-2 text-xs font-semibold text-secondary">One enquiry for {selectedProperties.length} units</p> : null}
                     <p className="text-sm text-on-surface-variant leading-relaxed mb-6 line-clamp-3 italic">"{inquiry.message}"</p>
                     <div className="flex items-center justify-between pt-4 border-t border-surface-container-low">
-                      <p className="text-xs text-secondary">{property?.location ?? 'Location unavailable'}</p>
-                      <button onClick={() => void navigate(`/dashboard/buyer/inquiry-details/${inquiry._id}`)} className="text-sm font-bold text-primary hover:underline transition-all">
+                      <p className="text-xs text-secondary">{property?.location ?? selectedProperties[0]?.location ?? 'Location unavailable'}</p>
+                      <button onClick={() => void navigate(`/dashboard/buyer/inquiry-details/${inquiryId}`)} className="text-sm font-bold text-primary hover:underline transition-all">
                         View Details
                       </button>
                     </div>

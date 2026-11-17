@@ -29,6 +29,7 @@ import SellerTrustBadge from '../../components/trust/SellerTrustBadge';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
 import FavouriteButton from '../../components/phase2/FavouriteButton';
+import CompareToggle from '../../components/compare/CompareToggle';
 import { useRecordRecentProperty } from '../../hooks/useRecordRecentProperty';
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
 import { messageService } from '../../services/messageService';
@@ -739,14 +740,15 @@ const PropertyDetails = () => {
                 {property.location}
               </p>
               <PropertyMeta property={property} />
-                {isBuyerProfile && (
-                <div className='mt-5 flex flex-wrap gap-3'>
+              <div className='mt-5 flex flex-wrap gap-3'>
+                <CompareToggle property={property} />
+                {isBuyerProfile ? <>
                   <FavouriteButton propertyReference={propertyReference} />
                   <Button onClick={() => void startConversation()}>
                     Message seller
                   </Button>
-                </div>
-              )}
+                </> : null}
+              </div>
             </div>
 
             <div>

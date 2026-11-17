@@ -7,7 +7,7 @@ import LoadingState from '../../../components/ui/LoadingState';
 import { useAsync } from '../../../hooks/useAsync';
 import { ApiRequestError } from '../../../lib/axios';
 import { inquiryService } from '../../../services/inquiryService';
-import { resolveInquiryProperty } from '../../../types';
+import { resolveInquiryId, resolveInquiryProperties, resolveInquiryProperty } from '../../../types';
 import { useAuth } from '../../../contexts/AuthContext';
 
 const formatDate = (date: string) =>
@@ -81,9 +81,11 @@ const InquiriesListContent = () => {
                   <tbody className="divide-y divide-slate-100">
                     {inquiries.map((item) => {
                       const property = resolveInquiryProperty(item.property);
+                      const selectedProperties = resolveInquiryProperties(item);
+                      const inquiryId = resolveInquiryId(item);
                       return (
-                        <tr key={item._id} className="hover:bg-slate-50/50 transition-colors group">
-                          <td className="px-6 py-5 text-sm font-bold text-slate-900">{property?.title ?? 'Property unavailable'}</td>
+                        <tr key={inquiryId} className="hover:bg-slate-50/50 transition-colors group">
+                          <td className="px-6 py-5 text-sm font-bold text-slate-900">{property?.title ?? selectedProperties[0]?.title ?? 'Property unavailable'}{selectedProperties.length > 1 ? <span className="mt-1 block text-xs font-medium text-secondary">+ {selectedProperties.length - 1} more selected {selectedProperties.length === 2 ? 'unit' : 'units'}</span> : null}</td>
                           <td className="px-6 py-5">
                             <div className="flex flex-col">
                               <span className="text-sm font-semibold text-slate-900">{item.inquirer || 'REALTIQ user'}</span>
@@ -100,10 +102,10 @@ const InquiriesListContent = () => {
                           </td>
                           <td className="px-6 py-5 text-right">
                             <div className="flex justify-end gap-2">
-                              <Link to={`/dashboard/landlord/inquiry-details/${item._id}`} className="text-primary font-bold text-sm hover:underline self-center">
+                              <Link to={`/dashboard/landlord/inquiry-details/${inquiryId}`} className="text-primary font-bold text-sm hover:underline self-center">
                                 View
                               </Link>
-                              <Button variant="secondary" onClick={() => void toggleStatus(item._id, item.status, item.version)}>
+                              <Button variant="secondary" onClick={() => void toggleStatus(inquiryId, item.status, item.version)}>
                                 {item.status === 'open' ? 'Close' : 'Reopen'}
                               </Button>
                             </div>

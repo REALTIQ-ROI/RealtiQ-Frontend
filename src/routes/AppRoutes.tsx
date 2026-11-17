@@ -21,6 +21,7 @@ import PropertyDetails from '../pages/public/PropertyDetails';
 import PropertyPriceHistory from '../pages/public/PropertyPriceHistory';
 import Projects from '../pages/public/Projects';
 import ProjectDetails from '../pages/public/ProjectDetails';
+import ComparePage from '../pages/public/ComparePage';
 import PartnerDirectory from '../pages/public/PartnerDirectory';
 import PublicProfile from '../pages/public/PublicProfile';
 import Community from '../pages/dashboard/Community';
@@ -145,15 +146,19 @@ import Group07FinanceOperations from '../pages/dashboard/Admin/Group07FinanceOpe
 import ProjectCommunityModeration from '../pages/dashboard/Admin/ProjectCommunityModeration';
 import CommunityGrowthTools from '../pages/dashboard/CommunityGrowthTools';
 import MessageModeration from '../pages/dashboard/Admin/MessageModeration';
+import { CompareProvider } from '../contexts/CompareContext';
 import NotFound from '../pages/public/NotFound';
 const AuditReader = lazy(() => import('../pages/secure/AuditReader'));
 
 const ScrollToTop = () => {
-  const { pathname, search } = useLocation();
+  const { pathname, search, state } = useLocation();
 
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-  }, [pathname, search]);
+    const restoreScrollY = state && typeof state === 'object' && 'restoreScrollY' in state && typeof (state as { restoreScrollY?: unknown }).restoreScrollY === 'number'
+      ? (state as { restoreScrollY: number }).restoreScrollY
+      : 0;
+    window.scrollTo({ top: Math.max(0, restoreScrollY), left: 0, behavior: 'auto' });
+  }, [pathname, search, state]);
 
   return null;
 };
@@ -169,6 +174,7 @@ const DeveloperProfileRoute = () => {
 const AppRoutes = () => {
   return (
     <BrowserRouter>
+      <CompareProvider>
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<Home />} />
@@ -177,6 +183,7 @@ const AppRoutes = () => {
         <Route path="/projects/map" element={<ProjectsMap />} />
         <Route path="/projects/:slug" element={<ProjectDetails />} />
         <Route path="/projects/:slug/properties" element={<ProjectProperties />} />
+        <Route path="/compare" element={<ComparePage />} />
         <Route path="/partners" element={<PartnerDirectory />} />
         <Route path="/partners/:profileId" element={<PublicProfile />} />
         <Route path="/profiles/:profileId" element={<PublicProfile />} />
@@ -400,6 +407,7 @@ const AppRoutes = () => {
 
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </CompareProvider>
     </BrowserRouter>
   );
 };

@@ -11,6 +11,7 @@ import {
 import TitleVerificationBadge from '../title/TitleVerificationBadge';
 import PaymentTypeBadges from './PaymentTypeBadges';
 import OffPlanBadges from './OffPlanBadges';
+import CompareToggle from '../compare/CompareToggle';
 import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
 import { effectiveCanonicalValue, fieldVocabularyLabel, formatCanonicalArea, vocabularyLabel } from '../../utils/propertyVocabulary';
@@ -30,10 +31,12 @@ const formatCount = (value?: number, label = '') =>
 const PropertyCard = ({
   property,
   showSaveAction = false,
+  showCompareAction = false,
   onSave,
 }: {
   property: Property;
   showSaveAction?: boolean;
+  showCompareAction?: boolean;
   onSave?: (property: Property) => void;
 }) => {
   const location = useLocation();
@@ -51,6 +54,7 @@ const PropertyCard = ({
   const publicStatusLabel = statusLabel?.trim().toLowerCase() === 'not released' ? undefined : statusLabel;
   const isSold = publicStatusLabel?.toLowerCase() === 'sold';
   const isAvailable = publicStatusLabel?.toLowerCase() === 'available';
+  const priceOnApplication = effectiveCanonicalValue(property, 'priceOnApplication') === true;
   const areaValue = effectiveCanonicalValue(property, 'internalFloorArea');
   const paymentTypes = normalizePropertyPaymentTypes(property.paymentTypes, property.price ?? 0);
   const [fetchedTitleDocuments, setFetchedTitleDocuments] = useState<{
@@ -170,7 +174,7 @@ const PropertyCard = ({
             className="font-black text-base text-on-surface shrink-0"
             style={{ fontFamily: 'Manrope, sans-serif' }}
           >
-            {formatCurrency(property.price, property.currency)}
+            {priceOnApplication ? 'Price on application' : formatCurrency(property.price, property.currency)}
           </span>
         </div>
 
@@ -223,6 +227,8 @@ const PropertyCard = ({
             {property.views ?? 0}
           </span>
         </div>
+
+        {showCompareAction ? <CompareToggle property={property} /> : null}
 
         {routeReference ? (
           <Link to={`/properties/${routeReference}`} state={{ from: `${location.pathname}${location.search}`, discoveryFrom: (location.state as { discoveryFrom?: string } | null)?.discoveryFrom }} className="inline-flex items-center gap-1 text-primary font-bold text-sm hover:underline underline-offset-4">

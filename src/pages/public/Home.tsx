@@ -73,7 +73,7 @@ const Home = () => {
         {!loading && !error ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {homepageProperties.slice(0, 3).map((property) => (
-              <PropertyCard key={propertyRouteReference(property)} property={property} />
+              <PropertyCard key={propertyRouteReference(property)} property={property} showCompareAction />
             ))}
           </div>
         ) : null}

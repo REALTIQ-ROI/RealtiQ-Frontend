@@ -7,11 +7,13 @@ import ProtectedMediaSection from '../../../components/media/ProtectedMediaSecti
 import PaymentTypeBadges from '../../../components/property/PaymentTypeBadges';
 import ConstructionUpdateManager from '../../../components/property/ConstructionUpdateManager';
 import VirtualTourManagement from '../../../components/virtualTour/VirtualTourManagement';
+import SellerComparisonInsights from '../../../components/compare/SellerComparisonInsights';
+import { useAuth } from '../../../contexts/AuthContext';
 import { useAsync } from '../../../hooks/useAsync';
 import { inquiryService } from '../../../services/inquiryService';
 import { paymentService } from '../../../services/paymentService';
 import { propertyService } from '../../../services/propertyService';
-import { propertyRouteReference } from '../../../types';
+import { propertyRouteReference, resolveInquiryId, resolveInquiryProperties } from '../../../types';
 import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
 import { effectiveCanonicalValue, formatCanonicalArea } from '../../../utils/propertyVocabulary';
 
@@ -25,6 +27,7 @@ const formatRelativeDate = (date?: string) => {
 
 const LandlordPropertyDetails = () => {
   const { id } = useParams<{ id: string }>();
+  const { activeProfile } = useAuth();
   const { data: ownerDetail, loading: propertyLoading, error: propertyError, execute: refreshProperty } = useAsync(
     () => id ? propertyService.getPropertyOwnerDetail(id) : Promise.reject(new Error('Missing property reference.')),
     Boolean(id),
@@ -39,9 +42,9 @@ const LandlordPropertyDetails = () => {
   const relatedInquiries = (inquiries ?? []).filter((item) => {
     const propertyRef = item.property;
     if (typeof propertyRef === 'string') {
-      return propertyRef === property?._id;
+      return propertyRef === property?._id || resolveInquiryProperties(item).some((selected) => (selected.id ?? selected._id) === property?._id);
     }
-    return (propertyRef.id ?? propertyRef._id) === property?._id;
+    return (propertyRef.id ?? propertyRef._id) === property?._id || resolveInquiryProperties(item).some((selected) => (selected.id ?? selected._id) === property?._id);
   });
 
   const relatedPayments = (payments ?? []).filter((item) => item.property?._id === property?._id);
@@ -107,6 +110,8 @@ const LandlordPropertyDetails = () => {
           </div>
         </div>
 
+        {property?._id ? <SellerComparisonInsights key={`${activeProfile?.id ?? ''}:${property._id}`} propertyId={property._id} profileId={activeProfile?.id} /> : null}
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
           <div className="md:col-span-2 bg-surface-container-lowest p-8 rounded-xl flex flex-col justify-between min-h-[200px]">
             <div className="flex justify-between items-start">
@@ -126,7 +131,7 @@ const LandlordPropertyDetails = () => {
               <p className="text-4xl font-black text-slate-900 tracking-tighter">{relatedInquiries.length}</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {relatedInquiries.slice(0, 3).map((item) => (
-                  <span key={item._id} className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold text-slate-600">
+                  <span key={resolveInquiryId(item)} className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold text-slate-600">
                     {item.status}
                   </span>
                 ))}
@@ -235,13 +240,13 @@ const LandlordPropertyDetails = () => {
                   {relatedInquiries.length > 0 ? (
                     relatedInquiries.slice(0, 3).map((item) => (
                       <Link
-                        key={item._id}
-                        to={`/dashboard/landlord/inquiry-details/${item._id}`}
+                        key={resolveInquiryId(item)}
+                        to={`/dashboard/landlord/inquiry-details/${resolveInquiryId(item)}`}
                         className="p-4 bg-white rounded-lg hover:border-slate-200 transition-all border border-transparent"
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div>
-                            <p className="font-bold text-slate-900">{item.fullName}</p>
+                            <p className="font-bold text-slate-900">{item.inquirer || 'REALTIQ user'}</p>
                             <p className="text-xs text-slate-500">{item.inquiryType}</p>
                           </div>
                           <span className="text-[10px] font-bold uppercase tracking-widest text-secondary">{item.status}</span>

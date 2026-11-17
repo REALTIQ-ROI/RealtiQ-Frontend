@@ -1,4 +1,4 @@
-import type { OffPlanDevelopmentStatus, ProjectStatus, ProjectType } from '../types';
+import type { OffPlanDevelopmentStatus, ProjectPriceRangesByCurrency, ProjectStatus, ProjectType } from '../types';
 
 export const formatNgn = (value?: number, currency = 'NGN') =>
   typeof value === 'number' && Number.isFinite(value)
@@ -44,6 +44,25 @@ export const formatPriceRange = (minimum?: number, maximum?: number, currency = 
   return `${formatNgn(minimum, currency)} - ${formatNgn(maximum, currency)}`;
 };
 
+export const formatCurrencyRanges = (ranges?: ProjectPriceRangesByCurrency, fallback?: { minimum?: number; maximum?: number; currency?: string }, aggregateState?: string) => {
+  const values = Object.entries(ranges ?? {}).flatMap(([currency, value]) => {
+    if (!value) return [];
+    const minimum = typeof value.minimum === 'number' && Number.isFinite(value.minimum) ? value.minimum : undefined;
+    const maximum = typeof value.maximum === 'number' && Number.isFinite(value.maximum) ? value.maximum : undefined;
+    const range = minimum !== undefined || maximum !== undefined ? formatPriceRange(minimum, maximum, currency) : '';
+    const poaCount = Number.isInteger(value.priceOnApplicationCount) && value.priceOnApplicationCount > 0 ? value.priceOnApplicationCount : 0;
+    const details = [range, poaCount ? `${poaCount} price on application` : ''].filter(Boolean);
+    return details.length ? [`${currency}: ${details.join(' · ')}`] : [];
+  });
+  if (values.length) return values.join(' · ');
+  if (aggregateState === 'fx_unconfigured' || aggregateState === 'unavailable') return 'Price comparison unavailable';
+  if (fallback && (typeof fallback.minimum === 'number' || typeof fallback.maximum === 'number')) {
+    const currency = fallback.currency ?? (Object.keys(ranges ?? {}).length === 1 ? Object.keys(ranges ?? {})[0] : undefined) ?? 'NGN';
+    return formatPriceRange(fallback.minimum, fallback.maximum, currency);
+  }
+  return 'Price unavailable';
+};
+
 export const projectMapPricePresentation = (
   minimum: number | null | undefined,
   maximum: number | null | undefined,
@@ -56,5 +75,11 @@ export const projectMapPricePresentation = (
     }
   : { label: formatPriceRange(minimum ?? undefined, maximum ?? undefined, currency), notice: null };
 
-export const formatDate = (value?: string) =>
-  value ? new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Not set';
+export const formatDate = (value?: string) => {
+  if (!value) return 'Not set';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return 'Not set';
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = date.toLocaleDateString('en-GB', { month: 'short' });
+  return `${day}-${month}-${date.getFullYear()}`;
+};

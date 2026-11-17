@@ -195,7 +195,42 @@ export interface ProjectCard extends ProjectSummary {
     availableOffPlanUnits: number;
     minimumOffPlanPrice?: number;
     maximumOffPlanPrice?: number;
+    priceRangesByCurrency?: ProjectPriceRangesByCurrency;
   };
+  matchingUnitCount?: number;
+  underOfferUnits?: number;
+  priceRangesByCurrency?: ProjectPriceRangesByCurrency;
+  priceAggregateState?: string;
+  unpricedAvailableCount?: number;
+  matchingRanges?: Record<string, unknown>;
+}
+
+export interface ProjectCurrencyPriceRange {
+  minimum: number | null;
+  maximum: number | null;
+  pricedCount: number;
+  priceOnApplicationCount: number;
+}
+
+export type ProjectPriceRangesByCurrency = Partial<Record<'NGN' | 'USD', ProjectCurrencyPriceRange>>;
+
+export interface ProjectUnitSummary {
+  totalUnitCount?: number;
+  availableUnitCount?: number;
+  underOfferUnitCount?: number;
+  soldUnitCount?: number;
+  verifiedListingCount?: number;
+  priceRangesByCurrency?: ProjectPriceRangesByCurrency;
+  unpricedAvailableCount?: number;
+  bedrooms?: { minimum: number | null; maximum: number | null };
+  internalFloorAreaSqm?: { minimum: number | null; maximum: number | null };
+  propertyTypes?: string[];
+  categories?: string[];
+  unitTypes?: unknown[];
+  buildStages?: Record<string, number>;
+  handoverMonths?: string[];
+  earliestHandoverMonth?: string | null;
+  [key: string]: unknown;
 }
 
 export interface ProjectLocationLandmark {
@@ -243,6 +278,10 @@ export interface ProjectDetail extends ProjectCard {
   propertyCount?: number;
   availablePropertyCount?: number;
   verifiedPropertyCount?: number;
+  unitSummary?: ProjectUnitSummary;
+  faqs?: Array<{ question: string; answer: string }>;
+  approvedQuestionCount?: number;
+  reviewSummary?: Record<string, unknown>;
 }
 
 export interface ConstructionUpdate {
@@ -687,22 +726,28 @@ export interface Inquiry {
   ownerId?: string;
 }
 
-export interface CreateInquiryPayload {
-  propertyId: string;
+export interface CreateInquiryContact {
   fullName: string;
   email: string;
+  phone?: string;
   message: string;
   inquiryType: string;
   leadUpdatesOptIn?: boolean;
+  comparisonContextOptIn?: boolean;
 }
+
+export type CreateInquiryPayload = CreateInquiryContact & (
+  | { propertyId: string; propertyIds?: never }
+  | { propertyIds: string[]; propertyId?: never }
+);
 
 export interface InquiryProperty {
   id?: string;
   _id?: string;
   publicReference?: string;
   title: string;
-  location: string;
-  status?: string;
+  location?: string | null;
+  status?: string | null;
 }
 
 export interface InquiryUser {
@@ -712,8 +757,11 @@ export interface InquiryUser {
 }
 
 export interface ApiInquiry {
-  _id: string;
+  _id?: string;
   property: InquiryProperty | string;
+  id?: string;
+  inquiryGroupId?: string;
+  selectedProperties?: Array<InquiryProperty & { id: string }>;
   userId?: string | null;
   user?: InquiryUser;
   ownerId: string;
@@ -728,10 +776,20 @@ export interface ApiInquiry {
   updatedAt?: string;
   version: number;
   leadUpdatesOptIn?: boolean;
+  comparisonContextOptIn?: boolean;
+  buyerOptedIntoComparisonContext?: boolean;
 }
 
 export const resolveInquiryProperty = (property: ApiInquiry['property']): InquiryProperty | null =>
   typeof property === 'string' ? null : property;
+
+export const resolveInquiryId = (inquiry: Pick<ApiInquiry, '_id' | 'id'>): string => inquiry.id || inquiry._id || '';
+
+export const resolveInquiryProperties = (inquiry: Pick<ApiInquiry, 'property' | 'selectedProperties'>): InquiryProperty[] => {
+  if (inquiry.selectedProperties?.length) return inquiry.selectedProperties;
+  const property = resolveInquiryProperty(inquiry.property);
+  return property ? [property] : [];
+};
 
 export interface TourPropertySummary {
   _id: string;

@@ -457,6 +457,7 @@ const Listings = () => {
                       <PropertyCard
                         property={property}
                         showSaveAction
+                        showCompareAction
                         onSave={handleSave}
                       />
                     </div>

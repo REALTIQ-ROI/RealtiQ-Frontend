@@ -30,8 +30,8 @@ const parsePageCount = (payload: unknown, fallback: number): number => {
 };
 
 export const inquiryService = {
-  async createInquiry(payload: CreateInquiryPayload): Promise<ApiInquiry> {
-    const { data } = await api.post<ApiInquiry>('/inquiries', payload);
+  async createInquiry(payload: CreateInquiryPayload): Promise<ApiInquiry | { inquiryGroupId: string; inquiry: ApiInquiry }> {
+    const { data } = await api.post<ApiInquiry | { inquiryGroupId: string; inquiry: ApiInquiry }>('/inquiries', payload);
     return data;
   },
 

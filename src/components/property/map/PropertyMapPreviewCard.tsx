@@ -6,6 +6,7 @@ import PaymentTypeBadges from '../PaymentTypeBadges';
 import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTypes';
 import { useCanonicalFieldDictionary } from '../../../hooks/useCanonicalFieldDictionary';
 import { effectiveCanonicalValue, fieldVocabularyLabel, vocabularyLabel } from '../../../utils/propertyVocabulary';
+import CompareToggle from '../../compare/CompareToggle';
 
 interface Props {
   property: Property;
@@ -73,6 +74,7 @@ const PropertyMapPreviewCard = ({ property, detailsPath, actions, onClose, onDet
         <Link className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-on-primary" to={detailsPath(property)} state={{ from: `${location.pathname}${location.search}` }} onClick={onDetailsNavigate}>
           View Details
         </Link>
+        <CompareToggle property={property} compact />
         {actions?.(property)}
       </div>
     </div>

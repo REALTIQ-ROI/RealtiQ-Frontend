@@ -1,6 +1,7 @@
 ﻿import type { ReactNode } from 'react';
 import Navbar from './Navbar';
 import Footer from './Footer';
+import CompareTray from '../compare/CompareTray';
 
 const PublicLayout = ({ children, fullHeight = false }: { children: ReactNode; fullHeight?: boolean }) => {
   return (
@@ -8,6 +9,7 @@ const PublicLayout = ({ children, fullHeight = false }: { children: ReactNode; f
       <Navbar />
       <main className={fullHeight ? 'pt-20 sm:pt-24 lg:h-screen lg:overflow-hidden' : 'pt-20 sm:pt-24'}>{children}</main>
       {!fullHeight ? <Footer /> : null}
+      <CompareTray />
     </div>
   );
 };

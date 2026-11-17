@@ -9,7 +9,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { hasAdminCapability } from '../../../services/adminAccessService';
 import { ApiRequestError } from '../../../lib/axios';
 import { inquiryService } from '../../../services/inquiryService';
-import { resolveInquiryProperty } from '../../../types';
+import { resolveInquiryId, resolveInquiryProperties, resolveInquiryProperty } from '../../../types';
 
 const formatDate = (date: string) =>
   new Date(date).toLocaleString('en-NG', {
@@ -29,11 +29,13 @@ const AdminInquiryDetailsContent = () => {
     Boolean(id),
   );
   const property = inquiry ? resolveInquiryProperty(inquiry.property) : null;
+  const selectedProperties = inquiry ? resolveInquiryProperties(inquiry) : [];
+  const inquiryId = inquiry ? resolveInquiryId(inquiry) : '';
 
   const toggleStatus = async () => {
-    if (!inquiry || !canManageSupport) return;
+    if (!inquiry || !inquiryId || !canManageSupport) return;
     try {
-      await inquiryService.updateInquiryStatus(inquiry._id, inquiry.status === 'open' ? 'closed' : 'open', inquiry.version);
+      await inquiryService.updateInquiryStatus(inquiryId, inquiry.status === 'open' ? 'closed' : 'open', inquiry.version);
       toast.success(inquiry.status === 'open' ? 'Inquiry closed.' : 'Inquiry reopened.');
       await execute();
     } catch (error) {
@@ -83,13 +85,15 @@ const AdminInquiryDetailsContent = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <p><strong>Property:</strong> {property?.title ?? 'Property unavailable'}</p>
-              <p><strong>Location:</strong> {property?.location ?? 'Location unavailable'}</p>
+              <p><strong>Property:</strong> {property?.title ?? selectedProperties[0]?.title ?? 'Property unavailable'}</p>
+              <p><strong>Location:</strong> {property?.location ?? selectedProperties[0]?.location ?? 'Location unavailable'}</p>
               <p><strong>Inquiry Type:</strong> {inquiry.inquiryType}</p>
               <p><strong>Created:</strong> {formatDate(inquiry.createdAt)}</p>
               <p><strong>Owner ID:</strong> {inquiry.ownerId}</p>
               <p><strong>User ID:</strong> {inquiry.userId ?? 'Visitor inquiry'}</p>
             </div>
+
+            {selectedProperties.length > 1 ? <section className="rounded-xl border border-outline-variant/15 p-5"><h3 className="font-bold">Selected units · {selectedProperties.length}</h3><ul className="mt-3 divide-y divide-outline-variant/15">{selectedProperties.map((selected, index) => <li key={selected.id ?? selected._id ?? `${selected.title}-${index}`} className="flex flex-wrap justify-between gap-2 py-2 text-sm"><span className="font-semibold">{selected.title}</span><span className="text-secondary">{[selected.publicReference, selected.location, selected.status].filter(Boolean).join(' · ') || 'Current status unavailable'}</span></li>)}</ul></section> : null}
 
             <div className="bg-surface-container-low rounded-xl p-6">
               <p className="text-xs text-secondary uppercase tracking-widest mb-2">Message</p>

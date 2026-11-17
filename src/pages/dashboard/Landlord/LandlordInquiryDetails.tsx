@@ -8,7 +8,7 @@ import { useAsync } from '../../../hooks/useAsync';
 import { ApiRequestError } from '../../../lib/axios';
 import { inquiryService } from '../../../services/inquiryService';
 import { messageService } from '../../../services/messageService';
-import { resolveInquiryProperty } from '../../../types';
+import { resolveInquiryId, resolveInquiryProperties, resolveInquiryProperty } from '../../../types';
 import { useAuth } from '../../../contexts/AuthContext';
 
 const formatDate = (date: string) =>
@@ -28,22 +28,24 @@ const LandlordInquiryDetailsContent = () => {
     Boolean(id),
   );
   const property = inquiry ? resolveInquiryProperty(inquiry.property) : null;
+  const selectedProperties = inquiry ? resolveInquiryProperties(inquiry) : [];
+  const inquiryId = inquiry ? resolveInquiryId(inquiry) : '';
   const senderLabel = inquiry?.inquirer?.trim() || 'REALTIQ user';
 
   const startConversation = async () => {
-    if (!inquiry) return;
+    if (!inquiry || !inquiryId) return;
     const propertyId = typeof inquiry.property === 'string' ? inquiry.property : inquiry.property.id ?? inquiry.property._id;
     if (!propertyId) { toast.error('This inquiry does not include a current listing reference.'); return; }
     try {
-      const conversation = await messageService.start(propertyId, inquiry._id);
+      const conversation = await messageService.start(propertyId, inquiryId);
       navigate(`/messages/${encodeURIComponent(conversation._id)}`);
     } catch (raw) { toast.error(raw instanceof Error ? raw.message : 'Unable to open the on-platform conversation.'); }
   };
 
   const toggleStatus = async () => {
-    if (!inquiry) return;
+    if (!inquiry || !inquiryId) return;
     try {
-      await inquiryService.updateInquiryStatus(inquiry._id, inquiry.status === 'open' ? 'closed' : 'open', inquiry.version);
+      await inquiryService.updateInquiryStatus(inquiryId, inquiry.status === 'open' ? 'closed' : 'open', inquiry.version);
       toast.success(inquiry.status === 'open' ? 'Inquiry closed.' : 'Inquiry reopened.');
       await execute();
     } catch (error) {
@@ -97,9 +99,15 @@ const LandlordInquiryDetailsContent = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
                   <p><strong>Inquiry Type:</strong> {inquiry.inquiryType}</p>
-                  <p><strong>Property:</strong> {property?.title ?? 'Property unavailable'}</p>
-                  <p><strong>Location:</strong> {property?.location ?? 'Location unavailable'}</p>
+                  <p><strong>{selectedProperties.length > 1 ? 'First selected unit' : 'Property'}:</strong> {property?.title ?? selectedProperties[0]?.title ?? 'Property unavailable'}</p>
+                  <p><strong>Location:</strong> {property?.location ?? selectedProperties[0]?.location ?? 'Location unavailable'}</p>
                 </div>
+
+                {selectedProperties.length > 1 ? <section className="mb-6 rounded-xl border border-outline-variant/15 p-5">
+                  <h3 className="font-bold">Selected units · {selectedProperties.length}</h3>
+                  <ul className="mt-3 divide-y divide-outline-variant/15">{selectedProperties.map((selected, index) => <li key={selected.id ?? selected._id ?? `${selected.title}-${index}`} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span className="font-semibold">{selected.title || 'Unit'}</span><span className="text-secondary">{[selected.publicReference, selected.location, selected.status].filter(Boolean).join(' · ') || 'Current status unavailable'}</span></li>)}</ul>
+                  <p className="mt-3 text-xs text-secondary">This is one enquiry covering the selected units. Current availability is shown as returned by the server.</p>
+                </section> : null}
 
                 <div className="bg-surface-container-low p-6 rounded-xl">
                   <p className="text-xs text-secondary uppercase tracking-widest mb-2">Message</p>

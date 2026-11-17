@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import type { ProjectCard as ProjectCardType } from '../../types';
-import { formatPriceRange, labelize, projectStatusClasses } from '../../utils/projectFormatters';
+import { formatCurrencyRanges, labelize, projectStatusClasses } from '../../utils/projectFormatters';
 import { isProjectExplicitlyUnpublished, isProjectPublished } from '../../utils/projectPublication';
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
 import { fieldVocabularyLabel } from '../../utils/propertyVocabulary';
@@ -21,6 +21,17 @@ const ProjectCard = ({ project, requirePublishedToView = false }: ProjectCardPro
   const canViewProject = requirePublishedToView
     ? isProjectPublished(project)
     : !isProjectExplicitlyUnpublished(project);
+  const priceRange = formatCurrencyRanges(project.priceRangesByCurrency, {
+    minimum: project.minimumPrice,
+    maximum: project.maximumPrice,
+    currency: 'NGN',
+  }, project.priceAggregateState);
+  const offPlanPriceRange = project.offPlanSummary
+    ? formatCurrencyRanges(project.offPlanSummary.priceRangesByCurrency, {
+      minimum: project.offPlanSummary.minimumOffPlanPrice,
+      maximum: project.offPlanSummary.maximumOffPlanPrice,
+    })
+    : null;
   const media = (
     <div className="relative aspect-[16/10] bg-surface-container-low">
       {cover ? (
@@ -66,11 +77,12 @@ const ProjectCard = ({ project, requirePublishedToView = false }: ProjectCardPro
         <div className="grid grid-cols-2 gap-3 rounded-xl bg-surface-container-low p-4 text-sm">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-secondary">Price Range</p>
-            <p className="mt-1 font-black">{formatPriceRange(project.minimumPrice, project.maximumPrice, project.currency)}</p>
+            <p className="mt-1 font-black">{priceRange}</p>
           </div>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-secondary">Available Units</p>
             <p className="mt-1 font-black">{project.availableUnits} / {project.totalUnits}</p>
+            {typeof project.matchingUnitCount === 'number' ? <p className="mt-1 text-xs text-secondary">{project.matchingUnitCount} matching {project.matchingUnitCount === 1 ? 'unit' : 'units'}</p> : null}
           </div>
         </div>
 
@@ -80,7 +92,7 @@ const ProjectCard = ({ project, requirePublishedToView = false }: ProjectCardPro
             <p className="mt-1 text-secondary">
               {project.offPlanSummary.availableOffPlanUnits} of {project.offPlanSummary.totalOffPlanUnits} off-plan units available.
             </p>
-            <p className="mt-1 font-semibold">{formatPriceRange(project.offPlanSummary.minimumOffPlanPrice, project.offPlanSummary.maximumOffPlanPrice, project.currency)}</p>
+            {offPlanPriceRange ? <p className="mt-1 font-semibold">{offPlanPriceRange}</p> : null}
           </div>
         ) : null}
 
