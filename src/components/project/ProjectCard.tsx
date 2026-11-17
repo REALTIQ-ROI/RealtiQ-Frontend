@@ -10,6 +10,8 @@ interface ProjectCardProps {
   requirePublishedToView?: boolean;
 }
 
+const internalProjectStates = new Set(['draft', 'suspended', 'unpublished']);
+
 const ProjectCard = ({ project, requirePublishedToView = false }: ProjectCardProps) => {
   const location = useLocation();
   const { dictionary } = useCanonicalFieldDictionary();
@@ -21,6 +23,10 @@ const ProjectCard = ({ project, requirePublishedToView = false }: ProjectCardPro
   const canViewProject = requirePublishedToView
     ? isProjectPublished(project)
     : !isProjectExplicitlyUnpublished(project);
+  const showProjectStatus = requirePublishedToView;
+  // Public discovery must never expose internal project lifecycle/publication
+  // states. The seller workspace may show those states on its private cards.
+  if (!requirePublishedToView && (!canViewProject || internalProjectStates.has(project.status))) return null;
   const priceRange = formatCurrencyRanges(project.priceRangesByCurrency, {
     minimum: project.minimumPrice,
     maximum: project.maximumPrice,
@@ -46,10 +52,10 @@ const ProjectCard = ({ project, requirePublishedToView = false }: ProjectCardPro
           {projectTypeLabel}
         </span>
         {project.isFeatured ? <span className="rounded-full bg-amber-300 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-amber-950">Featured</span> : null}
-        <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wide ${projectStatusClasses[project.status] ?? 'bg-slate-100 text-slate-700'}`}>
+        {showProjectStatus ? <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wide ${projectStatusClasses[project.status] ?? 'bg-slate-100 text-slate-700'}`}>
           {labelize(project.status)}
-        </span>
-        {!canViewProject ? (
+        </span> : null}
+        {requirePublishedToView && !canViewProject ? (
           <span className="rounded-full bg-slate-900/80 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-white">
             Unpublished
           </span>
@@ -97,7 +103,7 @@ const ProjectCard = ({ project, requirePublishedToView = false }: ProjectCardPro
         ) : null}
 
         <div className="flex items-center justify-between gap-3 border-t border-outline-variant/10 pt-4">
-          <p className="text-xs text-secondary">{project.developer?.name || 'Not provided'}</p>
+          {project.developer?.name ? <div className="min-w-0 text-xs text-secondary"><p className="font-bold">Developer project</p><p className="mt-1 truncate">{project.developer.name}</p></div> : <span />}
           {canViewProject ? (
             <Link to={path} state={navigationState} className="text-sm font-bold text-primary hover:underline">View project</Link>
           ) : (

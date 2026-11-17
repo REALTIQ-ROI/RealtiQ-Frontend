@@ -296,8 +296,8 @@ export const projectService = {
     return data;
   },
 
-  async getProject(idOrSlug: string): Promise<{ project: ProjectDetail }> {
-    const { data } = await api.get<{ project: ProjectDetail }>(`/projects/${encodeURIComponent(idOrSlug)}`);
+  async getProject(idOrSlug: string, signal?: AbortSignal): Promise<{ project: ProjectDetail }> {
+    const { data } = await api.get<{ project: ProjectDetail }>(`/projects/${encodeURIComponent(idOrSlug)}`, { signal });
     return data;
   },
 

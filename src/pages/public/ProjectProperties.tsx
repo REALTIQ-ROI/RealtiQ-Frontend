@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import PublicLayout from '../../components/layout/PublicLayout';
 import PropertyCard from '../../components/property/PropertyCard';
@@ -18,8 +18,14 @@ import { isProjectPublished } from '../../utils/projectPublication';
 import { adoptCanonicalQuery, catalogueFilterFormKey, readCatalogueQuery, sameCanonicalCriteria, writeCatalogueQuery } from '../../utils/catalogueQuery';
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
 import { inquiryService } from '../../services/inquiryService';
+import CompareToggle from '../../components/compare/CompareToggle';
+import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
+import { effectiveCanonicalValue, fieldVocabularyLabel } from '../../utils/propertyVocabulary';
+import { propertyRouteReference } from '../../types';
+import { groupProjectUnits, readProjectUnitDisplayMode, type ProjectUnitView } from '../../utils/projectUnitDisplay';
 
 const PAGE_SIZE = 20;
+const EMPTY_PROPERTIES: import('../../types').Property[] = [];
 const pageFromQuery = (params: URLSearchParams) => {
   const page = Number(params.get('page') ?? 1);
   return Number.isSafeInteger(page) && page > 0 ? page : 1;
@@ -37,9 +43,12 @@ const ProjectProperties = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeProfile, isAuthenticated } = useAuth();
+  const { dictionary } = useCanonicalFieldDictionary();
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
   const [selectedUnits, setSelectedUnits] = useState<Record<string, import('../../types').Property>>({});
   const [inquiryOpen, setInquiryOpen] = useState(false);
+  const [unitView, setUnitView] = useState<ProjectUnitView>('cards');
+  const [projectDetailState, setProjectDetailState] = useState<{ slug: string; project: import('../../types').ProjectDetail | null; error: boolean } | null>(null);
   const searchParamsRef = useRef(searchParams);
   useEffect(() => { searchParamsRef.current = searchParams; }, [searchParams]);
   const projectNavigationState = location.state as { from?: string; discoveryFrom?: string } | null;
@@ -87,12 +96,24 @@ const ProjectProperties = () => {
     return () => controller.abort();
   }, [slug, queryKey, page, refreshVersion, requestKey, activeProfile?.id, setSearchParams]);
 
+  useEffect(() => {
+    if (!slug) return;
+    const controller = new AbortController();
+    void projectService.getProject(slug, controller.signal)
+      .then(({ project }) => { if (!controller.signal.aborted) setProjectDetailState({ slug, project, error: false }); })
+      .catch(() => { if (!controller.signal.aborted) setProjectDetailState({ slug, project: null, error: true }); });
+    return () => controller.abort();
+  }, [slug]);
+
   const currentData = dataProfileId === (activeProfile?.id ?? null) ? data : null;
   const project = currentData?.project;
+  const projectDetails = projectDetailState?.slug === slug ? projectDetailState.project : null;
+  const projectUnitDisplayMode = readProjectUnitDisplayMode(projectDetails);
   const projectIsPublic = project ? isProjectPublished(project) : true;
-  const properties = projectIsPublic ? currentData?.properties ?? [] : [];
+  const properties = projectIsPublic ? currentData?.properties ?? EMPTY_PROPERTIES : EMPTY_PROPERTIES;
   const total = currentData?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const unitGroups = useMemo(() => groupProjectUnits(properties, projectUnitDisplayMode), [properties, projectUnitDisplayMode]);
   const applyFilters = (changes: Parameters<typeof writeCatalogueQuery>[0], clearAll = false) => setSearchParams(writeCatalogueQuery(changes, { base: searchParams, resetPage: true, clearAll }));
   const clearFilterChip = (key: string, index: number) => setSearchParams(removeCatalogueFilterChip(searchParams, { key, index }));
   const changePage = (nextPage: number) => {
@@ -102,6 +123,8 @@ const ProjectProperties = () => {
     setSearchParams(next);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+  // Clear selections when the project or selected profile changes so units cannot carry between contexts.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setSelectedUnitIds([]); setSelectedUnits({}); }, [slug, activeProfile?.id]);
   const toggleUnitSelection = (property: import('../../types').Property) => {
     setSelectedUnitIds((current) => current.includes(property._id)
@@ -120,6 +143,17 @@ const ProjectProperties = () => {
     else toast.error('Select an eligible Buyer profile to start a purchase negotiation.');
   };
 
+  const formatUnitPrice = (property: import('../../types').Property) => {
+    if (effectiveCanonicalValue(property, 'priceOnApplication') === true) return 'Price on application';
+    if (typeof property.price !== 'number' || !Number.isFinite(property.price) || typeof property.currency !== 'string') return 'Price unavailable';
+    try { return new Intl.NumberFormat('en-NG', { style: 'currency', currency: property.currency, maximumFractionDigits: 0 }).format(property.price); }
+    catch { return 'Price unavailable'; }
+  };
+  const formatAvailability = (status: string) => ({ available: 'Available', under_offer: 'Under Offer', sold: 'Sold' } as Record<string, string>)[status] ?? 'Availability unavailable';
+  const renderUnitRows = (group: typeof unitGroups[number]) => group.properties.map((property) => (
+    <article key={property._id} className="min-w-0"><PropertyCard property={property} showCompareAction />{['available', 'under_offer'].includes(property.status) ? <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><input type="checkbox" checked={selectedUnitIds.includes(property._id)} disabled={!selectedUnitIds.includes(property._id) && selectedUnitIds.length >= 100} onChange={() => toggleUnitSelection(property)} /><span>Select this unit for an enquiry or negotiation</span></label> : null}</article>
+  ));
+
   return <PublicLayout>
     <section className="mx-auto max-w-7xl px-4 py-8 sm:px-8">
       <header className="mb-6">
@@ -130,12 +164,17 @@ const ProjectProperties = () => {
       <div className="-mx-4 mb-5 sm:-mx-8"><PropertyFiltersPanel key={catalogueFilterFormKey(searchParams)} initialFilters={readCatalogueQuery(searchParams)} initialQuery={searchParams} activeProfile={activeProfile} onApply={applyFilters} /></div>
       <div className="-mx-4 sm:-mx-8"><ActiveCatalogueFilters params={searchParams} onClear={clearFilterChip} /></div>
       <CatalogueResultInsights facets={currentData?.facets} diagnostics={currentData?.diagnostics} onApplySuggestion={(patch) => applyFilters(patch)} />
-      <div className="my-5 flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-semibold text-secondary">{total.toLocaleString()} units</p><div className="flex items-center gap-3"><button type="button" onClick={() => setRefreshVersion((version) => version + 1)} className="text-sm font-bold text-primary">Refresh</button>{selectedUnitIds.length ? <><Button type="button" disabled={selectedUnitIds.length > 100} onClick={startNegotiation}>Start negotiation · {selectedUnitIds.length} selected</Button>{selectedUnitIds.length >= 2 ? <Button type="button" variant="secondary" onClick={() => setInquiryOpen(true)}>Enquire about selected units</Button> : null}</> : null}</div></div>
+      <div className="my-5 flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-secondary">{total.toLocaleString()} units</p><p className="mt-1 text-xs text-secondary">Developer’s unit display preference: {projectUnitDisplayMode === 'grouped_by_unit_type' ? 'Grouped by unit type' : projectUnitDisplayMode === 'individual_units' ? 'Individual units' : 'Unavailable'}</p>{projectUnitDisplayMode === 'grouped_by_unit_type' ? <p className="mt-1 text-xs text-secondary">Units are grouped by returned type name on this page; each unit still opens its own listing.</p> : null}</div><div className="flex flex-wrap items-center gap-3"><fieldset className="flex items-center gap-1 rounded-lg border p-1" aria-label="Unit presentation"><legend className="sr-only">Unit presentation</legend>{(['cards', 'list', 'table'] as const).map((view) => <button key={view} type="button" aria-pressed={unitView === view} onClick={() => setUnitView(view)} className={`rounded-md px-3 py-2 text-sm font-semibold ${unitView === view ? 'bg-primary text-on-primary' : 'text-secondary'}`}>{view === 'cards' ? 'Cards' : view === 'list' ? 'List' : 'Table'}</button>)}</fieldset><button type="button" onClick={() => setRefreshVersion((version) => version + 1)} className="text-sm font-bold text-primary">Refresh</button>{selectedUnitIds.length ? <><Button type="button" disabled={selectedUnitIds.length > 100} onClick={startNegotiation}>Start negotiation · {selectedUnitIds.length} selected</Button>{selectedUnitIds.length >= 2 ? <Button type="button" variant="secondary" onClick={() => setInquiryOpen(true)}>Enquire about selected units</Button> : null}</> : null}</div></div>
+      {projectDetailState?.slug === slug && (projectDetailState.error || (projectDetailState.project && !projectUnitDisplayMode)) ? <p role="status" className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">The developer-selected unit layout was not returned. Units are shown individually for this view.</p> : null}
       {currentData?.normalization?.notices?.length ? <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{currentData.normalization.notices.map((notice, index) => <p key={`unit-search-notice-${index}`}>{noticeText(notice) || 'The server normalized this search.'}</p>)}</div> : null}
       {loading && !properties.length ? <LoadingState label="Loading project units..." /> : null}
       {error ? <ErrorState message={error} onRetry={() => setRefreshVersion((version) => version + 1)} /> : null}
       {!loading && !error && !projectIsPublic ? <div className="rounded-xl border border-dashed border-outline-variant/20 p-10 text-center text-secondary">This project is not published yet.</div> : null}
-      {!loading && !error && projectIsPublic && properties.length ? <div className={`grid gap-6 md:grid-cols-2 xl:grid-cols-3 ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>{properties.map((property) => <article key={property._id} className="min-w-0"><PropertyCard property={property} showCompareAction />{['available', 'under_offer'].includes(property.status) ? <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><input type="checkbox" checked={selectedUnitIds.includes(property._id)} disabled={!selectedUnitIds.includes(property._id) && selectedUnitIds.length >= 100} onChange={() => toggleUnitSelection(property)} /><span>Select this unit for an enquiry or negotiation</span></label> : null}</article>)}</div> : null}
+      {!loading && !error && projectIsPublic && properties.length && unitView !== 'table' ? <div className={unitView === 'cards' ? `grid gap-6 md:grid-cols-2 xl:grid-cols-3 ${loading ? 'opacity-60' : ''}` : `grid gap-4 ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>{unitGroups.map((group) => <section key={group.key} className={unitView === 'cards' ? 'contents' : 'space-y-4'}>{projectUnitDisplayMode === 'grouped_by_unit_type' ? <h2 className="col-span-full text-lg font-bold">{group.label}</h2> : null}{renderUnitRows(group)}</section>)}</div> : null}
+      {!loading && !error && projectIsPublic && properties.length && unitView === 'table' ? <div className="overflow-x-auto rounded-xl border border-outline-variant/20 bg-white"><table className="w-full min-w-[720px] border-collapse text-left text-sm"><caption className="sr-only">Project units with public status, price and comparison controls</caption><thead className="bg-surface-container-low text-xs uppercase tracking-wide text-secondary"><tr><th scope="col" className="px-4 py-3">Unit</th><th scope="col" className="px-4 py-3">Type</th><th scope="col" className="px-4 py-3">Availability</th><th scope="col" className="px-4 py-3">Price</th><th scope="col" className="px-4 py-3">Actions</th></tr></thead><tbody>{unitGroups.flatMap((group) => [
+        ...(projectUnitDisplayMode === 'grouped_by_unit_type' ? [<tr key={`${group.key}-heading`} className="border-t bg-surface-container-low"><th scope="rowgroup" colSpan={5} className="px-4 py-3 text-base font-bold">{group.label}</th></tr>] : []),
+        ...group.properties.map((property) => <tr key={property._id} className="border-t border-outline-variant/10"><td className="px-4 py-3"><Link className="font-bold text-primary hover:underline" to={`/properties/${propertyRouteReference(property)}`}>{property.title}</Link>{property.publicReference ? <p className="mt-1 text-xs text-secondary">{property.publicReference}</p> : null}</td><td className="px-4 py-3">{fieldVocabularyLabel(dictionary, 'propertyType', property.propertyType) ?? property.propertyType}</td><td className="px-4 py-3">{formatAvailability(property.status)}</td><td className="px-4 py-3 font-semibold">{formatUnitPrice(property)}</td><td className="px-4 py-3"><div className="flex items-center gap-3"><CompareToggle property={property} /><Link className="font-bold text-primary hover:underline" to={`/properties/${propertyRouteReference(property)}`}>View</Link></div></td></tr>),
+      ])}</tbody></table></div> : null}
       {!loading && !error && projectIsPublic && !properties.length ? <div className="rounded-xl border border-dashed border-outline-variant/20 p-10 text-center text-secondary">No project units match this search.</div> : null}
       {total > PAGE_SIZE ? <nav className="mt-8 flex items-center justify-between" aria-label="Project unit result pages"><button type="button" onClick={() => changePage(Math.max(1, page - 1))} disabled={page <= 1 || loading} className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold disabled:opacity-40">Previous</button><span className="text-sm font-semibold text-secondary">Page {page} of {totalPages}</span><button type="button" onClick={() => changePage(Math.min(totalPages, page + 1))} disabled={page >= totalPages || loading} className="rounded-lg bg-surface-container-low px-4 py-2 text-sm font-bold disabled:opacity-40">Next</button></nav> : null}
     </section>
