@@ -15,7 +15,7 @@ import { personalisationService } from "../../services/personalisationService";
 import { propertyService } from "../../services/propertyService";
 import type { CanonicalMapMarker } from '../../types/canonicalMap';
 import { canonicalMapMarkers } from '../../utils/canonicalMapMarkers';
-import { adoptCanonicalQuery, catalogueFilterFormKey, cataloguePageFromQuery, catalogueQueryForDisplay, hasFeaturedFilterIgnoredNotice, readCatalogueQuery, sameCanonicalCriteria, visibleCatalogueNotices, writeCatalogueQuery, withoutFeaturedSearchFilter } from "../../utils/catalogueQuery";
+import { adoptCanonicalQuery, catalogueFilterFormKey, cataloguePageFromQuery, catalogueQueryForDisplay, hasFeaturedFilterIgnoredNotice, readCatalogueQuery, sameCanonicalCriteria, visibleCatalogueNotices, writeCatalogueQuery, withoutUnsupportedCatalogueFilters } from "../../utils/catalogueQuery";
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
 import { savedSearchFiltersFromUrl, savedSearchFiltersToUrl } from '../../utils/savedSearchQuery';
 import type { SavedSearch } from '../../types';
@@ -160,7 +160,7 @@ const Listings = () => {
       .then((result) => {
         if (controller.signal.aborted) return;
         if (result.normalization?.query !== undefined || hasFeaturedFilterIgnoredNotice(result.normalization?.notices)) {
-          adoptNormalization(result.normalization?.query ?? withoutFeaturedSearchFilter(query), query);
+          adoptNormalization(result.normalization?.query ?? withoutUnsupportedCatalogueFilters(query), query);
         }
         const parsed = canonicalMapMarkers(result);
         setMapState({ queryKey: mapRequestIdentity, count: Number.isFinite(result.total) ? result.total : null, error: null,
@@ -197,6 +197,9 @@ const Listings = () => {
 
   const handleViewportChange = useCallback(
     (nextViewport: typeof viewport & object, userInitiated = false) => {
+      // The map reports viewport bounds after both user gestures and URL-driven
+      // camera updates. Ignore the latter when a viewport is already in search.
+      if (!userInitiated && requestedViewport) return;
       const key = Object.values(nextViewport)
         .map((value) => Math.round(value * 100_000) / 100_000)
         .join(":");
@@ -205,13 +208,15 @@ const Listings = () => {
       viewportKey.current = key;
       setViewport(nextViewport);
       if (userInitiated) viewportInteracted.current = true;
-      const nextParams = writeCatalogueMapViewport(searchParams, nextViewport, userInitiated);
+      const current = searchParamsRef.current;
+      const nextParams = writeCatalogueMapViewport(current, nextViewport, userInitiated);
+      if (nextParams.toString() === current.toString()) return;
       searchParamsRef.current = nextParams;
       appliedQueryKey.current = nextParams.toString();
       setSearchParams(nextParams);
       applyFilters(nextParams, userInitiated ? 1 : cataloguePageFromQuery(nextParams));
     },
-    [applyFilters, searchParams, setSearchParams],
+    [applyFilters, requestedViewport, setSearchParams],
   );
 
   const profileContext = useRef(activeProfile?.id ?? null);

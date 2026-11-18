@@ -8,7 +8,7 @@ import {
   type UpdatePropertyPayload,
 } from '../services/propertyService';
 import type { Property } from '../types';
-import { canonicalCatalogueSearchParams, hasFeaturedFilterIgnoredNotice, visibleCatalogueNotices, withoutFeaturedSearchFilter } from '../utils/catalogueQuery';
+import { canonicalCatalogueSearchParams, hasFeaturedFilterIgnoredNotice, visibleCatalogueNotices, withoutUnsupportedCatalogueFilters } from '../utils/catalogueQuery';
 import { apiErrorMessage } from '../utils/apiErrorMessage';
 
 interface UsePropertiesOptions {
@@ -74,7 +74,7 @@ export const useProperties = (options: UsePropertiesOptions = {}) => {
           setDiagnostics(res.diagnostics ?? null);
           setFacets(res.facets ?? null);
           if (res.normalization?.query !== undefined || hasFeaturedFilterIgnoredNotice(res.normalization?.notices)) {
-            const normalizedQuery = res.normalization?.query ?? withoutFeaturedSearchFilter(requestFilters);
+            const normalizedQuery = res.normalization?.query ?? withoutUnsupportedCatalogueFilters(requestFilters);
             const adopted = onNormalizationRef.current?.(normalizedQuery, requestFilters);
             if (adopted) setFilters(adopted);
           }

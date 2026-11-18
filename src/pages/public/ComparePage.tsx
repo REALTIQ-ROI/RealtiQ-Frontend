@@ -359,7 +359,7 @@ const SuggestionPanel = ({ category, anchorIds, existingCategory, disabled, onCo
       if (mode === 'top_matches') {
         const url = new URL(returnPath, window.location.origin);
         const filters: Record<string, string> = {};
-        url.searchParams.forEach((value, key) => { if (key !== 'featured' && !['page', 'limit', 'sort', 'queryVersion', 'category', 'availability', 'status'].includes(key)) filters[key] = value; });
+        url.searchParams.forEach((value, key) => { if (!['featured', 'groupByProject', 'page', 'limit', 'sort', 'queryVersion', 'category', 'availability', 'status'].includes(key)) filters[key] = value; });
         response = await compareService.suggestions({ mode, category: selectedCategory, criterion, count, filters: { queryVersion: 'canonical-v1', ...filters } });
       } else {
         const anchorPropertyId = anchorIds[0];

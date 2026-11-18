@@ -106,7 +106,7 @@ export interface ProjectPropertiesResponse {
 
 export interface ProjectMapResponse {
   mode: 'projects';
-  bounds: { north: number; south: number; east: number; west: number; zoom: number } | null;
+  bounds: { north: number; south: number; east: number; west: number } | null;
   total: number;
   limit: number;
   truncated: boolean;
@@ -122,7 +122,7 @@ const parseProjectMapResponse = (value: unknown): ProjectMapResponse => {
   }
   const response = value as Partial<ProjectMapResponse>;
   const hasValidBounds = response.bounds === null || Boolean(response.bounds &&
-    ['north', 'south', 'east', 'west', 'zoom'].every((key) => Number.isFinite(response.bounds?.[key as keyof NonNullable<ProjectMapResponse['bounds']>])));
+    ['north', 'south', 'east', 'west'].every((key) => Number.isFinite(response.bounds?.[key as keyof NonNullable<ProjectMapResponse['bounds']>])));
   const hasValidProjects = Array.isArray(response.projects) && response.projects.every((candidate) => {
     if (!candidate || typeof candidate !== 'object') return false;
     const item = candidate as Partial<ProjectMapItem>;

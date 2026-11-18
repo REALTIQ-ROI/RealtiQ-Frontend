@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { projectService, type ProjectPropertiesResponse } from '../../services/projectService';
 import { isProjectPublished } from '../../utils/projectPublication';
-import { adoptCanonicalQuery, catalogueFilterFormKey, hasFeaturedFilterIgnoredNotice, readCatalogueQuery, sameCanonicalCriteria, visibleCatalogueNotices, writeCatalogueQuery, withoutFeaturedSearchFilter } from '../../utils/catalogueQuery';
+import { adoptCanonicalQuery, catalogueFilterFormKey, hasFeaturedFilterIgnoredNotice, readCatalogueQuery, sameCanonicalCriteria, visibleCatalogueNotices, writeCatalogueQuery, withoutUnsupportedCatalogueFilters } from '../../utils/catalogueQuery';
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
 import { inquiryService } from '../../services/inquiryService';
 import CompareToggle from '../../components/compare/CompareToggle';
@@ -79,7 +79,7 @@ const ProjectProperties = () => {
           if (response.normalization?.query !== undefined || hasFeaturedFilterIgnoredNotice(response.normalization?.notices)) {
             const current = searchParamsRef.current;
             if (sameCanonicalCriteria(current, query)) {
-              const normalized = adoptCanonicalQuery(current, response.normalization?.query ?? withoutFeaturedSearchFilter(query));
+              const normalized = adoptCanonicalQuery(current, response.normalization?.query ?? withoutUnsupportedCatalogueFilters(query));
               if (normalized.toString() !== current.toString()) {
                 searchParamsRef.current = normalized;
                 setSearchParams(normalized, { replace: true });

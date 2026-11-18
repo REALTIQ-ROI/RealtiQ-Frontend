@@ -76,7 +76,13 @@ const GooglePropertyMap = ({
     let map: GoogleMapInstance | null = null;
     let resize: ResizeObserver | null = null;
     let tileTimeout = 0;
+    let viewportTimeout = 0;
+    let pendingUserViewportChange = false;
     const listeners: Array<{ remove(): void }> = [];
+    const markUserViewportChange = () => { userViewportChange.current = true; };
+    const markGoogleControlClick = (event: MouseEvent) => {
+      if (event.target instanceof Element && event.target.closest('.gm-bundled-control')) markUserViewportChange();
+    };
     setMapError(false);
     setTilesAvailable(false);
     void loadGoogleMapsSdk().then((googleMaps) => {
@@ -95,21 +101,27 @@ const GooglePropertyMap = ({
       listeners.push(map.addListener('tilesloaded', () => { window.clearTimeout(tileTimeout); setTilesAvailable(true); setMapError(false); }));
       listeners.push(map.addListener('zoom_changed', () => setMapZoom(map?.getZoom() ?? 5.2)));
       listeners.push(map.addListener('idle', () => {
-        if (!map) return;
-        const bounds = map.getBounds();
-        const zoom = map.getZoom();
-        if (!bounds || typeof zoom !== 'number') return;
-        const northEast = bounds.getNorthEast();
-        const southWest = bounds.getSouthWest();
-        visibleRef.current?.(propertiesRef.current.filter((property) => bounds.contains({ lat: property.coordinates!.lat, lng: property.coordinates!.lng })));
-        const userInitiated = userViewportChange.current;
+        pendingUserViewportChange ||= userViewportChange.current;
         userViewportChange.current = false;
-        viewportRef.current?.({ north: northEast.lat(), south: southWest.lat(), east: northEast.lng(), west: southWest.lng(), zoom }, userInitiated);
+        window.clearTimeout(viewportTimeout);
+        viewportTimeout = window.setTimeout(() => {
+          if (disposed || !map) return;
+          const bounds = map.getBounds();
+          const zoom = map.getZoom();
+          if (!bounds || typeof zoom !== 'number') return;
+          const northEast = bounds.getNorthEast();
+          const southWest = bounds.getSouthWest();
+          visibleRef.current?.(propertiesRef.current.filter((property) => bounds.contains({ lat: property.coordinates!.lat, lng: property.coordinates!.lng })));
+          const userInitiated = pendingUserViewportChange;
+          pendingUserViewportChange = false;
+          viewportRef.current?.({ north: northEast.lat(), south: southWest.lat(), east: northEast.lng(), west: southWest.lng(), zoom }, userInitiated);
+        }, 300);
       }));
-      listeners.push(map.addListener('dragstart', () => { userViewportChange.current = true; }));
-      listeners.push(map.addListener('dblclick', () => { userViewportChange.current = true; }));
-      container.addEventListener('wheel', () => { userViewportChange.current = true; }, { passive: true });
-      container.addEventListener('touchstart', () => { userViewportChange.current = true; }, { passive: true });
+      listeners.push(map.addListener('dragstart', markUserViewportChange));
+      listeners.push(map.addListener('dblclick', markUserViewportChange));
+      container.addEventListener('wheel', markUserViewportChange, { passive: true });
+      container.addEventListener('touchstart', markUserViewportChange, { passive: true });
+      container.addEventListener('click', markGoogleControlClick);
       resize = new ResizeObserver(() => googleMaps.event.trigger(map!, 'resize'));
       resize.observe(container);
       tileTimeout = window.setTimeout(() => setMapError(true), 15_000);
@@ -120,7 +132,11 @@ const GooglePropertyMap = ({
     return () => {
       disposed = true;
       window.clearTimeout(tileTimeout);
+      window.clearTimeout(viewportTimeout);
       resize?.disconnect();
+      container.removeEventListener('wheel', markUserViewportChange);
+      container.removeEventListener('touchstart', markUserViewportChange);
+      container.removeEventListener('click', markGoogleControlClick);
       listeners.forEach((listener) => listener.remove());
       if (maps && map) maps.event.clearInstanceListeners(map);
       mapsRef.current = null;

@@ -11,7 +11,7 @@ import { configureMapbox, MAPBOX_STYLE, nigeriaCenter } from '../../lib/mapbox';
 import { loadGoogleMapsSdk, type GoogleMapInstance, type GoogleMapsApi } from '../../lib/googleMaps';
 import { useMapConfig } from '../../contexts/MapConfigContext';
 import { writeCatalogueMapViewport } from '../../utils/catalogueMapViewport';
-import { adoptCanonicalQuery, catalogueQueryForDisplay, hasFeaturedFilterIgnoredNotice, sameCanonicalCriteria, writeCatalogueQuery, withoutFeaturedSearchFilter } from '../../utils/catalogueQuery';
+import { adoptCanonicalQuery, catalogueQueryForDisplay, hasFeaturedFilterIgnoredNotice, sameCanonicalCriteria, writeCatalogueQuery, withoutUnsupportedCatalogueFilters } from '../../utils/catalogueQuery';
 import CatalogueResultInsights from '../../components/property/CatalogueResultInsights';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBuyerCatalogueSearchParams } from '../../hooks/useBuyerCatalogueSearchParams';
@@ -137,10 +137,17 @@ const ProjectsMap = () => {
     const googleMaps = googleMapsRef.current;
     if (!mapbox && !googleMap) return;
     const markUserViewportChange = () => { userViewportChangeRef.current = true; };
+    const markMapControlClick = (event: MouseEvent) => {
+      if (event.target instanceof Element && event.target.closest('.gm-bundled-control, .mapboxgl-ctrl-zoom-in, .mapboxgl-ctrl-zoom-out')) {
+        userViewportChangeRef.current = true;
+      }
+    };
     const container = mapbox ? mapbox.getCanvasContainer() : googleMap!.getDiv();
+    const mapContainer = mapbox ? mapbox.getContainer() : googleMap!.getDiv();
     container.addEventListener('wheel', markUserViewportChange, { passive: true });
     container.addEventListener('touchstart', markUserViewportChange, { passive: true });
     container.addEventListener('keydown', markUserViewportChange);
+    mapContainer.addEventListener('click', markMapControlClick);
     if (mapbox) {
       mapbox.on('dragstart', markUserViewportChange);
       mapbox.on('dblclick', markUserViewportChange);
@@ -150,6 +157,9 @@ const ProjectsMap = () => {
       googleMap!.addListener('dblclick', markUserViewportChange);
     }
     const updateViewport = (userInitiated: boolean) => {
+      // Applying URL bounds to the map also emits moveend/idle. Only user
+      // movement should change the search URL and trigger another map request.
+      if (!userInitiated) return;
       const zoom = mapbox ? mapbox.getZoom() : googleMap!.getZoom();
       if (typeof zoom !== 'number') return;
       let north: number; let south: number; let east: number; let west: number;
@@ -194,6 +204,7 @@ const ProjectsMap = () => {
       container.removeEventListener('wheel', markUserViewportChange);
       container.removeEventListener('touchstart', markUserViewportChange);
       container.removeEventListener('keydown', markUserViewportChange);
+      mapContainer.removeEventListener('click', markMapControlClick);
     };
   }, [mapInstanceVersion]);
 
@@ -209,7 +220,7 @@ const ProjectsMap = () => {
         if (response.normalization?.query !== undefined || hasFeaturedFilterIgnoredNotice(response.normalization?.notices)) {
           const current = searchParamsRef.current;
           if (sameCanonicalCriteria(current, params)) {
-            const normalized = adoptCanonicalQuery(current, response.normalization?.query ?? withoutFeaturedSearchFilter(params));
+            const normalized = adoptCanonicalQuery(current, response.normalization?.query ?? withoutUnsupportedCatalogueFilters(params));
             if (normalized.toString() !== current.toString()) { searchParamsRef.current = normalized; setSearchParams(normalized, { replace: true }); }
           }
         }

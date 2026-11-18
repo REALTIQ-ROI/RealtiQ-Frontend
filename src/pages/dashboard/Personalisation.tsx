@@ -8,7 +8,7 @@ import { ApiRequestError } from '../../lib/axios';
 import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { savedSearchFiltersToUrl } from '../../utils/savedSearchQuery';
 import SavedSearchAlertsFields, { defaultSavedSearchAlerts } from '../../components/property/SavedSearchAlertsFields';
-import { withoutFeaturedSavedSearchFilters } from '../../utils/catalogueQuery';
+import { withoutUnsupportedSavedSearchFilters } from '../../utils/catalogueQuery';
 import ModalPortal from '../../components/ui/ModalPortal';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -137,7 +137,7 @@ export default function Personalisation() {
     try {
       const updated = await personalisationService.updateSearch(editingSearch.search.publicReference || editingSearch.search._id, {
         name: editingSearch.name.trim(),
-        filters: withoutFeaturedSavedSearchFilters(editingSearch.search.filters),
+        filters: withoutUnsupportedSavedSearchFilters(editingSearch.search.filters),
         alerts: editingSearch.alerts,
         expectedConfigurationRevision: editingSearch.search.configurationRevision,
       });

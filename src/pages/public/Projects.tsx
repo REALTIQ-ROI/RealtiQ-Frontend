@@ -10,7 +10,7 @@ import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { projectService, type ProjectListResponse } from '../../services/projectService';
-import { adoptCanonicalQuery, catalogueFilterFormKey, hasFeaturedFilterIgnoredNotice, readCatalogueQuery, sameCanonicalCriteria, visibleCatalogueNotices, writeCatalogueQuery, withoutFeaturedSearchFilter } from '../../utils/catalogueQuery';
+import { adoptCanonicalQuery, catalogueFilterFormKey, hasFeaturedFilterIgnoredNotice, readCatalogueQuery, sameCanonicalCriteria, visibleCatalogueNotices, writeCatalogueQuery, withoutUnsupportedCatalogueFilters } from '../../utils/catalogueQuery';
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
 import { useBuyerCatalogueSearchParams } from '../../hooks/useBuyerCatalogueSearchParams';
 
@@ -56,7 +56,7 @@ const Projects = () => {
         if (response.normalization?.query !== undefined || hasFeaturedFilterIgnoredNotice(response.normalization?.notices)) {
           const current = searchParamsRef.current;
           if (sameCanonicalCriteria(current, params)) {
-            const normalized = adoptCanonicalQuery(current, response.normalization?.query ?? withoutFeaturedSearchFilter(params));
+            const normalized = adoptCanonicalQuery(current, response.normalization?.query ?? withoutUnsupportedCatalogueFilters(params));
             if (normalized.toString() !== current.toString()) {
               searchParamsRef.current = normalized;
               setSearchParams(normalized, { replace: true });

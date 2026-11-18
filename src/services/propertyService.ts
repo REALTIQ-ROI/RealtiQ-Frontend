@@ -322,6 +322,7 @@ export const propertyService = {
   async getMapProperties(filters: PropertyMapFilters, signal?: AbortSignal): Promise<PropertyMapResponse> {
     const params: Record<string, unknown> = { ...filters };
     delete params.featured;
+    delete params.groupByProject;
     const { data } = await api.get<PropertyMapResponse>('/properties/map', { params, signal });
     if (data.mode === 'properties') {
       return { ...data, properties: data.properties.map(normalizeProperty) };

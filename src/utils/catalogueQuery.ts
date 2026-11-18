@@ -7,12 +7,14 @@ type QueryValue = string | number | boolean | readonly (string | number | boolea
 export type CatalogueQueryChanges = Record<string, QueryValue>;
 type ReadFilters = PropertyFilters & { [originalQuery]?: URLSearchParams };
 
-/** Removes the legacy Featured search parameter without changing any other URL state. */
-export const withoutFeaturedSearchFilter = (source: URLSearchParams): URLSearchParams => {
+/** Removes unsupported legacy search parameters without changing other URL state. */
+export const withoutUnsupportedCatalogueFilters = (source: URLSearchParams): URLSearchParams => {
   const params = new URLSearchParams(source);
   params.delete('featured');
+  params.delete('groupByProject');
   return params;
 };
+
 
 const canonicalDefaults = {
   queryVersion: 'canonical-v1',
@@ -99,7 +101,7 @@ export const canonicalQueryParams = (query: unknown): URLSearchParams => {
 
 /** Canonicalizes buyer catalogue criteria while excluding Featured, which is display-only. */
 export const canonicalCatalogueSearchParams = (query: unknown): URLSearchParams =>
-  withoutFeaturedSearchFilter(canonicalQueryParams(query));
+  withoutUnsupportedCatalogueFilters(canonicalQueryParams(query));
 
 export const isFeaturedFilterIgnoredNotice = (notice: unknown): boolean =>
   typeof notice === 'object' && notice !== null && !Array.isArray(notice) &&
@@ -111,11 +113,13 @@ export const hasFeaturedFilterIgnoredNotice = (notices: unknown): boolean =>
 export const visibleCatalogueNotices = (notices: unknown): unknown[] =>
   Array.isArray(notices) ? notices.filter((notice) => !isFeaturedFilterIgnoredNotice(notice)) : [];
 
-export const withoutFeaturedSavedSearchFilters = <T extends Record<string, unknown>>(filters: T): T => {
+export const withoutUnsupportedSavedSearchFilters = <T extends Record<string, unknown>>(filters: T): T => {
   const cleaned = { ...filters };
   delete cleaned.featured;
+  delete cleaned.groupByProject;
   return cleaned;
 };
+
 
 /**
  * Adopts server-normalized filters while retaining pagination and map UI state
@@ -175,7 +179,7 @@ const replacedAliases: Record<string, readonly string[]> = {
 };
 
 export const catalogueQueryForDisplay = (source: URLSearchParams): URLSearchParams => {
-  const params = withoutFeaturedSearchFilter(source);
+  const params = withoutUnsupportedCatalogueFilters(source);
   for (const [canonical, aliases] of Object.entries(replacedAliases)) {
     if (params.has(canonical)) continue;
     const alias = aliases.find((candidate) => params.has(candidate));
@@ -214,11 +218,11 @@ export const writeCatalogueQuery = (
   options: { base?: URLSearchParams; resetPage?: boolean; clearAll?: boolean } = {},
 ): URLSearchParams => {
   const source = options.base ?? (changes as ReadFilters)[originalQuery];
-  const params = options.clearAll ? defaultCatalogueQuery() : withoutFeaturedSearchFilter(source ?? new URLSearchParams());
+  const params = options.clearAll ? defaultCatalogueQuery() : withoutUnsupportedCatalogueFilters(source ?? new URLSearchParams());
   if (!params.has('queryVersion')) params.set('queryVersion', 'canonical-v1');
 
   for (const [key, value] of Object.entries(changes)) {
-    if (key === 'featured') continue;
+    if (key === 'featured' || key === 'groupByProject') continue;
     if (options.clearAll && Object.prototype.hasOwnProperty.call(canonicalDefaults, key) && String(value) === String(canonicalDefaults[key as keyof typeof canonicalDefaults])) continue;
     // Keep repeated values intact on an unchanged read/write round trip.
     if (!options.base && source && !options.clearAll && source.has(key)) {

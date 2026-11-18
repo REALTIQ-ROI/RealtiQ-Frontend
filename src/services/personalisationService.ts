@@ -7,7 +7,7 @@ import type {
   SavedSearchAlerts,
   SavedSearchFilters,
 } from "../types";
-import { withoutFeaturedSavedSearchFilters } from '../utils/catalogueQuery';
+import { withoutUnsupportedSavedSearchFilters } from '../utils/catalogueQuery';
 export interface SavedSearchInput {
   name: string;
   filters: SavedSearchFilters;
@@ -37,7 +37,7 @@ export const parseSavedSearch = (value: unknown): SavedSearch => {
   ) {
     throw new Error('The saved-search response is missing documented revision or identity fields.');
   }
-  return { ...value, filters: withoutFeaturedSavedSearchFilters(value.filters) } as unknown as SavedSearch;
+  return { ...value, filters: withoutUnsupportedSavedSearchFilters(value.filters) } as unknown as SavedSearch;
 };
 
 const parseSavedSearchEnvelope = (value: unknown): SavedSearch => {
@@ -118,7 +118,7 @@ export const personalisationService = {
   async createSearch(input: SavedSearchInput) {
     const { data } = await api.post<{ savedSearch: SavedSearch }>(
       "/personalisation/searches",
-      { ...input, filters: withoutFeaturedSavedSearchFilters(input.filters) },
+      { ...input, filters: withoutUnsupportedSavedSearchFilters(input.filters) },
       noStoreConfig,
     );
     return parseSavedSearchEnvelope(data);
@@ -133,7 +133,7 @@ export const personalisationService = {
   async updateSearch(id: string, input: SavedSearchUpdateInput) {
     const { data } = await api.patch<{ savedSearch: SavedSearch }>(
       `/personalisation/searches/${id}`,
-      { ...input, ...(input.filters ? { filters: withoutFeaturedSavedSearchFilters(input.filters) } : {}) },
+      { ...input, ...(input.filters ? { filters: withoutUnsupportedSavedSearchFilters(input.filters) } : {}) },
       noStoreConfig,
     );
     return parseSavedSearchEnvelope(data);
