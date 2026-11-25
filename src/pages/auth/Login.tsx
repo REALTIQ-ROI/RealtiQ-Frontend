@@ -8,6 +8,7 @@ import { clearMarketAccessIntent, marketAuthPath, useMarketAccessIntent } from '
 import EmailVerificationResend from '../../components/auth/EmailVerificationResend';
 import { normalizeVerificationEmail } from '../../lib/emailVerification';
 import { isEmailUnverifiedLoginError } from '../../services/authService';
+import { DIRECT_DEBIT_CALLBACK_PATH } from '../../utils/directDebit';
 
 type Role = Extract<UserRole, 'buyer' | 'owner' | 'proxy_inspector'>;
 
@@ -42,6 +43,14 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
   const [autoResendKey, setAutoResendKey] = useState(0);
   const loginSubmissionRef = useRef(false);
   const requestedRedirect = (location.state as { redirectTo?: unknown } | null)?.redirectTo;
+  const requestedDirectDebitReference = (location.state as { directDebitProviderReference?: unknown } | null)?.directDebitProviderReference;
+  const directDebitReturnReference = typeof requestedDirectDebitReference === 'string' && requestedDirectDebitReference.trim().length <= 256
+    ? requestedDirectDebitReference.trim()
+    : null;
+  const requestedDirectDebitReferences = (location.state as { directDebitProviderReferences?: unknown } | null)?.directDebitProviderReferences;
+  const directDebitReturnReferences = Array.isArray(requestedDirectDebitReferences)
+    ? requestedDirectDebitReferences.filter((value): value is string => typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 256).map((value) => value.trim()).slice(0, 2)
+    : directDebitReturnReference ? [directDebitReturnReference] : [];
   const buyerRedirect =
     typeof requestedRedirect === 'string' &&
     requestedRedirect.startsWith('/dashboard/buyer/') &&
@@ -57,21 +66,26 @@ const Login = ({ purchaseMode = false }: LoginProps) => {
     }
 
     toast.success('Login successful');
-    if (!purchaseMode && marketRedirect) {
+    if (!purchaseMode && marketRedirect && requestedRedirect !== DIRECT_DEBIT_CALLBACK_PATH) {
       clearMarketAccessIntent();
       navigate(marketRedirect, { replace: true });
       return;
     }
     const requested = (location.state as { redirectTo?: unknown } | null)?.redirectTo;
-    const safeRoleRedirect =
-      typeof requested === 'string' &&
-      requested.startsWith('/') &&
-      !requested.startsWith('//') &&
-      ((loginRole === 'buyer' && requested.startsWith('/buyer/proxy-inspections')) ||
-        (loginRole === 'proxy_inspector' && requested.startsWith('/proxy/')))
+    const directDebitReturn = requested === DIRECT_DEBIT_CALLBACK_PATH;
+    const safeRoleRedirect = directDebitReturn
+      ? DIRECT_DEBIT_CALLBACK_PATH
+      : typeof requested === 'string' &&
+          requested.startsWith('/') &&
+          !requested.startsWith('//') &&
+          ((loginRole === 'buyer' && requested.startsWith('/buyer/proxy-inspections')) ||
+            (loginRole === 'proxy_inspector' && requested.startsWith('/proxy/')))
         ? requested
         : null;
-    navigate(purchaseMode ? buyerRedirect ?? '/checkout' : safeRoleRedirect ?? DASHBOARD_PATHS[user.role as Role] ?? '/dashboard');
+    const redirectState = directDebitReturn && directDebitReturnReferences.length
+      ? { directDebitProviderReferences: directDebitReturnReferences }
+      : undefined;
+    navigate(purchaseMode ? buyerRedirect ?? '/checkout' : safeRoleRedirect ?? DASHBOARD_PATHS[user.role as Role] ?? '/dashboard', { replace: true, state: redirectState });
   };
 
   const onSubmit = async (e: FormEvent) => {

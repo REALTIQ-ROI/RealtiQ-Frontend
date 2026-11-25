@@ -14,6 +14,7 @@ import InquirySuccess from '../pages/public/InquirySuccess';
 import LoginRequired from '../pages/public/LoginRequired';
 import PaymentFailed from '../pages/public/PaymentFailed';
 import PaymentSucess from '../pages/public/PaymentSucess';
+import DirectDebitCallback from '../pages/public/DirectDebitCallback';
 import PostPaymentRedirect from '../pages/public/PostPaymentRedirect';
 import Redirecting from '../pages/public/Redirecting';
 import Listings from '../pages/public/Listings';
@@ -205,6 +206,7 @@ const AppRoutes = () => {
         <Route path="/payment-failed" element={<PaymentFailed />} />
         <Route path="/payment-success" element={<PaymentSucess />} />
         <Route path="/post-payment-redirect" element={<PostPaymentRedirect />} />
+        <Route path="/settings/billing/direct-debit/callback" element={<DirectDebitCallback />} />
         <Route path="/payments/verify" element={<ProxyPaymentReturn />} />
         <Route path="/redirecting" element={<Redirecting />} />
 

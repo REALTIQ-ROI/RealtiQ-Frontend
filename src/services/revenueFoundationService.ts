@@ -110,6 +110,12 @@ export interface PaymentAuthorization {
   lastUsedAt: string | null;
   createdAt: string;
 }
+export interface DirectDebitSetupResponse {
+  authorization: PaymentAuthorization;
+  redirectUrl: string | null;
+  idempotent: boolean;
+  pending?: boolean;
+}
 export interface RenewalPreference {
   id: string;
   profileId: string;
@@ -223,8 +229,8 @@ export const revenueFoundationService = {
     const { data } = await api.get<{ authorizations: PaymentAuthorization[] }>(`${profileBase}/billing/payment-authorizations`, noStore);
     return data.authorizations;
   },
-  async startDirectDebit(body: { operationKey: string; consent: true }, challengeId: string): Promise<{ authorization: PaymentAuthorization; redirectUrl: string | null; pending?: boolean }> {
-    const { data } = await api.post<{ authorization: PaymentAuthorization; redirectUrl: string | null; pending?: boolean }>(`${profileBase}/billing/payment-authorizations/direct-debit`, body, stepUp(challengeId));
+  async startDirectDebit(body: { operationKey: string; consent: true }, challengeId: string): Promise<DirectDebitSetupResponse> {
+    const { data } = await api.post<DirectDebitSetupResponse>(`${profileBase}/billing/payment-authorizations/direct-debit`, body, stepUp(challengeId));
     return data;
   },
   async revokePaymentAuthorization(id: string, challengeId: string): Promise<PaymentAuthorization> {

@@ -23,9 +23,9 @@ describe('Group 04 profile revenue contract', () => {
     await expect(revenueFoundationService.listPublicationPlans()).resolves.toEqual(catalogue);
     await expect(revenueFoundationService.getPublicationPlan()).resolves.toEqual(current);
     await expect(revenueFoundationService.listPublicationPurchases({ before: 'opaque', limit: 25 })).resolves.toEqual(page);
-    expect(api.get).toHaveBeenNthCalledWith(1, '/profiles/current/publication-plans');
-    expect(api.get).toHaveBeenNthCalledWith(2, '/profiles/current/publication-plan');
-    expect(api.get).toHaveBeenNthCalledWith(3, '/profiles/current/publication-plan-purchases', { params: { before: 'opaque', limit: 25 } });
+    expect(api.get).toHaveBeenNthCalledWith(1, '/profiles/current/publication-plans', { headers: { 'Cache-Control': 'no-store' } });
+    expect(api.get).toHaveBeenNthCalledWith(2, '/profiles/current/publication-plan', { headers: { 'Cache-Control': 'no-store' } });
+    expect(api.get).toHaveBeenNthCalledWith(3, '/profiles/current/publication-plan-purchases', { params: { before: 'opaque', limit: 25 }, headers: { 'Cache-Control': 'no-store' } });
   });
 
   it('binds the exact purchase body and allows a separate persisted upgrade quote', async () => {
@@ -40,7 +40,7 @@ describe('Group 04 profile revenue contract', () => {
 
   it('uses exact protected renewal, mandate and invoice requests without provider secrets', async () => {
     vi.mocked(api.put).mockResolvedValue({ data: { preference: { id: 'preference-1' } } } as never);
-    vi.mocked(api.post).mockResolvedValueOnce({ data: { authorization: { id: 'authorization-1', state: 'pending_activation' }, redirectUrl: null, pending: true } } as never).mockResolvedValueOnce({ data: { payment: { id: 'payment-1', reference: 'ref-1', state: 'pending', redirectUrl: null } } } as never);
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { authorization: { id: 'authorization-1', state: 'pending_activation' }, redirectUrl: null, idempotent: false, pending: true } } as never).mockResolvedValueOnce({ data: { payment: { id: 'payment-1', reference: 'ref-1', state: 'pending', redirectUrl: null } } } as never);
     const preference = { kind: 'publication_plan' as const, targetId: 'developer', planKey: 'plan-1', billingPeriod: 'monthly' as const, method: 'manual' as const, autoRenew: false, expectedVersion: 0 };
     await revenueFoundationService.saveRenewalPreference(preference, 'challenge-preference');
     await revenueFoundationService.startDirectDebit({ operationKey: 'mandate_operation_1', consent: true }, 'challenge-mandate');
@@ -48,6 +48,17 @@ describe('Group 04 profile revenue contract', () => {
     expect(api.put).toHaveBeenCalledWith('/profiles/current/billing/renewal-preferences', preference, { headers: { 'X-Step-Up-Challenge': 'challenge-preference' } });
     expect(api.post).toHaveBeenNthCalledWith(1, '/profiles/current/billing/payment-authorizations/direct-debit', { operationKey: 'mandate_operation_1', consent: true }, { headers: { 'X-Step-Up-Challenge': 'challenge-mandate' } });
     expect(api.post).toHaveBeenNthCalledWith(2, '/revenue-documents/invoice-1/pay', { operationKey: 'invoice_operation_1' }, { headers: { 'X-Step-Up-Challenge': 'challenge-invoice' } });
+  });
+
+  it('loads current payment authorizations with no-store caching and exposes setup idempotency metadata', async () => {
+    const authorization = { id: 'authorization-1', provider: 'paystack', method: 'direct_debit', providerReference: 'ref-1', reusable: false, state: 'pending_activation', consentAt: '2026-11-25T00:00:00.000Z', lastUsedAt: null, createdAt: '2026-11-25T00:00:00.000Z' } as const;
+    vi.mocked(api.get).mockResolvedValueOnce({ data: { authorizations: [authorization] } } as never);
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { authorization, redirectUrl: null, idempotent: true, pending: true } } as never);
+
+    await expect(revenueFoundationService.listPaymentAuthorizations()).resolves.toEqual([authorization]);
+    await expect(revenueFoundationService.startDirectDebit({ operationKey: 'mandate_attempt_1', consent: true }, 'challenge-1')).resolves.toEqual({ authorization, redirectUrl: null, idempotent: true, pending: true });
+    expect(api.get).toHaveBeenCalledWith('/profiles/current/billing/payment-authorizations', { headers: { 'Cache-Control': 'no-store' } });
+    expect(api.post).toHaveBeenCalledWith('/profiles/current/billing/payment-authorizations/direct-debit', { operationKey: 'mandate_attempt_1', consent: true }, { headers: { 'X-Step-Up-Challenge': 'challenge-1' } });
   });
 
   it('starts profile payout setup with the exact private bank fields and request-bound challenge', async () => {

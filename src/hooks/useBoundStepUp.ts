@@ -130,7 +130,7 @@ export const useBoundStepUp = <T,>() => {
     }
   }, [activeProfile?.id, publishError, token]);
 
-  const complete = useCallback(async (code: string): Promise<{ ok: true; value: T } | { ok: false; error?: string; code?: string; fieldErrors?: ApiFieldError[] }> => {
+  const complete = useCallback(async (code: string): Promise<{ ok: true; value: T } | { ok: false; error?: string; code?: string; status?: number; fieldErrors?: ApiFieldError[] }> => {
     const action = actionRef.current;
     const current = challenge;
     if (!action || !current || busyRef.current) return { ok: false, error: error ?? undefined };
@@ -185,6 +185,7 @@ export const useBoundStepUp = <T,>() => {
         ok: false,
         error: message,
         ...(codeValue ? { code: codeValue } : {}),
+        ...(raw instanceof ApiRequestError && raw.status ? { status: raw.status } : {}),
         ...(raw instanceof ApiRequestError && raw.fieldErrors ? { fieldErrors: raw.fieldErrors } : {}),
       };
     } finally {

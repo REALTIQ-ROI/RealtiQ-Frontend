@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import ProfileBilling from './ProfileBilling';
 import { revenueFoundationService, type RevenueDocument } from '../../services/revenueFoundationService';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
@@ -15,7 +16,7 @@ vi.mock('../../hooks/useBoundStepUp', () => ({ useBoundStepUp: vi.fn() }));
 vi.mock('../../services/revenueFoundationService', () => ({ revenueFoundationService: {
   listPublicationPlans: vi.fn(), getPublicationPlan: vi.fn(), listPublicationPurchases: vi.fn(),
   listRenewalPreferences: vi.fn(), listPaymentAuthorizations: vi.fn(), listRevenueDocuments: vi.fn(),
-  quotePublicationChange: vi.fn(), purchasePublicationPlan: vi.fn(),
+  quotePublicationChange: vi.fn(), purchasePublicationPlan: vi.fn(), startDirectDebit: vi.fn(),
 } }));
 
 const begin = vi.fn();
@@ -31,7 +32,7 @@ const document = (id: string): RevenueDocument => ({ id, kind: 'receipt', number
 describe('profile publication billing', () => {
   beforeEach(() => {
     vi.clearAllMocks(); sessionStorage.clear(); localStorage.setItem('activeProfileId', 'developer-profile');
-    vi.mocked(useBoundStepUp).mockReturnValue({ begin, challenge: null, busy: false, error: null, cancel: vi.fn(), complete: vi.fn() } as unknown as ReturnType<typeof useBoundStepUp>);
+    vi.mocked(useBoundStepUp).mockReturnValue({ begin, challenge: null, busy: false, error: null, cancel: vi.fn(), complete: vi.fn(), getError: vi.fn(() => null) } as unknown as ReturnType<typeof useBoundStepUp>);
     vi.mocked(revenueFoundationService.listPublicationPlans).mockResolvedValue(catalogue);
     vi.mocked(revenueFoundationService.getPublicationPlan).mockResolvedValue({ profileId: 'developer-profile', category: 'developer', entitlement: null, latest: null, usage: { activeProjects: 0, activeListings: 0, units: 0, additionalSeats: 0, includedHolderSeat: true }, publicationAllowedByPlan: false });
     vi.mocked(revenueFoundationService.listPublicationPurchases).mockResolvedValue({ purchases: [], nextCursor: null });
@@ -41,7 +42,7 @@ describe('profile publication billing', () => {
   });
 
   it('shows server catalogue terms and binds a purchase to the exact selected term', async () => {
-    render(<ProfileBilling />);
+    render(<MemoryRouter><ProfileBilling /></MemoryRouter>);
     expect(await screen.findByRole('heading', { name: 'Starter' })).toBeInTheDocument();
     expect(screen.getByText(/₦1,000\.00 gross/i)).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText('Plan'), 'starter');
@@ -51,7 +52,7 @@ describe('profile publication billing', () => {
 
   it('does not offer a second purchase while the server reports an unresolved purchase', async () => {
     vi.mocked(revenueFoundationService.listPublicationPurchases).mockResolvedValue({ purchases: [{ id: 'purchase-1', profileId: 'developer-profile', category: 'developer', plan: { key: 'starter', label: 'Starter', profileType: 'developer', billingPeriod: 'monthly', entitlements: catalogue.plans[0].entitlements, amountMinor: 100000, currency: 'NGN', policyRevision: 3 }, reference: 'RTQ-PUB-1', state: 'outcome_unknown', createdAt: '2026-11-10T00:00:00.000Z' }], nextCursor: null });
-    render(<ProfileBilling />);
+    render(<MemoryRouter><ProfileBilling /></MemoryRouter>);
     expect(await screen.findByText(/An existing purchase is outcome unknown/i)).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText('Plan'), 'starter');
     expect(screen.getByRole('button', { name: 'Purchase with authenticator' })).toBeDisabled();
@@ -100,5 +101,56 @@ describe('profile publication billing', () => {
     await user.click(screen.getByLabelText(/Save the payment authorization for future renewals/));
     await user.click(screen.getByRole('button', { name: 'Purchase with authenticator' }));
     expect(begin).toHaveBeenCalledWith(expect.objectContaining({ method: 'POST', path: '/api/profiles/current/publication-plan-purchases', body: expect.objectContaining({ saveAuthorizationForRenewal: true, planKey: 'starter', billingPeriod: 'monthly' }) }));
+  });
+
+  it('requires explicit consent and reuses the same setup key on a retry', async () => {
+    const setupCatalogue = {
+      ...catalogue,
+      renewalAvailability: {
+        ...catalogue.renewalAvailability!,
+        unavailableMethods: [{ method: 'direct_debit' as const, reasonCode: 'PAYMENT_AUTHORIZATION_REQUIRED' }],
+      },
+    };
+    vi.mocked(revenueFoundationService.listPublicationPlans).mockResolvedValue(setupCatalogue);
+    begin.mockResolvedValue(false);
+    const user = userEvent.setup();
+    render(<MemoryRouter><ProfileBilling /></MemoryRouter>);
+
+    const consent = await screen.findByLabelText('I consent to REALTIQ starting a Paystack Direct Debit mandate setup for this profile.');
+    const setupButton = screen.getByRole('button', { name: 'Continue with authenticator' });
+    expect(setupButton).toBeDisabled();
+    await user.click(consent);
+    expect(setupButton).toBeEnabled();
+
+    await user.click(setupButton);
+    await waitFor(() => expect(begin).toHaveBeenCalledTimes(1));
+    const firstAction = begin.mock.calls[0][0];
+    expect(firstAction).toEqual(expect.objectContaining({
+      method: 'POST',
+      path: '/api/profiles/current/billing/payment-authorizations/direct-debit',
+      body: { operationKey: expect.stringMatching(/^mandate_[A-Za-z0-9_-]{8,128}$/), consent: true },
+    }));
+
+    await user.click(setupButton);
+    await waitFor(() => expect(begin).toHaveBeenCalledTimes(2));
+    expect(begin.mock.calls[1][0].body).toEqual(firstAction.body);
+    expect(sessionStorage.getItem('realtiq.directDebitOperation:developer-profile')).toBe(firstAction.body.operationKey);
+  });
+
+  it('blocks setup when the authorization list reports a pending mandate', async () => {
+    const setupCatalogue = {
+      ...catalogue,
+      renewalAvailability: {
+        ...catalogue.renewalAvailability!,
+        unavailableMethods: [{ method: 'direct_debit' as const, reasonCode: 'PAYMENT_AUTHORIZATION_REQUIRED' }],
+      },
+    };
+    vi.mocked(revenueFoundationService.listPublicationPlans).mockResolvedValue(setupCatalogue);
+    vi.mocked(revenueFoundationService.listPaymentAuthorizations).mockResolvedValue([{ id: 'mandate-1', method: 'direct_debit', state: 'pending_activation', providerReference: 'ref-1', provider: 'paystack', reusable: false, consentAt: '2026-11-25T00:00:00.000Z', lastUsedAt: null, createdAt: '2026-11-25T00:00:00.000Z' }]);
+    render(<MemoryRouter><ProfileBilling /></MemoryRouter>);
+
+    expect(await screen.findByText(/A Direct Debit authorization is still pending/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue with authenticator' })).toBeDisabled();
+    expect(begin).not.toHaveBeenCalled();
   });
 });
