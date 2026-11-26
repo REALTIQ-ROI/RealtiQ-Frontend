@@ -34,11 +34,12 @@ describe('viewing contract', () => {
     expect(api.get).toHaveBeenCalledWith('/profiles/current/viewing-assignees', { params: { limit: 100, after: 'va1.previous' }, headers: { 'Cache-Control': 'no-store' } });
   });
 
-  it('requires the server-returned participant join path before requesting a live-video URL', async () => {
-    await expect(tourService.getJoinUrl('tour-1', null)).rejects.toThrow(/not confirmed/i);
-    expect(api.get).not.toHaveBeenCalled();
-    vi.mocked(api.get).mockResolvedValue({ data: { joinUrl: 'https://zoom.example/participant' } });
-    await expect(tourService.getJoinUrl('tour-1', '/api/tour/tour-1/video-session/join')).resolves.toBe('https://zoom.example/participant');
-    expect(api.get).toHaveBeenCalledWith('/tour/tour-1/video-session/join', { headers: { 'Cache-Control': 'no-store' } });
+  it('requests a fresh Video SDK token without a body and binds the selected profile', async () => {
+    const token = { sdkKey: 'zoom-sdk-key', signature: 'signed-sdk-token', sessionName: 'tour-session', userName: 'Ada', role: 'host' };
+    vi.mocked(api.post).mockResolvedValue({ data: token });
+    await expect(tourService.getVideoSessionToken('tour-1', 'seller-profile-1')).resolves.toEqual(token);
+    expect(api.post).toHaveBeenCalledWith('/tour/tour-1/video-session/token', undefined, {
+      headers: { 'Cache-Control': 'no-store', 'X-Profile-ID': 'seller-profile-1' },
+    });
   });
 });

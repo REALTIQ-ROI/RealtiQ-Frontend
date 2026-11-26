@@ -9,6 +9,7 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
+import LiveGuidedVideoSession from '../../components/tour/LiveGuidedVideoSession';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBoundStepUp } from '../../hooks/useBoundStepUp';
 import { ApiRequestError } from '../../lib/axios';
@@ -31,46 +32,38 @@ const LiveGuidedTourActions = ({ tour, canManage }: { tour: Tour; canManage: boo
   const generation = useRef(0);
   const [session, setSession] = useState<TourVideoSession | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [meetingId, setMeetingId] = useState('');
+  const [joining, setJoining] = useState(false);
+  const [joiningProfileId, setJoiningProfileId] = useState('');
   const stepUp = useBoundStepUp<TourVideoSession>();
 
   const refresh = useCallback(async () => {
     const current = ++generation.current;
     setLoading(true); setError('');
     try {
-      const response = await tourService.getVideoSession(tour.id);
+      const response = await tourService.getVideoSession(tour.id, profileId);
       if (current === generation.current && activeProfile?.id === profileId) setSession(response);
     } catch (raw) {
       if (current === generation.current && activeProfile?.id === profileId) setError(raw instanceof Error ? raw.message : 'Live video status is unavailable.');
     } finally { if (current === generation.current) setLoading(false); }
   }, [activeProfile?.id, profileId, tour.id]);
 
-  useEffect(() => { setSession(null); void refresh(); return () => { generation.current += 1; }; }, [profileId, refresh]);
+  useEffect(() => { setSession(null); setJoining(false); setJoiningProfileId(''); void refresh(); return () => { generation.current += 1; }; }, [profileId, refresh]);
   useEffect(() => {
     if (!session || !['queued', 'processing'].includes(session.state)) return;
     const timer = window.setTimeout(() => void refresh(), 5000);
     return () => window.clearTimeout(timer);
   }, [refresh, session]);
 
-  const openJoinLink = async () => {
-    if (busy || !session || session.state !== 'ready' || session.joinAvailable !== true || !session.joinPath || tour.status !== 'approved') return;
-    const newTab = window.open('about:blank', '_blank');
-    if (!newTab) { toast.error('Allow a new tab to open the secure live-tour link.'); return; }
-    newTab.opener = null;
-    setBusy(true);
-    try {
-      const url = await tourService.getJoinUrl(tour.id, session.joinPath);
-      newTab.location.replace(url);
-    } catch (raw) {
-      newTab.close();
-      toast.error(raw instanceof Error ? raw.message : 'A current live-tour link is unavailable.');
-    } finally { setBusy(false); }
+  const openVideoSession = () => {
+    if (!profileId || !session || session.state !== 'ready' || session.joinAvailable !== true || tour.status !== 'approved') return;
+    setJoiningProfileId(profileId);
+    setJoining(true);
   };
 
   const beginReconcile = async () => {
-    if (!meetingId.trim() || !session || busy || stepUp.challenge || stepUp.busy) return;
+    if (!meetingId.trim() || !session || stepUp.challenge || stepUp.busy) return;
     const body = { meetingId: meetingId.trim(), expectedVersion: tour.version };
     const started = await stepUp.begin({
       method: 'POST', path: `/api/tour/${encodeURIComponent(tour.id)}/video-session/reconcile`, body,
@@ -91,13 +84,15 @@ const LiveGuidedTourActions = ({ tour, canManage }: { tour: Tour; canManage: boo
     <p className="text-sm font-semibold">Live guided video</p>
     {error ? <p role="alert" className="text-sm text-error">{error}</p> : null}
     {session ? <p role="status" className="text-sm text-secondary">Video status: {toLabel(session.state)}{session.lastErrorCode ? ` · ${toLabel(session.lastErrorCode)}` : ''}{session.readiness ? ` · Readiness: ${toLabel(session.readiness.state)}${session.readiness.reasonCode ? ` (${toLabel(session.readiness.reasonCode)})` : ''}` : ''}</p> : null}
-    {session && ['queued', 'processing'].includes(session.state) ? <p className="text-xs text-secondary">The meeting is being prepared. This page checks the server again automatically.</p> : null}
-    {session?.state === 'ready' && tour.status === 'approved' && session.joinAvailable === true && session.joinPath ? <Button type="button" disabled={busy} onClick={() => void openJoinLink()}>{busy ? 'Opening…' : 'Join live guided tour'}</Button> : null}
-    {session?.state === 'ready' && (!session.joinAvailable || !session.joinPath) ? <p role="status" className="text-xs text-secondary">The participant join link is not currently available. Refresh the session status before joining.</p> : null}
-    {session?.state === 'reconciliation_required' && canManage ? <div className="space-y-2"><p className="text-xs text-secondary">If Zoom created the meeting but the result was unclear, enter the actual meeting ID after finding the meeting with this REALTIQ tour reference. Do not guess or create another meeting.</p><label className="block text-xs font-semibold">Existing Zoom meeting ID<input inputMode="numeric" value={meetingId} onChange={(event) => setMeetingId(event.target.value)} className="mt-1 block w-full rounded border px-3 py-2" /></label><Button type="button" variant="secondary" disabled={!meetingId.trim() || busy || stepUp.busy} onClick={() => void beginReconcile()}>Reconcile existing meeting</Button></div> : null}
+    {session && ['queued', 'processing'].includes(session.state) ? <p className="text-xs text-secondary">The live-video session is being prepared. This page checks the server again automatically.</p> : null}
+    {session?.state === 'ended' ? <p role="status" className="text-xs text-secondary">This live-video session has ended.</p> : null}
+    {session?.joinAvailable === true && tour.status === 'approved' ? <Button type="button" disabled={!profileId} onClick={openVideoSession}>Join live guided tour</Button> : null}
+    {session && session.joinAvailable !== true && !['queued', 'processing', 'ended', 'reconciliation_required'].includes(session.state) ? <p role="status" className="text-xs text-secondary">The backend has not made this live-video session available to join yet. Refresh the session status before joining.</p> : null}
+    {session?.state === 'reconciliation_required' && canManage ? <div className="space-y-2"><p className="text-xs text-secondary">If Zoom created the meeting but the result was unclear, enter the actual meeting ID after finding the meeting with this REALTIQ tour reference. Do not guess or create another meeting.</p><label className="block text-xs font-semibold">Existing Zoom meeting ID<input inputMode="numeric" value={meetingId} onChange={(event) => setMeetingId(event.target.value)} className="mt-1 block w-full rounded border px-3 py-2" /></label><Button type="button" variant="secondary" disabled={!meetingId.trim() || stepUp.busy} onClick={() => void beginReconcile()}>Reconcile existing meeting</Button></div> : null}
     {session?.state === 'ready' && tour.status !== 'approved' ? <p className="text-xs text-secondary">The seller must approve this booking before either participant can join.</p> : null}
-    <Button type="button" variant="secondary" disabled={busy || stepUp.busy} onClick={() => void refresh()}>Refresh video status</Button>
+    <Button type="button" variant="secondary" disabled={stepUp.busy} onClick={() => void refresh()}>Refresh video status</Button>
     <StepUpDialog challenge={stepUp.challenge} busy={stepUp.busy} error={stepUp.error} onCancel={stepUp.cancel} onSubmit={completeStepUp} />
+    {joining && joiningProfileId === profileId && profileId ? <LiveGuidedVideoSession key={`${tour.id}:${profileId}`} tourId={tour.id} profileId={profileId} tourApproved={tour.status === 'approved'} onClose={() => setJoining(false)} /> : null}
   </div>;
 };
 

@@ -1,5 +1,5 @@
 import api from '../lib/axios';
-import type { Tour, TourAvailability, TourCalendarEnvelope, TourCalendarScopeKind, TourCalendarSlot, TourMode, TourRequestPayload, TourStatus, TourType, TourVideoSession } from '../types';
+import type { Tour, TourAvailability, TourCalendarEnvelope, TourCalendarScopeKind, TourCalendarSlot, TourMode, TourRequestPayload, TourStatus, TourType, TourVideoSession, TourVideoSessionToken } from '../types';
 
 export interface TourRequestResponse {
   tour: Tour;
@@ -114,20 +114,18 @@ export const tourService = {
     return data;
   },
 
-  async getVideoSession(id: string): Promise<TourVideoSession> {
-    const { data } = await api.get<TourVideoSession>(`/tour/${encodeURIComponent(id)}/video-session`, { headers: { 'Cache-Control': 'no-store' } });
+  async getVideoSession(id: string, profileId: string): Promise<TourVideoSession> {
+    if (!profileId) throw new Error('Select a current profile before checking live-video access.');
+    const { data } = await api.get<TourVideoSession>(`/tour/${encodeURIComponent(id)}/video-session`, { headers: { 'Cache-Control': 'no-store', 'X-Profile-ID': profileId } });
     return data;
   },
 
-  async getJoinUrl(id: string, joinPath?: string | null): Promise<string> {
-    const expectedPath = `/api/tour/${encodeURIComponent(id)}/video-session/join`;
-    if (joinPath !== expectedPath) throw new Error('The server has not confirmed that the participant join route is available.');
-    const { data } = await api.get<{ joinUrl: string }>(`/tour/${encodeURIComponent(id)}/video-session/join`, { headers: { 'Cache-Control': 'no-store' } });
-    const url = new URL(data.joinUrl);
-    if (url.protocol !== 'https:') {
-      throw new Error('The server returned an invalid live-video join address.');
-    }
-    return data.joinUrl;
+  async getVideoSessionToken(id: string, profileId: string): Promise<TourVideoSessionToken> {
+    if (!profileId) throw new Error('Select a current profile before requesting live-video access.');
+    const { data } = await api.post<TourVideoSessionToken>(`/tour/${encodeURIComponent(id)}/video-session/token`, undefined, {
+      headers: { 'Cache-Control': 'no-store', 'X-Profile-ID': profileId },
+    });
+    return data;
   },
 
   async reconcileVideoSession(id: string, body: { meetingId: string; expectedVersion: number }, challengeId: string): Promise<TourVideoSession> {

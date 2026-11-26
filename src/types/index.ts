@@ -829,7 +829,7 @@ export interface Tour {
   calendarId?: string;
   calendarVersion?: number;
   slotId?: string;
-  video?: { state: string; provider?: string; joinPath?: string | null };
+  video?: { state: string; provider?: string };
   createdAt: string;
   updatedAt: string;
 }
@@ -890,10 +890,20 @@ export interface TourVideoSession {
   joinAvailable?: boolean;
   state: 'queued' | 'processing' | 'ready' | 'reconciliation_required' | 'ended' | string;
   provider?: 'zoom' | string;
-  joinPath?: string | null;
   readiness?: LiveVideoReadiness;
   lastErrorCode?: string | null;
   version?: number;
+}
+
+export interface TourVideoSessionToken {
+  sdkKey: string;
+  signature: string;
+  sessionName: string;
+  userName: string;
+  /** Display hint only. Zoom applies the role encoded by the server-signed SDK token. */
+  role: string | number;
+  expiresAt?: string;
+  expiresIn?: number;
 }
 
 export interface CartItemResponse {
