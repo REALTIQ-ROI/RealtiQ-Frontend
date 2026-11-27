@@ -15,6 +15,9 @@ import { adoptCanonicalQuery, catalogueQueryForDisplay, hasFeaturedFilterIgnored
 import CatalogueResultInsights from '../../components/property/CatalogueResultInsights';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBuyerCatalogueSearchParams } from '../../hooks/useBuyerCatalogueSearchParams';
+import FxDisplayControl from '../../components/property/FxDisplayControl';
+import { useFxDisplay } from '../../contexts/FxDisplayContext';
+import { formatPriceRangeForDisplay } from '../../utils/fxDisplay';
 
 const emptyProjects: ProjectMapItem[] = [];
 
@@ -23,6 +26,7 @@ const ProjectsMap = () => {
   const [searchParams, setSearchParams] = useBuyerCatalogueSearchParams();
   const displaySearchParams = useMemo(() => catalogueQueryForDisplay(searchParams), [searchParams]);
   const { activeProfile } = useAuth();
+  const { displayCurrency, officialRate } = useFxDisplay();
   const { state: mapConfigState, refresh: refreshMapConfig, hasCredential } = useMapConfig();
   const mapProvider = mapConfigState.status === 'ready' ? mapConfigState.config.provider : null;
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -264,6 +268,11 @@ const ProjectsMap = () => {
   const selectedPrice = selected
     ? projectMapPricePresentation(selected.minimumPrice, selected.maximumPrice, selected.currency, selected.priceAggregateState)
     : null;
+  const selectedDisplayPrice = selectedPrice?.notice
+    ? selectedPrice.label
+    : selected && selected.currency && (typeof selected.minimumPrice === 'number' || typeof selected.maximumPrice === 'number')
+    ? formatPriceRangeForDisplay(selected.minimumPrice, selected.maximumPrice, selected.currency, displayCurrency, officialRate)
+    : selectedPrice?.label;
   return (
     <PublicLayout>
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-8">
@@ -274,6 +283,7 @@ const ProjectsMap = () => {
           </div>
           <div className="flex items-center gap-3"><span className="text-sm font-semibold text-secondary">{total.toLocaleString()} matching projects</span><button type="button" onClick={() => setRefreshVersion((version) => version + 1)} className="text-sm font-bold text-primary">Refresh</button><Link to={{ pathname: '/projects', search: location.search }} className="rounded-lg bg-surface-container-low px-4 py-3 text-sm font-bold text-primary">List view</Link></div>
         </header>
+        <FxDisplayControl className="mb-4" />
         {loading ? <LoadingState label="Loading project map..." /> : null}
         {error ? <ErrorState message={error} onRetry={() => setRefreshVersion((version) => version + 1)} /> : null}
         {!loading && !error && activeMapResult?.truncated ? <p role="status" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">The map returned the current configured limit of {activeMapResult.limit} project markers. Zoom in or narrow the map area to see a smaller result set.</p> : null}
@@ -291,7 +301,7 @@ const ProjectsMap = () => {
               </button>
               <h2 className="pr-8 text-lg font-black">{selected.name}</h2>
               <p className="mt-1 text-sm text-secondary">{selected.projectType.replaceAll('_', ' ')}</p>
-              <p className="mt-3 font-bold">{selectedPrice?.label}</p>
+              <p className="mt-3 font-bold">{selectedDisplayPrice}</p>
               {selectedPrice?.notice ? <p role="status" className="mt-1 text-xs text-amber-800">{selectedPrice.notice}</p> : null}
               <p className="text-sm text-secondary">{selected.availableUnitCount} available · {selected.underOfferUnitCount} under offer · {selected.soldUnitCount} sold · {selected.matchingUnitCount} matching units</p>
               <Link to={`/projects/${selected.slug || selected._id}`} state={{ from: `${location.pathname}${location.search}`, discoveryFrom }} className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-bold text-on-primary">View project</Link>

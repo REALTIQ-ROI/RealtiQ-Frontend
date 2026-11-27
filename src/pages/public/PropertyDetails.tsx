@@ -65,6 +65,8 @@ import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes'
 import { formatDate, formatNgn, labelize } from '../../utils/projectFormatters';
 import { hasPropertyMap, propertyGallerySlideCount } from '../../utils/propertyGallery';
 import { effectiveCanonicalValue, fieldVocabularyLabel, formatCanonicalArea, vocabularyLabel } from '../../utils/propertyVocabulary';
+import FxPriceDisplay from '../../components/property/FxPriceDisplay';
+import FxDisplayControl from '../../components/property/FxDisplayControl';
 
 const formatCurrency = (value: number | undefined, currency?: string) => {
   if (typeof value !== 'number' || !Number.isFinite(value) || !currency) return 'Price unavailable';
@@ -622,7 +624,7 @@ const PropertyDetails = () => {
                 </div>
                 <div className='hidden min-w-0 sm:block'>
                   <p className='truncate text-sm font-black text-primary'>
-                    {formatCurrency(property.price, currency)}
+                    <FxPriceDisplay amount={property.price} currency={currency} priceOnApplication={effectiveCanonicalValue(property, 'priceOnApplication') === true} />
                   </p>
                   <div className='mt-1 flex flex-wrap gap-2 text-[11px] font-semibold text-secondary'>
                     <span>{property.bedrooms ?? '—'} Beds</span>
@@ -636,7 +638,7 @@ const PropertyDetails = () => {
               <div className='flex items-center gap-2'>
                 <div className='sm:hidden'>
                   <p className='text-sm font-black text-primary'>
-                    {formatCurrency(property.price, currency)}
+                    <FxPriceDisplay amount={property.price} currency={currency} priceOnApplication={effectiveCanonicalValue(property, 'priceOnApplication') === true} />
                   </p>
                   <p className='text-[11px] font-semibold text-secondary'>
                     {property.bedrooms ?? '—'} Beds ·{' '}
@@ -1263,8 +1265,9 @@ const PropertyDetails = () => {
               <p className='text-xs text-secondary uppercase tracking-[0.2em] mb-2'>
                 List Price
               </p>
+              <FxDisplayControl />
               <p className='text-4xl font-extrabold tracking-tighter'>
-                {formatCurrency(property.price, currency)}
+                <FxPriceDisplay amount={property.price} currency={currency} priceOnApplication={effectiveCanonicalValue(property, 'priceOnApplication') === true} />
               </p>
               <p className='text-xs text-secondary'>
                 {areaLabel}

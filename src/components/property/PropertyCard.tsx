@@ -15,15 +15,7 @@ import CompareToggle from '../compare/CompareToggle';
 import { normalizePropertyPaymentTypes } from '../../utils/propertyPaymentTypes';
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
 import { effectiveCanonicalValue, fieldVocabularyLabel, formatCanonicalArea, vocabularyLabel } from '../../utils/propertyVocabulary';
-
-const formatCurrency = (value?: number, currency?: string) =>
-  typeof value === 'number' && Number.isFinite(value) && currency
-    ? new Intl.NumberFormat('en-NG', {
-        style: 'currency',
-        currency,
-        maximumFractionDigits: 0,
-      }).format(value)
-    : 'Price unavailable';
+import FxPriceDisplay from './FxPriceDisplay';
 
 const formatCount = (value?: number, label = '') =>
   typeof value === 'number' && Number.isFinite(value) ? `${value.toLocaleString()}${label}` : 'N/A';
@@ -174,7 +166,7 @@ const PropertyCard = ({
             className="font-black text-base text-on-surface shrink-0"
             style={{ fontFamily: 'Manrope, sans-serif' }}
           >
-            {priceOnApplication ? 'Price on application' : formatCurrency(property.price, property.currency)}
+            <FxPriceDisplay amount={property.price} currency={property.currency} priceOnApplication={priceOnApplication} />
           </span>
         </div>
 

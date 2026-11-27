@@ -1,4 +1,5 @@
 import type { OffPlanDevelopmentStatus, ProjectPriceRangesByCurrency, ProjectStatus, ProjectType } from '../types';
+import { formatPriceRangeForDisplay, type DisplayCurrency, type OfficialFxRate } from './fxDisplay';
 
 export const formatNgn = (value?: number, currency = 'NGN') =>
   typeof value === 'number' && Number.isFinite(value)
@@ -61,6 +62,33 @@ export const formatCurrencyRanges = (ranges?: ProjectPriceRangesByCurrency, fall
     return formatPriceRange(fallback.minimum, fallback.maximum, currency);
   }
   return 'Price unavailable';
+};
+
+export const formatCurrencyRangesForDisplay = (
+  ranges: ProjectPriceRangesByCurrency | undefined,
+  fallback: { minimum?: number; maximum?: number; currency?: string } | undefined,
+  aggregateState: string | undefined,
+  displayCurrency: DisplayCurrency,
+  rate: OfficialFxRate | null,
+) => {
+  if (!displayCurrency) return formatCurrencyRanges(ranges, fallback, aggregateState);
+  const values = Object.entries(ranges ?? {}).flatMap(([currency, value]) => {
+    if (!value) return [];
+    const minimum = typeof value.minimum === 'number' && Number.isFinite(value.minimum) ? value.minimum : undefined;
+    const maximum = typeof value.maximum === 'number' && Number.isFinite(value.maximum) ? value.maximum : undefined;
+    const range = minimum !== undefined || maximum !== undefined ? formatPriceRangeForDisplay(minimum, maximum, currency, displayCurrency, rate) : '';
+    const converted = Boolean(rate && (currency === 'USD' || currency === 'NGN') && currency !== displayCurrency && (minimum !== undefined || maximum !== undefined));
+    const poaCount = Number.isInteger(value.priceOnApplicationCount) && value.priceOnApplicationCount > 0 ? value.priceOnApplicationCount : 0;
+    const parts = [range, poaCount ? `${poaCount} price on application` : ''].filter(Boolean);
+    if (!parts.length) return [];
+    return [`${converted ? displayCurrency : currency}: ${parts.join(' · ')}`];
+  });
+  if (values.length) return values.join(' · ');
+  if (fallback && (typeof fallback.minimum === 'number' || typeof fallback.maximum === 'number')) {
+    const currency = fallback.currency ?? (Object.keys(ranges ?? {}).length === 1 ? Object.keys(ranges ?? {})[0] : undefined) ?? 'NGN';
+    return formatPriceRangeForDisplay(fallback.minimum, fallback.maximum, currency, displayCurrency, rate);
+  }
+  return formatCurrencyRanges(ranges, fallback, aggregateState);
 };
 
 export const projectMapPricePresentation = (

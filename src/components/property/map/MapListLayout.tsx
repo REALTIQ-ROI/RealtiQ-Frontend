@@ -7,6 +7,7 @@ import MobileMapListToggle, { type MapListView } from './MobileMapListToggle';
 import PropertyMap from './PropertyMap';
 import { useCanonicalFieldDictionary } from '../../../hooks/useCanonicalFieldDictionary';
 import { effectiveCanonicalValue, fieldVocabularyOptions } from '../../../utils/propertyVocabulary';
+import FxPriceDisplay from '../FxPriceDisplay';
 
 interface Props {
   properties: Property[];
@@ -24,12 +25,6 @@ const matchesAvailability = (property: Property, selected: string, options: Retu
   const current = [property.status, effectiveCanonicalValue(property, 'availability')].filter((value): value is string => typeof value === 'string');
   return current.some((value) => normalizedAvailability(value) === normalizedAvailability(selected) || normalizedAvailability(value) === normalizedAvailability(selectedLabel));
 };
-const formatPrice = (property: Property) => effectiveCanonicalValue(property, 'priceOnApplication') === true
-  ? 'Price on application'
-  : typeof property.price === 'number' && Number.isFinite(property.price) && typeof property.currency === 'string'
-    ? (() => { try { return new Intl.NumberFormat('en-NG', { style: 'currency', currency: property.currency, maximumFractionDigits: 0 }).format(property.price); } catch { return 'Price unavailable'; } })()
-    : 'Price unavailable';
-
 const MapListLayout = ({ properties, detailsPath, actions, children, mapClassName = '' }: Props) => {
   const { dictionary } = useCanonicalFieldDictionary();
   const [mobileView, setMobileView] = useState<MapListView>('list');
@@ -94,7 +89,7 @@ const MapListLayout = ({ properties, detailsPath, actions, children, mapClassNam
           <div className="min-w-0 flex-1">
             <h3 className="truncate text-sm font-bold text-on-surface">{property.title}</h3>
             <p className="truncate text-xs text-secondary">{property.location}</p>
-            <p className="mt-1 text-sm font-black text-primary">{formatPrice(property)}</p>
+            <FxPriceDisplay amount={property.price} currency={property.currency} priceOnApplication={effectiveCanonicalValue(property, 'priceOnApplication') === true} className="mt-1 block text-sm font-black text-primary" amountClassName="block" detailClassName="text-[10px]" />
             {detailsPath(property) ? (
               <Link to={detailsPath(property)} className="mt-1 inline-block text-xs font-bold text-primary hover:underline">View Details</Link>
             ) : (

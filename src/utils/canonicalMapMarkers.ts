@@ -41,7 +41,9 @@ export const canonicalMapMarkers = (response: CanonicalPropertyMapResponse): { m
         continue;
       }
       markers.push({ kind: 'property', id: property._id, reference: property.publicReference, title: property.title ?? 'Property', lat, lng: lng as number,
-        label: priceLabel(property.canonicalEffectiveFields?.askingPrice, property.canonicalEffectiveFields?.currency) });
+        label: priceLabel(property.canonicalEffectiveFields?.askingPrice, property.canonicalEffectiveFields?.currency),
+        priceAmount: property.canonicalEffectiveFields?.askingPrice,
+        priceCurrency: property.canonicalEffectiveFields?.currency });
     }
   }
   return { markers, skipped };

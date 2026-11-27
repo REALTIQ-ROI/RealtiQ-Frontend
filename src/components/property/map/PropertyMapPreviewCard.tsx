@@ -7,6 +7,7 @@ import { normalizePropertyPaymentTypes } from '../../../utils/propertyPaymentTyp
 import { useCanonicalFieldDictionary } from '../../../hooks/useCanonicalFieldDictionary';
 import { effectiveCanonicalValue, fieldVocabularyLabel, vocabularyLabel } from '../../../utils/propertyVocabulary';
 import CompareToggle from '../../compare/CompareToggle';
+import FxPriceDisplay from '../FxPriceDisplay';
 
 interface Props {
   property: Property;
@@ -16,29 +17,13 @@ interface Props {
   onDetailsNavigate?: () => void;
 }
 
-const formatPrice = (property: Property) => typeof property.price === 'number' && Number.isFinite(property.price) && typeof property.currency === 'string'
-  ? (() => {
-    try {
-      return new Intl.NumberFormat('en-NG', {
-        style: 'currency',
-        currency: property.currency,
-        maximumFractionDigits: 0,
-      }).format(property.price);
-    } catch {
-      return 'Price unavailable';
-    }
-  })()
-  : 'Price unavailable';
-
 const PropertyMapPreviewCard = ({ property, detailsPath, actions, onClose, onDetailsNavigate }: Props) => {
   const location = useLocation();
   const { dictionary } = useCanonicalFieldDictionary();
   const typeLabel = fieldVocabularyLabel(dictionary, 'propertyType', property.propertyType)
     ?? vocabularyLabel(dictionary, 'propertyTypes', property.propertyType)
     ?? 'Property type unavailable';
-  const priceLabel = effectiveCanonicalValue(property, 'priceOnApplication') === true
-    ? 'Price on application'
-    : formatPrice(property);
+  const priceOnApplication = effectiveCanonicalValue(property, 'priceOnApplication') === true;
   return <article className="absolute bottom-4 left-4 right-4 z-[1000] overflow-hidden rounded-xl bg-white shadow-2xl sm:left-auto sm:w-80">
     <button
       type="button"
@@ -57,7 +42,7 @@ const PropertyMapPreviewCard = ({ property, detailsPath, actions, onClose, onDet
         <p className="truncate text-xs text-secondary">{property.location || 'Location unavailable'}</p>
       </div>
       <div className="flex items-center justify-between gap-2">
-        <strong className="text-primary">{priceLabel}</strong>
+        <FxPriceDisplay amount={property.price} currency={property.currency} priceOnApplication={priceOnApplication} className="text-right text-sm font-black text-primary" amountClassName="block" detailClassName="text-[10px]" />
         <span className="rounded-full bg-surface-container-low px-2 py-1 text-[10px] font-bold uppercase text-secondary">
           {typeLabel}
         </span>

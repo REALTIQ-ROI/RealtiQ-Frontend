@@ -1,9 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
 import type { ProjectCard as ProjectCardType } from '../../types';
-import { formatCurrencyRanges, labelize, projectStatusClasses } from '../../utils/projectFormatters';
+import { formatCurrencyRangesForDisplay, labelize, projectStatusClasses } from '../../utils/projectFormatters';
 import { isProjectExplicitlyUnpublished, isProjectPublished } from '../../utils/projectPublication';
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
 import { fieldVocabularyLabel } from '../../utils/propertyVocabulary';
+import { useFxDisplay } from '../../contexts/FxDisplayContext';
 
 interface ProjectCardProps {
   project: ProjectCardType;
@@ -15,6 +16,7 @@ const internalProjectStates = new Set(['draft', 'suspended', 'unpublished']);
 const ProjectCard = ({ project, requirePublishedToView = false }: ProjectCardProps) => {
   const location = useLocation();
   const { dictionary } = useCanonicalFieldDictionary();
+  const { displayCurrency, officialRate } = useFxDisplay();
   const projectTypeLabel = fieldVocabularyLabel(dictionary, 'projectType', project.projectType) ?? project.projectType;
   const projectLocation = [project.location?.area, project.location?.city, project.location?.state].filter(Boolean).join(', ');
   const cover = project.coverImage?.url;
@@ -27,16 +29,16 @@ const ProjectCard = ({ project, requirePublishedToView = false }: ProjectCardPro
   // Public discovery must never expose internal project lifecycle/publication
   // states. The seller workspace may show those states on its private cards.
   if (!requirePublishedToView && (!canViewProject || internalProjectStates.has(project.status))) return null;
-  const priceRange = formatCurrencyRanges(project.priceRangesByCurrency, {
+  const priceRange = formatCurrencyRangesForDisplay(project.priceRangesByCurrency, {
     minimum: project.minimumPrice,
     maximum: project.maximumPrice,
     currency: 'NGN',
-  }, project.priceAggregateState);
+  }, project.priceAggregateState, displayCurrency, officialRate);
   const offPlanPriceRange = project.offPlanSummary
-    ? formatCurrencyRanges(project.offPlanSummary.priceRangesByCurrency, {
+    ? formatCurrencyRangesForDisplay(project.offPlanSummary.priceRangesByCurrency, {
       minimum: project.offPlanSummary.minimumOffPlanPrice,
       maximum: project.offPlanSummary.maximumOffPlanPrice,
-    })
+    }, undefined, displayCurrency, officialRate)
     : null;
   const media = (
     <div className="relative aspect-[16/10] bg-surface-container-low">

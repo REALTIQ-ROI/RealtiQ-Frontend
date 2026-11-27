@@ -5,6 +5,8 @@ import { propertyPublicReference, propertyRouteReference, type Property } from '
 import PropertyMapPreviewCard from './PropertyMapPreviewCard';
 import type { CanonicalMapMarker } from '../../../types/canonicalMap';
 import { effectiveCanonicalValue } from '../../../utils/propertyVocabulary';
+import { useFxDisplay } from '../../../contexts/FxDisplayContext';
+import { formatCompactCurrencyAmount, getPricePresentation, type FxRateValue } from '../../../utils/fxDisplay';
 
 interface Props {
   properties: Property[];
@@ -28,17 +30,14 @@ const isMappable = (property: Property) => {
     typeof lng === 'number' && Number.isFinite(lng) && lng >= -180 && lng <= 180;
 };
 
-const priceLabel = (price: number, currency?: string) => {
+const priceLabel = (price: number, currency: string | undefined, displayCurrency: 'NGN' | 'USD' | null, rate: FxRateValue | null) => {
   if (!Number.isFinite(price) || !currency) return '—';
-  const prefix = currency === 'NGN' ? '₦' : currency === 'USD' ? '$' : '';
-  if (!prefix) return '—';
-  if (price >= 1_000_000_000) return `${prefix}${(price / 1_000_000_000).toFixed(1)}B`;
-  if (price >= 1_000_000) return `${prefix}${(price / 1_000_000).toFixed(1)}M`;
-  if (price >= 1_000) return `${prefix}${Math.round(price / 1_000)}K`;
-  return `${prefix}${price}`;
+  const result = getPricePresentation(price, currency, displayCurrency, rate);
+  return result.unsupportedCurrency ? result.displayText : formatCompactCurrencyAmount(result.displayAmount, result.displayCurrency);
 };
 
 const LeafletPropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, requestedViewport, onSelectProperty, resolveProperty, onDetailsNavigate, canonicalMarkers, onSelectCanonicalMarker }: Props) => {
+  const { displayCurrency, officialRate } = useFxDisplay();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -110,7 +109,7 @@ const LeafletPropertyMap = ({ properties, detailsPath, actions, className = '', 
       const marker = L.marker([lat, lng], {
         icon: L.divIcon({
           className: 'realtiq-map-marker',
-          html: `<span>${effectiveCanonicalValue(property, 'priceOnApplication') === true ? 'POA' : priceLabel(property.price, property.currency)}</span>`,
+          html: `<span>${effectiveCanonicalValue(property, 'priceOnApplication') === true ? 'POA' : priceLabel(property.price, property.currency, displayCurrency, officialRate ? { amount: officialRate.amount } : null)}</span>`,
           iconSize: [76, 32],
           iconAnchor: [38, 32],
         }),
@@ -130,7 +129,7 @@ const LeafletPropertyMap = ({ properties, detailsPath, actions, className = '', 
       bounds.extend([lat, lng]);
     });
     if (bounds.isValid() && !initialFit.current) { initialFit.current = true; map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 }); }
-  }, [mappable, onSelectProperty, resolveProperty]);
+  }, [mappable, onSelectProperty, resolveProperty, displayCurrency, officialRate?.amount]);
 
   useEffect(() => {
     const map = mapRef.current;

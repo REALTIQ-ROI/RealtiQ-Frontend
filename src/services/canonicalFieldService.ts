@@ -140,7 +140,7 @@ export const canonicalFieldService = {
     if (cachedDictionary) return cachedDictionary;
     if (!pendingDictionary) {
       const generation = dictionaryGeneration;
-      const request = api.get<unknown>('/properties/field-dictionary')
+      const request = api.get<unknown>('/properties/field-dictionary', { headers: { 'Cache-Control': 'no-store', Pragma: 'no-cache' } })
         .then(({ data }) => {
           const parsed = parseCanonicalFieldDictionary(data);
           if (generation === dictionaryGeneration) cachedDictionary = parsed;

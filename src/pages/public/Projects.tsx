@@ -13,6 +13,7 @@ import { projectService, type ProjectListResponse } from '../../services/project
 import { adoptCanonicalQuery, catalogueFilterFormKey, hasFeaturedFilterIgnoredNotice, readCatalogueQuery, sameCanonicalCriteria, visibleCatalogueNotices, writeCatalogueQuery, withoutUnsupportedCatalogueFilters } from '../../utils/catalogueQuery';
 import { removeCatalogueFilterChip } from '../../utils/catalogueFilterChips';
 import { useBuyerCatalogueSearchParams } from '../../hooks/useBuyerCatalogueSearchParams';
+import FxDisplayControl from '../../components/property/FxDisplayControl';
 
 const PAGE_SIZE = 20;
 const validPage = (params: URLSearchParams) => {
@@ -126,6 +127,7 @@ const Projects = () => {
           <div><p className="text-sm font-semibold text-secondary">{resultLabel}</p></div>
           <button type="button" onClick={refresh} className="text-sm font-bold text-primary hover:underline">Refresh</button>
         </div>
+        <FxDisplayControl className="mb-5" />
 
         {visibleCatalogueNotices(currentData?.normalization?.notices).length ? <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{visibleCatalogueNotices(currentData?.normalization?.notices).map((notice, index) => <p key={`project-notice-${index}`}>{searchNotice(notice) || 'The server normalized this search.'}</p>)}</div> : null}
 

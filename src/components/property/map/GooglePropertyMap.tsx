@@ -6,6 +6,8 @@ import { effectiveCanonicalValue } from '../../../utils/propertyVocabulary';
 import type { PropertyMapProps } from './PropertyMap';
 import PropertyMapPreviewCard from './PropertyMapPreviewCard';
 import Button from '../../ui/Button';
+import { useFxDisplay } from '../../../contexts/FxDisplayContext';
+import { formatCompactCurrencyAmount, getPricePresentation, type FxRateValue } from '../../../utils/fxDisplay';
 
 const isMappable = (property: Property) => {
   const lat = property.coordinates?.lat;
@@ -14,14 +16,10 @@ const isMappable = (property: Property) => {
     typeof lng === 'number' && Number.isFinite(lng) && lng >= -180 && lng <= 180;
 };
 
-const priceLabel = (price: number, currency?: string) => {
+const priceLabel = (price: number, currency: string | undefined, displayCurrency: 'NGN' | 'USD' | null, rate: FxRateValue | null) => {
   if (!Number.isFinite(price) || !currency) return 'View';
-  const prefix = currency === 'NGN' ? '₦' : currency === 'USD' ? '$' : '';
-  if (!prefix) return 'View';
-  if (price >= 1_000_000_000) return `${prefix}${(price / 1_000_000_000).toFixed(1)}B`;
-  if (price >= 1_000_000) return `${prefix}${(price / 1_000_000).toFixed(1)}M`;
-  if (price >= 1_000) return `${prefix}${Math.round(price / 1_000)}K`;
-  return `${prefix}${price}`;
+  const result = getPricePresentation(price, currency, displayCurrency, rate);
+  return result.unsupportedCurrency ? result.displayText : formatCompactCurrencyAmount(result.displayAmount, result.displayCurrency);
 };
 
 const validMarker = (marker: CanonicalMapMarker) =>
@@ -32,6 +30,7 @@ const GooglePropertyMap = ({
   properties, className = '', onVisiblePropertiesChange, onViewportChange, requestedViewport,
   onSelectProperty, resolveProperty, onDetailsNavigate, detailsPath, actions, canonicalMarkers, onSelectCanonicalMarker, suppressPreview = false,
 }: PropertyMapProps) => {
+  const { displayCurrency, officialRate } = useFxDisplay();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<GoogleMapInstance | null>(null);
   const mapsRef = useRef<GoogleMapsApi | null>(null);
@@ -165,7 +164,7 @@ const GooglePropertyMap = ({
       const first = group[0];
       if (!first) return;
       const cluster = group.length > 1;
-      const label = cluster ? String(group.length) : effectiveCanonicalValue(first, 'priceOnApplication') === true ? 'POA' : priceLabel(first.price, first.currency);
+      const label = cluster ? String(group.length) : effectiveCanonicalValue(first, 'priceOnApplication') === true ? 'POA' : priceLabel(first.price, first.currency, displayCurrency, officialRate ? { amount: officialRate.amount } : null);
       group.forEach((property, index) => nextLookup.set(cluster ? `${key}:${index}` : key, property));
       const marker = new maps.Marker({
         map,
@@ -232,7 +231,7 @@ const GooglePropertyMap = ({
       map.fitBounds(bounds, 40);
     }
     return () => [...markers, ...canonical].forEach(({ marker, listener }) => { listener?.remove(); marker.setMap(null); });
-  }, [ready, mappable, canonicalMarkers, mapZoom]);
+  }, [ready, mappable, canonicalMarkers, mapZoom, displayCurrency, officialRate?.amount]);
 
   useEffect(() => {
     const map = mapRef.current;

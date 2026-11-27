@@ -8,6 +8,8 @@ import { effectiveCanonicalValue } from '../../../utils/propertyVocabulary';
 import GooglePropertyMap from './GooglePropertyMap';
 import { useMapConfig } from '../../../contexts/MapConfigContext';
 import Button from '../../ui/Button';
+import { useFxDisplay } from '../../../contexts/FxDisplayContext';
+import { formatCompactCurrencyAmount, getPricePresentation, type FxRateValue } from '../../../utils/fxDisplay';
 
 export interface PropertyMapProps {
   properties: Property[];
@@ -34,17 +36,14 @@ const isMappable = (property: Property) => {
     typeof lng === 'number' && Number.isFinite(lng) && lng >= -180 && lng <= 180;
 };
 
-const priceLabel = (price: number, currency?: string) => {
+const priceLabel = (price: number, currency: string | undefined, displayCurrency: 'NGN' | 'USD' | null, rate: FxRateValue | null) => {
   if (!Number.isFinite(price) || !currency) return 'View';
-  const prefix = currency === 'NGN' ? '₦' : currency === 'USD' ? '$' : '';
-  if (!prefix) return 'View';
-  if (price >= 1_000_000_000) return `₦${(price / 1_000_000_000).toFixed(1)}B`;
-  if (price >= 1_000_000) return `₦${(price / 1_000_000).toFixed(1)}M`;
-  if (price >= 1_000) return `₦${Math.round(price / 1_000)}K`;
-  return `${prefix}${price}`;
+  const result = getPricePresentation(price, currency, displayCurrency, rate);
+  return result.unsupportedCurrency ? result.displayText : formatCompactCurrencyAmount(result.displayAmount, result.displayCurrency);
 };
 
 const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', onVisiblePropertiesChange, onViewportChange, requestedViewport, onSelectProperty, resolveProperty, onDetailsNavigate, canonicalMarkers, onSelectCanonicalMarker, suppressPreview = false }: Props) => {
+  const { displayCurrency, officialRate } = useFxDisplay();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const propertyLookupRef = useRef(new Map<string, Property>());
@@ -200,12 +199,12 @@ const MapboxPropertyMap = ({ properties, detailsPath, actions, className = '', o
     const features = mappable.map((property, index) => {
       const key = `${propertyRouteReference(property)}-${index}`; lookup.set(key, property);
       const priceOnApplication = effectiveCanonicalValue(property, 'priceOnApplication') === true;
-      return { type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [property.coordinates!.lng, property.coordinates!.lat] }, properties: { key, label: priceOnApplication ? 'POA' : priceLabel(property.price, property.currency), title: property.title } };
+      return { type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [property.coordinates!.lng, property.coordinates!.lat] }, properties: { key, label: priceOnApplication ? 'POA' : priceLabel(property.price, property.currency, displayCurrency, officialRate ? { amount: officialRate.amount } : null), title: property.title } };
     });
     propertyLookupRef.current = lookup;
     (map.getSource('properties') as mapboxgl.GeoJSONSource).setData({ type: 'FeatureCollection', features });
     if (mappable.length && !initialFit.current) { initialFit.current = true; fitCoordinates(map, mappable.map((property) => [property.coordinates!.lng, property.coordinates!.lat])); }
-  }, [mapLoaded, mappable]);
+  }, [mapLoaded, mappable, displayCurrency, officialRate?.amount]);
 
   useEffect(() => {
     const map = mapRef.current;

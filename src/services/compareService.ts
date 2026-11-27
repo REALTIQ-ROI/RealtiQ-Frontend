@@ -6,6 +6,8 @@ const enc = (value: string) => encodeURIComponent(value);
 
 export type CompareCategory = 'residential' | 'commercial';
 export type CompareCriterion = 'lowest_asking_price' | 'lowest_price_per_sqm' | 'largest_floor_area' | 'most_recently_listed' | 'most_recently_reduced';
+export const compareFxSourceLabel = (source: string | null | undefined): string =>
+  source === 'buyer_override' ? 'Your rate' : source === 'official_nfem' ? 'CBN NFEM' : 'Converted display';
 
 export interface CompareFx {
   state: string;
@@ -16,6 +18,10 @@ export interface CompareFx {
   rateNgnPerUsd?: number;
   effectiveAt?: string;
   recordedAt?: string;
+  rateDate?: string;
+  source?: string;
+  provider?: string;
+  series?: string;
   buyerRateNgnPerUsd?: number;
   message?: string;
 }
@@ -31,7 +37,7 @@ export interface CompareItem {
   status: 'available' | 'under_offer' | 'sold' | 'withdrawn_or_removed';
   availability: string;
   availableForPurchase: boolean;
-  price: { amount: number | null; currency: 'NGN' | 'USD' | null; displayAmount?: number; displayCurrency?: 'NGN' | 'USD'; conversionSource?: string; pricePerSqm: { amount?: number; currency?: string; areaUnit?: string } | null; kind?: 'poa' | 'unpriced' };
+  price: { amount: number | null; currency: 'NGN' | 'USD' | null; displayAmount?: number; displayCurrency?: 'NGN' | 'USD'; conversionSource?: string; pricePerSqm: { amount?: number; currency?: string; areaUnit?: string; displayAmount?: number; displayCurrency?: 'NGN' | 'USD'; conversionSource?: string } | null; kind?: 'poa' | 'unpriced' };
   location: { state: string | null; lga: string | null; area: string | null; estateName: string | null; streetAddress: string | null; coordinates: { lng: number; lat: number } | null };
   effectiveFields: Record<string, unknown>;
   internalFloorAreaSqm: number | null;
@@ -133,7 +139,7 @@ export const compareService = {
       params: {
         propertyIds: params.propertyIds.join(','),
         ...(params.displayCurrency ? { displayCurrency: params.displayCurrency } : {}),
-        ...(params.buyerFxOverrideNgnPerUsd ? { buyerFxOverrideNgnPerUsd: params.buyerFxOverrideNgnPerUsd } : {}),
+        ...(typeof params.buyerFxOverrideNgnPerUsd === 'number' ? { buyerFxOverrideNgnPerUsd: params.buyerFxOverrideNgnPerUsd } : {}),
       },
       ...privateRead,
     });

@@ -5,20 +5,23 @@ import ProtectedMediaSection from '../../components/media/ProtectedMediaSection'
 import ProjectRegisteredSurvey from '../../components/title/ProjectRegisteredSurvey';
 import ProjectCommunity from '../../components/project/ProjectCommunity';
 import PropertyCard from '../../components/property/PropertyCard';
+import FxDisplayControl from '../../components/property/FxDisplayControl';
 import LocationMap from '../../components/property/map/LocationMap';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAsync } from '../../hooks/useAsync';
 import { projectService } from '../../services/projectService';
-import { formatCurrencyRanges, formatDate } from '../../utils/projectFormatters';
+import { formatCurrencyRangesForDisplay, formatDate } from '../../utils/projectFormatters';
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
 import { fieldVocabularyLabel, vocabularyLabel } from '../../utils/propertyVocabulary';
 import { useAuth } from '../../contexts/AuthContext';
+import { useFxDisplay } from '../../contexts/FxDisplayContext';
 
 const ProjectDetails = () => {
   const { slug = '' } = useParams();
   const location = useLocation();
   const { activeProfile } = useAuth();
+  const { displayCurrency, officialRate } = useFxDisplay();
   const { dictionary } = useCanonicalFieldDictionary();
   const projectNavigationState = location.state as { from?: string; discoveryFrom?: string } | null;
   const searchReturn = typeof projectNavigationState?.discoveryFrom === 'string' && projectNavigationState.discoveryFrom.startsWith('/projects')
@@ -34,7 +37,7 @@ const ProjectDetails = () => {
   const availableUnits = unitSummary?.availableUnitCount ?? project?.availablePropertyCount ?? 0;
   const underOfferUnits = unitSummary?.underOfferUnitCount ?? 0;
   const verifiedUnits = unitSummary?.verifiedListingCount ?? project?.verifiedPropertyCount ?? 0;
-  const priceRanges = formatCurrencyRanges(unitSummary?.priceRangesByCurrency, undefined, project?.priceAggregateState);
+  const priceRanges = formatCurrencyRangesForDisplay(unitSummary?.priceRangesByCurrency, undefined, project?.priceAggregateState, displayCurrency, officialRate);
   const stageCounts = Object.entries(unitSummary?.buildStages ?? {}).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] > 0);
   const formatHandoverMonth = (month: string) => {
     const parsed = /^([0-9]{4})-([0-9]{2})$/.exec(month);
@@ -74,6 +77,7 @@ const ProjectDetails = () => {
             <ProjectMediaGallery media={project.media} title={project.name} />
             <ProtectedMediaSection resourceKind="project" resourceId={project._id} title={project.name} />
             <ProjectRegisteredSurvey projectId={project._id} />
+            <FxDisplayControl />
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {[
@@ -98,7 +102,7 @@ const ProjectDetails = () => {
                 <h2 className="text-xl font-black text-primary">Off-plan summary</h2>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <p><span className="block text-xs font-bold uppercase tracking-widest text-secondary">Off-plan units</span>{project.offPlanSummary.availableOffPlanUnits} / {project.offPlanSummary.totalOffPlanUnits}</p>
-                  <p><span className="block text-xs font-bold uppercase tracking-widest text-secondary">Off-plan price</span>{formatCurrencyRanges(project.offPlanSummary.priceRangesByCurrency, { minimum: project.offPlanSummary.minimumOffPlanPrice, maximum: project.offPlanSummary.maximumOffPlanPrice, currency: project.currency })}</p>
+                  <p><span className="block text-xs font-bold uppercase tracking-widest text-secondary">Off-plan price</span>{formatCurrencyRangesForDisplay(project.offPlanSummary.priceRangesByCurrency, { minimum: project.offPlanSummary.minimumOffPlanPrice, maximum: project.offPlanSummary.maximumOffPlanPrice, currency: project.currency }, undefined, displayCurrency, officialRate)}</p>
                 </div>
               </section>
             ) : null}

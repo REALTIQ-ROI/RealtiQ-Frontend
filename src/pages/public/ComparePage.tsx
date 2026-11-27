@@ -8,9 +8,10 @@ import ModalPortal from '../../components/ui/ModalPortal';
 import LoadingState from '../../components/ui/LoadingState';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCompare } from '../../contexts/CompareContext';
-import { compareService, type CompareCategory, type CompareCriterion, type CompareFx, type CompareItem, type CompareSuggestionResponse, type Comparison, type ComparisonAlertSubscription, type RecentSalesResponse } from '../../services/compareService';
+import { compareService, compareFxSourceLabel, type CompareCategory, type CompareCriterion, type CompareFx, type CompareItem, type CompareSuggestionResponse, type Comparison, type ComparisonAlertSubscription, type RecentSalesResponse } from '../../services/compareService';
 import { inquiryService } from '../../services/inquiryService';
 import { useCanonicalFieldDictionary } from '../../hooks/useCanonicalFieldDictionary';
+import { formatFxRateDate, formatFxUpdatedAt } from '../../utils/fxDisplay';
 import { ApiRequestError } from '../../lib/axios';
 import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { propertyRouteReference } from '../../types';
@@ -224,15 +225,23 @@ const ComparePage = () => {
       if (item.price.kind === 'poa') return 'Price on application';
       if (item.price.kind === 'unpriced' || item.price.amount === null) return 'Unpriced';
       const original = currencyAmount(item.price.amount, item.price.currency);
-      if (typeof item.price.displayAmount === 'number' && item.price.displayCurrency && (item.price.displayAmount !== item.price.amount || item.price.displayCurrency !== item.price.currency)) {
-        const source = item.price.conversionSource === 'buyer_override' ? 'Your rate' : item.price.conversionSource === 'official_nfem' ? 'Official rate' : 'Converted display';
-        return `${original} · ${currencyAmount(item.price.displayAmount, item.price.displayCurrency)} (${source})`;
+      const conversionSource = item.price.conversionSource ?? comparison?.fx.selectedRateSource;
+      if (typeof item.price.displayAmount === 'number' && item.price.displayCurrency && conversionSource && (item.price.displayAmount !== item.price.amount || item.price.displayCurrency !== item.price.currency)) {
+        return `${original} · ${currencyAmount(item.price.displayAmount, item.price.displayCurrency)} (${compareFxSourceLabel(conversionSource)})`;
       }
       return original;
     } },
     { key: 'pricePerSqm', label: 'Price per m²', value: (item) => ({ present: item.price.pricePerSqm !== null, value: item.price.pricePerSqm }), formatter: (item) => {
       const value = item.price.pricePerSqm;
       if (!value || typeof value.amount !== 'number') return item.price.kind === 'poa' ? 'Price on application' : 'Not provided';
+      const conversionSource = value.conversionSource ?? item.price.conversionSource ?? comparison?.fx.selectedRateSource;
+      if (typeof value.displayAmount === 'number' && value.displayCurrency && conversionSource && (value.displayAmount !== value.amount || value.displayCurrency !== value.currency)) {
+        return `${currencyAmount(value.amount, value.currency)} / m² · ${currencyAmount(value.displayAmount, value.displayCurrency)} / m² (${compareFxSourceLabel(conversionSource)})`;
+      }
+      if (typeof item.price.displayAmount === 'number' && item.price.displayCurrency && conversionSource && (item.price.displayAmount !== item.price.amount || item.price.displayCurrency !== item.price.currency) && typeof item.internalFloorAreaSqm === 'number' && item.internalFloorAreaSqm > 0) {
+        const amountPerSqm = item.price.displayAmount / item.internalFloorAreaSqm;
+        return `${currencyAmount(value.amount, value.currency)} / m² · ${currencyAmount(amountPerSqm, item.price.displayCurrency)} / m² (${compareFxSourceLabel(conversionSource)})`;
+      }
       return `${currencyAmount(value.amount, value.currency)} / m²`;
     } },
     { key: 'propertyType', label: 'Property type', value: (item) => ({ present: typeof item.propertyType === 'string' && item.propertyType.length > 0, value: item.propertyType }) },
@@ -334,8 +343,12 @@ const ComparePage = () => {
 const FxNotice = ({ fx }: { fx: CompareFx }) => {
   const source = fx.selectedRateSource;
   const rate = source === 'buyer_override' ? fx.buyerRateNgnPerUsd : fx.rateNgnPerUsd;
-  const rateDate = source === 'official_nfem' ? fx.effectiveAt ?? fx.recordedAt : undefined;
-  if (fx.convertedPricesAvailable) return <p role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">Converted amounts are presentation only. Seller prices and currencies remain shown. {source === 'buyer_override' ? `Your rate${rate ? `: ${rate.toLocaleString()} NGN per USD` : ''}.` : source === 'official_nfem' ? 'Official NFEM rate supplied by the server.' : 'Rate supplied by the server.'}{rateDate ? ` Rate date: ${new Date(rateDate).toLocaleDateString('en-GB')}.` : ''}</p>;
+  const rateDate = source === 'official_nfem' ? fx.rateDate : undefined;
+  const rateText = typeof rate === 'number' && Number.isFinite(rate)
+    ? `1 USD = ₦${new Intl.NumberFormat('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rate)}`
+    : '';
+  const sourceText = fx.provider === 'cbn_nfem' || source === 'official_nfem' ? 'CBN NFEM' : fx.source ?? 'Rate supplied by the server';
+  if (fx.convertedPricesAvailable) return <p role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">Converted amounts are presentation only. Original seller prices remain visible. {source === 'buyer_override' ? `Your rate${rateText ? `: ${rateText}` : ''}.` : source === 'official_nfem' ? `${rateText ? `${rateText} · ` : ''}${sourceText}.` : `${sourceText}.`}{source === 'official_nfem' && rateDate && formatFxRateDate(rateDate) ? ` Rate date: ${formatFxRateDate(rateDate)}.` : ''}{source === 'official_nfem' && fx.recordedAt && formatFxUpdatedAt(fx.recordedAt) ? ` Updated ${formatFxUpdatedAt(fx.recordedAt)}.` : ''}</p>;
   return <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Currency conversion is unavailable. Original listing prices remain visible; cross-currency price markers and ranking are disabled. {fx.message ?? ''}</p>;
 };
 

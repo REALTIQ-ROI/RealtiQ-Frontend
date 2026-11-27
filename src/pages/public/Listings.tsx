@@ -21,10 +21,13 @@ import { savedSearchFiltersFromUrl, savedSearchFiltersToUrl } from '../../utils/
 import type { SavedSearch } from '../../types';
 import type { SavedSearchAlerts } from '../../types';
 import SavedSearchAlertsFields, { defaultSavedSearchAlerts } from '../../components/property/SavedSearchAlertsFields';
+import FxDisplayControl from '../../components/property/FxDisplayControl';
 import { ApiRequestError } from '../../lib/axios';
 import { apiErrorMessage } from '../../utils/apiErrorMessage';
 import { writeCatalogueMapViewport } from '../../utils/catalogueMapViewport';
 import { useBuyerCatalogueSearchParams } from '../../hooks/useBuyerCatalogueSearchParams';
+import { useFxDisplay } from '../../contexts/FxDisplayContext';
+import { formatCompactCurrencyAmount, getPricePresentation } from '../../utils/fxDisplay';
 import {
   propertyPublicReference,
   propertyRouteReference,
@@ -45,6 +48,7 @@ const mapNoticeText = (notice: unknown): string => {
 
 const Listings = () => {
   const navigate = useNavigate();
+  const { displayCurrency, officialRate } = useFxDisplay();
   const location = useLocation();
   const [searchParams, setSearchParams] = useBuyerCatalogueSearchParams();
   const searchParamsRef = useRef(searchParams);
@@ -121,7 +125,13 @@ const Listings = () => {
   }, [displaySearchParams]);
   const mapLoading = mapActive && mapState.queryKey !== mapRequestIdentity;
   const mapError = mapState.queryKey === mapRequestIdentity ? mapState.error : null;
-  const activeMapMarkers = mapActive && mapState.queryKey === mapRequestIdentity ? mapState.markers : [];
+  const activeMapMarkers = useMemo(() => mapActive && mapState.queryKey === mapRequestIdentity
+    ? mapState.markers.map((marker) => {
+      if (marker.kind !== 'property' || typeof marker.priceAmount !== 'number' || !marker.priceCurrency) return marker;
+      const result = getPricePresentation(marker.priceAmount, marker.priceCurrency, displayCurrency, officialRate);
+      return { ...marker, label: result.unsupportedCurrency ? result.displayText : formatCompactCurrencyAmount(result.displayAmount, result.displayCurrency) };
+    })
+    : [], [displayCurrency, mapActive, mapRequestIdentity, mapState.markers, mapState.queryKey, officialRate]);
   const resultsRef = useRef<HTMLDivElement>(null);
   const viewportKey = useRef("");
   const viewportInteracted = useRef(false);
@@ -414,6 +424,7 @@ const Listings = () => {
                   Refresh
                 </button>
               </div>
+              <FxDisplayControl className="mt-3" />
             </header>
             {notices.length > 0 ? <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900" role="status">
               {notices.map((notice, index) => <p key={index}>{typeof notice === 'string' ? notice : notice && typeof notice === 'object' && 'code' in notice ? String(notice.code) : 'Search results were adjusted by the server.'}</p>)}
